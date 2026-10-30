@@ -42,6 +42,30 @@ What that means for this POC:
   Only expose 3000 and 3002 to trusted clients.
 - The Embed docs are tested with the 2.46 SDK line, so this POC pins `e2b@~2.46.1`.
 
+## Prerequisites per setup
+
+Docker has to run in the same Linux that has `/dev/kvm`, because Embed's containers use
+`/dev/kvm` and `/dev/net/tun` from their own host.
+
+**NixOS on WSL2**
+
+- Run Docker Engine inside NixOS (`virtualisation.docker.enable = true;`, with your user in the
+  `docker` group). Don't use Docker Desktop's WSL integration: that runs containers in its own
+  `docker-desktop` distro, so it doesn't test NixOS.
+- `ls -l /dev/kvm /dev/net/tun` must show both. If `/dev/kvm` is missing, add
+  `nestedVirtualization=true` under `[wsl2]` in `%UserProfile%\.wslconfig`, then run `wsl --shutdown`.
+- `uname -r` must be 6.8 or newer. The stock WSL2 kernel has been on the 6.6 line, which may be the
+  first blocker; the fallback is a custom WSL kernel or an Ubuntu 24.04 VM.
+- Docker 27+, Compose 2.24+, cgroup v2, and about 12 GiB RAM for WSL (`memory=` in `.wslconfig`).
+
+**Windows with Docker Desktop**
+
+- Docker Desktop runs on the same WSL2 kernel, so the `/dev/kvm`, `.wslconfig` and kernel checks
+  above apply too. Run them in the `docker-desktop` distro, or in a container started with
+  `--device /dev/kvm`.
+- Firecracker runs inside Docker Desktop's VM, where the host script can't see it. The "no CPU or
+  RAM while paused" check reports "not measured"; every other check still works.
+
 ## Run
 
 On the E2B host (the host checks read local `firecracker` processes, so run it on the machine
