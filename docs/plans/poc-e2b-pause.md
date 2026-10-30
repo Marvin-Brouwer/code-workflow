@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: planned. Settles [open question 1](../design.md#open-questions) (blocking).
+Status: built, not run yet, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 

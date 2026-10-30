@@ -1,0 +1,5 @@
+packages:
+  # validation POCs, see docs/plans/
+  - 'pocs/*'
+allowBuilds:
+  esbuild: true

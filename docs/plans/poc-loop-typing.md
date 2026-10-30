@@ -1,6 +1,6 @@
 # POC: `loop` result typing
 
-Status: planned. Settles [open question 2](../design.md#open-questions).
+Status: ✅ done, see [pocs/loop-typing](../../pocs/loop-typing/README.md). Settles [open question 2](../design.md#open-questions).
 
 ## Question
 
@@ -65,5 +65,5 @@ pnpm poc:loop-typing   # tsc --noEmit over the type tests and the sketches
 
 ## Open questions
 
-- [ ] Two result-bearing exits, such as `succeed(A)` plus `succeed(B)`: union `A | B`, or a
-  compile error? Leaning towards the union.
+- [x] Two result-bearing exits, such as `succeed(A)` plus `succeed(B)`: union `A | B`, or a
+  compile error? The union: it falls out of the design with no extra code.

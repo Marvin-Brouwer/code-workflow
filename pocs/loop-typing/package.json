@@ -1,0 +1,19 @@
+{
+    "name": "@pocs/loop-typing",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "check": "tsc -p tsconfig.json && tsc -p tsconfig.sketches.json && tsx scripts/hover.ts && tsx scripts/timing.ts",
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "zod": "^4.6.7"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "expect-type": "^1.4.0",
+        "tsx": "^4.23.15",
+        "typescript": "~6.0.3"
+    }
+}
