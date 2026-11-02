@@ -1,10 +1,9 @@
 # @pocs/e2b-pause
 
-**Outcome: ✅ adopted, with a caveat about local setup.** On self-hosted E2B (Embed), a paused
-sandbox kept its memory and processes. A pending `await` resolved in the same process and the same
-stack after 60 s paused, and again after an Embed restart. Running Embed on a developer machine
-needs a real Linux host, though. On Windows that means a WSL distro with its own Docker Engine,
-because Docker Desktop doesn't work. See [Findings](#findings).
+**Outcome: ⏳ passing so far, not adopted yet.** On self-hosted E2B (Embed) in an Ubuntu WSL
+distro, a paused sandbox kept its memory and processes: a pending `await` resolved in the same
+process and stack after 60 s paused, and again after an Embed restart. Docker Desktop doesn't work
+as a host. Still to run: NixOS on WSL. See [Findings](#findings).
 
 Plan and criteria: [docs/plans/poc-e2b-pause.md](../../docs/plans/poc-e2b-pause.md).
 

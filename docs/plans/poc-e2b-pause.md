@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: ✅ done 2026-11-02, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Pause keeps memory, also across an Embed restart; Docker Desktop is not a viable host. Settles [open question 1](../design.md#open-questions) (blocking).
+Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro (2026-11-02); Docker Desktop is not a viable host; NixOS on WSL still to run. Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 
