@@ -24,9 +24,10 @@ guide calls it "a single-machine evaluation package rather than a deployment pat
 
 What that means for this POC:
 
-- **WSL2 isn't mentioned anywhere** in the Embed docs, so NixOS on WSL2 is unverified. It needs
-  nested virtualization for `/dev/kvm`, and the docs' "Ubuntu recommended" leaves NixOS as
-  something to try, not a supported path. Try it first; fall back to an Ubuntu 24.04 VM or box.
+- **WSL2 isn't mentioned anywhere** in the Embed docs. On Windows 11 with Docker Desktop, WSL 3
+  gives a 6.18 kernel and a working `/dev/kvm` once configured (see
+  [Prerequisites](#prerequisites-per-setup)). NixOS on that VM is still unverified; the fallback
+  is an Ubuntu 24.04 VM or box.
 - **Pause with memory is the default**: `sandbox.pause()` saves memory and filesystem, and
   `Sandbox.connect(id)` resumes
   ([persistence docs](https://docs.e2b.dev/sandbox/persistence)). The docs give about 4 s per GiB
@@ -45,49 +46,75 @@ What that means for this POC:
 ## Prerequisites per setup
 
 Docker has to run in the same Linux that has `/dev/kvm`, because Embed's containers use
-`/dev/kvm` and `/dev/net/tun` from their own host.
+`/dev/kvm` and `/dev/net/tun` from their own host. Every setup needs Node 22+ and pnpm 10
+(`corepack enable`) to run the host script, and about 12 GiB RAM and 20 GiB disk for Embed.
 
-**NixOS on WSL2**
+### Windows with Docker Desktop
+
+Checked 2026-11-02 on Windows 11 with an Intel CPU, Docker Desktop on the WSL2 backend, WSL 3.0.3
+and kernel 6.18.54.1.
+
+1. **Install** Docker Desktop with the WSL2 backend, Git for Windows (Git Bash), and Node 22+.
+   Windows 11 on x86-64 is required; nested virtualization doesn't work on Windows 10 or arm64.
+2. **Update WSL** from PowerShell or Git Bash: `wsl --update`. The old 5.15 kernel is below
+   Embed's 6.8 minimum. A warning that `System.AppUserModel.ID` couldn't be set on `WSL.lnk` is
+   harmless.
+3. **Find your CPU vendor**, after starting Docker Desktop:
+   `docker run --rm alpine grep -m1 -oE 'vmx|svm' /proc/cpuinfo`. `vmx` is Intel, `svm` is AMD.
+4. **Configure WSL** in `%UserProfile%\.wslconfig`. Since WSL 3, KVM is a kernel module that isn't
+   loaded at boot, so `/dev/kvm` is missing until you load it here. `.wslconfig` applies to the
+   one VM all WSL distros share, Docker Desktop's included. Use `kvm_amd` for `svm`, and give
+   WSL at least 12GB of memory.
+
+   ```ini
+   [wsl2]
+   nestedVirtualization=true
+   loadKernelModules=kvm_intel
+   memory=16GB
+   ```
+
+5. **Restart WSL**: `wsl --shutdown`, then start Docker Desktop again.
+6. **Use Git Bash, with path conversion off**, for everything below. Without it, Git Bash rewrites
+   `/dev/kvm` and `/run/e2b/...` into Windows paths.
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   ```
+
+7. **Check**: both devices must be listed, and the kernel must be 6.8 or newer.
+
+   ```bash
+   docker run --rm --device /dev/kvm --device /dev/net/tun alpine sh -c "ls -l /dev/kvm /dev/net/tun; uname -r"
+   ```
+
+Then continue with [Run](#run), in the same Git Bash session. Two things differ from Linux:
+
+- Firecracker runs inside Docker Desktop's VM, where the host script can't see it. The "no CPU or
+  RAM while paused" check reports "not measured"; every other check still works.
+- The repo's `.npmrc` pins the public npm registry, so a company registry in your user-level npm
+  config doesn't apply here.
+
+### NixOS on WSL2
 
 - Run Docker Engine inside NixOS (`virtualisation.docker.enable = true;`, with your user in the
   `docker` group). Don't use Docker Desktop's WSL integration: that runs containers in its own
   `docker-desktop` distro, so it doesn't test NixOS.
-- `ls -l /dev/kvm /dev/net/tun` must show both. If `/dev/kvm` is missing, add
-  `nestedVirtualization=true` under `[wsl2]` in `%UserProfile%\.wslconfig`, then run `wsl --shutdown`.
-- `uname -r` must be 6.8 or newer. The stock WSL2 kernel has been on the 6.6 line, which may be the
-  first blocker; the fallback is a custom WSL kernel or an Ubuntu 24.04 VM.
-- Docker 27+, Compose 2.24+, cgroup v2, and about 12 GiB RAM for WSL (`memory=` in `.wslconfig`).
+- Steps 2 to 5 and 7 of the Windows setup apply too, because NixOS runs on the same WSL VM and
+  kernel. Run the check inside NixOS (`ls -l /dev/kvm /dev/net/tun; uname -r`).
+- Docker 27+, Compose 2.24+ and cgroup v2.
 
-**Windows with Docker Desktop**
+### Linux
 
-- Docker Desktop runs on the same WSL2 kernel, so the `/dev/kvm`, `.wslconfig` and kernel checks
-  above apply too. Run them in the `docker-desktop` distro, or in a container started with
-  `--device /dev/kvm`.
-- Run from Git Bash with `export MSYS_NO_PATHCONV=1`, or it rewrites `/dev/kvm` into a Windows
-  path.
-- Since WSL 3 (kernel 6.18) KVM is a module that isn't loaded at boot, so `/dev/kvm` is missing
-  even with nested virtualization on. Load it through `.wslconfig`, which covers Docker Desktop's
-  VM too (checked 2026-11-02 on WSL 3.0.3, kernel 6.18.54.1). Use `kvm_amd` on AMD; on Intel,
-  `grep -m1 -oE 'vmx|svm' /proc/cpuinfo` in a container prints `vmx`.
-
-  ```ini
-  [wsl2]
-  nestedVirtualization=true
-  loadKernelModules=kvm_intel
-  ```
-
-  Then `wsl --shutdown` and restart Docker Desktop.
-- Firecracker runs inside Docker Desktop's VM, where the host script can't see it. The "no CPU or
-  RAM while paused" check reports "not measured"; every other check still works.
+Ubuntu 24.04 on bare metal, or a VM with nested virtualization, as in the Step 0 table above.
 
 ## Run
 
-On the E2B host (the host checks read local `firecracker` processes, so run it on the machine
-that runs Embed):
+On the machine that runs Embed, since the host checks read local `firecracker` processes. On
+Windows, use Git Bash with `MSYS_NO_PATHCONV=1` set, as above.
 
 ```bash
-# once: start E2B Embed
-mkdir e2b && cd e2b
+# once: start E2B Embed (the first start takes a few minutes)
+mkdir -p ~/e2b && cd ~/e2b
 curl -fsSL --remote-name-all "https://raw.githubusercontent.com/e2b-dev/runtime/main/embed/compose/{compose.yaml,.env}"
 docker compose up -d --wait
 
@@ -98,8 +125,9 @@ eval "$(docker compose exec ready cat /run/e2b/sdk.env)"
 Then from the repo root:
 
 ```bash
+pnpm install
 pnpm poc:e2b-pause run      # start, pause for 60 s (POC_PAUSE_SECONDS), resume, verify
-pnpm poc:e2b-pause pause    # start and pause, then restart E2B:  docker compose restart
+pnpm poc:e2b-pause pause    # start and pause, then restart E2B:  docker compose -f ~/e2b/compose.yaml restart
 pnpm poc:e2b-pause resume   # resume the sandbox from the pause step and verify
 pnpm poc:e2b-pause egress   # allowlist one host (POC_EGRESS_ALLOWED), check another is blocked
 ```
