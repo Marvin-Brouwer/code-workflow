@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: built, not run yet, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Settles [open question 1](../design.md#open-questions) (blocking).
+Status: ✅ done 2026-11-02, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Pause keeps memory, also across an Embed restart; Docker Desktop is not a viable host. Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 

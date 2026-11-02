@@ -9,7 +9,7 @@ with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 | POC | Outcome |
 |---|---|
 | [`pocs/loop-typing`](pocs/loop-typing/README.md): `loop` infers its result from the exits | ✅ adopted |
-| [`pocs/e2b-pause`](pocs/e2b-pause/README.md): self-hosted E2B pause keeps memory | ⏳ needs a run on a machine with `/dev/kvm` |
+| [`pocs/e2b-pause`](pocs/e2b-pause/README.md): self-hosted E2B pause keeps memory | ✅ adopted; needs a Linux host (WSL distro on Windows, not Docker Desktop) |
 
 ```bash
 pnpm install
