@@ -63,6 +63,12 @@ Docker has to run in the same Linux that has `/dev/kvm`, because Embed's contain
 - Docker Desktop runs on the same WSL2 kernel, so the `/dev/kvm`, `.wslconfig` and kernel checks
   above apply too. Run them in the `docker-desktop` distro, or in a container started with
   `--device /dev/kvm`.
+- Run from Git Bash with `export MSYS_NO_PATHCONV=1`, or it rewrites `/dev/kvm` into a Windows
+  path.
+- Seen on 2026-11-02: after `wsl --update` (WSL 3.0.3, kernel 6.18) the CPU flags were visible
+  but `/dev/kvm` was missing, with or without `nestedVirtualization=true`. Loading the module in
+  Docker Desktop's VM fixed it, until the next `wsl --shutdown` or Docker Desktop restart:
+  `docker run --rm --privileged --pid=host alpine nsenter -t 1 -m -- sh -c "modprobe kvm_intel || modprobe kvm_amd"`.
 - Firecracker runs inside Docker Desktop's VM, where the host script can't see it. The "no CPU or
   RAM while paused" check reports "not measured"; every other check still works.
 
