@@ -7,10 +7,11 @@
  *   egress   check that sandbox egress can be limited to an allowlist
  *
  * Connection settings come from the environment, as the E2B SDK reads them (E2B_API_KEY,
- * E2B_DOMAIN or E2B_API_URL). For E2B Embed: eval "$(docker compose exec ready cat /run/e2b/sdk.env)".
+ * E2B_API_URL, E2B_SANDBOX_URL). For E2B Embed: eval "$(docker compose exec ready cat /run/e2b/sdk.env)",
+ * or, with the Windows container, .work/sdk.env is loaded automatically.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Sandbox } from 'e2b';
@@ -36,6 +37,20 @@ interface Done {
 }
 interface Remembered { sandboxId: string; waiting: Waiting; pausedAt: number; hostBefore: HostUsage; hostPaused: HostUsage }
 interface HostUsage { processes: number; rssMb: number }
+
+/**
+ * Loads the SDK settings the Windows container writes to .work/sdk.env, unless the environment
+ * already has them (as after `eval "$(docker compose exec ready cat /run/e2b/sdk.env)"`).
+ */
+function loadSdkEnv() {
+    const file = path.join(workDir, 'sdk.env');
+    if (process.env.E2B_API_URL || !existsSync(file)) return;
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+        const match = /^(?:export\s+)?(E2B_[A-Z_]+)=(.*)$/.exec(line.trim());
+        if (match?.[1] && match[2] !== undefined) process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
+    }
+    console.log(`     SDK settings from ${path.relative(process.cwd(), file)}`);
+}
 
 const report: Record<string, unknown> = { startedAt: new Date().toISOString(), sdk: 'e2b ~2.46.1' };
 const results: { name: string; ok: boolean; detail: string }[] = [];
@@ -83,15 +98,20 @@ async function readJson<T>(sandbox: Sandbox, file: string, signal: AbortSignal, 
     }
 }
 
-/** Opens GET /ticks on the stub and records what happens to the stream while the sandbox pauses. */
+/**
+ * Opens GET /ticks on the stub and records what happens to the stream while the sandbox pauses.
+ * With E2B_SANDBOX_URL set (Embed), the request goes through that proxy and names the sandbox and
+ * port in headers, the way the SDK reaches a sandbox there; otherwise it uses the sandbox's host.
+ */
 function watchTicks(sandbox: Sandbox, signal: AbortSignal) {
-    const protocol = (process.env.E2B_API_URL ?? '').startsWith('http://') ? 'http' : 'https';
-    const url = `${protocol}://${sandbox.getHost(tickPort)}/ticks`;
+    const proxy = process.env.E2B_SANDBOX_URL;
+    const url = proxy ? `${proxy}/ticks` : `https://${sandbox.getHost(tickPort)}/ticks`;
+    const headers = proxy ? { 'E2b-Sandbox-Id': sandbox.sandboxId, 'E2b-Sandbox-Port': String(tickPort) } : {};
     const state = { url, lines: 0, ended: null as string | null };
     const stream = (async () => {
         try {
-            const response = await fetch(url, { signal });
-            if (!response.body) throw new Error(`no body, status ${String(response.status)}`);
+            const response = await fetch(url, { headers, signal });
+            if (!response.ok || !response.body) throw new Error(`status ${String(response.status)}`);
             for await (const chunk of response.body) state.lines += String(chunk).split('\n').length - 1;
             state.ended = 'closed by the other side';
         } catch (error) {
@@ -239,6 +259,7 @@ if (!handler) {
     process.exit(2);
 }
 
+loadSdkEnv();
 const controller = new AbortController();
 process.once('SIGINT', () => { controller.abort(new Error('interrupted')); });
 

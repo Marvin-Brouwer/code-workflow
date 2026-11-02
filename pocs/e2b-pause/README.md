@@ -2,8 +2,9 @@
 
 **Outcome: ⏳ passing so far, not adopted yet.** On self-hosted E2B (Embed) in an Ubuntu WSL
 distro, a paused sandbox kept its memory and processes: a pending `await` resolved in the same
-process and stack after 60 s paused, and again after an Embed restart. Docker Desktop doesn't work
-as a host. Still to run: NixOS on WSL. See [Findings](#findings).
+process and stack after 60 s paused, and again after an Embed restart. Embed can't use Docker
+Desktop as its host directly; [`windows/`](windows/) wraps it in a container for that, not run
+yet. Still to run: that container, and NixOS on WSL. See [Findings](#findings).
 
 Plan and criteria: [docs/plans/poc-e2b-pause.md](../../docs/plans/poc-e2b-pause.md).
 
@@ -26,7 +27,7 @@ guide calls it "a single-machine evaluation package rather than a deployment pat
 What that means for this POC:
 
 - **WSL2 isn't mentioned anywhere** in the Embed docs. It works in an Ubuntu 24.04 WSL distro
-  with its own Docker Engine, but not with Docker Desktop (see
+  with its own Docker Engine, but not on Docker Desktop directly (see
   [Prerequisites](#prerequisites-per-setup)).
 - **Pause with memory is the default**: `sandbox.pause()` saves memory and filesystem, and
   `Sandbox.connect(id)` resumes
@@ -49,28 +50,28 @@ Docker has to run in the same Linux that has `/dev/kvm`, because Embed's contain
 `/dev/kvm` and `/dev/net/tun` from their own host. Every setup needs Node 22+ and pnpm 10
 (`corepack enable`) to run the host script, and about 12 GiB RAM and 20 GiB disk for Embed.
 
-### Windows: Ubuntu on WSL, not Docker Desktop
+### Windows with Docker Desktop: the `windows/` container
 
-Checked 2026-11-02 on Windows 11 with an Intel CPU, WSL 3.0.3 and kernel 6.18.54.1.
+**Not run yet.** The Ubuntu-on-WSL setup below is the one that has passed.
 
-**Docker Desktop doesn't work.** Embed isn't a self-contained container app. Its setup containers
-`nsenter` into the host's PID 1, configure hugepages and NBD devices, and store templates and
-snapshots in host paths (`/var/lib/e2b`, `/orchestrator`). With Docker Desktop, that host is
-Desktop's internal VM, whose root disk had 8 GiB free with no setting to grow it, so the preflight
-check (20 GiB) fails. Images live on a separate, large disk, which doesn't help. Lowering
-`PF_MIN_FREE_GIB` would start Embed on a disk too small for snapshots, and that disk's persistence
-across Desktop restarts is unknown.
+Embed can't run on Docker Desktop directly. It isn't a self-contained container app: its setup
+containers `nsenter` into the host's PID 1, configure hugepages and NBD devices, and store templates
+and snapshots in host paths (`/var/lib/e2b`, `/orchestrator`). Under Docker Desktop that host is
+Desktop's internal VM, whose root disk had 8 GiB free with no setting to grow it, so the 20 GiB
+preflight check fails.
 
-Use an Ubuntu 24.04 WSL distro with Docker Engine installed inside it:
+[`windows/`](windows/) gives Embed a host of its own instead: a privileged container with its own
+Docker Engine (`docker:dind`), which fetches and starts Embed inside itself. Its disk is a Docker
+volume on Desktop's large image disk.
 
-1. **Requirements:** Windows 11 on x86-64; nested virtualization doesn't work on Windows 10 or
-   arm64.
+1. **Requirements:** Windows 11 on x86-64 (nested virtualization doesn't work on Windows 10 or
+   arm64), Docker Desktop on the WSL2 backend, Git Bash, Node 22+ and pnpm 10.
 2. **Update WSL:** `wsl --update`. The old 5.15 kernel is below Embed's 6.8 minimum. A warning
    that `System.AppUserModel.ID` couldn't be set on `WSL.lnk` is harmless.
 3. **Configure WSL** in `%UserProfile%\.wslconfig`. Since WSL 3, KVM is a kernel module that isn't
    loaded at boot, so `/dev/kvm` is missing until you load it here. Use `kvm_amd` on AMD
-   (`grep -m1 -oE 'vmx|svm' /proc/cpuinfo` prints `vmx` on Intel, `svm` on AMD), and give WSL at
-   least 12GB of memory.
+   (`docker run --rm alpine grep -m1 -oE 'vmx|svm' /proc/cpuinfo` prints `vmx` on Intel, `svm` on
+   AMD), and give WSL at least 12GB of memory.
 
    ```ini
    [wsl2]
@@ -79,10 +80,46 @@ Use an Ubuntu 24.04 WSL distro with Docker Engine installed inside it:
    memory=16GB
    ```
 
-4. **Install Ubuntu and restart WSL:** `wsl --install -d Ubuntu-24.04`, then `wsl --shutdown`.
-5. **Quit Docker Desktop** if it's installed. Its WSL integration takes over `docker` in your
+4. **Restart WSL:** `wsl --shutdown`, then start Docker Desktop.
+5. **Start Embed** from the repo, in Git Bash. The first start pulls Embed's images inside the
+   container and takes several minutes; it's ready when the log says `E2B is up`.
+
+   ```bash
+   cd pocs/e2b-pause/windows
+   docker compose up -d --build
+   docker compose logs -f   # Ctrl+C once it says "E2B is up"
+   ```
+
+6. **Run the POC** from the repo root, still in Git Bash. The host script picks up the SDK settings
+   from `pocs/e2b-pause/.work/sdk.env`, which the container writes, so there's nothing to `eval`.
+
+   ```bash
+   pnpm install
+   pnpm poc:e2b-pause run
+   pnpm poc:e2b-pause pause
+   (cd pocs/e2b-pause/windows && docker compose restart && docker compose logs -f)   # until "E2B is up"
+   pnpm poc:e2b-pause resume
+   pnpm poc:e2b-pause egress
+   ```
+
+   Restarting the container restarts Embed and its Docker Engine. Paused sandboxes live in the
+   `e2b-data` and `orchestrator` volumes.
+
+Differences from Linux: firecracker runs inside the container, where the host script can't see it,
+so "no CPU or RAM while paused" reports "not measured". The repo's `.npmrc` pins the public npm
+registry, so a company registry in a user-level npm config doesn't apply.
+
+To remove everything: `docker compose down -v` in `pocs/e2b-pause/windows`.
+
+### Windows: Ubuntu on WSL
+
+Passed on 2026-11-02 on Windows 11 with an Intel CPU, WSL 3.0.3 and kernel 6.18.54.1. An Ubuntu
+24.04 WSL distro with Docker Engine installed inside it. Do steps 1 to 3 above, then:
+
+1. **Install Ubuntu and restart WSL:** `wsl --install -d Ubuntu-24.04`, then `wsl --shutdown`.
+2. **Quit Docker Desktop** if it's installed. Its WSL integration takes over `docker` in your
    default distro while it runs.
-6. **Open Ubuntu** (`wsl -d Ubuntu-24.04`) and do everything below in that shell, not in Git Bash
+3. **Open Ubuntu** (`wsl -d Ubuntu-24.04`) and do everything below in that shell, not in Git Bash
    or PowerShell. Install Docker Engine, Node 22 and pnpm:
 
    ```bash
@@ -91,10 +128,10 @@ Use an Ubuntu 24.04 WSL distro with Docker Engine installed inside it:
    sudo corepack enable
    ```
 
-7. **Check:** `docker info --format '{{.Name}} / {{.OperatingSystem}}'` names Ubuntu, not Docker
+4. **Check:** `docker info --format '{{.Name}} / {{.OperatingSystem}}'` names Ubuntu, not Docker
    Desktop; `ls -l /dev/kvm /dev/net/tun` lists both; `uname -r` is 6.8 or newer; `df -h /` has
    20G+ available.
-8. **Clone the repo into the Linux filesystem** (`~`, not `/mnt/c`), then continue with
+5. **Clone the repo into the Linux filesystem** (`~`, not `/mnt/c`), then continue with
    [Run](#run).
 
 The repo's `.npmrc` pins the public npm registry, so a company registry in a user-level npm config
@@ -105,7 +142,8 @@ doesn't apply.
 - Run Docker Engine inside NixOS (`virtualisation.docker.enable = true;`, with your user in the
   `docker` group). Don't use Docker Desktop's WSL integration: that runs containers in its own
   `docker-desktop` distro, so it doesn't test NixOS.
-- Windows steps 1 to 3 and 7 apply too, because NixOS runs on the same WSL VM and kernel.
+- Windows steps 1 to 3 apply too, and the checks of the Ubuntu setup, because NixOS runs on the
+  same WSL VM and kernel.
 - Docker 27+, Compose 2.24+ and cgroup v2.
 
 ### Linux
@@ -175,7 +213,7 @@ distro with Docker Engine, and E2B Embed from `e2b-dev/runtime` main (orchestrat
 | Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 1518 → 1518, token and 236 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 64 s waiting |
 | No CPU or RAM on the host while paused | ✅ firecracker processes 1 → 0 |
 | Survives a restart of the E2B service | ✅ `pause`, `docker compose restart`, `resume`: same PID, memory and stack, after 34 s waiting |
-| Runs on a machine used for development | ⚠️ yes on Linux, including WSL; no with Docker Desktop, see [Prerequisites](#prerequisites-per-setup) |
+| Runs on a machine used for development | ⚠️ yes on Linux, including a WSL distro; not on Docker Desktop directly; the `windows/` container is untested, see [Prerequisites](#prerequisites-per-setup) |
 | Egress limited to an allowlist (should) | ✅ `registry.npmjs.org` → 200, `example.com` blocked |
 | Same script against E2B cloud (should) | not run |
 

@@ -1,0 +1,31 @@
+# Windows only: runs E2B Embed inside a Linux container with its own Docker Engine.
+# Linux and WSL distros with Docker Engine run Embed directly; see ../README.md.
+name: e2b-windows
+
+services:
+  embed:
+    build: .
+    privileged: true
+    ports:
+      - "127.0.0.1:3000:3000" # API
+      - "127.0.0.1:3001:3001" # dashboard
+      - "127.0.0.1:3002:3002" # sandbox proxy
+    volumes:
+      # The kernel's modules and the live /dev, so Embed's host setup can load nbd for this kernel
+      # and the NBD devices it creates show up in here.
+      - /lib/modules:/lib/modules:ro
+      - /dev:/dev
+      # Kept across restarts and rebuilds: images, Embed's files, templates and snapshots.
+      - docker-data:/var/lib/docker
+      - embed:/embed
+      - e2b-data:/var/lib/e2b
+      - orchestrator:/orchestrator
+      # sdk.env for the host script.
+      - ../.work:/out
+    stop_grace_period: 90s
+
+volumes:
+  docker-data:
+  embed:
+  e2b-data:
+  orchestrator:
