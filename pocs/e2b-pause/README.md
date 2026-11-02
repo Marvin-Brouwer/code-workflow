@@ -127,7 +127,7 @@ Then from the repo root:
 ```bash
 pnpm install
 pnpm poc:e2b-pause run      # start, pause for 60 s (POC_PAUSE_SECONDS), resume, verify
-pnpm poc:e2b-pause pause    # start and pause, then restart E2B:  docker compose -f ~/e2b/compose.yaml restart
+pnpm poc:e2b-pause pause    # start and pause, then restart E2B:  (cd ~/e2b && docker compose restart)
 pnpm poc:e2b-pause resume   # resume the sandbox from the pause step and verify
 pnpm poc:e2b-pause egress   # allowlist one host (POC_EGRESS_ALLOWED), check another is blocked
 ```
