@@ -4,7 +4,7 @@ set -euo pipefail
 
 embed_ref="${EMBED_REF:-main}"
 
-dockerd-entrypoint.sh dockerd >/var/log/dockerd.log 2>&1 &
+dind dockerd >/var/log/dockerd.log 2>&1 &
 dockerd_pid=$!
 
 stop() {
@@ -27,7 +27,16 @@ if [ ! -s compose.yaml ] || [ ! -s .env ]; then
     curl -fsSL --remote-name-all "https://raw.githubusercontent.com/e2b-dev/runtime/${embed_ref}/embed/compose/{compose.yaml,.env}"
 fi
 
-docker compose up -d --wait
+if ! docker compose up -d --wait; then
+    # Compose only says which service failed; the reason is in that service's own log.
+    echo "embed: Embed failed to start. Logs of the services that exited with an error:" >&2
+    docker compose ps -a --format '{{.Service}} {{.ExitCode}}' | while read -r service code; do
+        [ "$code" != 0 ] || continue
+        echo "----- $service (exit $code)" >&2
+        docker compose logs --no-color --no-log-prefix --tail 50 "$service" >&2
+    done
+    exit 1
+fi
 docker compose exec -T ready cat /run/e2b/sdk.env > /out/sdk.env
 echo "embed: E2B is up; SDK settings written to pocs/e2b-pause/.work/sdk.env"
 

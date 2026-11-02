@@ -44,7 +44,10 @@ interface HostUsage { processes: number; rssMb: number }
  */
 function loadSdkEnv() {
     const file = path.join(workDir, 'sdk.env');
-    if (process.env.E2B_API_URL || !existsSync(file)) return;
+    if (process.env.E2B_API_URL) return;
+    if (!existsSync(file)) {
+        throw new Error(`No E2B settings: E2B_API_URL is unset and ${path.relative(process.cwd(), file)} doesn't exist. Start Embed first (README, Prerequisites).`);
+    }
     for (const line of readFileSync(file, 'utf8').split('\n')) {
         const match = /^(?:export\s+)?(E2B_[A-Z_]+)=(.*)$/.exec(line.trim());
         if (match?.[1] && match[2] !== undefined) process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');

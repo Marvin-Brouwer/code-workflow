@@ -61,8 +61,11 @@ Desktop's internal VM, whose root disk had 8 GiB free with no setting to grow it
 preflight check fails.
 
 [`windows/`](windows/) gives Embed a host of its own instead: a privileged container with its own
-Docker Engine (`docker:dind`), which fetches and starts Embed inside itself. Its disk is a Docker
-volume on Desktop's large image disk.
+Docker Engine, which fetches and starts Embed inside itself. Because Embed's preflight runs in that
+container's namespaces, the container is the Ubuntu 24.04 host Embed is built for (glibc, iptables,
+rsync, e2fsprogs, iproute2), with Docker Engine from Docker's apt repository. An Alpine-based
+`docker:dind` fails that preflight on glibc and the missing tools. Its disk is a Docker volume on
+Desktop's large image disk.
 
 1. **Requirements:** Windows 11 on x86-64 (nested virtualization doesn't work on Windows 10 or
    arm64), Docker Desktop on the WSL2 backend, Git Bash, Node 22+ and pnpm 10.
