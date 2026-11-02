@@ -2,9 +2,9 @@
     "name": "code-workflow",
     "private": true,
     "type": "module",
-    "packageManager": "pnpm@10.28.0",
     "engines": {
-        "node": ">=22"
+        "node": ">=22",
+        "pnpm": ">=10"
     },
     "scripts": {
         "poc:loop-typing": "pnpm --filter @pocs/loop-typing check",
