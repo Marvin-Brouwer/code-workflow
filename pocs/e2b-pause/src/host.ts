@@ -71,8 +71,11 @@ async function timed<T>(work: () => Promise<T>): Promise<{ value: T; ms: number 
 
 /** Firecracker processes on this machine. Only meaningful when the script runs on the E2B host itself. */
 function hostUsage(): HostUsage {
+    // Firecracker only runs on a Linux host; elsewhere (Windows, where it runs inside the windows/
+    // container) there is nothing to see, and Git Bash's ps doesn't know -C.
+    if (process.platform !== 'linux') return { processes: 0, rssMb: 0 };
     try {
-        const rss = execFileSync('ps', ['-C', 'firecracker', '-o', 'rss='], { encoding: 'utf8' })
+        const rss = execFileSync('ps', ['-C', 'firecracker', '-o', 'rss='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
             .split('\n').map((line) => Number(line.trim())).filter((kb) => kb > 0);
         return { processes: rss.length, rssMb: Math.round(rss.reduce((sum, kb) => sum + kb, 0) / 1024) };
     } catch {
