@@ -1,10 +1,10 @@
 # @pocs/e2b-pause
 
-**Outcome: ⏳ passing so far, not adopted yet.** On self-hosted E2B (Embed) in an Ubuntu WSL
-distro, a paused sandbox kept its memory and processes: a pending `await` resolved in the same
-process and stack after 60 s paused, and again after an Embed restart. Embed can't use Docker
-Desktop as its host directly; [`windows/`](windows/) wraps it in a container for that, not run
-yet. Still to run: that container, and NixOS on WSL. See [Findings](#findings).
+**Outcome: ⏳ passing so far, not adopted yet.** On self-hosted E2B (Embed), both in an Ubuntu WSL
+distro and in the [`windows/`](windows/) container on Docker Desktop, a paused sandbox kept its
+memory and processes: a pending `await` resolved in the same process and stack after 60 s paused,
+and again after an Embed restart. Embed can't use Docker Desktop as its host directly; the
+`windows/` container gives it one. Still to run: NixOS on WSL. See [Findings](#findings).
 
 Plan and criteria: [docs/plans/poc-e2b-pause.md](../../docs/plans/poc-e2b-pause.md).
 
@@ -52,7 +52,7 @@ Docker has to run in the same Linux that has `/dev/kvm`, because Embed's contain
 
 ### Windows with Docker Desktop: the `windows/` container
 
-**Not run yet.** The Ubuntu-on-WSL setup below is the one that has passed.
+**Passed 2026-11-02**, see [Findings](#findings).
 
 Embed can't run on Docker Desktop directly. It isn't a self-contained container app: its setup
 containers `nsenter` into the host's PID 1, configure hugepages and NBD devices, and store templates
@@ -212,12 +212,20 @@ distro with Docker Engine, and E2B Embed from `e2b-dev/runtime` main (orchestrat
 `v0.16.202610201713`, Firecracker `v1.14`). The default sandbox template has 473 MB RAM and Node
 20.9.0, so the stub used 236 MB of ballast.
 
+The same run passed on the same PC in the [`windows/`](windows/) container on Docker Desktop, with
+the same Embed version. The container needed three things to work: an Ubuntu 24.04 base rather than
+Alpine `docker:dind` (Embed's preflight checks glibc and host tools in the container itself), the
+`/etc` directories systemd and udev would normally create, and an inner address pool outside
+172.16.0.0/12, because an inner network on the container's own Docker Desktop subnet breaks its
+networking. The Firecracker host usage isn't measured there, because the processes live inside
+the container.
+
 | Criterion | Result |
 |---|---|
 | Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 1518 → 1518, token and 236 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 64 s waiting |
 | No CPU or RAM on the host while paused | ✅ firecracker processes 1 → 0 |
 | Survives a restart of the E2B service | ✅ `pause`, `docker compose restart`, `resume`: same PID, memory and stack, after 34 s waiting |
-| Runs on a machine used for development | ⚠️ yes on Linux, including a WSL distro; not on Docker Desktop directly; the `windows/` container is untested, see [Prerequisites](#prerequisites-per-setup) |
+| Runs on a machine used for development | ✅ in an Ubuntu WSL distro, and on Docker Desktop through the `windows/` container (not on Docker Desktop directly); NixOS on WSL still to run, see [Prerequisites](#prerequisites-per-setup) |
 | Egress limited to an allowlist (should) | ✅ `registry.npmjs.org` → 200, `example.com` blocked |
 | Same script against E2B cloud (should) | not run |
 
@@ -228,6 +236,7 @@ Measured:
 | Create | 473 ms |
 | Pause (236 MB in use, 473 MB VM) | 113 ms |
 | Resume | 238 ms; 660 ms after an Embed restart |
+| `windows/` container | create 373 ms, pause 91 ms, resume 212 ms; 649 ms after a container restart (Embed back up in 69 s) |
 | Snapshot size | not measured (`E2B_SNAPSHOT_DIR` not set) |
 
 Observations that matter for the engine:

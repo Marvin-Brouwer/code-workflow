@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro (2026-11-02); Docker Desktop is not a viable host; NixOS on WSL still to run. Settles [open question 1](../design.md#open-questions) (blocking).
+Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro and in the `windows/` container on Docker Desktop (2026-11-02); Docker Desktop is not a viable host without that container; NixOS on WSL still to run. Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 
