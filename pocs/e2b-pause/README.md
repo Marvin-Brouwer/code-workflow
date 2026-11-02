@@ -100,7 +100,8 @@ Desktop's large image disk.
    pnpm install
    pnpm poc:e2b-pause run
    pnpm poc:e2b-pause pause
-   (cd pocs/e2b-pause/windows && docker compose restart && docker compose logs -f)   # until "E2B is up"
+   (cd pocs/e2b-pause/windows && since=$(date -u +%FT%TZ) && docker compose restart \
+     && until docker compose logs --since "$since" | grep -q "E2B is up"; do sleep 5; done)
    pnpm poc:e2b-pause resume
    pnpm poc:e2b-pause egress
    ```
