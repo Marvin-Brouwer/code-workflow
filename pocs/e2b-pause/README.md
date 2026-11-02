@@ -56,6 +56,8 @@ and kernel 6.18.54.1.
 
 1. **Install** Docker Desktop with the WSL2 backend, Git for Windows (Git Bash), and Node 22+.
    Windows 11 on x86-64 is required; nested virtualization doesn't work on Windows 10 or arm64.
+   Embed's preflight wants 20 GiB free inside Docker's disk: raise Docker Desktop → Settings →
+   Resources → Advanced → *Virtual disk limit* (64 GB is comfortable), or `docker system prune`.
 2. **Update WSL** from PowerShell or Git Bash: `wsl --update`. The old 5.15 kernel is below
    Embed's 6.8 minimum. A warning that `System.AppUserModel.ID` couldn't be set on `WSL.lnk` is
    harmless.
