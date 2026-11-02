@@ -35,6 +35,10 @@ if ! docker compose up -d --wait; then
         echo "----- $service (exit $code)" >&2
         docker compose logs --no-color --no-log-prefix --tail 50 "$service" >&2
     done
+    # Docker Engine stays up, so the inner stack can be inspected or retried with
+    # `docker compose exec -T embed docker compose ...`.
+    echo "embed: Docker Engine left running for inspection; 'docker compose restart' retries" >&2
+    wait "$dockerd_pid"
     exit 1
 fi
 docker compose exec -T ready cat /run/e2b/sdk.env > /out/sdk.env
