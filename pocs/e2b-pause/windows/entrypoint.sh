@@ -4,7 +4,14 @@ set -euo pipefail
 
 embed_ref="${EMBED_REF:-main}"
 
-dind dockerd >/var/log/dockerd.log 2>&1 &
+# This container sits on a Docker Desktop network in 172.16.0.0/12, the same range the inner Docker
+# Engine would pick for Embed's network by default. An inner network on this container's own
+# subnet takes over its gateway address and breaks both outbound traffic and traffic between
+# Embed's containers, so the inner engine gets addresses from a range Docker Desktop doesn't use.
+dind dockerd \
+    --bip 10.213.255.1/24 \
+    --default-address-pool base=10.213.0.0/17,size=24 \
+    >/var/log/dockerd.log 2>&1 &
 dockerd_pid=$!
 
 stop() {
