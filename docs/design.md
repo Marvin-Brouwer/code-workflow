@@ -306,6 +306,12 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
    logins (as opposed to API keys).
 9. **Several instances of one connector** (e.g. two AWS accounts): named instances in config, picked
    by name in the workflow. Only when needed.
+10. **Embed's idle cost on a dev machine.** Idle with no sandboxes, Embed takes about a quarter of
+    a core (mostly ClickHouse) and 1+ GB RAM, with peaks over one core
+    ([findings](../pocs/e2b-pause/README.md#findings)). Paused sandboxes survive an Embed
+    restart, so the engine could start Embed when a run needs a sandbox and stop it once every run
+    is paused or done (a warm start took about 70 s). Alternatives: trim Embed (ClickHouse is only
+    for logs and metrics), or use E2B cloud for development and self-host only on a server.
 
 Out of scope for now: token and cost budgets.
 
