@@ -260,5 +260,10 @@ Observations that matter for the engine:
 - **Default template:** Node 20.9.0 and 473 MB RAM. The engine's sandbox template needs its own
   Node version and memory size.
 
+Idle cost: with no sandboxes running, Embed in the `windows/` container used about 0.25 of a core
+steadily (ClickHouse at about 22%, with 620 MB RAM) and peaked around 1.1 cores when the services'
+healthchecks fire together. That is Embed's own cost, not the POC's; stop the container when it
+isn't needed.
+
 Not done: the E2B cloud comparison, the snapshot size, NixOS on WSL, and a longer pause (hours or
 days).
