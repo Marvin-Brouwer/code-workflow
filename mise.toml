@@ -10,6 +10,14 @@ node = "lts"
 # [_.vscode]
 # .vscode/extensions.json
 
+# [_.docker]
+# Docker Engine 27+ with Compose 2.24+, installed at system level (NixOS: virtualisation.docker.enable)
+# pocs/e2b-pause/README.md#prerequisites-per-setup
+
+# [_.kvm]
+# /dev/kvm and /dev/net/tun, for Firecracker (WSL: nestedVirtualization and loadKernelModules in .wslconfig)
+# pocs/e2b-pause/README.md#prerequisites-per-setup
+
 [tasks.setup]
 description = "First run after cloning"
 run = ["pnpm install"]
