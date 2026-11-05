@@ -20,8 +20,10 @@ services:
       - embed:/embed
       - e2b-data:/var/lib/e2b
       - orchestrator:/orchestrator
-      # sdk.env for the host script.
+      # sdk.env for the host script. Docker creates a missing .work as root on a Linux host, so the
+      # entrypoint hands it to whoever owns this directory (read-only, only looked at).
       - ../.work:/out
+      - .:/owner:ro
     stop_grace_period: 90s
 
 volumes:

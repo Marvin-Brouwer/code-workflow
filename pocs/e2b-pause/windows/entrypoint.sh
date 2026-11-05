@@ -49,6 +49,9 @@ if ! docker compose up -d --wait; then
     exit 1
 fi
 docker compose exec -T ready cat /run/e2b/sdk.env > /out/sdk.env
+# On a Linux host the files would stay root's, so the host script couldn't write its reports next to
+# them. Docker Desktop on Windows ignores ownership, hence the || true.
+chown -R "$(stat -c %u:%g /owner)" /out 2>/dev/null || true
 echo "embed: E2B is up; SDK settings written to pocs/e2b-pause/.work/sdk.env"
 
 wait "$dockerd_pid"
