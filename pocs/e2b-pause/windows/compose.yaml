@@ -26,6 +26,14 @@ services:
       - .:/owner:ro
     stop_grace_period: 90s
 
+networks:
+  default:
+    driver_opts:
+      # WSL's mirrored networking routes 127.0.0.1 through its own interface, loopback0, instead of
+      # lo. Docker drops traffic to 127.0.0.1-published ports that doesn't arrive on lo, so the ports
+      # above time out there unless that interface is trusted. A name that doesn't exist is ignored.
+      com.docker.network.bridge.trusted_host_interfaces: loopback0
+
 volumes:
   docker-data:
   embed:
