@@ -1,0 +1,15 @@
+# This file serves both as an auto install and an SBOM (https://www.ntia.gov/page/software-bill-materials)
+# Install mise or use this file to configure the tools for this repo
+# https://mise.jdx.dev/
+
+[tools]
+"npm:pnpm" = "latest"
+node = "lts"
+"npm:typescript" = "latest"
+
+# [_.vscode]
+# .vscode/extensions.json
+
+[tasks.setup]
+description = "First run after cloning"
+run = ["pnpm install"]

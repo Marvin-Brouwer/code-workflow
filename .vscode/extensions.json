@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "ms-vscode.vscode-typescript-next",
+    "ms-toolsai.jupyter",
+    "vitest.explorer",
+    "yoavbls.pretty-ts-errors",
+    "wix.vscode-import-cost",
+    "meganrogge.template-string-converter",
+    "pflannery.vscode-versionlens",
+    "rodsarhan.tstypecolorpreview",
+    "Kundros.regexer-extension"
+  ],
+  "unwantedRecommendations": []
+}
