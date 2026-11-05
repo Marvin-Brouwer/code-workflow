@@ -8,7 +8,9 @@
     "meganrogge.template-string-converter",
     "pflannery.vscode-versionlens",
     "rodsarhan.tstypecolorpreview",
-    "Kundros.regexer-extension"
+    "Kundros.regexer-extension",
+    "docker.docker",
+    "ms-azuretools.vscode-containers" 
   ],
   "unwantedRecommendations": []
 }
