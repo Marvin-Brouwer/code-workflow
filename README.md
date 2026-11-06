@@ -1,4 +1,4 @@
-# code-workflow
+# `@mesh-flow/*`
 Deterministic development pipelines
 
 Workflows are plain TypeScript in git that dispatch to AI agents where that makes sense. Start
