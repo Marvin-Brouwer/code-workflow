@@ -278,10 +278,9 @@ No credential ever enters the sandbox. Full rules in
 
 | Mechanism | Used for |
 |---|---|
-| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | every credentialed tool: Jira, GitLab, GitHub, pushes |
-| **Model calls** over the same channel, native request and response passed through (proposal) | model providers |
-| **Short-lived handout** through a standard endpoint | AWS via `AWS_CONTAINER_CREDENTIALS_FULL_URI` (HTTPS or a loopback forwarder); `credential_process` for tools that need a file |
-| To decide | private package registries, git fetch |
+| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, git checkout/fetch/push, AWS operations |
+| **Model calls** over the same channel, native request and response passed through | model providers |
+| **Registry shim** in the sandbox turning package fetches into read-only tool calls | private package registries (CodeArtifact NuGet/npm) |
 
 ### Tool calls
 
@@ -316,7 +315,8 @@ No credential ever enters the sandbox. Full rules in
   admin.
 - **Per run:** the gateway fetches role credentials (`GetRoleCredentials`) for the configured
   account and permission set, refreshes them while the run is active and refreshing needs no
-  interaction, and adds `aws:SourceIp` so they only work from the gateway's egress.
+  interaction, and adds `aws:SourceIp` so they only work from the gateway's egress. AWS
+  operations are host-side tools; no credential is handed to the sandbox.
 - **Lazy login:** when a run needs AWS and the session is missing, expired or within the renew
   threshold, the run raises an input request with a notification. One login resumes every run
   waiting on it. When a session is close to expiring while runs use it, the user is warned ahead
@@ -339,8 +339,8 @@ export const aws = connector({
         permissionSet: z.string(),
         renewThreshold: z.string().default('2h'),
     }),
-    gateway: { login, refresh, expiresAt, issue },   // auth, refresh, handing out credentials
-    sandbox: { prepare },                             // points the AWS CLI at the handout
+    gateway: { login, refresh, expiresAt, tools },   // auth, refresh, host-side tools
+    sandbox: { tools },                               // stubs that call them
 });
 ```
 
@@ -349,7 +349,7 @@ export const aws = connector({
   possible, otherwise raises an input request and waits. An agent that hits expired credentials
   can call it itself.
 - A connector's credentialed tools have their implementation in the gateway half and a stub in
-  the sandbox half (section 7). AWS is the exception, since it uses the short-lived handout.
+  the sandbox half (section 7).
 - Workflows import the connectors they use, so the engine knows each workflow's requirements.
 
 ## 9. Settings

@@ -51,20 +51,22 @@ typed.
 6. **Inputs are validated on the host**, against the tool's schema, before anything runs. The stub
    validates too, so the agent gets errors early, but the host's check is the one that counts.
 
-## What doesn't fit the model yet
+## Everything credentialed is a tool call
 
-- **Model calls.** The loop itself calls models from the sandbox. Proposal: a `model` method on the
-  same channel that carries the provider's native request and streams the native response back,
-  so provider features (thinking, caching, headers) stay intact and usage is measured per loop.
-- **Private package registries** (CodeArtifact NuGet/npm) are used by `npm install` and
-  `dotnet restore` in the shell. Public sources stay reachable directly. For private ones: a
-  read-only proxy with a read-only token, or install through a tool. To decide when the first
-  workflow needs one.
-- **git.** Pushing goes only through tools (`gitlab.push(repository)`), so the agent can't push to
-  arbitrary remotes or branches. Fetching needs credentials too; a read-only credential helper or a
-  checkout tool. To decide with `connector-github`.
-- **AWS** stays the exception for now: the short-lived handout plus `aws:SourceIp`, as in design
-  section 7. Wrapping the CLI in tools would lose too much.
+The sandbox has no other way out with a credential, so these are tool calls like the rest:
+
+- **Model calls.** The loop's own model calls go over the channel as a host-side call that carries
+  the provider's native request and streams the native response back, so provider features
+  (thinking, caching, headers) stay intact and usage is measured per loop. Calling another agent
+  is already a tool: `agent.as(name, …)`.
+- **git.** Checkout, fetch and push are host-side tools (`gitlab.push(repository)`), so the agent
+  can't fetch from or push to arbitrary remotes or branches.
+- **Private package registries** (CodeArtifact NuGet/npm). The package manager in the sandbox is
+  pointed at a local shim that turns each package fetch into a read-only tool call
+  (`registry.fetch(package, version)`). Public package sources need no credential and stay
+  reachable directly.
+- **AWS.** Host-side tools per operation a workflow needs, using the gateway's role credentials.
+  No credential handout to the sandbox, so no raw `aws` CLI there.
 
 ## Worth borrowing from OpenShell
 

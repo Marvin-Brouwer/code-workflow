@@ -100,6 +100,9 @@ November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context]
   `AWS_ENDPOINT_URL`), but breaks presigned URLs, chunked uploads, and credentials passed to
   containers. Deferred; short-lived handout plus `aws:SourceIp` gives nearly the same protection
   with full compatibility.
+- **Short-lived AWS credentials handed to the sandbox** (`AWS_CONTAINER_CREDENTIALS_FULL_URI`,
+  `credential_process`) plus `aws:SourceIp`. Superseded 2026-11-06: still a credential in the
+  sandbox with its full reach for its lifetime. AWS operations are host-side tools now.
 - **Placeholder tokens swapped on the way out** (as in NVIDIA OpenShell and microsandbox's
   secrets). Still puts a value in the sandbox that means "use credential X", and the swap has to
   find it in headers, query strings or bodies.
