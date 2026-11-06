@@ -59,9 +59,9 @@ microsandbox (to verify, [open question 11](../design.md#open-questions)), E2B's
   other HTTP API each get an override route. Model providers already reach the gateway through a
   `baseUrl`, so they are routes like the rest. The exceptions stay as above: AWS SigV4 (short-lived
   handout) and git (credential helper).
-- **Allowlists come from the connector, team config can only narrow them.** Each operation a
-  connector offers declares the methods and paths it calls. A route allows the union for the
-  operations the workflows using it import, which the engine knows because workflows import their
-  connectors. Team config in git may remove methods or paths from a route, never add them. Anything
-  that widens a route (a new connector version or a newly used operation adding a method or path)
-  is flagged for human review, as borrowed from OpenShell above.
+- **Allowlists live in the connector only.** Each operation a connector offers declares the methods
+  and paths it calls. A route allows the union for the operations the workflows using it import,
+  which the engine knows because workflows import their connectors. There is no team-config
+  override: to change what a route allows, change the connector. A connector version or a newly
+  used operation that widens a route (a new method or path) is flagged for human review, as
+  borrowed from OpenShell above.

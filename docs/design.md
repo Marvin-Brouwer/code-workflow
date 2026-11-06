@@ -290,9 +290,9 @@ rules in the [plan](plans/gateway-credential-override.md):
 - **Strip, then set.** The route drops any incoming `Authorization` header, cookies and API-key
   query parameters, then adds its own credential. Redirects to another host never carry it.
 - **Allowlist per route.** Each connector operation declares the methods and paths it calls; a
-  route allows the union for the operations its workflows import. Team config can narrow it, never
-  widen it. Anything that widens a route is flagged for human review. Requests outside it fail
-  closed with a clear error.
+  route allows the union for the operations its workflows import. The connector is the only place
+  allowlists are defined, with no team-config override. Anything that widens a route is flagged for
+  human review. Requests outside it fail closed with a clear error.
 - The run token is required on every route. Tools that insist on a token get a fixed dummy value.
 
 ### Model providers
