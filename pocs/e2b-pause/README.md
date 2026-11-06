@@ -252,6 +252,13 @@ Measured:
 
 Observations that matter for the engine:
 
+- **Shutdown must not depend on the user.** The engine owns Embed's lifecycle, so on its own
+  shutdown (SIGINT, SIGTERM, the dev machine or WSL going down) it pauses every running sandbox and
+  stops Embed cleanly, and it never relies on someone running `docker compose stop` first. After an
+  unclean stop it has to recover on the next start (stale pid files, as in
+  [`windows/entrypoint.sh`](windows/entrypoint.sh), and runs whose sandbox was running rather than
+  paused). Found when a WSL shutdown left dockerd unable to start.
+
 - **`Date.now()` jumps to real time after resume.** The largest gap between the stub's one-second
   ticks was 61.2 s, about the pause length. Wall-clock time is right after a resume, so token
   expiry and deadlines based on `Date.now()` behave.

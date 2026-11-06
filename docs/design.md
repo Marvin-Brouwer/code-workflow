@@ -312,6 +312,9 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     restart, so the engine could start Embed when a run needs a sandbox and stop it once every run
     is paused or done (a warm start took about 70 s). Alternatives: trim Embed (ClickHouse is only
     for logs and metrics), or use E2B cloud for development and self-host only on a server.
+    Whatever starts Embed also stops it: on the engine's own shutdown it pauses running sandboxes
+    and stops Embed cleanly, and it recovers from an unclean stop on the next start, so nothing
+    depends on a user stopping Docker first.
 
 Out of scope for now: token and cost budgets.
 
