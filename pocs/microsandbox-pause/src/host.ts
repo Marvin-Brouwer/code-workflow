@@ -72,16 +72,26 @@ async function create(name: string, configure: (builder: ReturnType<typeof Sandb
 /** Requests https://<host>/ from inside the sandbox; the HTTP status, or '000' with the reason logged. */
 async function probe(sandbox: Sandbox, host: string): Promise<string> {
     const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
-    const output = await sandbox.exec('node', ['-e', script]);
+    // --use-system-ca: with TLS interception, microsandbox's CA is in the guest's trust store, which
+    // Node only reads with this flag.
+    const output = await sandbox.exec('node', ['--use-system-ca', '-e', script]);
     const error = output.stderr().trim();
     if (error) console.log(`     ${host}: ${error}`);
     return output.stdout().trim() || '000';
 }
 
 /** Runs `work` in a fresh sandbox with this network policy, and removes the sandbox afterwards. */
-async function withPolicy<T>(label: string, policy: NetworkPolicy, work: (sandbox: Sandbox) => Promise<T>): Promise<T> {
+async function withPolicy<T>(
+    label: string,
+    policy: NetworkPolicy,
+    options: { interceptTls: boolean },
+    work: (sandbox: Sandbox) => Promise<T>,
+): Promise<T> {
     console.log(`     sandbox with network policy: ${label}`);
-    const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy)));
+    const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => {
+        const withNetwork = b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy));
+        return options.interceptTls ? withNetwork.interceptTls() : withNetwork;
+    });
     try {
         return await work(sandbox);
     } finally {
@@ -133,13 +143,15 @@ const backend: Backend<MicrosandboxSandbox, Paused> = {
             defaultIngress: 'allow',
             rules: [Rule.allowDns(), Rule.allowEgress(Destination.domain(allowed))],
         } satisfies NetworkPolicy;
-        const result = await withPolicy('allowlist', policy, async (sandbox) => ({
+        // Hostname rules are strict by default: HTTPS is only allowed when microsandbox can read the
+        // request's host, which takes TLS interception. Without it the connection is reset.
+        const result = await withPolicy('allowlist, TLS intercepted', policy, { interceptTls: true }, async (sandbox) => ({
             allowed: await probe(sandbox, allowed),
             denied: await probe(sandbox, denied),
         }));
         if (result.allowed === '000') {
             // Tell a policy problem from a network problem: the same request with everything allowed.
-            const open = await withPolicy('allow all', NetworkPolicy.allowAll(), (sandbox) => probe(sandbox, allowed));
+            const open = await withPolicy('allow all', NetworkPolicy.allowAll(), { interceptTls: false }, (sandbox) => probe(sandbox, allowed));
             console.log(`     diagnosis: with everything allowed, ${allowed} → ${open}`);
         }
         return result;
