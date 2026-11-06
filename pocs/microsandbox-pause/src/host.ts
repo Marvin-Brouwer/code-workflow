@@ -78,7 +78,11 @@ const backend: Backend<MicrosandboxSandbox, Paused> = {
         const sandbox = await create(name);
         await sandbox.fs().write(stubPath, stubSource);
         const node = await sandbox.exec('node', ['--version']);
-        await sandbox.execDetachedWith('node', (exec) => exec.args([stubPath]).envs({ ...stubEnv }));
+        // Not as a managed job (execDetached): microsandbox refuses a full capture while one is
+        // active. setsid -f puts the stub in its own session, so it outlives the shell that starts it.
+        const env = Object.entries(stubEnv).map(([key, value]) => `${key}='${value}'`).join(' ');
+        const started = await sandbox.shell(`${env} setsid -f node ${stubPath} > /var/tmp/stub.log 2>&1 < /dev/null`);
+        if (!started.success) throw new Error(`starting the stub failed: ${started.stderr()}`);
         return { sandbox: new MicrosandboxSandbox(sandbox), details: { image, name, node: node.stdout().trim(), cpus, memoryMb: sandboxMemoryMb } };
     },
 
@@ -112,8 +116,11 @@ const backend: Backend<MicrosandboxSandbox, Paused> = {
         const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy)));
         try {
             const probe = async (host: string) => {
-                const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), () => console.log('000'))`;
-                return (await sandbox.exec('node', ['-e', script])).stdout().trim() || '000';
+                const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
+                const output = await sandbox.exec('node', ['-e', script]);
+                const error = output.stderr().trim();
+                if (error) console.log(`     ${host}: ${error}`);
+                return output.stdout().trim() || '000';
             };
             return { allowed: await probe(allowed), denied: await probe(denied) };
         } finally {
