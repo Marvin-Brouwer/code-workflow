@@ -1,10 +1,11 @@
 # @pocs/e2b-pause
 
-**Outcome: ⏳ passing so far, not adopted yet.** On self-hosted E2B (Embed), both in an Ubuntu WSL
-distro and in the [`windows/`](windows/) container on Docker Desktop, a paused sandbox kept its
-memory and processes: a pending `await` resolved in the same process and stack after 60 s paused,
-and again after an Embed restart. Embed can't use Docker Desktop as its host directly; the
-`windows/` container gives it one. Still to run: NixOS on WSL. See [Findings](#findings).
+**Outcome: ⏳ passing on every setup, not adopted yet.** On self-hosted E2B (Embed), in an Ubuntu
+WSL distro, in the [`windows/`](windows/) container on Docker Desktop, and in that container on
+NixOS on WSL, a paused sandbox kept its memory and processes: a pending `await` resolved in the
+same process and stack after 60 s paused, and again after an Embed restart. Embed can't use Docker
+Desktop or NixOS as its host directly; the `windows/` container gives it one. See
+[Findings](#findings).
 
 Plan and criteria: [docs/plans/poc-e2b-pause.md](../../docs/plans/poc-e2b-pause.md).
 
@@ -143,6 +144,8 @@ doesn't apply.
 
 ### NixOS on WSL2
 
+**Passed 2026-11-06**, see [Findings](#findings).
+
 - Run Docker Engine inside NixOS (`virtualisation.docker.enable = true;`, with your user in the
   `docker` group). Don't use Docker Desktop's WSL integration: that runs containers in its own
   `docker-desktop` distro, so it doesn't test NixOS.
@@ -232,7 +235,7 @@ the container.
 | Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 1518 → 1518, token and 236 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 64 s waiting |
 | No CPU or RAM on the host while paused | ✅ firecracker processes 1 → 0 |
 | Survives a restart of the E2B service | ✅ `pause`, `docker compose restart`, `resume`: same PID, memory and stack, after 34 s waiting |
-| Runs on a machine used for development | ✅ in an Ubuntu WSL distro, and on Docker Desktop through the `windows/` container (not on Docker Desktop directly); NixOS on WSL still to run, see [Prerequisites](#prerequisites-per-setup) |
+| Runs on a machine used for development | ✅ in an Ubuntu WSL distro, and on Docker Desktop through the `windows/` container (not on Docker Desktop directly); and on NixOS on WSL through that container, see [Prerequisites](#prerequisites-per-setup) |
 | Egress limited to an allowlist (should) | ✅ `registry.npmjs.org` → 200, `example.com` blocked |
 | Same script against E2B cloud (should) | not run |
 
@@ -244,6 +247,7 @@ Measured:
 | Pause (236 MB in use, 473 MB VM) | 113 ms |
 | Resume | 238 ms; 660 ms after an Embed restart |
 | `windows/` container | create 373 ms, pause 91 ms, resume 212 ms; 649 ms after a container restart (Embed back up in 69 s) |
+| NixOS on WSL (`windows/` container) | create 204 ms, pause 94 ms, resume 128 ms; 334 ms after a container restart (Embed back up in 77 s); firecracker processes 1 → 0 while paused |
 | Snapshot size | not measured (`E2B_SNAPSHOT_DIR` not set) |
 
 Observations that matter for the engine:
@@ -272,5 +276,10 @@ steadily (ClickHouse at about 22%, with 620 MB RAM) and peaked around 1.1 cores 
 healthchecks fire together. That is Embed's own cost, not the POC's; stop the container when it
 isn't needed.
 
-Not done: the E2B cloud comparison, the snapshot size, NixOS on WSL, and a longer pause (hours or
+On NixOS the host script sees the Firecracker processes inside the container, so "no CPU or RAM
+while paused" was measured there: 1 process before, 0 while paused. Its RSS reads only 3 MB,
+because the guest's memory lives in hugepages, which `ps` doesn't count; the process count is the
+evidence.
+
+Not done: the E2B cloud comparison, the snapshot size, and a longer pause (hours or
 days).

@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro and in the `windows/` container on Docker Desktop (2026-11-02); Docker Desktop is not a viable host without that container; NixOS on WSL still to run. Settles [open question 1](../design.md#open-questions) (blocking).
+Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro and in the `windows/` container on Docker Desktop (2026-11-02) and on NixOS on WSL (2026-11-06); Docker Desktop and NixOS need that container as Embed's host. Adoption still to decide. Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 
@@ -63,6 +63,6 @@ pnpm poc:e2b-pause   # on the E2B host, with connection settings from local, unc
 
 ## Open questions
 
-- [ ] E2B host: the NixOS/WSL2 dev machine first, with a separate Linux box only if nested
-  virtualization fails?
+- [x] E2B host: the NixOS/WSL2 dev machine works (nested virtualization, KVM and nbd all fine),
+  through the `windows/` container; no separate Linux box needed.
 - [ ] Should the E2B cloud comparison stay a "should", or drop out of this POC?
