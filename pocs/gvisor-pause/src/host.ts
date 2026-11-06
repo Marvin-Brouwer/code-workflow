@@ -7,7 +7,7 @@
  * `runsc restore` from that directory into a new container.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { type Backend, type HostUsage, type RunningSandbox, main, stubEnv, stubPath, stubSource } from '@pocs/pause-harness';
@@ -27,23 +27,39 @@ interface Mount {
     source: string;
 }
 
-/** Writes an OCI bundle around the shared rootfs: `runsc spec`, then our process, env and mounts. */
-async function bundle(name: string, args: readonly string[], env: Readonly<Record<string, string>>, mounts: readonly Mount[], signal: AbortSignal) {
+const capabilities = ['CAP_AUDIT_WRITE', 'CAP_KILL', 'CAP_NET_BIND_SERVICE'];
+
+/**
+ * Writes an OCI bundle around the shared rootfs: the spec `runsc spec` generates, with our process,
+ * env and mounts. Written here rather than by `runsc spec`, because with `RUNSC='sudo runsc'` that
+ * file would belong to root.
+ */
+function bundle(name: string, args: readonly string[], env: Readonly<Record<string, string>>, mounts: readonly Mount[]) {
     const directory = path.join(workDir, 'bundles', name);
     rmSync(directory, { recursive: true, force: true });
     mkdirSync(directory, { recursive: true });
-    await runscOk(['spec', `--bundle=${directory}`, '--', ...args], { root, signal });
-    const configFile = path.join(directory, 'config.json');
-    const config = z.looseObject({
-        process: z.looseObject({ env: z.array(z.string()) }),
-        root: z.looseObject({ path: z.string(), readonly: z.boolean() }),
-        mounts: z.array(z.looseObject({})),
-    }).parse(JSON.parse(readFileSync(configFile, 'utf8')));
-    config.process.env = [defaultPath, ...Object.entries(env).map(([key, value]) => `${key}=${value}`)];
-    // Writes inside the sandbox land in gVisor's in-memory overlay, so they are part of a checkpoint.
-    config.root = { path: rootfs, readonly: false };
-    config.mounts.push(...mounts.map((mount) => ({ ...mount, type: 'bind', options: ['rbind', 'ro'] })));
-    writeFileSync(configFile, JSON.stringify(config, null, 2));
+    const config = {
+        ociVersion: '1.0.0',
+        process: {
+            user: { uid: 0, gid: 0 },
+            args,
+            env: [defaultPath, ...Object.entries(env).map(([key, value]) => `${key}=${value}`)],
+            cwd: '/',
+            capabilities: { bounding: capabilities, effective: capabilities, inheritable: capabilities, permitted: capabilities },
+            rlimits: [{ type: 'RLIMIT_NOFILE', hard: 1024, soft: 1024 }],
+        },
+        // Writes inside the sandbox land in gVisor's in-memory overlay, so they are part of a checkpoint.
+        root: { path: rootfs, readonly: false },
+        hostname: 'runsc',
+        mounts: [
+            { destination: '/proc', type: 'proc', source: 'proc' },
+            { destination: '/dev', type: 'tmpfs', source: 'tmpfs' },
+            { destination: '/sys', type: 'sysfs', source: 'sysfs', options: ['nosuid', 'noexec', 'nodev', 'ro'] },
+            ...mounts.map((mount) => ({ ...mount, type: 'bind', options: ['rbind', 'ro'] })),
+        ],
+        linux: { namespaces: ['pid', 'network', 'ipc', 'uts', 'mount'].map((type) => ({ type })) },
+    };
+    writeFileSync(path.join(directory, 'config.json'), JSON.stringify(config, null, 2));
     return directory;
 }
 
@@ -87,7 +103,9 @@ type Paused = z.infer<typeof Paused>;
 
 function runscVersion(): string {
     const [program = 'runsc', ...prefix] = (process.env.RUNSC ?? 'runsc').split(' ').filter(Boolean);
-    return execFileSync(program, [...prefix, '--version'], { encoding: 'utf8' }).split('\n')[0] ?? 'unknown';
+    // The terminal's stdin, so `sudo` can ask for the password once here; the later runsc calls have
+    // no terminal and rely on sudo's cached credentials.
+    return execFileSync(program, [...prefix, '--version'], { encoding: 'utf8', stdio: ['inherit', 'pipe', 'inherit'] }).split('\n')[0] ?? 'unknown';
 }
 
 /** gVisor's processes on this machine: the sentry (`runsc-sandbox`) and the gofer. */
@@ -112,7 +130,7 @@ const backend: Backend<GvisorSandbox, Paused> = {
         const id = `poc-${String(Date.now())}`;
         // The stub isn't the container's init: when it finishes, init must stay, or the container
         // stops before the host has read done.json.
-        const bundleDir = await bundle(id, ['sh', '-c', `node ${stubPath}; exec sleep infinity`], stubEnv, [], signal);
+        const bundleDir = bundle(id, ['sh', '-c', `node ${stubPath}; exec sleep infinity`], stubEnv, []);
         await runscOk(['run', '--detach', `--bundle=${bundleDir}`, id], { root, signal, logFile: path.join(workDir, `${id}.log`) });
         return { sandbox: new GvisorSandbox(id, bundleDir), details: { image, layers, id } };
     },
@@ -156,7 +174,7 @@ const backend: Backend<GvisorSandbox, Paused> = {
                 env.NODE_EXTRA_CA_CERTS = '/run/poc-ca.crt';
             }
             const id = `poc-egress-${String(Date.now())}`;
-            const bundleDir = await bundle(id, ['node', '-e', probeScript, allowed, denied], env, mounts, signal);
+            const bundleDir = bundle(id, ['node', '-e', probeScript, allowed, denied], env, mounts);
             const output = await runscOk(['--host-uds=open', 'run', `--bundle=${bundleDir}`, id], { root, signal });
             await runsc(['delete', '--force', id], { root, signal });
             const result = z.record(z.string(), z.string()).parse(JSON.parse(output.trim().split('\n').at(-1) ?? '{}'));
