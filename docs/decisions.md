@@ -100,6 +100,19 @@ November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context]
   `AWS_ENDPOINT_URL`), but breaks presigned URLs, chunked uploads, and credentials passed to
   containers. Deferred; short-lived handout plus `aws:SourceIp` gives nearly the same protection
   with full compatibility.
+- **Short-lived AWS credentials handed to the sandbox** (`AWS_CONTAINER_CREDENTIALS_FULL_URI`,
+  `credential_process`) plus `aws:SourceIp`. Superseded 2026-11-06: still a credential in the
+  sandbox with its full reach for its lifetime. AWS operations are host-side tools now.
+- **Placeholder tokens swapped on the way out** (as in NVIDIA OpenShell and microsandbox's
+  secrets). Still puts a value in the sandbox that means "use credential X", and the swap has to
+  find it in headers, query strings or bodies.
+- **A gateway route per endpoint that strips and sets the credential**, with method/path
+  allowlists per route; later **an intercepting HTTPS proxy** (sandbox trusts the gateway's CA)
+  with per-host credential middleware and no allowlists. Rejected 2026-11-06: in both, anything in
+  the sandbox that reaches the endpoint (an agent's `curl -X DELETE`) gets the credential's full
+  reach, because the gateway can't tell a tool's request from a typed one, and allowlists only
+  re-implement the tools badly. Replaced by host-side credentialed tools with per-loop endpoints
+  ([plan](plans/gateway-tool-calls.md)).
 - **An `aws.session(() => ...)` scope.** Replaced by `checkSession()`, usable from code and as an
   agent tool, so an agent can recover from expired credentials itself.
 - **Account and permission set inline in workflow code.** Moved to connector settings (static

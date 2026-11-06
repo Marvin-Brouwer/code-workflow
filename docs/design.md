@@ -42,8 +42,8 @@ web UI (separate project)
    │  HTTP + SSE
 host
    ├─ engine:  runs, sandbox lifecycle (create, snapshot, resume), input requests, notifications
-   └─ gateway: the only egress for credentials (models, AWS, package registries, git, Jira, GitLab)
-   │  run token
+   └─ gateway: runs credentialed tools and holds every credential (models, AWS, git, Jira, GitLab)
+   │  tool calls (endpoint + token per loop)
 sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hypervisor)
    ├─ workflow runtime (plain async TS, events via AsyncLocalStorage)
    ├─ agents: Pi Durable underneath `loop`
@@ -67,8 +67,9 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
 - **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, relays
   human input and external events (webhooks), and serves the UI API. The prototype's
   `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol.
-- **The gateway** holds every credential and is the only way out for anything that needs one.
-  The sandbox's network is locked down to the gateway and public package sources.
+- **The gateway** holds every credential and runs every tool that needs one. The sandbox calls
+  those tools over the host↔sandbox channel; it sends no credentialed traffic itself. Its network
+  is locked down to the gateway and public package sources.
 
 ## 4. Authoring model
 
@@ -272,14 +273,30 @@ pick up deviations found earlier.
 
 ## 7. Credentials and the gateway
 
-The sandbox gets a **run token**, valid for that run only, revoked when it ends. The gateway
-turns it into access in one of three ways:
+No credential ever enters the sandbox. Full rules in
+[gateway-tool-calls.md](plans/gateway-tool-calls.md).
 
 | Mechanism | Used for |
 |---|---|
-| **Credential-injecting reverse proxy**, per provider, native API (no translation) | model providers, package registries (CodeArtifact NuGet/npm), Jira and GitLab APIs |
-| **Short-lived handout** through a standard endpoint | AWS via `AWS_CONTAINER_CREDENTIALS_FULL_URI` (HTTPS or a loopback forwarder); `credential_process` for tools that need a file |
-| **Credential helper** asking the gateway per operation | git |
+| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, AWS operations; git clone/fetch/push as functions for workflow code only |
+| **Model calls** over the same channel, native request and response passed through | model providers |
+| **Registry shim** in the sandbox turning package fetches into read-only tool calls | private package registries (CodeArtifact NuGet/npm) |
+
+### Tool calls
+
+- **Where a tool runs is part of the tool.** Tools without credentials (shell, files, tests) run in
+  the sandbox. Credentialed tools run on the host; the sandbox has a stub with the same signature.
+  A tool's own code is the limit on what its credential can do: there's no raw HTTP to the API
+  for the agent to misuse.
+- **An endpoint and token per loop.** When a `loop` starts, the runtime registers the tools
+  interpolated into its template and gets an endpoint and token for that loop only. Calls outside
+  that set are refused, failing closed with a clear error. Each token is single-use and the
+  response carries the next, so a stolen one is detected (the runtime's own call fails and the
+  loop fails). Revoked when the loop settles. Workflow
+  code gets a run-level endpoint for the tools the workflow imports, revoked when the run ends.
+- **Tokens stay out of the agent's reach:** only in the runtime's memory, and agent shell commands
+  run as a separate unprivileged user, so concurrent loops can't use each other's endpoints.
+- **Validated on the host** against the tool's schema before it runs. Aborts propagate both ways.
 
 ### Model providers
 
@@ -287,8 +304,8 @@ turns it into access in one of three ways:
   user's ordered list that offers it.
 - Agents are module-level, so the engine knows a workflow's models before a run starts and checks
   them against the user's providers up front.
-- In the sandbox, pi-ai uses each provider's native API with `baseUrl` pointing at the gateway,
-  which keeps provider-specific features (thinking, caching, headers) intact.
+- In the sandbox, pi-ai sends each provider's native request over the channel and the gateway
+  forwards it with the credential, which keeps provider-specific features (thinking, caching, headers) intact.
 - Usage and cost per run are measured at the gateway.
 
 ### AWS
@@ -298,7 +315,8 @@ turns it into access in one of three ways:
   admin.
 - **Per run:** the gateway fetches role credentials (`GetRoleCredentials`) for the configured
   account and permission set, refreshes them while the run is active and refreshing needs no
-  interaction, and adds `aws:SourceIp` so they only work from the gateway's egress.
+  interaction, and adds `aws:SourceIp` so they only work from the gateway's egress. AWS
+  operations are host-side tools; no credential is handed to the sandbox.
 - **Lazy login:** when a run needs AWS and the session is missing, expired or within the renew
   threshold, the run raises an input request with a notification. One login resumes every run
   waiting on it. When a session is close to expiring while runs use it, the user is warned ahead
@@ -321,8 +339,8 @@ export const aws = connector({
         permissionSet: z.string(),
         renewThreshold: z.string().default('2h'),
     }),
-    gateway: { login, refresh, expiresAt, issue },   // auth, refresh, handing out credentials
-    sandbox: { prepare },                             // points tools at the gateway
+    gateway: { login, refresh, expiresAt, tools },   // auth, refresh, host-side tools
+    sandbox: { tools },                               // stubs that call them
 });
 ```
 
@@ -330,6 +348,8 @@ export const aws = connector({
   tool: returns immediately when the session is valid beyond the threshold, refreshes when
   possible, otherwise raises an input request and waits. An agent that hits expired credentials
   can call it itself.
+- A connector's credentialed tools have their implementation in the gateway half and a stub in
+  the sandbox half (section 7).
 - Workflows import the connectors they use, so the engine knows each workflow's requirements.
 
 ## 9. Settings
@@ -436,7 +456,8 @@ Out of scope for now: token and cost budgets.
 
 - **Run**: one execution of a workflow, in its own sandbox.
 - **Gateway**: the host service that holds credentials and is the only egress needing them.
-- **Run token**: the sandbox's only credential; valid for one run.
+- **Loop token**: the single-use, rotating token for a loop's tool endpoint (section 7); held by
+  the runtime, never by the agent. Workflow code has a run-level one.
 - **Exit tool**: `succeed`, `propose`, `verify` or `fail`, interpolated in a prompt; the only way
   an agent finishes.
 - **Check**: a lazy verification used by `verify`.

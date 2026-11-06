@@ -14,10 +14,10 @@ The build plan for the MVP (roadmap step 2), after the POCs:
 - [mvp-build.md](mvp-build.md): the first `@mesh-flow` packages in build order, and the rules every
   package follows (abort signals, shutdown, conventions).
 
-Proposals, not decided yet:
+Decided designs:
 
-- [gateway-credential-override.md](gateway-credential-override.md): a gateway route per endpoint
-  that always sets that endpoint's credential, instead of placeholder tokens in the sandbox.
+- [gateway-tool-calls.md](gateway-tool-calls.md): credentialed tools run on the host, called from
+  the sandbox over one channel with an endpoint and token per loop.
 
 ## POC pattern
 
