@@ -42,8 +42,8 @@ web UI (separate project)
    │  HTTP + SSE
 host
    ├─ engine:  runs, sandbox lifecycle (create, snapshot, resume), input requests, notifications
-   └─ gateway: the only egress for credentials (models, AWS, package registries, git, Jira, GitLab)
-   │  run token
+   └─ gateway: runs credentialed tools and holds every credential (models, AWS, git, Jira, GitLab)
+   │  tool calls (endpoint + nonce per loop)
 sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hypervisor)
    ├─ workflow runtime (plain async TS, events via AsyncLocalStorage)
    ├─ agents: Pi Durable underneath `loop`
@@ -67,8 +67,9 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
 - **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, relays
   human input and external events (webhooks), and serves the UI API. The prototype's
   `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol.
-- **The gateway** holds every credential and is the only way out for anything that needs one.
-  The sandbox's network is locked down to the gateway and public package sources.
+- **The gateway** holds every credential and runs every tool that needs one. The sandbox calls
+  those tools over the host↔sandbox channel; it sends no credentialed traffic itself. Its network
+  is locked down to the gateway and public package sources.
 
 ## 4. Authoring model
 
@@ -272,30 +273,31 @@ pick up deviations found earlier.
 
 ## 7. Credentials and the gateway
 
-The sandbox gets a **run token**, valid for that run only, revoked when it ends. The gateway
-turns it into access in one of three ways:
+No credential ever enters the sandbox. Full rules in
+[gateway-tool-calls.md](plans/gateway-tool-calls.md).
 
 | Mechanism | Used for |
 |---|---|
-| **Intercepting proxy with per-host override middleware**, native API (no translation) | every HTTP connector: model providers, package registries (CodeArtifact NuGet/npm), Jira and GitLab APIs |
+| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | every credentialed tool: Jira, GitLab, GitHub, pushes |
+| **Model calls** over the same channel, native request and response passed through (proposal) | model providers |
 | **Short-lived handout** through a standard endpoint | AWS via `AWS_CONTAINER_CREDENTIALS_FULL_URI` (HTTPS or a loopback forwarder); `credential_process` for tools that need a file |
-| **Credential helper** asking the gateway per operation | git |
+| To decide | private package registries, git fetch |
 
-### Override middleware
+### Tool calls
 
-The sandbox's `HTTPS_PROXY` points at the gateway and its image trusts the gateway's CA (not a
-secret). The gateway intercepts requests to the real URLs and picks a middleware by host. Only two
-identities on one host get a separate route on the gateway. No placeholder tokens go into the
-sandbox. Full rules in the [plan](plans/gateway-credential-override.md):
-
-- **Proxy middleware per host.** The connector's gateway half provides a middleware that rewrites
-  each request to its host and applies the credential in whatever form the endpoint needs. The
-  default is strip, then set: drop any incoming `Authorization` header, cookies and API-key query
-  parameters, then add the connector's credential. Redirects to another host never carry it.
-- **No allowlists.** What the sandbox can do with a credential is bounded by how it is scoped, so prefer
-  short-lived or narrowly scoped credentials. A middleware may refuse a request, failing closed
-  with a clear error.
-- The run token is required on every request. Tools that insist on a token get a fixed dummy value.
+- **Where a tool runs is part of the tool.** Tools without credentials (shell, files, tests) run in
+  the sandbox. Credentialed tools run on the host; the sandbox has a stub with the same signature.
+  A tool's own code is the limit on what its credential can do: there's no raw HTTP to the API
+  for the agent to misuse.
+- **An endpoint and nonce per loop.** When a `loop` starts, the runtime registers the tools
+  interpolated into its template and gets an endpoint and nonce for that loop only. Calls outside
+  that set are refused, failing closed with a clear error. Each nonce is single-use and the
+  response carries the next, so a stolen one is detected (the runtime's own call fails and the
+  loop fails). Revoked when the loop settles. Workflow
+  code gets a run-level endpoint for the tools the workflow imports, revoked when the run ends.
+- **Nonces stay out of the agent's reach:** only in the runtime's memory, and agent shell commands
+  run as a separate unprivileged user, so concurrent loops can't use each other's endpoints.
+- **Validated on the host** against the tool's schema before it runs. Aborts propagate both ways.
 
 ### Model providers
 
@@ -303,8 +305,8 @@ sandbox. Full rules in the [plan](plans/gateway-credential-override.md):
   user's ordered list that offers it.
 - Agents are module-level, so the engine knows a workflow's models before a run starts and checks
   them against the user's providers up front.
-- In the sandbox, pi-ai uses each provider's native API at its real URL through the gateway,
-  which keeps provider-specific features (thinking, caching, headers) intact.
+- In the sandbox, pi-ai sends each provider's native request over the channel and the gateway
+  forwards it with the credential, which keeps provider-specific features (thinking, caching, headers) intact.
 - Usage and cost per run are measured at the gateway.
 
 ### AWS
@@ -338,7 +340,7 @@ export const aws = connector({
         renewThreshold: z.string().default('2h'),
     }),
     gateway: { login, refresh, expiresAt, issue },   // auth, refresh, handing out credentials
-    sandbox: { prepare },                             // points tools at the gateway
+    sandbox: { prepare },                             // points the AWS CLI at the handout
 });
 ```
 
@@ -346,8 +348,8 @@ export const aws = connector({
   tool: returns immediately when the session is valid beyond the threshold, refreshes when
   possible, otherwise raises an input request and waits. An agent that hits expired credentials
   can call it itself.
-- An HTTP connector's gateway half also provides `proxy`, the middleware for its hosts
-  (section 7). AWS has none, since it uses the short-lived handout.
+- A connector's credentialed tools have their implementation in the gateway half and a stub in
+  the sandbox half (section 7). AWS is the exception, since it uses the short-lived handout.
 - Workflows import the connectors they use, so the engine knows each workflow's requirements.
 
 ## 9. Settings
