@@ -15,7 +15,7 @@
         "typecheck": "pnpm -r typecheck"
     },
     "devDependencies": {
-        "oxlint": "1.92.0",
+        "oxlint": "1.91.0",
         "oxlint-tsgolint": "7.0.2006",
         "typescript": "~6.0.3"
     }
