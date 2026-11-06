@@ -44,7 +44,8 @@ interface HostUsage { processes: number; rssMb: number }
  */
 function loadSdkEnv() {
     const file = path.join(workDir, 'sdk.env');
-    if (process.env.E2B_API_URL) return;
+    // E2B_API_URL points at Embed; an API key on its own means E2B cloud.
+    if (process.env.E2B_API_URL ?? process.env.E2B_API_KEY) return;
     if (!existsSync(file)) {
         throw new Error(`No E2B settings: E2B_API_URL is unset and ${path.relative(process.cwd(), file)} doesn't exist. Start Embed first (README, Prerequisites).`);
     }
