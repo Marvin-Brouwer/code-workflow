@@ -6,6 +6,12 @@
 "npm:pnpm" = "latest"
 node = "lts"
 "npm:typescript" = "latest"
+# Runs the daemons below. mise installs it when a task needs a daemon; listed so the inventory is complete.
+pitchfork = "latest"
+
+[settings]
+# [daemons] is experimental in mise.
+experimental = true
 
 # [_.vscode]
 # .vscode/extensions.json
@@ -21,3 +27,23 @@ node = "lts"
 [tasks.setup]
 description = "First run after cloning"
 run = ["pnpm install"]
+
+# E2B Embed, for pocs/e2b-pause. Only started by a task that needs it, not on entering the
+# directory: it takes over a minute to start and costs about a quarter core while idle.
+# Stopping the daemon stops the container; paused sandboxes are kept.
+[daemons.e2b]
+run = "exec docker compose -f pocs/e2b-pause/windows/compose.yaml up --build"
+# The container prints this once Embed is up and the SDK settings are written.
+ready_output = "E2B is up"
+# Longer than the container's own 90 s stop grace period.
+stop_signal = { signal = "SIGTERM", timeout = "120s" }
+
+[tasks."poc:e2b-pause"]
+description = "Run an E2B pause POC command (run, pause, resume, egress), starting Embed first if needed"
+daemons = ["e2b"]
+run = "pnpm poc:e2b-pause"
+
+[tasks."e2b:stop"]
+description = "Stop E2B Embed"
+run = "mise daemons stop e2b"
+
