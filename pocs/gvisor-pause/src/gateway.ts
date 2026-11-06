@@ -5,7 +5,7 @@
  */
 import { createServer, request } from 'node:http';
 import { connect, type Socket } from 'node:net';
-import { rmSync } from 'node:fs';
+import { chmodSync, rmSync } from 'node:fs';
 
 function upstream(host: string, port: number): Promise<Socket> {
     const proxy = process.env.HTTPS_PROXY ?? process.env.https_proxy;
@@ -54,6 +54,9 @@ export async function startGateway(socketPath: string, allowed: readonly string[
     });
     rmSync(socketPath, { force: true });
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    // runsc's gofer, which opens the socket for the sandbox, runs as root without CAP_DAC_OVERRIDE;
+    // without this, a socket created by a normal user isn't writable for it.
+    chmodSync(socketPath, 0o666);
     return {
         log,
         stop: () => new Promise((resolve) => {
@@ -70,12 +73,13 @@ export async function startGateway(socketPath: string, allowed: readonly string[
 export const probeScript = `
 const http = require('node:http');
 const tls = require('node:tls');
+const errors = {};
 function probe(host) {
     return new Promise((resolve) => {
-        const fail = () => resolve('000');
+        const fail = (error) => { if (error) errors[host] = String(error.code || error.message || error); resolve('000'); };
         const req = http.request({ socketPath: process.env.GATEWAY_SOCKET, method: 'CONNECT', path: host + ':443' });
         req.once('connect', (res, socket) => {
-            if (res.statusCode !== 200) { socket.destroy(); return fail(); }
+            if (res.statusCode !== 200) { socket.destroy(); return fail('gateway answered ' + res.statusCode); }
             const secure = tls.connect({ socket, servername: host }, () => {
                 secure.write('HEAD / HTTP/1.1\\r\\nHost: ' + host + '\\r\\nConnection: close\\r\\n\\r\\n');
             });
@@ -84,7 +88,7 @@ function probe(host) {
             secure.once('error', fail);
         });
         req.once('error', fail);
-        req.setTimeout(10000, () => { req.destroy(); fail(); });
+        req.setTimeout(10000, () => { req.destroy(); fail('timeout'); });
         req.end();
     });
 }
@@ -97,6 +101,7 @@ async function direct(host) {
     const result = {};
     for (const host of hosts) result[host] = await probe(host);
     result.direct = await direct(hosts[0]);
+    result.errors = JSON.stringify(errors);
     console.log(JSON.stringify(result));
 })();
 `;

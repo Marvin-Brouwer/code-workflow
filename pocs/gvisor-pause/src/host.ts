@@ -178,7 +178,7 @@ const backend: Backend<GvisorSandbox, Paused> = {
             const output = await runscOk(['--host-uds=open', 'run', `--bundle=${bundleDir}`, id], { root, signal });
             await runsc(['delete', '--force', id], { root, signal });
             const result = z.record(z.string(), z.string()).parse(JSON.parse(output.trim().split('\n').at(-1) ?? '{}'));
-            console.log(`     gateway: ${gateway.log.join(', ')}; direct request without the gateway → ${result.direct ?? '?'}`);
+            console.log(`     gateway: ${gateway.log.join(', ') || 'no requests'}; direct request without the gateway → ${result.direct ?? '?'}; errors in the sandbox: ${result.errors ?? '?'}`);
             return { allowed: result[allowed] ?? '000', denied: result[denied] ?? '000' };
         } finally {
             await gateway.stop();

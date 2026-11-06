@@ -1,10 +1,10 @@
 # @pocs/gvisor-pause
 
-**Outcome: ⏳ passing so far, not adopted yet.** In a Linux cloud container without KVM, gVisor's
-`runsc checkpoint` / `runsc restore` kept memory and processes: a pending `await` resolved in the
-same process and stack after 60 s paused, and again after the runsc state was wiped and the restore
-ran from a new process. Egress through a gateway socket worked with an allowlist. Still to run:
-NixOS on WSL, and a real host restart. See [Findings](#findings).
+**Outcome: ⏳ passing so far, not adopted yet.** On NixOS on WSL, and in a Linux cloud container
+without KVM, gVisor's `runsc checkpoint` / `runsc restore` kept memory and processes: a pending
+`await` resolved in the same process and stack after 60 s paused, and again after a `wsl --shutdown`.
+Egress through a gateway socket with an allowlist passes in the container; on NixOS it still has to
+rerun after a socket permission fix. See [Findings](#findings).
 
 Same question, stub and criteria as [`../e2b-pause`](../e2b-pause/README.md)
 ([plan](../../docs/plans/poc-e2b-pause.md)), through the shared [`../pause-harness`](../pause-harness/README.md),
@@ -65,25 +65,26 @@ itself.
 
 ## Findings
 
-Ran 2026-11-06 in a Linux cloud container (kernel 6.18, 4 vCPUs, 15 GiB RAM, **no `/dev/kvm`**), as
-root, with runsc `release-20260714.0` on the `systrap` platform, and `node:22-slim` (Node 22).
+Ran 2026-11-06 on NixOS on WSL (Marvin's dev machine, runsc from nixpkgs through `sudo`, `systrap`),
+and in a Linux cloud container (kernel 6.18, 4 vCPUs, 15 GiB RAM, **no `/dev/kvm`**) as root with runsc
+`release-20260714.0` on `systrap`. Both with `node:22-slim` (Node 22).
 
 | Criterion | Result |
 |---|---|
 | Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 2 → 2, token and 500 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 68 s waiting |
 | No CPU or RAM on the host while paused | ✅ runsc processes (sentry and gofer) 2 → 0 |
-| Survives a restart | ✅ as far as a container allows: `pause`, delete runsc's whole state directory, then `resume` from a new process: same PID, memory and stack. A real WSL or machine restart is still to run |
-| Runs on a machine used for development | ⏳ not run on NixOS/WSL yet; needs only `pkgs.gvisor` and root there |
-| Egress limited to an allowlist (should) | ✅ through the gateway socket: `registry.npmjs.org` → 200, `example.com` → refused by the gateway; a direct request without the gateway fails (no network) |
+| Survives a restart | ✅ NixOS: `pause`, `wsl --shutdown`, `resume`: same PID, memory and stack after 84 s. Container: same after deleting runsc's whole state directory |
+| Runs on a machine used for development | ✅ NixOS on WSL with `nix shell nixpkgs#gvisor` and `RUNSC="sudo $(command -v runsc)"`; no Docker, no config change |
+| Egress limited to an allowlist (should) | ✅ container: through the gateway socket, `registry.npmjs.org` → 200, `example.com` → refused by the gateway; a direct request without the gateway fails (no network). ⏳ NixOS: the first run reached no gateway at all (the socket wasn't writable for runsc's gofer when created by a normal user); rerun after the fix |
 
 Measured:
 
-| What | Value |
-|---|---|
-| Start (rootfs cached) | 120–175 ms |
-| Pause (checkpoint of a sandbox with 500 MB in use) | 3.7–4.2 s, uncompressed |
-| Resume | 280–290 ms; 830 ms once |
-| Checkpoint size | 539 MB for 500 MB of ballast (`pages.img` is the memory) |
+| What | NixOS on WSL | Cloud container |
+|---|---|---|
+| Start (rootfs cached) | 210–240 ms | 120–175 ms |
+| Pause (checkpoint of a sandbox with 500 MB in use) | 370–410 ms | 3.7–4.2 s |
+| Resume | 570 ms; 490 ms after `wsl --shutdown` | 280–290 ms; 830 ms once |
+| Checkpoint size | | 539 MB for 500 MB of ballast, uncompressed (`pages.img` is the memory) |
 
 Observations that matter for the engine:
 
@@ -94,9 +95,9 @@ Observations that matter for the engine:
   sandbox may rely on what a timer does across a pause.
 - **`Date.now()` jumps to real time after resume** (largest tick gap 64.8 s for a 60 s pause), as
   in E2B.
-- **Pause is slower than E2B** (about 4 s against 0.1 s), because runsc writes all memory to the
-  checkpoint before it returns. Fine for waits on humans; `--compression` and
-  `--exclude-committed-zero-pages` are there to make the image smaller.
+- **Pause time is disk speed.** runsc writes all memory to the checkpoint before it returns: 0.4 s
+  on the dev machine, 4 s on the cloud container's slower disk (E2B: 0.1 s). Fine for waits on
+  humans either way; `--compression` and `--exclude-committed-zero-pages` make the image smaller.
 - **The stub must not be the container's init.** When the container's first process exits, the
   container stops. The bundle runs `sh -c 'node stub.mjs; exec sleep infinity'`; the engine's
   runtime would be a long-lived process anyway.
@@ -107,4 +108,5 @@ Observations that matter for the engine:
 - **Restore needs the same bundle and rootfs**, and a host CPU with the same or more features.
 - **No daemon, no idle cost**: between runs nothing of gVisor runs. Compare Embed's 0.25 core idle.
 
-Not done: NixOS on WSL, a real restart, the open-stream measurement, and a longer pause.
+Not done: egress on NixOS after the fix, the open-stream measurement, and a longer pause (hours or
+days).
