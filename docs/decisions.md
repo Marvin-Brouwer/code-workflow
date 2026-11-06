@@ -52,6 +52,30 @@ Full sketches of all three exist; option C was chosen.
   Packages take agents as parameters.
 - **`.view()` hooks or UI code in workflows.** The UI derives views from the event tree.
 
+## Agent loops
+
+Came out of comparing the design with humanlayer's 12-factor-agents (factors 3, 9 and 13) in
+November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context](design.md#context),
+[Pre-fetching](design.md#pre-fetching)) and section 6 hold what was chosen.
+
+- **Context compaction (summarising or dropping old turns when the context fills up).** Hidden
+  engine behaviour that changes what the agent knows without a trace in the diff. Workflows avoid
+  long contexts instead: one loop per task, results as values and files, values that control their
+  own rendering. Hitting the limit fails the loop.
+- **Output truncation by the engine.** The engine can't know which part of a tool's output
+  matters. A tool with large output writes it to a file and returns a summary plus the path.
+- **Limits per tool (`${limit(jira.search, 3)}`, or a limit in the tool definition).** How often a
+  call is reasonable depends on the task, not the tool, and per-tool budgets spread one decision
+  over many places. Replaced by one loop-wide `limit` line in the template.
+- **Counting human wait time in `minutes`.** A limit that a slow approval can exhaust punishes the
+  agent for the human. Only the agent's own runtime counts.
+- **Handing thrown errors back to the agent, or retrying in the engine.** Makes failure handling
+  implicit: a broken credential or a bug turns into the agent improvising around it, and retries
+  hide flakiness. Errors bail by default; a tool that wants the agent to see a failure returns it
+  as a result and retries its own transient failures.
+- **A pre-fetch feature (declaring tools to run before the loop).** Not needed: a tool is also a
+  function, so code calls it and interpolates the result.
+
 ## Durability
 
 - **Replay-based execution (Azure Durable Functions, Temporal style).** Code appears to wait but is
