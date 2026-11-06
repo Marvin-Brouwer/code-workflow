@@ -1,6 +1,6 @@
 # POC: E2B pause and resume
 
-Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro and in the `windows/` container on Docker Desktop (2026-11-02) and on NixOS on WSL (2026-11-06); Docker Desktop and NixOS need that container as Embed's host. Adoption still to decide. Settles [open question 1](../design.md#open-questions) (blocking).
+Status: in progress, see [pocs/e2b-pause](../../pocs/e2b-pause/README.md). Passes on an Ubuntu WSL distro and in the `windows/` container on Docker Desktop (2026-11-02) and on NixOS on WSL (2026-11-06); Docker Desktop and NixOS need that container as Embed's host. Adopted for hosted (E2B Cloud); locally microsandbox or gVisor instead of Embed, through the same checks ([`pocs/pause-harness`](../../pocs/pause-harness/README.md)). Settles [open question 1](../design.md#open-questions) (blocking).
 
 ## Question
 

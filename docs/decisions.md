@@ -88,14 +88,38 @@ Full sketches of all three exist; option C was chosen.
 
 ## Sandboxes
 
-Compared for per-run isolation with memory-preserving pause (October 2026):
+Compared for per-run isolation with memory-preserving pause (October 2026), then tested without
+Docker (November 2026, POCs in `pocs/`). Outcome: E2B Cloud hosted, microsandbox locally with a
+hypervisor, gVisor locally without one (design section 3).
 
-- **E2B**: chosen. Pause keeps memory and processes; paused sandboxes are kept indefinitely; open
-  source (Apache-2.0) with single-node self-hosting (Embed) and the same API in the cloud. Pause
-  support in Embed still needs to be verified.
-- **Fly Sprites**: RAM snapshots on idle, no runtime cap, but cloud only. Fallback candidate.
+- **E2B**: chosen for hosted (E2B Cloud). Pause keeps memory and processes; paused sandboxes are
+  kept indefinitely; open source (Apache-2.0).
+- **E2B Embed locally (superseded).** Works, including across a restart (POC), but needs Docker
+  Engine on the same Linux as `/dev/kvm`, an Ubuntu-shaped host (on Docker Desktop and NixOS only
+  through a Docker-in-Docker container), 12 GiB RAM and 20 GiB disk, and costs a quarter of a core
+  while idle. On NixOS on WSL, mirrored networking plus Docker's raw DROP rule made it unreachable.
+  Setup effort was the deciding factor. Still the option for self-hosting on a server.
+- **microsandbox**: chosen for local. microVMs (libkrun) from an npm package with no daemon; full
+  snapshots keep memory and processes, also across `wsl --shutdown` (POC). Beta. A full snapshot is
+  refused while managed jobs run, and hostname allowlists need its TLS-intercepting proxy.
+- **gVisor**: chosen as the local fallback without a hypervisor. `runsc checkpoint`/`restore`
+  keeps memory and processes across a restart (POC), needs no KVM, but needs root and Linux, and the
+  engine builds the rootfs and networking itself. Pause writes all memory to disk first (0.4 s on
+  the dev machine, 4 s on a slow disk).
+- **Fly Sprites**: RAM snapshots on idle, no runtime cap, but cloud only.
 - **Daytona**: memory is only kept for VM sandboxes, not containers.
-- **microsandbox**: local microVMs incl. Windows; beta.
+- **BoxLite, smolvm**: daemonless microVMs, but disk-only persistence.
+- **Firecracker or Cloud Hypervisor driven directly**: solid memory snapshots, but that means
+  rebuilding what E2B packages (kernel and rootfs builds, tap networking, snapshot bookkeeping).
+- **V8 isolates (isolated-vm, Node `vm`, Deno, workerd), WASM/WASI, QuickJS heap snapshots**:
+  can't run git, toolchains or a shell, and V8 can't snapshot a running heap. Splitting workflow
+  code (in QuickJS) from toolchains breaks "the debugger shows the real stack".
+- **Kubernetes**: schedules containers but gives no memory snapshot (kubelet checkpoints through
+  CRIU can't be restored as a normal operation), and plain pods isolate too little for agents with
+  a shell. Not needed: hosted sandboxes are E2B's, the engine's services can run anywhere.
+- **NVIDIA OpenShell**: filesystem-only persistence ("does not restore process memory"), runs on
+  Docker, Podman, Kubernetes or libkrun. Its credential placeholders and per-binary egress rules are
+  worth comparing with the gateway, not a sandbox for runs.
 - **Trigger.dev**: CRIU checkpoints only for its supported waits; real checkpoints need Kubernetes
   with CRIU; it's a whole task platform.
 - **Vercel Sandbox, Cloudflare Sandbox**: filesystem-only snapshots.

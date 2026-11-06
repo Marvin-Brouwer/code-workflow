@@ -43,7 +43,7 @@ host
    ├─ engine:  runs, sandbox lifecycle (create, snapshot, resume), input requests, notifications
    └─ gateway: the only egress for credentials (models, AWS, package registries, git, Jira, GitLab)
    │  run token
-sandbox per run (E2B: Embed locally, cloud later)
+sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hypervisor)
    ├─ workflow runtime (plain async TS, events via AsyncLocalStorage)
    ├─ agents: Pi Durable underneath `loop`
    └─ repository checkouts, toolchains, tests
@@ -51,6 +51,18 @@ sandbox per run (E2B: Embed locally, cloud later)
 
 - **One sandbox per run**, so runs can't contaminate each other. Workflow code, agent calls and
   checkouts all run inside it.
+- **Sandbox backends** sit behind one engine interface (create, pause to disk, resume, egress
+  policy) and all pass the same checks ([`pocs/pause-harness`](../pocs/pause-harness/README.md)):
+  - **hosted: E2B Cloud**;
+  - **local: microsandbox** (microVMs from an npm package, no daemon) when a hypervisor is usable:
+    `/dev/kvm` on Linux and WSL, Hypervisor.framework on macOS, the Windows Hypervisor Platform on
+    Windows;
+  - **local without a hypervisor: gVisor** (`runsc`, Linux only, needs root), for example in a cloud
+    container or CI.
+
+  The engine picks the local backend at startup ([`pocs/sandbox-pause`](../pocs/sandbox-pause/README.md)
+  shows the rule). Snapshots don't move between backends or machines: a paused run resumes where it
+  was paused.
 - **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, relays
   human input and external events (webhooks), and serves the UI API. The prototype's
   `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol.
@@ -162,12 +174,16 @@ pick up deviations found earlier.
 ## 5. Durability
 
 - **Every `await` is real.** While a run waits for a human or an external event, the engine
-  snapshots the sandbox (E2B pause keeps memory and processes) and stops it. The answer resumes
+  snapshots the sandbox (every backend keeps memory and processes) and stops it. The answer resumes
   it, and the await resolves in the same stack. The snapshot also pins the code version per run.
 - **Design rule: no open connections across a wait.** Primitives open connections per call.
+- **Design rule: timed waits are engine-side.** Across a pause, E2B stops the guest's monotonic
+  clock and gVisor doesn't, so a `setTimeout` inside the sandbox behaves differently per backend.
+  Deadlines and "wait until" are engine-side wake-ups, like any external event. `Date.now()` is
+  correct after a resume on every backend.
 - **Agents** are Pi Durable sessions, so a conversation and its pending tool calls survive a
   crash independently of the snapshot.
-- **Fallback** (lost snapshot, crash, E2B falling back to a filesystem-only pause): the run
+- **Fallback** (lost snapshot, crash, a backend falling back to a filesystem-only pause): the run
   restarts from the top. Idempotent primitives and Pi Durable sessions keyed by call site make
   the rerun cheap. Where that's still too expensive, an explicit, opt-in `checkpoint(name, fn)`
   can be added (open question 6). The UI shows "run restarted".
@@ -285,9 +301,10 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
 
 ## Open questions
 
-1. **E2B spike (blocking).** Does pause/resume with memory work in E2B Embed? Is `/dev/kvm`
-   available on the dev machine (NixOS on WSL2 needs nested virtualization), or does Embed run on
-   a separate Linux box?
+1. ~~**Sandbox spike (blocking).**~~ Resolved 2026-11-06: E2B Embed, microsandbox and gVisor all
+   keep memory and processes across a pause and a restart of the host
+   ([e2b-pause](../pocs/e2b-pause/README.md), [microsandbox-pause](../pocs/microsandbox-pause/README.md),
+   [gvisor-pause](../pocs/gvisor-pause/README.md)). Backends as in section 3.
 2. **Typing spike.** Infer `loop`'s result type from the exits in a tagged template's values,
    including `succeed(folder)`, `propose`, `verify` and no exit at all. Types only.
 3. **The plan as file plus data.** `workspace.file('plan.md', { schema: Plan })`: renders as the
@@ -306,7 +323,8 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
    logins (as opposed to API keys).
 9. **Several instances of one connector** (e.g. two AWS accounts): named instances in config, picked
    by name in the workflow. Only when needed.
-10. **Embed's idle cost on a dev machine.** Idle with no sandboxes, Embed takes about a quarter of
+10. **Embed's idle cost**, only relevant if E2B is ever self-hosted (Embed isn't the local backend
+    any more). Idle with no sandboxes, Embed takes about a quarter of
     a core (mostly ClickHouse) and 1+ GB RAM, with peaks over one core
     ([findings](../pocs/e2b-pause/README.md#findings)). Paused sandboxes survive an Embed
     restart, so the engine could start Embed when a run needs a sandbox and stop it once every run
@@ -315,12 +333,19 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     Whatever starts Embed also stops it: on the engine's own shutdown it pauses running sandboxes
     and stops Embed cleanly, and it recovers from an unclean stop on the next start, so nothing
     depends on a user stopping Docker first.
+11. **Egress per backend.** The sandbox may reach only the gateway and public package sources. gVisor
+    runs without a network, with the gateway as a bind-mounted Unix socket (proven). microsandbox's
+    hostname rules only allow HTTPS through its TLS-intercepting proxy; the gateway itself should be
+    an IP and port rule instead, which is unverified. E2B has allow/deny lists (proven for one host).
+    Public package sources by hostname mean either interception or a gateway-side package proxy.
+12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) is untried; until it
+    is, Windows means WSL.
 
 Out of scope for now: token and cost budgets.
 
 ## Roadmap
 
-1. Spikes: E2B pause, `loop` result typing (2–4 days).
+1. Spikes: sandbox pause (E2B, microsandbox, gVisor), `loop` result typing. Done.
 2. MVP: workflow runtime with events, `loop` with exits on Pi Durable, `input`, gateway for model
    providers, a sandbox per run kept alive while waiting (no snapshots yet), the `example`
    workflow end to end from a CLI with sequential repositories.
