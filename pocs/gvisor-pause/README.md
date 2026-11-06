@@ -1,6 +1,6 @@
 # @pocs/gvisor-pause
 
-**Outcome: ⏳ passing so far, not adopted yet.** On NixOS on WSL, and in a Linux cloud container
+**Outcome: ✅ adopted as the local backend without a hypervisor** (2026-11-06). On NixOS on WSL, and in a Linux cloud container
 without KVM, gVisor's `runsc checkpoint` / `runsc restore` kept memory and processes: a pending
 `await` resolved in the same process and stack after 60 s paused, and again after a `wsl --shutdown`.
 Egress through a gateway socket with an allowlist passes on both. Adoption still to decide. See

@@ -1,6 +1,6 @@
 # @pocs/e2b-pause
 
-**Outcome: ⏳ passing on every setup, not adopted yet.** On self-hosted E2B (Embed), in an Ubuntu
+**Outcome: ✅ adopted for hosted (E2B Cloud); ❌ Embed not adopted as the local backend** (setup effort; see [decisions](../../docs/decisions.md#sandboxes)). On self-hosted E2B (Embed), in an Ubuntu
 WSL distro, in the [`windows/`](windows/) container on Docker Desktop, and in that container on
 NixOS on WSL, a paused sandbox kept its memory and processes: a pending `await` resolved in the
 same process and stack after 60 s paused, and again after an Embed restart. Embed can't use Docker

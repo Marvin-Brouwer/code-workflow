@@ -1,0 +1,20 @@
+{
+    "name": "@pocs/sandbox-pause",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "start": "tsx src/host.ts",
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "@pocs/gvisor-pause": "workspace:*",
+        "@pocs/microsandbox-pause": "workspace:*",
+        "@pocs/pause-harness": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "tsx": "^4.23.15",
+        "typescript": "~6.0.3"
+    }
+}

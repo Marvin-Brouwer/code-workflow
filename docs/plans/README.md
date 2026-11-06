@@ -7,7 +7,7 @@ recorded in its README.
 | Plan | Question | Runs where |
 |---|---|---|
 | [poc-loop-typing.md](poc-loop-typing.md) | Can `loop` infer its result type from the interpolated exits? | anywhere (`tsc` only) |
-| [poc-e2b-pause.md](poc-e2b-pause.md) | Does self-hosted E2B pause keep memory and processes? | a machine with `/dev/kvm` |
+| [poc-e2b-pause.md](poc-e2b-pause.md) | Does self-hosted E2B pause keep memory and processes? Same criteria for [microsandbox](../../pocs/microsandbox-pause/README.md) and [gVisor](../../pocs/gvisor-pause/README.md). | `/dev/kvm` (E2B, microsandbox); any Linux (gVisor) |
 
 ## POC pattern
 

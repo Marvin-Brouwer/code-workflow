@@ -1,6 +1,6 @@
 # @pocs/microsandbox-pause
 
-**Outcome: ⏳ passing, not adopted yet.** On NixOS on WSL (2026-11-06), a full snapshot kept memory
+**Outcome: ✅ adopted as the local backend where a hypervisor is usable** (2026-11-06). On NixOS on WSL (2026-11-06), a full snapshot kept memory
 and processes: a pending `await` resolved in the same process and stack after 60 s paused, and again
 after `wsl --shutdown` (6 minutes later). Egress to an allowlist works, but only with TLS
 interception. Installed by `pnpm install` alone. See [Findings](#findings).

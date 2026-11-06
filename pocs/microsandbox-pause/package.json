@@ -3,6 +3,9 @@
     "version": "0.0.0",
     "private": true,
     "type": "module",
+    "exports": {
+        "./backend": "./src/backend.ts"
+    },
     "scripts": {
         "start": "tsx src/host.ts",
         "typecheck": "tsc -p tsconfig.json"
