@@ -22,13 +22,17 @@ query strings or bodies.
    `<gateway>/jira`, a provider's API, …). Tools are pointed at that base URL by the connector's
    sandbox half. The rule belongs to the route, not to a `Host` header the sandbox chooses, and the
    sandbox needs no CA to trust a TLS-intercepting proxy.
-2. **Override means strip, then set.** Drop any incoming `Authorization` header, cookies and API-key
-   query parameters, then add the endpoint's credential. Never follow a redirect to another host
-   with the credential attached.
-3. **Scope what the credential can do through the route.** Anything in the sandbox that reaches the
-   route can use the credential's full permissions there, so each route gets a method and path
-   allowlist (a workflow that opens merge requests doesn't need `DELETE /projects`). The run token
-   is required on every route. Prefer short-lived or narrowly scoped credentials.
+2. **Proxy middleware per route decides how it works.** The connector's gateway half provides a
+   middleware that sees each request on its route and rewrites it before it goes upstream. The
+   middleware is what applies the credential, in whatever form the endpoint needs (a header, a
+   query parameter, a provider-specific scheme). The default is strip, then set: drop any incoming
+   `Authorization` header, cookies and API-key query parameters, then add the endpoint's
+   credential. Never follow a redirect to another host with the credential attached.
+3. **No allowlists.** The gateway doesn't keep method or path allowlists per route. Anything in the
+   sandbox that reaches a route can use the credential's full permissions there, so what a route
+   can do is bounded by the credential itself: prefer short-lived or narrowly scoped credentials. A
+   middleware may still refuse a request when its connector has a reason to. The run token is
+   required on every route.
 4. **Tools that insist on a token** get a fixed dummy value the gateway ignores. It isn't a secret.
 5. **Keyed by connector instance, not by host**, so two identities for one endpoint (two GitLab
    users, two AWS accounts) are two routes. Ties in with
@@ -44,8 +48,8 @@ query strings or bodies.
 ## Worth borrowing from OpenShell
 
 - Egress rules per destination **and per binary** (only `git` may reach the git host).
-- Fail closed with a clear error when a request doesn't match its route's allowlist.
-- Flag changes that give a credential new reach (a new route, method or path) for human review.
+- Fail closed with a clear error when a middleware refuses a request.
+- Flag changes that give a credential new reach (a new route) for human review.
 
 ## Fit with the sandbox backends
 
@@ -59,9 +63,6 @@ microsandbox (to verify, [open question 11](../design.md#open-questions)), E2B's
   other HTTP API each get an override route. Model providers already reach the gateway through a
   `baseUrl`, so they are routes like the rest. The exceptions stay as above: AWS SigV4 (short-lived
   handout) and git (credential helper).
-- **Allowlists live in the connector only.** Each operation a connector offers declares the methods
-  and paths it calls. A route allows the union for the operations the workflows using it import,
-  which the engine knows because workflows import their connectors. There is no team-config
-  override: to change what a route allows, change the connector. A connector version or a newly
-  used operation that widens a route (a new method or path) is flagged for human review, as
-  borrowed from OpenShell above.
+- **No allowlists; the route's proxy middleware decides.** Each connector's gateway half provides
+  the middleware for its routes, which applies the credential (strip, then set by default) and may
+  refuse requests. Reach is bounded by how the credential is scoped, not by a gateway allowlist.

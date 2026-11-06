@@ -287,12 +287,13 @@ Each HTTP endpoint is a route on the gateway with its own base URL (`<gateway>/g
 provider's API, …), keyed by connector instance. No placeholder tokens go into the sandbox. Full
 rules in the [plan](plans/gateway-credential-override.md):
 
-- **Strip, then set.** The route drops any incoming `Authorization` header, cookies and API-key
-  query parameters, then adds its own credential. Redirects to another host never carry it.
-- **Allowlist per route.** Each connector operation declares the methods and paths it calls; a
-  route allows the union for the operations its workflows import. The connector is the only place
-  allowlists are defined, with no team-config override. Anything that widens a route is flagged for
-  human review. Requests outside it fail closed with a clear error.
+- **Proxy middleware per route.** The connector's gateway half provides a middleware that rewrites
+  each request on its route and applies the credential in whatever form the endpoint needs. The
+  default is strip, then set: drop any incoming `Authorization` header, cookies and API-key query
+  parameters, then add the route's credential. Redirects to another host never carry it.
+- **No allowlists.** What a route can do is bounded by how its credential is scoped, so prefer
+  short-lived or narrowly scoped credentials. A middleware may refuse a request, failing closed
+  with a clear error.
 - The run token is required on every route. Tools that insist on a token get a fixed dummy value.
 
 ### Model providers
@@ -335,7 +336,7 @@ export const aws = connector({
         permissionSet: z.string(),
         renewThreshold: z.string().default('2h'),
     }),
-    gateway: { login, refresh, expiresAt, issue },   // auth, refresh, handing out credentials
+    gateway: { login, refresh, expiresAt, issue, proxy }, // auth, refresh, credentials, route middleware
     sandbox: { prepare },                             // points tools at the gateway
 });
 ```
