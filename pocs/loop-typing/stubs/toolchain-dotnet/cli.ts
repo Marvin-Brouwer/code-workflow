@@ -1,4 +1,4 @@
-import type { Repository } from '@engine/git';
+import type { Repository } from '@mesh-flow/git';
 
 export declare const cli: {
     build(repository: string): Promise<{ succeeded: boolean; log: string }>;

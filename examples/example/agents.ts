@@ -2,7 +2,7 @@
  * Agents for the `example` workflows. Workflow and team specific: models, reasoning and
  * conventions. Model ids resolve through the providers configured for the run.
  */
-import { agent, prompt, requestUserInput } from '@engine/core';
+import { agent, prompt, requestUserInput } from '@mesh-flow/core';
 
 export const planner = agent({
     model: 'claude-opus-5-5',

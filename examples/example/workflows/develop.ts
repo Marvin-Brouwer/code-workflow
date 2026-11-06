@@ -6,11 +6,11 @@
  *
  * Design sketch: the packages don't exist yet and this hasn't been type-checked.
  */
-import { fail, input, inDependencyOrder, propose, succeed, verify, workflow } from '@engine/core';
-import { jira } from '@engine/connector-atlassian';
-import { gitlab } from '@engine/connector-gitlab';
-import { dotnet } from '@engine/toolchain-dotnet';
-import { Plan, Research, codeReview, deliveryOrder, deviations } from '@engine/preset-development';
+import { fail, input, inDependencyOrder, propose, succeed, verify, workflow } from '@mesh-flow/core';
+import { jira } from '@mesh-flow/connector-atlassian';
+import { gitlab } from '@mesh-flow/connector-gitlab';
+import { dotnet } from '@mesh-flow/toolchain-dotnet';
+import { Plan, Research, codeReview, deliveryOrder, deviations } from '@mesh-flow/preset-development';
 import { developer, planner, reviewer } from '../agents';
 
 export default workflow('develop', async () => {

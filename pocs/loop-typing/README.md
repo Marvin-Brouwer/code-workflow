@@ -77,8 +77,8 @@ one word.
 **Other things the sketches need before they're real packages**, found while wiring them up:
 
 - The sketches import connectors as namespaces (`import { jira } from
-  '@engine/connector-atlassian'`) while each module exports its members directly. A package entry
-  point needs `export * as jira from './index'` or similar; `stubs/entries/` does that for now.
+  '@mesh-flow/connector-atlassian'`) while each module exported its members directly. Since
+  then each package's `index.ts` exports its namespace (`export * as jira from './jira'`).
 - The sketches use extensionless relative imports, so they type-check under `bundler` resolution,
   not under the repo's `NodeNext`.
 - `Tool` is an opaque `{ name }`, not callable. "A tool is also a function" (`CLAUDE.md`) isn't

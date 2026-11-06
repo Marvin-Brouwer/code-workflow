@@ -6,12 +6,12 @@
         "module": "preserve",
         "moduleResolution": "bundler",
         "paths": {
-            "@engine/core": ["./src/core.ts"],
-            "@engine/git": ["./stubs/git.ts"],
-            "@engine/connector-atlassian": ["./stubs/entries/connector-atlassian.ts"],
-            "@engine/connector-gitlab": ["./stubs/entries/connector-gitlab.ts"],
-            "@engine/toolchain-dotnet": ["./stubs/entries/toolchain-dotnet.ts"],
-            "@engine/preset-development": ["../../packages/preset-development/src/index.ts"],
+            "@mesh-flow/core": ["./src/core.ts"],
+            "@mesh-flow/git": ["./stubs/git.ts"],
+            "@mesh-flow/connector-atlassian": ["../../packages/connector-atlassian/src/index.ts"],
+            "@mesh-flow/connector-gitlab": ["../../packages/connector-gitlab/src/index.ts"],
+            "@mesh-flow/toolchain-dotnet": ["../../packages/toolchain-dotnet/src/index.ts"],
+            "@mesh-flow/preset-development": ["../../packages/preset-development/src/index.ts"],
             "zod": ["./node_modules/zod"]
         },
         "rootDirs": [

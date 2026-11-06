@@ -1,7 +1,7 @@
 /**
  * Development preset: schemas, the code review check and plan deviations. Ships no agents.
  */
-import { type Agent, check, succeed, tool, workspace } from '@engine/core';
+import { type Agent, check, succeed, tool, workspace } from '@mesh-flow/core';
 import { z } from 'zod';
 
 /**

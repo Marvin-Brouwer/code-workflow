@@ -1,4 +1,4 @@
-import type { Repository } from '@engine/git';
+import type { Repository } from '@mesh-flow/git';
 
 export interface MergeRequest { readonly url: string }
 
