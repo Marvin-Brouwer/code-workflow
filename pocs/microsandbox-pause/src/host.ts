@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { z } from 'zod';
-import { Destination, type NetworkPolicy, Rule, Sandbox, Snapshot } from 'microsandbox';
+import { Destination, NetworkPolicy, Rule, Sandbox, Snapshot } from 'microsandbox';
 import { type Backend, type HostUsage, type RunningSandbox, main, sandboxMemoryMb, stubEnv, stubPath, stubSource } from '@pocs/pause-harness';
 
 const pocDir = path.resolve(import.meta.dirname, '..');
@@ -69,6 +69,26 @@ async function create(name: string, configure: (builder: ReturnType<typeof Sandb
     return configure(Sandbox.builder(name).image(image).cpus(cpus).memory(sandboxMemoryMb)).replace().create();
 }
 
+/** Requests https://<host>/ from inside the sandbox; the HTTP status, or '000' with the reason logged. */
+async function probe(sandbox: Sandbox, host: string): Promise<string> {
+    const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
+    const output = await sandbox.exec('node', ['-e', script]);
+    const error = output.stderr().trim();
+    if (error) console.log(`     ${host}: ${error}`);
+    return output.stdout().trim() || '000';
+}
+
+/** Runs `work` in a fresh sandbox with this network policy, and removes the sandbox afterwards. */
+async function withPolicy<T>(label: string, policy: NetworkPolicy, work: (sandbox: Sandbox) => Promise<T>): Promise<T> {
+    console.log(`     sandbox with network policy: ${label}`);
+    const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy)));
+    try {
+        return await work(sandbox);
+    } finally {
+        await removeSandbox(sandbox);
+    }
+}
+
 const backend: Backend<MicrosandboxSandbox, Paused> = {
     name: 'microsandbox 0.7.13',
     paused: Paused,
@@ -110,24 +130,19 @@ const backend: Backend<MicrosandboxSandbox, Paused> = {
     async egress(allowed, denied) {
         const policy = {
             defaultEgress: 'deny',
-            // As in microsandbox's own allowlist example. Nothing listens in the sandbox and no port is
-            // published; with 'deny', the allowed host's connection was reset (ECONNRESET).
             defaultIngress: 'allow',
             rules: [Rule.allowDns(), Rule.allowEgress(Destination.domain(allowed))],
         } satisfies NetworkPolicy;
-        const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy)));
-        try {
-            const probe = async (host: string) => {
-                const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
-                const output = await sandbox.exec('node', ['-e', script]);
-                const error = output.stderr().trim();
-                if (error) console.log(`     ${host}: ${error}`);
-                return output.stdout().trim() || '000';
-            };
-            return { allowed: await probe(allowed), denied: await probe(denied) };
-        } finally {
-            await removeSandbox(sandbox);
+        const result = await withPolicy('allowlist', policy, async (sandbox) => ({
+            allowed: await probe(sandbox, allowed),
+            denied: await probe(sandbox, denied),
+        }));
+        if (result.allowed === '000') {
+            // Tell a policy problem from a network problem: the same request with everything allowed.
+            const open = await withPolicy('allow all', NetworkPolicy.allowAll(), (sandbox) => probe(sandbox, allowed));
+            console.log(`     diagnosis: with everything allowed, ${allowed} → ${open}`);
         }
+        return result;
     },
 };
 
