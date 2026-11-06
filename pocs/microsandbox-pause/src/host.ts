@@ -58,10 +58,10 @@ type Paused = z.infer<typeof Paused>;
  */
 function hostUsage(): HostUsage | undefined {
     if (process.platform === 'win32') return undefined;
-    const lines = execFileSync('ps', ['-eo', 'rss=,comm='], { encoding: 'utf8' }).split('\n')
-        .map((line) => line.trim().split(/\s+/))
-        .filter(([, comm]) => comm?.startsWith('msb'));
-    const rssKb = lines.reduce((sum, [rss]) => sum + Number(rss), 0);
+    // By command line: the VM processes run the bundled msb binary, whatever their process name.
+    const lines = execFileSync('ps', ['-eo', 'rss=,args='], { encoding: 'utf8' }).split('\n')
+        .filter((line) => /\/bin\/msb\b|libkrun/.test(line));
+    const rssKb = lines.reduce((sum, line) => sum + Number(line.trim().split(/\s+/)[0]), 0);
     return { processes: lines.length, rssMb: Math.round(rssKb / 1024) };
 }
 
@@ -110,7 +110,9 @@ const backend: Backend<MicrosandboxSandbox, Paused> = {
     async egress(allowed, denied) {
         const policy = {
             defaultEgress: 'deny',
-            defaultIngress: 'deny',
+            // As in microsandbox's own allowlist example. Nothing listens in the sandbox and no port is
+            // published; with 'deny', the allowed host's connection was reset (ECONNRESET).
+            defaultIngress: 'allow',
             rules: [Rule.allowDns(), Rule.allowEgress(Destination.domain(allowed))],
         } satisfies NetworkPolicy;
         const sandbox = await create(`poc-egress-${String(Date.now())}`, (b) => b.network((network: { policy(p: NetworkPolicy): unknown }) => network.policy(policy)));
