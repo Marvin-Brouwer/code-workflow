@@ -79,6 +79,8 @@ async function probe(sandbox: Sandbox, host: string): Promise<string> {
     const output = await sandbox.exec('node', ['--use-system-ca', '-e', script]);
     const error = output.stderr().trim();
     if (error) console.log(`     ${host}: ${error}`);
+    // microsandbox's proxy answers a blocked HTTPS request itself: 403 with code network_policy_denied.
+    if (error.includes('"code":"network_policy_denied"')) return '000';
     return output.stdout().trim() || '000';
 }
 

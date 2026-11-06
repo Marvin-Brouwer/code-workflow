@@ -1,8 +1,9 @@
 # @pocs/microsandbox-pause
 
-**Outcome: ⏳ not run yet.** Needs `/dev/kvm` (Linux, WSL) or the Windows Hypervisor Platform,
-which the cloud container this was written in doesn't have. Type-checked and linted only; `msb
-doctor` runs and reports the missing KVM. See [Findings](#findings).
+**Outcome: ⏳ passing, not adopted yet.** On NixOS on WSL (2026-11-06), a full snapshot kept memory
+and processes: a pending `await` resolved in the same process and stack after 60 s paused, and again
+after `wsl --shutdown` (6 minutes later). Egress to an allowlist works, but only with TLS
+interception. Installed by `pnpm install` alone. See [Findings](#findings).
 
 Same question, stub and criteria as [`../e2b-pause`](../e2b-pause/README.md)
 ([plan](../../docs/plans/poc-e2b-pause.md)), through the shared [`../pause-harness`](../pause-harness/README.md),
@@ -55,18 +56,42 @@ and writes the full report to `.work/report-<command>-<time>.json`. Snapshots st
 
 ## Findings
 
-Not run yet. What's known from the docs and the package:
+Ran 2026-11-06 on NixOS on WSL (Marvin's dev machine, AMD, `/dev/kvm` world-writable, nix-ld
+already enabled), microsandbox 0.7.13 from npm, `node:22-slim`. `msb doctor` was green without any
+change to the machine.
 
-- Full snapshots are documented as "Disk, memory, and running processes" → "Resumes execution", and
-  are local only (microsandbox's cloud only does disk snapshots).
-- Restoring after a host restart isn't stated anywhere; the `pause` / restart / `resume` sequence is
-  what settles it.
-- Clock: by default the host sets the guest clock on restore and the monotonic clock "continues
-  from the snapshot", which predicts E2B's behaviour (timers don't count paused time), not
-  gVisor's. The report's `clock` section shows which.
-- Open connections aren't captured: "Reconnect clients and application connections".
-- Windows support is marked preview; snapshots taken there before the PIT-timer fix are rejected.
+| Criterion | Result |
+|---|---|
+| Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 468 → 468, token and 500 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 66 s waiting |
+| No CPU or RAM on the host while paused | ✅ msb processes 1 → 0, RSS 657 → 0 MB |
+| Survives a restart | ✅ `pause`, `wsl --shutdown`, `resume`: same PID, memory and stack after 375 s |
+| Runs on a machine used for development | ✅ NixOS on WSL, nothing installed beyond `pnpm install`; native Windows not tried |
+| Egress limited to an allowlist (should) | ✅ with TLS interception: `registry.npmjs.org` → 200, `example.com` → refused by microsandbox's proxy (403, `network_policy_denied`) |
 
-Written against the 0.7.13 type definitions, not run: if an SDK call behaves differently from its
-types (for example removing a killed sandbox, or the network policy builder), fixing that is part
-of the first run.
+Measured:
+
+| What | Value |
+|---|---|
+| Start (image cached) | 650–810 ms; 3.2 s the first time |
+| Pause (full snapshot, 500 MB in use, 1 GiB VM) | 0.9–1.9 s |
+| Resume | 750 ms; 670 ms after `wsl --shutdown` |
+
+Observations that matter for the engine:
+
+- **No managed jobs during a capture.** A full snapshot is refused while a job started with
+  `execDetached` runs ("full capture and fork are unavailable while managed jobs are active"). The
+  stub is started with `setsid -f` from a shell instead. The engine's runtime would be started the
+  same way, or as the sandbox's own process.
+- **Hostname allowlists need TLS interception.** In strict hostname mode, the default, HTTPS allowed
+  only by a hostname rule is reset unless microsandbox can read the request's host, which means it
+  terminates TLS with its own CA (`interceptTls()`; Node needs `--use-system-ca` to trust it). That
+  is a TLS-intercepting proxy in the sandbox's path, which the gateway design doesn't need: a
+  gateway-only egress could be an IP rule to the gateway instead. `strict(false)` would allow by
+  SNI without interception, which is weaker.
+- **A blocked HTTPS request gets an HTTP answer** from that proxy (403 with
+  `{"code":"network_policy_denied"}`), not a reset; a blocked plain connection is refused.
+- **Clock**: see the reports' `clock` section; not yet compared with E2B and gVisor.
+- **Not measured on Windows natively** (Windows Hypervisor Platform), which is the one thing only
+  microsandbox offers here.
+
+Not done: native Windows, the open-stream measurement, and a longer pause.
