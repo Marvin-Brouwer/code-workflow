@@ -1,8 +1,9 @@
 # Design
 
-Status: design converged (option C: plain async TypeScript). Validation spikes pending, see
-[Open questions](#open-questions). Sketches of the reference workflow and packages live in
-`examples/example/` and `packages/`; they haven't been type-checked yet.
+Status: design converged (option C: plain async TypeScript). The sandbox and typing spikes are
+done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). Sketches of the
+reference workflow and packages live in `examples/example/` and `packages/`; they haven't been
+type-checked yet.
 
 ## 1. Goal
 
@@ -121,6 +122,7 @@ exit tool. What an interpolated value becomes:
 |---|---|
 | a tool | registered for this loop, referenced by name |
 | an exit (`succeed`, `propose`, `verify`, `fail`) | registered as an exit tool, referenced by name |
+| `limit(...)` | the loop's limit, as a line the agent can read (see [Loop limits](#loop-limits)) |
 | a workspace file | its path |
 | a workspace folder | its path plus a listing of its files |
 | anything else | rendered as text |
@@ -140,13 +142,69 @@ exit tool. What an interpolated value becomes:
 - If the model stops without calling a present exit, the engine nudges it, up to a maximum.
 - Exits combine, e.g. `verify` before `propose`.
 
+### Loop limits
+
+A loop can be limited as a whole, with one interpolated line at the end of the template, next to
+the exits:
+
+```ts
+const description = await planner.loop`
+    Write a short merge request description for the changes in ${repository},
+    based on ${plan.path}. ${succeed(gitlab.Description)}
+    ${limit({ turns: 4, minutes: 20 })}
+`;
+```
+
+- **Loop-wide only.** There are no limits per tool: a tool doesn't know how often it's reasonable
+  to call it in a given task, the loop does.
+- `turns` counts model turns. `minutes` counts the agent's own runtime, tracked by the engine; time
+  spent waiting on a human (`propose`, `requestUserInput`, a login) doesn't count.
+- The line renders as text, so the agent knows its budget and can plan for it.
+- Without a `limit`, a loop is unconstrained.
+- Exceeding a limit rejects the loop, like any other error (section 6).
+- `verify`'s `maxRejections` and the cap on missing-exit nudges are separate and keep their own
+  defaults.
+
+### Context
+
+There is **no context compaction**. Workflows are shaped so a loop's context never needs it:
+
+- **One loop per task.** A workflow runs a new loop for each piece of work instead of one long
+  conversation (review handling is one loop per comment round, not one loop per merge request).
+- **Results pass as values and files**, not as chat history: a loop's result is data the next
+  loop gets interpolated, and big things are `workspace.file` or `workspace.folder` paths the
+  agent reads when it needs them.
+- **Values control their own rendering.** An interpolated value decides how much of itself ends
+  up in the prompt (a story renders as the path of its Markdown dump, a folder as its path plus a listing).
+- **Tools cap their own output.** A tool that can produce a lot (test runs, logs, search) writes
+  the full output to a file in the workspace and returns a summary plus the path. That is part of
+  the tool, not an engine feature.
+
+Hitting the model's context limit fails the loop. That is a bug in the workflow or a tool, and it
+shows up as one instead of as silently dropped context.
+
+### Pre-fetching
+
+A convention, not a feature: when an agent would call a tool in nearly every run, call it in code
+and interpolate the result instead. It saves a model turn and makes the input visible in the diff.
+This works because a tool is also a function:
+
+```ts
+const related = await jira.search({ jql: `text ~ "${story.summary}"` });
+const research = await planner.loop`
+    Research ${story}. These issues look related: ${related}. Read them with ${jira.dump}.
+    ...
+`;
+```
+
 ### Building blocks
 
 Packages export three kinds of things, and nothing else:
 
 - **Functions** for code: `jira.collect`, `gitlab.openMergeRequest`, `dotnet.updatePackages`.
 - **Tools** for agents: `jira.search`, `gitlab.searchRepositories`, `gitlab.push(repository)`.
-  Every tool is also callable as a function.
+  Every tool is also callable as a function. A tool validates its own arguments, retries its own
+  transient failures and caps its own output ([Context](#context)).
 - **Checks** for `verify`: `dotnet.tests(repository)`, `codeReview(reviewer, repository, plan)`,
   `gitlab.pipelinePasses(mergeRequest)`. Lazy: they run when `verify` asks. A check may wait on
   something external (a pipeline).
@@ -158,6 +216,7 @@ status or identical comment).
 
 - `input(question, fields)`: asks a human for typed input; the run waits.
 - `requestUserInput`: tool that lets an agent ask the user mid-loop.
+- `limit({ turns?, minutes? })`: a loop-wide limit, interpolated in the template.
 - `inDependencyOrder(nodes, deliver)`: runs `deliver` per node as soon as its dependencies have
   returned, passes their results as `upstream`, runs independent nodes concurrently. Fails up
   front on cycles or unknown ids; a failed node blocks only its dependents.
@@ -177,6 +236,12 @@ pick up deviations found earlier.
   snapshots the sandbox (every backend keeps memory and processes) and stops it. The answer resumes
   it, and the await resolves in the same stack. The snapshot also pins the code version per run.
 - **Design rule: no open connections across a wait.** Primitives open connections per call.
+- **Design rule: the engine leaves nothing running when it exits.** On shutdown (a signal, a
+  fatal error, a normal exit) the engine aborts its work, pauses every running sandbox to disk,
+  flushes its own state and closes every backend process it started. A local backend never
+  depends on the user stopping it (or Docker) first. Because a process can also die without
+  warning (`SIGKILL`, power loss), every start begins by reconciling: sandboxes the engine has no
+  record of are removed, runs whose sandbox is gone are marked for restart (the fallback below).
 - **Design rule: timed waits are engine-side.** Across a pause, E2B stops the guest's monotonic
   clock and gVisor doesn't, so a `setTimeout` inside the sandbox behaves differently per backend.
   Deadlines and "wait until" are engine-side wake-ups, like any external event. `Date.now()` is
@@ -190,8 +255,16 @@ pick up deviations found earlier.
 
 ## 6. Failure and cancellation
 
-- A thrown error fails the run; the UI offers a restart.
+- **Errors bail by default.** Any error thrown inside a loop (by a tool, a check, the model
+  provider or the engine) rejects the `loop` call. Unless the workflow catches it, it fails the
+  run; the UI offers a restart. The engine doesn't retry and doesn't hand thrown errors back to the
+  agent. A tool that wants the agent to see a failure (a bad argument, nothing found) returns that
+  as its result, and transient failures are retried inside the tool.
+- **Protocol, not errors:** exit-schema validation errors and `verify` findings go back to the
+  agent, as described in section 4. Neither throws until its cap (`maxRejections`, the nudge cap).
 - `verify` fails the loop after `maxRejections`, with the last findings.
+- Exceeding a loop's `limit` rejects the loop with which limit was hit.
+- Hitting the model's context limit rejects the loop.
 - `inDependencyOrder`: a failed node blocks its dependents; independent nodes continue; the result
   reports failed nodes explicitly.
 - Cancellation: `AbortSignal` everywhere, passed implicitly via `AsyncLocalStorage`. Cancellation
@@ -341,14 +414,18 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
 12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) is untried; until it
     is, Windows means WSL.
 
+13. **Typed fields on `requestUserInput`**, like `input(question, fields)`, so an agent can ask for a
+    choice or a value instead of free text. An idea, not decided.
+
 Out of scope for now: token and cost budgets.
 
 ## Roadmap
 
 1. Spikes: sandbox pause (E2B, microsandbox, gVisor), `loop` result typing. Done.
-2. MVP: workflow runtime with events, `loop` with exits on Pi Durable, `input`, gateway for model
-   providers, a sandbox per run kept alive while waiting (no snapshots yet), the `example`
-   workflow end to end from a CLI with sequential repositories.
+2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
+   `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
+   connector; first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
+   then the `example` workflow, both end to end from a CLI with sequential repositories.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. `inDependencyOrder` with concurrency.
 5. GitLab review watching; AWS and CodeArtifact through the gateway; `checkSession`.
