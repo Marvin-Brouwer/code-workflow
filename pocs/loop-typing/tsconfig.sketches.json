@@ -1,0 +1,34 @@
+{
+    // Type-checks the option C sketches in examples/ and packages/ against src/core.ts.
+    // Bundler resolution because the sketches use extensionless relative imports.
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "module": "preserve",
+        "moduleResolution": "bundler",
+        "paths": {
+            "@mesh-flow/core": ["./src/core.ts"],
+            "@mesh-flow/git": ["./stubs/git.ts"],
+            "@mesh-flow/connector-atlassian": ["../../packages/connector-atlassian/src/index.ts"],
+            "@mesh-flow/connector-gitlab": ["../../packages/connector-gitlab/src/index.ts"],
+            "@mesh-flow/toolchain-dotnet": ["../../packages/toolchain-dotnet/src/index.ts"],
+            "@mesh-flow/preset-development": ["../../packages/preset-development/src/index.ts"],
+            "zod": ["./node_modules/zod"]
+        },
+        "rootDirs": [
+            "../../packages/connector-atlassian/src",
+            "./stubs/connector-atlassian",
+            "../../packages/connector-gitlab/src",
+            "./stubs/connector-gitlab",
+            "../../packages/toolchain-dotnet/src",
+            "./stubs/toolchain-dotnet"
+        ]
+    },
+    "include": [
+        "../../examples/example/**/*.ts",
+        "../../packages/connector-atlassian/src/**/*.ts",
+        "../../packages/connector-gitlab/src/**/*.ts",
+        "../../packages/toolchain-dotnet/src/**/*.ts",
+        "../../packages/preset-development/src/**/*.ts",
+        "./stubs/**/*.ts"
+    ]
+}
