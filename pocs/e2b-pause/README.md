@@ -248,7 +248,7 @@ Measured:
 | Resume | 238 ms; 660 ms after an Embed restart |
 | `windows/` container | create 373 ms, pause 91 ms, resume 212 ms; 649 ms after a container restart (Embed back up in 69 s) |
 | NixOS on WSL (`windows/` container) | create 204 ms, pause 94 ms, resume 128 ms; 334 ms after a container restart (Embed back up in 77 s); firecracker processes 1 → 0 while paused |
-| Snapshot size | not measured (`E2B_SNAPSHOT_DIR` not set) |
+| Snapshot size | not separated per sandbox; Embed's storage on NixOS was 2.8 GB in `/var/lib/e2b` (templates, build cache and the snapshots of the runs so far) and 11 MB in `/orchestrator` |
 
 Observations that matter for the engine:
 
@@ -271,10 +271,12 @@ Observations that matter for the engine:
 - **Pause is much faster than the docs' estimate** of about 4 s per GiB: 113 ms for a 473 MB VM.
   Pause may return before the snapshot is fully written; the restart test shows it was complete
   34 s later.
-- **Open stream across a pause: not observed.** The host's `GET /ticks` failed before any data,
-  because the sandbox URL used the SDK's default domain (`8080-<id>.e2b.app`), not Embed's. The
-  "no open connections across a wait" rule stays a design rule until this is retested with
-  Embed's sandbox proxy address.
+- **Open stream across a pause: not observed yet.** The first run used the SDK's default domain
+  (`8080-<id>.e2b.app`) instead of Embed's proxy. The NixOS run connected through the proxy
+  (`localhost:3002`) and the stream later ended with `terminated`, but it reported 0 lines because
+  the host script counted newlines in undecoded bytes; that's fixed, and the report now records
+  when the stream ended relative to the pause and resume. The "no open connections across a wait"
+  rule stays a design rule until a rerun shows what happens.
 - **Default template:** Node 20.9.0 and 473 MB RAM. The engine's sandbox template needs its own
   Node version and memory size.
 

@@ -114,16 +114,18 @@ function watchTicks(sandbox: Sandbox, signal: AbortSignal) {
     const proxy = process.env.E2B_SANDBOX_URL;
     const url = proxy ? `${proxy}/ticks` : `https://${sandbox.getHost(tickPort)}/ticks`;
     const headers = proxy ? { 'E2b-Sandbox-Id': sandbox.sandboxId, 'E2b-Sandbox-Port': String(tickPort) } : {};
-    const state = { url, lines: 0, ended: null as string | null };
+    const state = { url, lines: 0, ended: null as string | null, endedAt: null as number | null };
     const stream = (async () => {
         try {
             const response = await fetch(url, { headers, signal });
             if (!response.ok || !response.body) throw new Error(`status ${String(response.status)}`);
-            for await (const chunk of response.body) state.lines += String(chunk).split('\n').length - 1;
+            // The chunks are bytes; decode them, or there are no newlines to count.
+            for await (const text of response.body.pipeThrough(new TextDecoderStream())) state.lines += text.split('\n').length - 1;
             state.ended = 'closed by the other side';
         } catch (error) {
             state.ended = `error: ${error instanceof Error ? error.message : String(error)}`;
         }
+        state.endedAt = Date.now();
     })();
     return { state, stream };
 }
@@ -216,14 +218,18 @@ async function run(signal: AbortSignal) {
     const ticks = watchTicks(sandbox, signal);
     await sleep(3000, undefined, { signal });
 
+    const linesBeforePause = ticks.state.lines;
+    const pausedAt = Date.now();
     const usage = await pause(sandbox, signal);
     checkHostUsage(usage.before, usage.during);
     await sleep(Number(process.env.POC_PAUSE_SECONDS ?? '60') * 1000, undefined, { signal });
 
     const linesBeforeResume = ticks.state.lines;
+    const resumedAt = Date.now();
     await resumeAndVerify(sandbox.sandboxId, waiting, signal);
     await Promise.race([ticks.stream, sleep(5000)]);
-    report.openStream = { ...ticks.state, linesBeforeResume };
+    // endedAt against these tells whether the pause, the resume or the final kill closed the stream.
+    report.openStream = { ...ticks.state, linesBeforePause, linesBeforeResume, pausedAt, resumedAt };
 }
 
 async function pauseOnly(signal: AbortSignal) {
