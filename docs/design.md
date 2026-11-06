@@ -423,8 +423,9 @@ Out of scope for now: token and cost budgets.
 
 1. Spikes: sandbox pause (E2B, microsandbox, gVisor), `loop` result typing. Done.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
-   `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, the `example`
-   workflow end to end from a CLI with sequential repositories.
+   `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
+   connector; first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
+   then the `example` workflow, both end to end from a CLI with sequential repositories.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. `inDependencyOrder` with concurrency.
 5. GitLab review watching; AWS and CodeArtifact through the gateway; `checkSession`.
