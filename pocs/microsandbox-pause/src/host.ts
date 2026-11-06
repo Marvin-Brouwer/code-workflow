@@ -71,7 +71,9 @@ async function create(name: string, configure: (builder: ReturnType<typeof Sandb
 
 /** Requests https://<host>/ from inside the sandbox; the HTTP status, or '000' with the reason logged. */
 async function probe(sandbox: Sandbox, host: string): Promise<string> {
-    const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then((r) => console.log(r.status), (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
+    // Logs who answered (server header and the start of the body) next to the status, because a
+    // block can also be an HTTP answer from microsandbox's TLS-intercepting proxy.
+    const script = `fetch('https://${host}/', { signal: AbortSignal.timeout(10000) }).then(async (r) => { console.log(r.status); console.error('server ' + r.headers.get('server') + ': ' + (await r.text()).replace(/\\s+/g, ' ').slice(0, 120)); }, (e) => { console.log('000'); console.error(String(e.cause?.code ?? e.cause ?? e)); })`;
     // --use-system-ca: with TLS interception, microsandbox's CA is in the guest's trust store, which
     // Node only reads with this flag.
     const output = await sandbox.exec('node', ['--use-system-ca', '-e', script]);
