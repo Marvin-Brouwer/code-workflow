@@ -1,5 +1,5 @@
 {
-    "name": "code-workflow",
+    "name": "@mesh-flow/repository",
     "private": true,
     "type": "module",
     "engines": {
