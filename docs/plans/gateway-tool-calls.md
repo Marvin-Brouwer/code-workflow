@@ -59,8 +59,10 @@ The sandbox has no other way out with a credential, so these are tool calls like
   the provider's native request and streams the native response back, so provider features
   (thinking, caching, headers) stay intact and usage is measured per loop. Calling another agent
   is already a tool: `agent.as(name, …)`.
-- **git.** Checkout, fetch and push are host-side tools (`gitlab.push(repository)`), so the agent
-  can't fetch from or push to arbitrary remotes or branches.
+- **git.** Clone, fetch and push are host-side functions called from workflow code, not agent
+  tools: the workflow checks out before a loop and pushes after `verify` passes. Local git (status,
+  diff, commit) needs no credential and stays in the sandbox. The earlier prototype's `git`
+  package backs the host side.
 - **Private package registries** (CodeArtifact NuGet/npm). The package manager in the sandbox is
   pointed at a local shim that turns each package fetch into a read-only tool call
   (`registry.fetch(package, version)`). Public package sources need no credential and stay

@@ -278,7 +278,7 @@ No credential ever enters the sandbox. Full rules in
 
 | Mechanism | Used for |
 |---|---|
-| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, git checkout/fetch/push, AWS operations |
+| **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, AWS operations; git clone/fetch/push as functions for workflow code only |
 | **Model calls** over the same channel, native request and response passed through | model providers |
 | **Registry shim** in the sandbox turning package fetches into read-only tool calls | private package registries (CodeArtifact NuGet/npm) |
 
