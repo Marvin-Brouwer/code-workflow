@@ -37,6 +37,25 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
+  pocs/gvisor-pause:
+    dependencies:
+      '@pocs/pause-harness':
+        specifier: workspace:*
+        version: link:../pause-harness
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
   pocs/loop-typing:
     dependencies:
       zod:
@@ -52,6 +71,41 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  pocs/microsandbox-pause:
+    dependencies:
+      '@pocs/pause-harness':
+        specifier: workspace:*
+        version: link:../pause-harness
+      microsandbox:
+        specifier: 0.7.13
+        version: 0.7.13
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  pocs/pause-harness:
+    dependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
@@ -232,6 +286,9 @@ packages:
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
 
+  '@microsandbox/types@0.7.13':
+    resolution: {integrity: sha512-46PiHv30/FdeES5QHS3T+mwDaBFLiUcUQ9z/RX0I5V1Za55TFtp0gstLZFpQ6mAd3FCXd/KycnGoSFYLs2GboQ==}
+
   '@oxlint-tsgolint/darwin-arm64@7.0.2006':
     resolution: {integrity: sha512-uc0MEHXZUDW23Zmo5X28eSNeSnP17jKnh9GiehpVZqhfy99ks8spyXT5Llar3tjDN7ppnQN0Qd9FK6WNkdD+fQ==}
     cpu: [arm64]
@@ -376,6 +433,36 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
+    resolution: {integrity: sha512-j4o5dlEATkJhalKUuvM/CEIE3Q1NaHAi1JG6JafHDk9HMEvSKE0Rh+hAaLI4hURjrduzARTpcAKxPkSoaCG3uw==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
+    resolution: {integrity: sha512-sQQ4MgzbM0yHKwxYuinOxMZgC51QSKaOJLt4iHIhvRLLtACj2K+TsyDmiEoarYVw6tLD9Q18l07uIAQnZ/M3ZQ==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
+    resolution: {integrity: sha512-833z4BHBJ5RwbZMHYHIGcxYxhnPGWOi0Lm2Zusu6Kl4taBM+4u76WPudKg246ElJgtPb0UIuwHlIQJA3crRodg==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [linux]
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
+    resolution: {integrity: sha512-ggs8eWAQJzrUNYhTpshe0UUgboZsagK9ngwBmeHXY/hW4sogBAgHnz9QJxrf00VWDMNFKSnISgCuQEIqtqLVIA==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
+    resolution: {integrity: sha512-pVOltXMyFQ+cKnnnIfChsMvgmLOguUSMF84ywrrwALB3PNusG4tz9XHxh0UU1YaPi5nyRxpoBcCjGgALHSvhUQ==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [win32]
+
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
 
@@ -426,6 +513,11 @@ packages:
   lru-cache@11.5.3:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
     engines: {node: 20 || >=22}
+
+  microsandbox@0.7.13:
+    resolution: {integrity: sha512-+tt4XK0Lghnfk1ev/+SaSGUwMu1QM5Wuz3+nwSSWGiR6onGM6oD+FORMJ2QV8hl7LpsuIHkNbedQzJFDBjFJLg==}
+    engines: {node: '>= 22'}
+    hasBin: true
 
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
@@ -602,6 +694,8 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
+  '@microsandbox/types@0.7.13': {}
+
   '@oxlint-tsgolint/darwin-arm64@7.0.2006':
     optional: true
 
@@ -675,6 +769,21 @@ snapshots:
     optional: true
 
   '@oxlint/binding-win32-x64-msvc@1.92.0':
+    optional: true
+
+  '@superradcompany/microsandbox-darwin-arm64@0.7.13':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.13':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.13':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.13':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.13':
     optional: true
 
   '@types/node@22.20.5':
@@ -755,6 +864,16 @@ snapshots:
       path-scurry: 2.0.2
 
   lru-cache@11.5.3: {}
+
+  microsandbox@0.7.13:
+    dependencies:
+      '@microsandbox/types': 0.7.13
+    optionalDependencies:
+      '@superradcompany/microsandbox-darwin-arm64': 0.7.13
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.7.13
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.7.13
+      '@superradcompany/microsandbox-win32-arm64-msvc': 0.7.13
+      '@superradcompany/microsandbox-win32-x64-msvc': 0.7.13
 
   minimatch@10.2.6:
     dependencies:
