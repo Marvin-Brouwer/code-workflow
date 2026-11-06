@@ -336,7 +336,7 @@ export const aws = connector({
         permissionSet: z.string(),
         renewThreshold: z.string().default('2h'),
     }),
-    gateway: { login, refresh, expiresAt, issue, proxy }, // auth, refresh, credentials, route middleware
+    gateway: { login, refresh, expiresAt, issue },   // auth, refresh, handing out credentials
     sandbox: { prepare },                             // points tools at the gateway
 });
 ```
@@ -345,6 +345,8 @@ export const aws = connector({
   tool: returns immediately when the session is valid beyond the threshold, refreshes when
   possible, otherwise raises an input request and waits. An agent that hits expired credentials
   can call it itself.
+- An HTTP connector's gateway half also provides `proxy`, the middleware for its override routes
+  (section 7). AWS has none, since it uses the short-lived handout.
 - Workflows import the connectors they use, so the engine knows each workflow's requirements.
 
 ## 9. Settings
