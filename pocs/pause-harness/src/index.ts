@@ -10,7 +10,7 @@
  *   resume   resume the remembered sandbox, answer, verify (run after a restart)
  *   egress   check that sandbox egress can be limited to an allowlist
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { z } from 'zod';
@@ -243,6 +243,9 @@ export async function main<Sandbox extends RunningSandbox, Paused>(
             report.note(`paused; remembered in ${path.relative(process.cwd(), rememberedFile)}. Restart, then run resume.`);
         },
         async resume(signal) {
+            if (!existsSync(rememberedFile)) {
+                throw new Error(`Nothing paused: ${path.relative(process.cwd(), rememberedFile)} doesn't exist. Run pause first.`);
+            }
             const remembered = Remembered.parse(JSON.parse(readFileSync(rememberedFile, 'utf8')));
             report.data.pausedForMs = Date.now() - remembered.pausedAt;
             checkHostUsage(report, remembered.hostBefore, remembered.hostPaused);
