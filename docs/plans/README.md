@@ -9,6 +9,11 @@ recorded in its README.
 | [poc-loop-typing.md](poc-loop-typing.md) | Can `loop` infer its result type from the interpolated exits? | anywhere (`tsc` only) |
 | [poc-e2b-pause.md](poc-e2b-pause.md) | Does self-hosted E2B pause keep memory and processes? Same criteria for [microsandbox](../../pocs/microsandbox-pause/README.md) and [gVisor](../../pocs/gvisor-pause/README.md). | `/dev/kvm` (E2B, microsandbox); any Linux (gVisor) |
 
+Proposals, not decided yet:
+
+- [gateway-credential-override.md](gateway-credential-override.md): a gateway route per endpoint
+  that always sets that endpoint's credential, instead of placeholder tokens in the sandbox.
+
 ## POC pattern
 
 The POCs follow the earlier prototype's pattern: a pnpm workspace, one `@pocs/<name>` project
