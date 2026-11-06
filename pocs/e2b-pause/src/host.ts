@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Sandbox } from 'e2b';
+import { z } from 'zod';
 
 const pocDir = path.resolve(import.meta.dirname, '..');
 const workDir = path.join(pocDir, '.work');
@@ -23,20 +24,39 @@ const stubPath = '/home/user/stub.mjs';
 const tickPort = 8080;
 const sandboxTimeoutMs = 30 * 60 * 1000;
 
-interface Waiting { pid: number; token: string; memoryMb: number; checksum: string; waitingAt: number; stack: string }
-interface Done {
-    pid: number;
-    token: string;
-    checksum: string;
-    answer: { approved: boolean };
-    waitedMs: number;
-    timeout: { scheduledAt: number; dueAt: number; firedAt: number | null };
-    largestTickGapMs: number;
-    stack: string;
-    doneAt: number;
-}
-interface Remembered { sandboxId: string; waiting: Waiting; pausedAt: number; hostBefore: HostUsage; hostPaused: HostUsage }
-interface HostUsage { processes: number; rssMb: number }
+const Waiting = z.object({
+    pid: z.number(),
+    token: z.string(),
+    memoryMb: z.number(),
+    checksum: z.string(),
+    waitingAt: z.number(),
+    stack: z.string(),
+});
+type Waiting = z.infer<typeof Waiting>;
+
+const Done = z.object({
+    pid: z.number(),
+    token: z.string(),
+    checksum: z.string(),
+    answer: z.object({ approved: z.boolean() }),
+    waitedMs: z.number(),
+    timeout: z.object({ scheduledAt: z.number(), dueAt: z.number(), firedAt: z.number().nullable() }),
+    largestTickGapMs: z.number(),
+    stack: z.string(),
+    doneAt: z.number(),
+});
+
+const HostUsage = z.object({ processes: z.number(), rssMb: z.number() });
+type HostUsage = z.infer<typeof HostUsage>;
+
+const Remembered = z.object({
+    sandboxId: z.string(),
+    waiting: Waiting,
+    pausedAt: z.number(),
+    hostBefore: HostUsage,
+    hostPaused: HostUsage,
+});
+type Remembered = z.infer<typeof Remembered>;
 
 /**
  * Loads the SDK settings the Windows container writes to .work/sdk.env, unless the environment
@@ -92,12 +112,18 @@ function snapshotBytes(): number | undefined {
     return Number(bytes);
 }
 
-async function readJson<T>(sandbox: Sandbox, file: string, signal: AbortSignal, timeoutMs = 120_000): Promise<T> {
+async function readJson<T>(
+    schema: z.ZodType<T>,
+    sandbox: Sandbox,
+    file: string,
+    signal: AbortSignal,
+    timeoutMs = 120_000,
+): Promise<T> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
         signal.throwIfAborted();
         try {
-            return JSON.parse(await sandbox.files.read(file, { requestTimeoutMs: 10_000 })) as T;
+            return schema.parse(JSON.parse(await sandbox.files.read(file, { requestTimeoutMs: 10_000 })));
         } catch (error) {
             if (Date.now() > deadline) throw new Error(`${file} didn't appear within ${String(timeoutMs)} ms`, { cause: error });
             await sleep(500, undefined, { signal });
@@ -150,7 +176,7 @@ async function startStub(signal: AbortSignal) {
         envs: { STATE_DIR: stateDir, STUB_MEMORY_MB: String(memoryMb), TICK_PORT: String(tickPort) },
         timeoutMs: 0,
     });
-    const waiting = await readJson<Waiting>(sandbox, `${stateDir}/waiting.json`, signal);
+    const waiting = await readJson(Waiting, sandbox, `${stateDir}/waiting.json`, signal);
     console.log(`     stub waiting: pid ${String(waiting.pid)}, ${String(waiting.memoryMb)} MB ballast`);
     return { sandbox, waiting };
 }
@@ -185,7 +211,7 @@ async function resumeAndVerify(sandboxId: string, waiting: Waiting, signal: Abor
     record('stub process survived', alive.exitCode === 0, `pid ${String(waiting.pid)} ${alive.exitCode === 0 ? 'is' : 'is not'} running`);
 
     await sandbox.files.write(`${stateDir}/answer.json`, JSON.stringify({ approved: true }));
-    const done = await readJson<Done>(sandbox, `${stateDir}/done.json`, signal, 30_000);
+    const done = await readJson(Done, sandbox, `${stateDir}/done.json`, signal, 30_000);
 
     record('pending await resolved', done.answer.approved, `answered after ${String(done.waitedMs)} ms of waiting`);
     record('same process', done.pid === waiting.pid, `pid ${String(waiting.pid)} → ${String(done.pid)}`);
@@ -210,7 +236,7 @@ function remember(remembered: Remembered) {
 }
 
 function recall(): Remembered {
-    return JSON.parse(readFileSync(path.join(workDir, 'sandbox.json'), 'utf8')) as Remembered;
+    return Remembered.parse(JSON.parse(readFileSync(path.join(workDir, 'sandbox.json'), 'utf8')));
 }
 
 async function run(signal: AbortSignal) {

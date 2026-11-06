@@ -15,7 +15,7 @@ TypeScript in git, not something clicked together in a UI.
 
 ## Conventions
 
-- TypeScript, strict. Run ESLint after every change and fix what it reports.
+- TypeScript, strict. Run the linter (`pnpm lint`, oxlint) after every change and fix what it reports.
 - **Workflows are plain async TypeScript.** No workflow DSL: no step objects, no `next()`, no
   combinators, no builder chains (`.then()`, `.returns()`, `.view()`). Control flow is `await`,
   `if`, `for`, `Promise.all`, `throw`.

@@ -23,12 +23,12 @@ code-workflow/
     loop-typing/                                 @pocs/loop-typing
     e2b-pause/                                   @pocs/e2b-pause
   package.json                                   private; poc:* scripts, lint, typecheck
-  pnpm-workspace.yaml                            pocs/* only for now
+  pnpm-workspace.yaml                            pocs/*, packages/*, examples/*
   tsconfig.base.json                             strict, NodeNext, noUncheckedIndexedAccess, exactOptionalPropertyTypes
-  eslint.config.js                               typescript-eslint, strict + type-checked
+  .oxlintrc.json                                 oxlint, type-aware (oxlint-tsgolint)
 ```
 
-- ESLint runs at the root over every POC. `pnpm lint` and `pnpm typecheck` both have to pass
+- oxlint runs at the root over every POC. `pnpm lint` and `pnpm typecheck` both have to pass
   before a PR goes up.
 - Node 22, pnpm 10.
 

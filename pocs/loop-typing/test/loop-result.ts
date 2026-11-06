@@ -21,7 +21,7 @@ import {
 declare const agent: Agent;
 declare const tests: Check;
 declare const review: Check;
-declare function anyValue(): any; // eslint-disable-line @typescript-eslint/no-explicit-any
+declare function anyValue(): any; // oxlint-disable-line typescript/no-explicit-any
 
 const Plan = z.object({ path: z.string(), repositories: z.array(z.string()) });
 type Plan = z.infer<typeof Plan>;

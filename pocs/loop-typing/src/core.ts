@@ -145,6 +145,6 @@ type ResultOfExit<E> = E extends Exit<infer T> ? T : never;
  */
 export type ResultOf<Values extends readonly unknown[]> =
     [ExitsIn<Values>] extends [never] ? string
-    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- `loop` resolves to nothing, like `succeed()`
+    // oxlint-disable-next-line typescript/no-invalid-void-type -- `loop` resolves to nothing, like `succeed()`
     : [Exclude<ExitsIn<Values>, Gate>] extends [never] ? void
     : ResultOfExit<Exclude<ExitsIn<Values>, Gate>>;

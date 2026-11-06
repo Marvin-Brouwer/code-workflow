@@ -100,3 +100,11 @@ Compared for per-run isolation with memory-preserving pause (October 2026):
   with CRIU; it's a whole task platform.
 - **Vercel Sandbox, Cloudflare Sandbox**: filesystem-only snapshots.
 - **Sandcastle, Flue**: agent-in-sandbox runners/harnesses without memory durability.
+
+## Tooling
+
+- **ESLint with typescript-eslint (superseded by oxlint).** The scaffold used ESLint's
+  `strictTypeChecked` and `stylisticTypeChecked`. Replaced with oxlint, type-aware through
+  oxlint-tsgolint, by preference: much faster, two dependencies instead of four. The ruleset is
+  `correctness` and `suspicious` plus the type-aware rules the scaffold relied on, listed in
+  `.oxlintrc.json`; ESLint's stylistic rules have no one-to-one replacement.
