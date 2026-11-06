@@ -1,7 +1,8 @@
 # Plan: per-endpoint credential override in the gateway
 
-Status: proposal, not decided. Refines the credential-injecting reverse proxy in
-[design section 7](../design.md#7-credentials-and-the-gateway). Nothing is built yet.
+Status: decided 2026-11-06. This is the gateway's model for every HTTP connector, and replaces the
+credential-injecting reverse proxy in [design section 7](../design.md#7-credentials-and-the-gateway).
+Nothing is built yet.
 
 ## Idea
 
@@ -52,9 +53,15 @@ The sandbox's only way to these routes is the gateway: a bind-mounted Unix socke
 (proven in [`pocs/gvisor-pause`](../../pocs/gvisor-pause/README.md)), an IP and port rule under
 microsandbox (to verify, [open question 11](../design.md#open-questions)), E2B's allowlist hosted.
 
-## To decide
+## Decisions
 
-- Is this the gateway's model for every HTTP connector? If so, section 7's table changes from
-  "credential-injecting reverse proxy" to this, with these rules.
-- Where the method/path allowlists live: in the connector (defaults per operation it offers) or in
-  team config.
+- **Every HTTP connector uses this.** Model providers, package registries, Jira, GitLab and any
+  other HTTP API each get an override route. Model providers already reach the gateway through a
+  `baseUrl`, so they are routes like the rest. The exceptions stay as above: AWS SigV4 (short-lived
+  handout) and git (credential helper).
+- **Allowlists come from the connector, team config can only narrow them.** Each operation a
+  connector offers declares the methods and paths it calls. A route allows the union for the
+  operations the workflows using it import, which the engine knows because workflows import their
+  connectors. Team config in git may remove methods or paths from a route, never add them. Anything
+  that widens a route (a new connector version or a newly used operation adding a method or path)
+  is flagged for human review, as borrowed from OpenShell above.
