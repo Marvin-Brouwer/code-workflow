@@ -3,8 +3,8 @@
 **Outcome: ⏳ passing so far, not adopted yet.** On NixOS on WSL, and in a Linux cloud container
 without KVM, gVisor's `runsc checkpoint` / `runsc restore` kept memory and processes: a pending
 `await` resolved in the same process and stack after 60 s paused, and again after a `wsl --shutdown`.
-Egress through a gateway socket with an allowlist passes in the container; on NixOS it still has to
-rerun after a socket permission fix. See [Findings](#findings).
+Egress through a gateway socket with an allowlist passes on both. Adoption still to decide. See
+[Findings](#findings).
 
 Same question, stub and criteria as [`../e2b-pause`](../e2b-pause/README.md)
 ([plan](../../docs/plans/poc-e2b-pause.md)), through the shared [`../pause-harness`](../pause-harness/README.md),
@@ -75,7 +75,7 @@ and in a Linux cloud container (kernel 6.18, 4 vCPUs, 15 GiB RAM, **no `/dev/kvm
 | No CPU or RAM on the host while paused | ✅ runsc processes (sentry and gofer) 2 → 0 |
 | Survives a restart | ✅ NixOS: `pause`, `wsl --shutdown`, `resume`: same PID, memory and stack after 84 s. Container: same after deleting runsc's whole state directory |
 | Runs on a machine used for development | ✅ NixOS on WSL with `nix shell nixpkgs#gvisor` and `RUNSC="sudo $(command -v runsc)"`; no Docker, no config change |
-| Egress limited to an allowlist (should) | ✅ container: through the gateway socket, `registry.npmjs.org` → 200, `example.com` → refused by the gateway; a direct request without the gateway fails (no network). ⏳ NixOS: the first run reached no gateway at all (the socket wasn't writable for runsc's gofer when created by a normal user); rerun after the fix |
+| Egress limited to an allowlist (should) | ✅ container: through the gateway socket, `registry.npmjs.org` → 200, `example.com` → refused by the gateway; a direct request without the gateway fails (no network). ✅ NixOS: the same, after making the socket world-writable (created by a normal user, runsc's gofer couldn't connect to it) |
 
 Measured:
 
@@ -108,5 +108,5 @@ Observations that matter for the engine:
 - **Restore needs the same bundle and rootfs**, and a host CPU with the same or more features.
 - **No daemon, no idle cost**: between runs nothing of gVisor runs. Compare Embed's 0.25 core idle.
 
-Not done: egress on NixOS after the fix, the open-stream measurement, and a longer pause (hours or
+Not done: the open-stream measurement, and a longer pause (hours or
 days).
