@@ -26,7 +26,7 @@ packages that don't depend on the open decisions first.
 | 1 | `@mesh-flow/sandbox` | the backend interface, E2B, microsandbox and gVisor, backend selection, conformance tests | nothing |
 | 2 | `@mesh-flow/engine` | runs, sandbox lifecycle, shutdown and reconciliation, input requests, the CLI | 1 |
 | 3 | `@mesh-flow/core` | the authoring vocabulary as a runtime: `workflow`, `loop`, exits, `limit`, `input`, events | Pi Durable |
-| 4 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, nonces) and model providers (model-first resolution) | 1 to 3 |
+| 4 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 3 |
 | 5 | `@mesh-flow/connector-github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks; the smallest workflow that runs end to end | 1 to 4 |
 | 6 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 4, and 5 for the shared review-watching shape |
 
@@ -91,7 +91,7 @@ Turns `packages/core/src/*.d.ts` into an implementation that runs inside the san
 ### 4. `@mesh-flow/gateway`
 
 The host side of tool calls ([gateway-tool-calls.md](gateway-tool-calls.md)): per-loop and
-run-level endpoints with nonces over the host↔sandbox channel, host-side input validation,
+run-level endpoints with tokens over the host↔sandbox channel, host-side input validation,
 revocation when a loop settles. Model providers on their native API
 ([design section 7](../design.md#model-providers)), model-first resolution over the user's ordered
 providers, usage per run. Providers and credentials come from a local credential store, never from

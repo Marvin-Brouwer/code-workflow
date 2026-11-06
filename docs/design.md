@@ -43,7 +43,7 @@ web UI (separate project)
 host
    ├─ engine:  runs, sandbox lifecycle (create, snapshot, resume), input requests, notifications
    └─ gateway: runs credentialed tools and holds every credential (models, AWS, git, Jira, GitLab)
-   │  tool calls (endpoint + nonce per loop)
+   │  tool calls (endpoint + token per loop)
 sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hypervisor)
    ├─ workflow runtime (plain async TS, events via AsyncLocalStorage)
    ├─ agents: Pi Durable underneath `loop`
@@ -288,13 +288,13 @@ No credential ever enters the sandbox. Full rules in
   the sandbox. Credentialed tools run on the host; the sandbox has a stub with the same signature.
   A tool's own code is the limit on what its credential can do: there's no raw HTTP to the API
   for the agent to misuse.
-- **An endpoint and nonce per loop.** When a `loop` starts, the runtime registers the tools
-  interpolated into its template and gets an endpoint and nonce for that loop only. Calls outside
-  that set are refused, failing closed with a clear error. Each nonce is single-use and the
+- **An endpoint and token per loop.** When a `loop` starts, the runtime registers the tools
+  interpolated into its template and gets an endpoint and token for that loop only. Calls outside
+  that set are refused, failing closed with a clear error. Each token is single-use and the
   response carries the next, so a stolen one is detected (the runtime's own call fails and the
   loop fails). Revoked when the loop settles. Workflow
   code gets a run-level endpoint for the tools the workflow imports, revoked when the run ends.
-- **Nonces stay out of the agent's reach:** only in the runtime's memory, and agent shell commands
+- **Tokens stay out of the agent's reach:** only in the runtime's memory, and agent shell commands
   run as a separate unprivileged user, so concurrent loops can't use each other's endpoints.
 - **Validated on the host** against the tool's schema before it runs. Aborts propagate both ways.
 
@@ -456,7 +456,8 @@ Out of scope for now: token and cost budgets.
 
 - **Run**: one execution of a workflow, in its own sandbox.
 - **Gateway**: the host service that holds credentials and is the only egress needing them.
-- **Run token**: the sandbox's only credential; valid for one run.
+- **Loop token**: the single-use, rotating token for a loop's tool endpoint (section 7); held by
+  the runtime, never by the agent. Workflow code has a run-level one.
 - **Exit tool**: `succeed`, `propose`, `verify` or `fail`, interpolated in a prompt; the only way
   an agent finishes.
 - **Check**: a lazy verification used by `verify`.

@@ -17,7 +17,7 @@ The build plan for the MVP (roadmap step 2), after the POCs:
 Decided designs:
 
 - [gateway-tool-calls.md](gateway-tool-calls.md): credentialed tools run on the host, called from
-  the sandbox over one channel with an endpoint and nonce per loop.
+  the sandbox over one channel with an endpoint and token per loop.
 
 ## POC pattern
 

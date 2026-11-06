@@ -32,21 +32,22 @@ typed.
    back the same way. Aborting a call on either side aborts the other (cancel message → the host
    tool's `AbortSignal`).
 3. **An endpoint per loop.** When a `loop` starts, the runtime registers the tools interpolated
-   into its template with the host and gets back an endpoint and a nonce for that loop only. The
-   host rejects calls to tools outside that set. The endpoint and nonce are revoked when the loop
+   into its template with the host and gets back an endpoint and a token for that loop only. The
+   host rejects calls to tools outside that set. The endpoint and token are revoked when the loop
    settles (exit, failure, limit or abort).
-   **The nonce rolls:** each one is valid for a single call, and the response carries the next.
-   Parallel tool calls in one turn each take their own nonce from a small pool the host hands out.
-   A replayed or already-used nonce is refused, and because the runtime's own next call then
-   fails, a stolen nonce doesn't go unnoticed: the host fails the loop and the run reports why.
+   **The token rotates** (single-use token rotation with reuse detection, as with OAuth refresh
+   tokens): each one is valid for a single call, and the response carries the next.
+   Parallel tool calls in one turn each take their own token from a small pool the host hands out.
+   A replayed or already-used token is refused, and because the runtime's own next call then
+   fails, a stolen token doesn't go unnoticed: the host fails the loop and the run reports why.
 4. **An endpoint for workflow code.** Tools called as functions from workflow code use a run-level
    endpoint that accepts the tools the workflow imports. Revoked when the run ends.
-5. **Nonces stay out of the agent's reach.** They live only in the runtime's memory: not in env
+5. **Tokens stay out of the agent's reach.** They live only in the runtime's memory: not in env
    vars, files or prompts. Memory snapshots of a paused run contain them, but those stay on the
-   host, and a nonce is useless once its loop has settled. Shell commands an agent
+   host, and a token is useless once its loop has settled. Shell commands an agent
    runs execute as a separate unprivileged user that can't read the runtime's process, env or
    files. That matters for loops that run at the same time (`Promise.all`, `inDependencyOrder`) in
-   one sandbox: without it, one agent's shell could read another loop's nonce. The rolling nonce
+   one sandbox: without it, one agent's shell could read another loop's token. Rotation
    catches theft after the fact; the separate user prevents it.
 6. **Inputs are validated on the host**, against the tool's schema, before anything runs. The stub
    validates too, so the agent gets errors early, but the host's check is the one that counts.
