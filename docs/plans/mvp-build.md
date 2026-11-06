@@ -2,8 +2,8 @@
 
 Status: plan, nothing built yet. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
-sequential repositories, one sandbox per run,
-`loop` with exits and `limit` on Pi Durable, `input`, and a gateway for model providers.
+sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
+and a gateway for model providers.
 
 ## Before it starts
 
