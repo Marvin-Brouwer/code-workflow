@@ -166,15 +166,6 @@ Ubuntu 24.04 on bare metal, or a VM with nested virtualization, as in the Step 0
 
 ## Run
 
-With [mise](https://mise.jdx.dev/) and the `windows/` container (Docker Desktop or NixOS), one
-command per step starts Embed first when it isn't running, and `mise run e2b:stop` stops it again:
-
-```bash
-mise run poc:e2b-pause run        # likewise pause, resume, egress
-```
-
-Without mise, or on a Linux host running Embed directly:
-
 On the machine that runs Embed, since the host checks read local `firecracker` processes. On
 Windows, that's the Ubuntu shell.
 
