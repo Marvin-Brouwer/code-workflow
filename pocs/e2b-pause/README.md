@@ -149,6 +149,13 @@ doesn't apply.
 - Windows steps 1 to 3 apply too, and the checks of the Ubuntu setup, because NixOS runs on the
   same WSL VM and kernel.
 - Docker 27+, Compose 2.24+ and cgroup v2.
+- **No `networkingMode=mirrored`** in `.wslconfig`. Mirrored mode routes all TCP to `127.0.0.1`
+  through its own `loopback0` interface, and Docker 28+ drops traffic to ports published on
+  `127.0.0.1` that doesn't arrive on `lo`; no Docker option removes that rule. Any container
+  published on `127.0.0.1` is then unreachable, Embed's API included (the SDK times out on
+  `localhost:3000`). Use WSL's default NAT networking.
+- Run Embed through the [`windows/`](windows/) container, like on Docker Desktop: Embed's host
+  setup expects an Ubuntu layout (`/bin/bash`, a writable `/etc`), which NixOS doesn't have.
 
 ### Linux
 
