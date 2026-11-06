@@ -18,24 +18,27 @@ query strings or bodies.
 
 ## Rules
 
-1. **A route per endpoint**, with its own base URL on the gateway (`<gateway>/gitlab`,
-   `<gateway>/jira`, a provider's API, …). Tools are pointed at that base URL by the connector's
-   sandbox half. The rule belongs to the route, not to a `Host` header the sandbox chooses, and the
-   sandbox needs no CA to trust a TLS-intercepting proxy.
-2. **Proxy middleware per route decides how it works.** The connector's gateway half provides a
-   middleware that sees each request on its route and rewrites it before it goes upstream. The
+1. **Intercept the real URLs.** The sandbox's `HTTPS_PROXY` points at the gateway, and the sandbox
+   image trusts the gateway's CA (system store, `NODE_EXTRA_CA_CERTS`, certifi, git's
+   `http.sslCAInfo`). The CA cert isn't a secret. The gateway terminates TLS and picks the
+   middleware by the request's host, so tools keep their real URLs and connectors don't rewire
+   base URLs. Hosts without a middleware are refused, or passed through for public package sources.
+   Costs: every runtime must trust the CA, and certificate pinning breaks.
+2. **Proxy middleware per host decides how it works.** The connector's gateway half provides a
+   middleware that sees each request to its host and rewrites it before it goes upstream. The
    middleware is what applies the credential, in whatever form the endpoint needs (a header, a
    query parameter, a provider-specific scheme). The default is strip, then set: drop any incoming
    `Authorization` header, cookies and API-key query parameters, then add the endpoint's
    credential. Never follow a redirect to another host with the credential attached.
-3. **No allowlists.** The gateway doesn't keep method or path allowlists per route. Anything in the
-   sandbox that reaches a route can use the credential's full permissions there, so what a route
+3. **No allowlists.** The gateway doesn't keep method or path allowlists. Anything in the
+   sandbox that reaches a host can use the credential's full permissions there, so what it
    can do is bounded by the credential itself: prefer short-lived or narrowly scoped credentials. A
    middleware may still refuse a request when its connector has a reason to. The run token is
-   required on every route.
+   required on every request.
 4. **Tools that insist on a token** get a fixed dummy value the gateway ignores. It isn't a secret.
-5. **Keyed by connector instance, not by host**, so two identities for one endpoint (two GitLab
-   users, two AWS accounts) are two routes. Ties in with
+5. **Two identities on one host** (two GitLab users) can't be told apart by host. Only for that
+   case, a connector instance gets its own route on the gateway (`<gateway>/gitlab-bot`) and its
+   sandbox half points that tool at it. Ties in with
    [open question 9](../design.md#open-questions).
 
 ## Out of scope for this mechanism
@@ -43,26 +46,30 @@ query strings or bodies.
 - **AWS SigV4** signs the whole request, so an override would mean re-signing, which
   [decisions](../decisions.md#credentials-and-settings) deferred in favour of the short-lived
   handout plus `aws:SourceIp`.
-- **git** keeps the credential helper, or goes through the same route over HTTPS.
+- **git** keeps the credential helper, or goes through the same interception over HTTPS.
 
 ## Worth borrowing from OpenShell
 
 - Egress rules per destination **and per binary** (only `git` may reach the git host).
 - Fail closed with a clear error when a middleware refuses a request.
-- Flag changes that give a credential new reach (a new route) for human review.
+- Flag changes that give a credential new reach (a new host or middleware) for human review.
 
 ## Fit with the sandbox backends
 
-The sandbox's only way to these routes is the gateway: a bind-mounted Unix socket under gVisor
-(proven in [`pocs/gvisor-pause`](../../pocs/gvisor-pause/README.md)), an IP and port rule under
-microsandbox (to verify, [open question 11](../design.md#open-questions)), E2B's allowlist hosted.
+The sandbox's only way out is the gateway: a bind-mounted Unix socket under gVisor
+(proven in [`pocs/gvisor-pause`](../../pocs/gvisor-pause/README.md)), which needs a small
+in-sandbox forwarder from a loopback port to the socket for `HTTPS_PROXY`; an IP and port rule under
+microsandbox (to verify, [open question 11](../design.md#open-questions)); E2B's allowlist hosted.
+Interception also covers public package sources by hostname, which open question 11 already needs.
 
 ## Decisions
 
 - **Every HTTP connector uses this.** Model providers, package registries, Jira, GitLab and any
-  other HTTP API each get an override route. Model providers already reach the gateway through a
-  `baseUrl`, so they are routes like the rest. The exceptions stay as above: AWS SigV4 (short-lived
+  other HTTP API each get an override middleware. The exceptions stay as above: AWS SigV4 (short-lived
   handout) and git (credential helper).
-- **No allowlists; the route's proxy middleware decides.** Each connector's gateway half provides
-  the middleware for its routes, which applies the credential (strip, then set by default) and may
+- **No allowlists; the host's proxy middleware decides.** Each connector's gateway half provides
+  the middleware for its hosts, which applies the credential (strip, then set by default) and may
   refuse requests. Reach is bounded by how the credential is scoped, not by a gateway allowlist.
+- **Intercept the real URLs, routes only as a fallback.** The gateway intercepts by host through
+  `HTTPS_PROXY` and its own CA; a separate route on the gateway exists only for two identities on
+  one host.

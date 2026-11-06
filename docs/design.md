@@ -277,24 +277,25 @@ turns it into access in one of three ways:
 
 | Mechanism | Used for |
 |---|---|
-| **Per-endpoint override route**, native API (no translation) | every HTTP connector: model providers, package registries (CodeArtifact NuGet/npm), Jira and GitLab APIs |
+| **Intercepting proxy with per-host override middleware**, native API (no translation) | every HTTP connector: model providers, package registries (CodeArtifact NuGet/npm), Jira and GitLab APIs |
 | **Short-lived handout** through a standard endpoint | AWS via `AWS_CONTAINER_CREDENTIALS_FULL_URI` (HTTPS or a loopback forwarder); `credential_process` for tools that need a file |
 | **Credential helper** asking the gateway per operation | git |
 
-### Override routes
+### Override middleware
 
-Each HTTP endpoint is a route on the gateway with its own base URL (`<gateway>/gitlab`, a
-provider's API, …), keyed by connector instance. No placeholder tokens go into the sandbox. Full
-rules in the [plan](plans/gateway-credential-override.md):
+The sandbox's `HTTPS_PROXY` points at the gateway and its image trusts the gateway's CA (not a
+secret). The gateway intercepts requests to the real URLs and picks a middleware by host. Only two
+identities on one host get a separate route on the gateway. No placeholder tokens go into the
+sandbox. Full rules in the [plan](plans/gateway-credential-override.md):
 
-- **Proxy middleware per route.** The connector's gateway half provides a middleware that rewrites
-  each request on its route and applies the credential in whatever form the endpoint needs. The
+- **Proxy middleware per host.** The connector's gateway half provides a middleware that rewrites
+  each request to its host and applies the credential in whatever form the endpoint needs. The
   default is strip, then set: drop any incoming `Authorization` header, cookies and API-key query
-  parameters, then add the route's credential. Redirects to another host never carry it.
-- **No allowlists.** What a route can do is bounded by how its credential is scoped, so prefer
+  parameters, then add the connector's credential. Redirects to another host never carry it.
+- **No allowlists.** What the sandbox can do with a credential is bounded by how it is scoped, so prefer
   short-lived or narrowly scoped credentials. A middleware may refuse a request, failing closed
   with a clear error.
-- The run token is required on every route. Tools that insist on a token get a fixed dummy value.
+- The run token is required on every request. Tools that insist on a token get a fixed dummy value.
 
 ### Model providers
 
@@ -302,7 +303,7 @@ rules in the [plan](plans/gateway-credential-override.md):
   user's ordered list that offers it.
 - Agents are module-level, so the engine knows a workflow's models before a run starts and checks
   them against the user's providers up front.
-- In the sandbox, pi-ai uses each provider's native API with `baseUrl` pointing at the gateway,
+- In the sandbox, pi-ai uses each provider's native API at its real URL through the gateway,
   which keeps provider-specific features (thinking, caching, headers) intact.
 - Usage and cost per run are measured at the gateway.
 
@@ -345,7 +346,7 @@ export const aws = connector({
   tool: returns immediately when the session is valid beyond the threshold, refreshes when
   possible, otherwise raises an input request and waits. An agent that hits expired credentials
   can call it itself.
-- An HTTP connector's gateway half also provides `proxy`, the middleware for its override routes
+- An HTTP connector's gateway half also provides `proxy`, the middleware for its hosts
   (section 7). AWS has none, since it uses the short-lived handout.
 - Workflows import the connectors they use, so the engine knows each workflow's requirements.
 
