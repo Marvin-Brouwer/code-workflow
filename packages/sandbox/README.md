@@ -122,7 +122,7 @@ await Template.build(template, 'mesh-flow-node-22', {
 })
 ```
 
-Then map the image to the template's name in `templates`: `{ 'node:22-slim': 'mesh-flow-node-22' }`. A spec with an image that has no template is an error.
+Then map the image to the template's name in `templates`: `{ 'node:22-slim': 'mesh-flow-node-22' }`. A spec with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
 
 ### Self-hosted E2B
 
@@ -130,7 +130,7 @@ A [self-hosted E2B](https://github.com/e2b-dev/infra) deployment works the same 
 
 ```ts
 const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: { 'node:22-slim': 'mesh-flow-node-22' } })
-``` `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
+```
 
 ## What every backend does the same
 
