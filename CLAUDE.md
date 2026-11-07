@@ -16,6 +16,9 @@ TypeScript in git, not something clicked together in a UI.
 ## Conventions
 
 - TypeScript, strict. Run the linter (`pnpm lint`, oxlint) after every change and fix what it reports.
+- Code style: tabs, no semicolons, single quotes, `.mts` source files with relative imports that
+  name the `.mts` file. Run `pnpm format` (oxfmt, `.oxfmtrc.json`) after every change;
+  `pnpm format:check` is what a PR has to pass. Markdown is not formatted.
 - **Workflows are plain async TypeScript.** No workflow DSL: no step objects, no `next()`, no
   combinators, no builder chains (`.then()`, `.returns()`, `.view()`). Control flow is `await`,
   `if`, `for`, `Promise.all`, `throw`.

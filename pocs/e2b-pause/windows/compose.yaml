@@ -7,9 +7,9 @@ services:
     build: .
     privileged: true
     ports:
-      - "127.0.0.1:3000:3000" # API
-      - "127.0.0.1:3001:3001" # dashboard
-      - "127.0.0.1:3002:3002" # sandbox proxy
+      - '127.0.0.1:3000:3000' # API
+      - '127.0.0.1:3001:3001' # dashboard
+      - '127.0.0.1:3002:3002' # sandbox proxy
     volumes:
       # The kernel's modules and the live /dev, so Embed's host setup can load nbd for this kernel
       # and the NBD devices it creates show up in here.
