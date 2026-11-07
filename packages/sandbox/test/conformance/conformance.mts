@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, describe, expect, test } from 'vitest'
+import ts from 'typescript'
 import { z } from 'zod'
 import type { BackendName } from '../../src/paused-sandbox.mts'
 import type { SandboxBackend } from '../../src/sandbox-backend.mts'
@@ -8,9 +9,16 @@ import type { Sandbox } from '../../src/sandbox.mts'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 import { startInBackground } from '../../src/start-in-background.mts'
 
-const stub = readFileSync(new URL('stub.mjs', import.meta.url), 'utf8')
-const probe = readFileSync(new URL('probe.mjs', import.meta.url), 'utf8')
+const stub = guestScript('stub.mts')
+const probe = guestScript('probe.mts')
 const stateDir = '/var/tmp/conformance'
+
+/** A script from `guest/`, transpiled to JavaScript for the image's own Node. */
+function guestScript(name: string): string {
+	const source = readFileSync(new URL(`guest/${name}`, import.meta.url), 'utf8')
+	const compilerOptions = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
+	return ts.transpileModule(source, { compilerOptions }).outputText
+}
 
 const Waiting = z.object({ pid: z.number(), token: z.string(), checksum: z.string() })
 const Done = Waiting.extend({ answer: z.object({ approved: z.boolean() }), stack: z.string() })

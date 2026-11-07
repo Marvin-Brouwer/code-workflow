@@ -32,7 +32,7 @@ const backend: SandboxBackend =
 		: (await import('@mesh-flow/sandbox/microsandbox')).microsandboxBackend()
 ```
 
-Hosted, E2B takes an API key from the engine's credential store and a template per image:
+Hosted, E2B takes an API key from the engine's credential store and a template per image. [Setting up E2B](#setting-up-e2b) says how to get both:
 
 ```ts
 import { e2bBackend } from '@mesh-flow/sandbox/e2b'
@@ -92,6 +92,37 @@ for (const held of await backend.list(signal)) {
 	if (!knownSandboxIds.has(held.id)) await backend.remove(held.id, signal)
 }
 ```
+
+## Setting up E2B
+
+The E2B backend needs two things: an API key and a template for each image a spec names.
+
+### API key
+
+1. Sign up or sign in at [e2b.dev](https://e2b.dev).
+2. In the [API Keys tab](https://e2b.dev/dashboard?tab=keys) of the dashboard, create a key for the team the sandboxes should run in. It starts with `e2b_`.
+3. Store it in the engine's credential store. The engine passes it to `e2bBackend` as `apiKey` and keeps it on the host: it never goes into a sandbox, an env var or a file in the repository.
+
+The conformance suite reads it from `E2B_API_KEY`, as the E2B SDK does, because it runs outside the engine.
+
+### Templates
+
+E2B starts sandboxes from templates, not from images. Build one per image with the E2B SDK's `Template` builder; the build also fixes CPUs and memory:
+
+```ts
+import { defaultBuildLogger, Template } from 'e2b'
+
+const template = Template().fromImage('node:22-slim')
+
+await Template.build(template, 'mesh-flow-node-22', {
+	apiKey,
+	cpuCount: 2,
+	memoryMB: 2048,
+	onBuildLogs: defaultBuildLogger(),
+})
+```
+
+Then map the image to the template's name in `templates`: `{ 'node:22-slim': 'mesh-flow-node-22' }`. A spec with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
 
 ## What every backend does the same
 

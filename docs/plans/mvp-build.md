@@ -156,8 +156,10 @@ against one repository at a time. `inDependencyOrder` runs sequentially until ro
 
 - **Name and shape.** `@mesh-flow/<name>` under `packages/`. These are publishable libraries, not
   POCs: one concept per file, grouped in folders by concept, no comment section boundaries.
-  `index.mts` is only the public surface; connectors and toolchains export their namespace
-  (`export * as jira from './jira'`).
+  Each public entry point is a file in `src/_module`, named after its subpath (the package's own
+  name for `.`), and holds only exports; connectors and toolchains export their namespace
+  (`export * as jira from '../jira.mts'`). tsdown builds `src/_module/*.mts`, and `exports` in
+  `package.json` lists each with its `source`, as in rooted.
 - **TypeScript and lint.** `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`,
   `exactOptionalPropertyTypes`). `pnpm lint` (oxlint, type-aware) and `pnpm typecheck` pass before
   a PR goes up.
@@ -174,7 +176,9 @@ against one repository at a time. `inDependencyOrder` runs sequentially until ro
   Tests that need something real on the machine (a sandbox backend, a service) are opt-in by
   environment variable, so `pnpm test` runs anywhere.
 - **Build.** [tsdown](https://tsdown.dev) (on rolldown) to ESM with declarations, one entry per
-  public subpath.
+  file in `src/_module`.
+- **No JavaScript files.** Sources, tests and fixtures are TypeScript, also code that runs inside a
+  sandbox: tests transpile it before they copy it in.
 - **README.** Every package has a `README.md`: what it's for, who uses it, and code samples for
   the average use. It's what npm shows, so it stands on its own without the design docs.
 

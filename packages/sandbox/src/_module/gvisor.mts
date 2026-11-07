@@ -3,4 +3,4 @@
  *
  * @module
  */
-export { gvisorBackend, type GvisorBackendOptions } from './gvisor/gvisor-backend.mts'
+export { gvisorBackend, type GvisorBackendOptions } from '../gvisor/gvisor-backend.mts'
