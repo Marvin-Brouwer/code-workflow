@@ -16,41 +16,82 @@ This package is for the engine. Workflow code never sees it.
 
 ## Usage
 
+### Pick a backend
+
+`chooseBackend` applies the rule above to this machine and says why it chose what it did. Load only the backend it names:
+
 ```ts
-import { chooseBackend, PausedSandbox, startInBackground, type SandboxBackend } from '@mesh-flow/sandbox';
+import { chooseBackend, type SandboxBackend } from '@mesh-flow/sandbox'
 
-const choice = chooseBackend({ hosted: false });
-console.log(`sandbox backend: ${choice.backend} (${choice.reason})`);
+const choice = chooseBackend({ hosted: false })
+console.log(`sandbox backend: ${choice.backend} (${choice.reason})`)
 
-const backend: SandboxBackend = choice.backend === 'gvisor'
-    ? (await import('@mesh-flow/sandbox/gvisor')).gvisorBackend({ directory: '/var/lib/mesh-flow/gvisor' })
-    : (await import('@mesh-flow/sandbox/microsandbox')).microsandboxBackend();
+const backend: SandboxBackend =
+	choice.backend === 'gvisor'
+		? (await import('@mesh-flow/sandbox/gvisor')).gvisorBackend({ directory: '/var/lib/mesh-flow/gvisor' })
+		: (await import('@mesh-flow/sandbox/microsandbox')).microsandboxBackend()
+```
 
-const sandbox = await backend.create({
-    image: 'node:22-slim',
-    cpus: 2,
-    memoryMb: 2048,
-    egress: { allow: ['registry.npmjs.org'] },
-}, signal);
+Hosted, E2B takes an API key from the engine's credential store and a template per image:
 
-await sandbox.writeFile('/srv/runtime.mjs', runtimeSource, signal);
-await startInBackground(sandbox, ['node', '/srv/runtime.mjs'], { signal, logFile: '/var/log/runtime.log' });
+```ts
+import { e2bBackend } from '@mesh-flow/sandbox/e2b'
 
-// The run waits for a human: keep the paused state in the run record.
-const paused = await sandbox.pause(signal);
+const backend = e2bBackend({ apiKey, templates: { 'node:22-slim': 'mesh-flow-node-22' } })
+```
+
+### Create a sandbox and run commands
+
+```ts
+import { startInBackground } from '@mesh-flow/sandbox'
+
+const sandbox = await backend.create(
+	{
+		image: 'node:22-slim',
+		cpus: 2,
+		memoryMb: 2048,
+		egress: { allow: ['registry.npmjs.org'] },
+	},
+	signal,
+)
+
+const result = await sandbox.exec(['npm', 'ci'], { signal, cwd: '/work' })
+if (result.exitCode !== 0) throw new Error(result.stderr)
+
+await sandbox.writeFile('/srv/runtime.mjs', runtimeSource, signal)
+await startInBackground(sandbox, ['node', '/srv/runtime.mjs'], { signal, logFile: '/var/log/runtime.log' })
+```
+
+### Pause and resume
+
+A run that waits for a human pauses its sandbox and keeps the paused state in the run record. It is plain JSON, and `PausedSandbox` parses it back:
+
+```ts
+import { PausedSandbox } from '@mesh-flow/sandbox'
+
+const paused = await sandbox.pause(signal)
+await saveRunRecord({ ...record, paused })
 
 // Later, maybe after a restart of the engine or the machine:
-const resumed = await backend.resume(PausedSandbox.parse(record.paused), signal);
+const resumed = await backend.resume(PausedSandbox.parse(record.paused), signal)
 ```
+
+### Shut down and reconcile
 
 On shutdown, pause what's worth keeping and close the backend. `close` aborts calls in flight and destroys every sandbox it still runs, so nothing is left behind:
 
 ```ts
-await Promise.allSettled(running.map((sandbox) => sandbox.pause(deadline)));
-await backend.close(deadline);
+await Promise.allSettled(running.map((sandbox) => sandbox.pause(deadline)))
+await backend.close(deadline)
 ```
 
-On start, reconcile: `list` returns every mesh-flow sandbox the backend holds, also ones from a process that died, and `remove` takes away the ones the engine has no record of.
+On start, reconcile: `list` returns every mesh-flow sandbox the backend holds, also ones from a process that died, and `remove` takes away the ones the engine has no record of:
+
+```ts
+for (const held of await backend.list(signal)) {
+	if (!knownSandboxIds.has(held.id)) await backend.remove(held.id, signal)
+}
+```
 
 ## What every backend does the same
 

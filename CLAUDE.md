@@ -19,6 +19,8 @@ TypeScript in git, not something clicked together in a UI.
 - Code style: tabs, no semicolons, single quotes, `.mts` source files with relative imports that
   name the `.mts` file. Run `pnpm format` (oxfmt, `.oxfmtrc.json`) after every change;
   `pnpm format:check` is what a PR has to pass. Markdown is not formatted.
+- Every package has a `README.md` that says what it's for and shows the average use in code
+  samples, written in the same code style.
 - **Workflows are plain async TypeScript.** No workflow DSL: no step objects, no `next()`, no
   combinators, no builder chains (`.then()`, `.returns()`, `.view()`). Control flow is `await`,
   `if`, `for`, `Promise.all`, `throw`.

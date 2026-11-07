@@ -175,6 +175,8 @@ against one repository at a time. `inDependencyOrder` runs sequentially until ro
   environment variable, so `pnpm test` runs anywhere.
 - **Build.** [tsdown](https://tsdown.dev) (on rolldown) to ESM with declarations, one entry per
   public subpath.
+- **README.** Every package has a `README.md`: what it's for, who uses it, and code samples for
+  the average use. It's what npm shows, so it stands on its own without the design docs.
 
 ## Done when
 
