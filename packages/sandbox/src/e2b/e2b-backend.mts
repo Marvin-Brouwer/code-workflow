@@ -12,6 +12,8 @@ const ownerKey = 'mesh-flow'
 export interface E2bBackendOptions {
 	/** Comes from the engine's credential store. It stays on the host. */
 	readonly apiKey: string
+	/** The domain of a self-hosted E2B deployment. Leave it out for E2B Cloud. */
+	readonly domain?: string
 	/**
 	 * The E2B template to use for each image a spec can name. E2B builds sandboxes from templates,
 	 * not from images, and a template fixes CPUs and memory: `cpus` and `memoryMb` in the spec
@@ -34,7 +36,7 @@ export interface E2bBackendOptions {
 export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 	const lifetime = new BackendLifetime()
 	const timeoutMs = options.timeoutMs ?? 24 * 60 * 60 * 1000
-	const connection = { apiKey: options.apiKey }
+	const connection = { apiKey: options.apiKey, ...(options.domain === undefined ? {} : { domain: options.domain }) }
 
 	return {
 		name: 'e2b',
