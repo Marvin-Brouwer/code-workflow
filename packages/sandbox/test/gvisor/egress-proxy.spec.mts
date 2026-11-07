@@ -53,7 +53,7 @@ async function upstreamProxy(hold = false): Promise<Upstream> {
 
 async function startProxy(allow: readonly string[], upstream: Upstream): Promise<{ proxy: EgressProxy; socketPath: string }> {
 	const socketPath = path.join(await temporaryDirectory(), 'egress.sock')
-	const proxy = await startEgressProxy({ socketPath, allow, upstreamProxy: upstream.url })
+	const proxy = await startEgressProxy({ socketPath, allow, upstreamProxy: upstream.url, signal: AbortSignal.timeout(5000) })
 	onTestFinished(() => proxy.close())
 	return { proxy, socketPath }
 }
@@ -164,5 +164,21 @@ describe('egress proxy', () => {
 
 		// Assert
 		await expect(closing).resolves.toBeUndefined()
+	})
+
+	test('keeps running when the signal it was started with aborts later', async () => {
+		// Arrange
+		const upstream = await upstreamProxy()
+		const socketPath = path.join(await temporaryDirectory(), 'egress.sock')
+		const started = new AbortController()
+		const proxy = await startEgressProxy({ socketPath, allow: ['registry.npmjs.org'], upstreamProxy: upstream.url, signal: started.signal })
+		onTestFinished(() => proxy.close())
+
+		// Act
+		started.abort()
+		const result = await tunnel(socketPath, 'registry.npmjs.org:443')
+
+		// Assert
+		expect(result.status).toBe(200)
 	})
 })

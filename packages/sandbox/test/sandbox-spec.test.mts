@@ -10,14 +10,21 @@ describe('EgressHost', () => {
 		expect(result.success).toBe(true)
 	})
 
-	test.each(['*.npmjs.org', '0.0.0.0/0', '1.2.3.4', 'Registry.npmjs.org', 'registry.npmjs.org:443', 'registry.npmjs.org.', ''])(
-		'refuses %j',
-		(host) => {
-			// Act
-			const result = EgressHost.safeParse(host)
+	test.each([
+		'*.npmjs.org',
+		'0.0.0.0/0',
+		'1.2.3.4',
+		'0x7f000001',
+		'0x7f.1',
+		'Registry.npmjs.org',
+		'registry.npmjs.org:443',
+		'registry.npmjs.org.',
+		'',
+	])('refuses %j', (host) => {
+		// Act
+		const result = EgressHost.safeParse(host)
 
-			// Assert
-			expect(result.success).toBe(false)
-		},
-	)
+		// Assert
+		expect(result.success).toBe(false)
+	})
 })

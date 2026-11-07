@@ -4,7 +4,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
-import type { PausedSandbox } from '../paused-sandbox.mts'
+import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import { assertSandboxId, isSandboxId, newSandboxId } from '../sandbox-id.mts'
 import type { Sandbox } from '../sandbox.mts'
@@ -56,7 +56,6 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 	}
 	const images = new RootfsCache(layout.images, lifetime)
 	const proxies = new EgressProxies(layout, options.upstreamProxy)
-	const resuming = new Set<string>()
 
 	/** Either runsc call may fail because the container is already gone, which is fine. */
 	async function stopContainer(id: string, signal: AbortSignal): Promise<void> {
@@ -65,7 +64,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 		await proxies.stop(id, signal)
 	}
 
-	async function remove(id: string, signal: AbortSignal): Promise<void> {
+	async function removeFromDisk(id: string, signal: AbortSignal): Promise<void> {
 		await stopContainer(id, signal)
 		await rm(layout.sandbox(id).directory, { recursive: true, force: true })
 	}
@@ -75,14 +74,15 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 		await lifetime.keep(work(AbortSignal.timeout(cleanupTimeoutMs))).catch(() => undefined)
 	}
 
-	async function stateOf(id: string, status: string | undefined): Promise<HeldSandbox['state']> {
+	/** `status` is runsc's, for a container it still has a record of. */
+	async function stateOf(id: string, status?: string): Promise<HeldSandbox['state']> {
 		if (status === 'running') return 'running'
 		// Not running, but with a finished checkpoint: a pause that couldn't delete its container.
 		// Without one, it belonged to a sandbox that was running.
 		return (await hasCheckpoint(layout.sandbox(id).checkpoints)) ? 'paused' : 'running'
 	}
 
-	const context: GvisorContext = { runsc: config, layout, lifetime, proxies, remove }
+	const context: GvisorContext = { runsc: config, layout, lifetime, proxies, remove: removeFromDisk }
 
 	return {
 		name: 'gvisor',
@@ -107,41 +107,40 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				await proxies.start(id, spec.egress, bound)
 				await runscOrThrow(config, ['run', '--detach', `--bundle=${paths.bundle}`, id], { signal: bound, logFile: paths.log })
 			} catch (error) {
-				await cleanUp((cleanupSignal) => remove(id, cleanupSignal))
+				await cleanUp((cleanupSignal) => removeFromDisk(id, cleanupSignal))
 				throw error
 			}
 			return new GvisorSandbox(id, spec, context)
 		},
 
-		async resume(paused: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
+		async resume(input: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
+			const paused = PausedSandbox.parse(input)
 			assertPausedBy(paused, 'gvisor')
 			assertSandboxId(paused.id)
 			if (paused.snapshot === undefined || !isCheckpointName(paused.snapshot)) {
 				throw new Error(`The paused sandbox ${paused.id} names no valid checkpoint.`)
 			}
-			if (lifetime.tracks(paused.id) || resuming.has(paused.id)) throw new Error(`The sandbox ${paused.id} is already running.`)
 			const bound = lifetime.bind(signal)
 			const paths = layout.sandbox(paused.id)
 			const imagePath = path.join(paths.checkpoints, paused.snapshot)
 			if (!existsSync(imagePath)) throw new Error(`The checkpoint of ${paused.id} is gone: ${imagePath}`)
-			resuming.add(paused.id)
-			try {
-				// A pause that couldn't delete its container leaves the record behind.
-				await runsc(config, ['delete', '--force', paused.id], { signal: bound })
-				await proxies.start(paused.id, paused.spec.egress, bound)
-				// The bundle must be the one the sandbox was created from.
-				await runscOrThrow(config, ['restore', '--detach', `--image-path=${imagePath}`, `--bundle=${paths.bundle}`, paused.id], {
-					signal: bound,
-					logFile: paths.log,
-				})
+			return lifetime.startOnce(paused.id, async () => {
+				try {
+					// A pause that couldn't delete its container leaves the record behind.
+					await runsc(config, ['delete', '--force', paused.id], { signal: bound })
+					await proxies.start(paused.id, paused.spec.egress, bound)
+					// The bundle must be the one the sandbox was created from.
+					await runscOrThrow(config, ['restore', '--detach', `--image-path=${imagePath}`, `--bundle=${paths.bundle}`, paused.id], {
+						signal: bound,
+						logFile: paths.log,
+					})
+				} catch (error) {
+					// The directory stays: its checkpoint is what a retry needs.
+					await cleanUp((cleanupSignal) => stopContainer(paused.id, cleanupSignal))
+					throw error
+				}
 				return new GvisorSandbox(paused.id, paused.spec, context)
-			} catch (error) {
-				// The directory stays: its checkpoint is what a retry needs.
-				await cleanUp((cleanupSignal) => stopContainer(paused.id, cleanupSignal))
-				throw error
-			} finally {
-				resuming.delete(paused.id)
-			}
+			})
 		},
 
 		async list(signal: AbortSignal): Promise<HeldSandbox[]> {
@@ -154,14 +153,14 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 			}
 			const directories = existsSync(layout.sandboxes) ? await readdir(layout.sandboxes) : []
 			for (const id of directories.filter(isSandboxId)) {
-				if (!held.has(id)) held.set(id, { id, state: await stateOf(id, undefined) })
+				if (!held.has(id)) held.set(id, { id, state: await stateOf(id) })
 			}
 			return [...held.values()]
 		},
 
 		async remove(id: string, signal: AbortSignal): Promise<void> {
 			assertSandboxId(id)
-			await remove(id, lifetime.bind(signal))
+			await removeFromDisk(id, lifetime.bind(signal))
 			lifetime.untrack(id)
 		},
 

@@ -180,7 +180,7 @@ describe('gVisor backend, on a fake runsc', () => {
 		expect(await reopen().list(timeout())).toEqual([{ id: sandbox.id, state: 'paused' }])
 	})
 
-	test('remove clears a paused sandbox, and refuses anything that is not a sandbox id', async () => {
+	test('remove clears a paused sandbox', async () => {
 		// Arrange
 		const { backend } = await backendOnFakeRunsc()
 		const sandbox = await backend.create(spec, timeout())
@@ -191,7 +191,17 @@ describe('gVisor backend, on a fake runsc', () => {
 
 		// Assert
 		expect(await backend.list(timeout())).toEqual([])
-		await expect(backend.remove('../images', timeout())).rejects.toThrow("isn't a mesh-flow sandbox id")
+	})
+
+	test('remove refuses anything that is not a sandbox id', async () => {
+		// Arrange
+		const { backend } = await backendOnFakeRunsc()
+
+		// Act
+		const removing = backend.remove('../images', timeout())
+
+		// Assert
+		await expect(removing).rejects.toThrow("isn't a mesh-flow sandbox id")
 	})
 
 	test('starts the egress proxy with the sandbox and stops it on pause', async () => {

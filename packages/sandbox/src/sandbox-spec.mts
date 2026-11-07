@@ -10,7 +10,11 @@ const hostName = new RegExp(`^(?=.{1,253}$)${label}(?:\\.${label})*$`)
 export const EgressHost = z
 	.string()
 	.regex(hostName, 'Use a lowercase host name, such as registry.npmjs.org.')
-	.refine((host) => !/^[\d.]+$/.test(host), 'IP addresses are not allowed; use a host name.')
+	// Resolvers read digits-only and hex (`0x7f000001`) names as IP addresses.
+	.refine(
+		(host) => !/^[\d.]+$/.test(host) && !host.split('.').some((part) => part.startsWith('0x')),
+		'IP addresses are not allowed; use a host name.',
+	)
 
 /**
  * Where a sandbox may connect to, over HTTPS. `registry.npmjs.org` allows that host only, not its

@@ -1,7 +1,7 @@
 import { ALL_TRAFFIC, Sandbox as E2bSdkSandbox, type SandboxOpts } from 'e2b'
 import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
-import type { PausedSandbox } from '../paused-sandbox.mts'
+import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import type { Sandbox } from '../sandbox.mts'
 import { allowsEgress, type EgressPolicy, SandboxSpec } from '../sandbox-spec.mts'
@@ -62,11 +62,14 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 			return new E2bSandbox(sandbox, spec, lifetime)
 		},
 
-		async resume(paused: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
+		async resume(input: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
+			const paused = PausedSandbox.parse(input)
 			assertPausedBy(paused, 'e2b')
-			if (lifetime.tracks(paused.id)) throw new Error(`The sandbox ${paused.id} is already running.`)
-			const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs, signal: lifetime.bind(signal) })
-			return new E2bSandbox(sandbox, paused.spec, lifetime)
+			const bound = lifetime.bind(signal)
+			return lifetime.startOnce(paused.id, async () => {
+				const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs, signal: bound })
+				return new E2bSandbox(sandbox, paused.spec, lifetime)
+			})
 		},
 
 		async list(signal: AbortSignal): Promise<HeldSandbox[]> {

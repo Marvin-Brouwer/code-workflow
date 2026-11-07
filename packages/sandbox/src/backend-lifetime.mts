@@ -12,7 +12,9 @@ type Remove = (signal: AbortSignal) => Promise<void>
 export class BackendLifetime {
 	readonly #closed = new AbortController()
 	readonly #running = new Map<string, Remove>()
+	readonly #starting = new Set<string>()
 	readonly #pending = new Set<Promise<unknown>>()
+	/** Set once `close` is called; the signal its cleanup runs on. */
 	#closeSignal: AbortSignal | undefined
 
 	/** Aborts on close only: for shared work that no single caller should be able to stop. */
@@ -22,7 +24,7 @@ export class BackendLifetime {
 
 	/** The caller's signal, aborted on close as well. Throws once the backend is closed. */
 	bind(signal: AbortSignal): AbortSignal {
-		if (this.#closed.signal.aborted) throw new Error('This sandbox backend is closed.')
+		if (this.#closeSignal !== undefined) throw new Error('This sandbox backend is closed.')
 		return AbortSignal.any([signal, this.#closed.signal])
 	}
 
@@ -49,6 +51,20 @@ export class BackendLifetime {
 	/** Whether a sandbox with this id is running on this backend now. */
 	tracks(id: string): boolean {
 		return this.#running.has(id)
+	}
+
+	/**
+	 * Runs `start` for a sandbox that must not run twice, such as a resume. Throws when it already
+	 * runs here, or another start of it is still going.
+	 */
+	async startOnce<T>(id: string, start: () => Promise<T>): Promise<T> {
+		if (this.#running.has(id) || this.#starting.has(id)) throw new Error(`The sandbox ${id} is already running.`)
+		this.#starting.add(id)
+		try {
+			return await start()
+		} finally {
+			this.#starting.delete(id)
+		}
 	}
 
 	/** Forgets a sandbox that was paused, or removed some other way. */

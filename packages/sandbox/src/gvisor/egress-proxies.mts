@@ -22,16 +22,19 @@ export class EgressProxies {
 			socketPath: this.#layout.sandbox(id).egressSocket,
 			allow: egress.allow,
 			...(this.#upstreamProxy === undefined ? {} : { upstreamProxy: this.#upstreamProxy }),
+			signal,
 		})
 		this.#proxies.set(id, proxy)
 	}
 
+	/** Stops the sandbox's proxy, if it has one. */
 	async stop(id: string, signal: AbortSignal): Promise<void> {
 		const proxy = this.#proxies.get(id)
 		this.#proxies.delete(id)
 		if (proxy !== undefined) await abortable(proxy.close(), signal)
 	}
 
+	/** On close: stops every proxy, also of sandboxes whose removal failed. */
 	async stopAll(signal: AbortSignal): Promise<void> {
 		await Promise.allSettled([...this.#proxies.keys()].map((id) => this.stop(id, signal)))
 	}

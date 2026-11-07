@@ -56,15 +56,31 @@ describe('microsandbox backend, on a fake SDK', () => {
 		const closing = backend.close(AbortSignal.timeout(5000)).then(() => {
 			closed = true
 		})
-		await expect(creating).rejects.toThrow('closed')
+		// A macrotask, so a close that doesn't wait would have finished by now.
+		await new Promise((resolve) => setTimeout(resolve, 20))
 		const closedBeforeTheVmCame = closed
 		sdk.state.resolveCreate(vm)
 		await closing
 
 		// Assert
+		await expect(creating).rejects.toThrow('closed')
 		expect(closedBeforeTheVmCame).toBe(false)
 		expect(vm.kill).toHaveBeenCalledOnce()
 		expect(sdk.remove).toHaveBeenCalledWith(vm.name)
+	})
+
+	test('a create after close is refused before the SDK makes a VM', async () => {
+		// Arrange
+		const backend = microsandboxBackend()
+		await backend.close(AbortSignal.timeout(1000))
+		const builder = vi.spyOn(sdk.Sandbox, 'builder')
+
+		// Act
+		const creating = backend.create(spec, AbortSignal.timeout(1000))
+
+		// Assert
+		await expect(creating).rejects.toThrow('closed')
+		expect(builder).not.toHaveBeenCalled()
 	})
 
 	test('close settles when the SDK never finishes a create, once its signal aborts', async () => {

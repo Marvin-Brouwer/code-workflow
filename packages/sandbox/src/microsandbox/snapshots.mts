@@ -14,7 +14,7 @@ export function sandboxIdOfSnapshot(name: string | null): string | undefined {
 }
 
 /** Every snapshot this package took, with the sandbox it belongs to. */
-export async function meshFlowSnapshots(): Promise<{ readonly id: string; readonly snapshot: SnapshotHandle }[]> {
+export async function ownedSnapshots(): Promise<{ readonly id: string; readonly snapshot: SnapshotHandle }[]> {
 	const owned = []
 	for (const snapshot of await Snapshot.list()) {
 		const id = sandboxIdOfSnapshot(snapshot.name)
@@ -25,5 +25,5 @@ export async function meshFlowSnapshots(): Promise<{ readonly id: string; readon
 
 /** Every snapshot of one sandbox. */
 export async function snapshotsOf(id: string): Promise<SnapshotHandle[]> {
-	return (await meshFlowSnapshots()).filter((owned) => owned.id === id).map((owned) => owned.snapshot)
+	return (await ownedSnapshots()).filter((owned) => owned.id === id).map((owned) => owned.snapshot)
 }

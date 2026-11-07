@@ -1,5 +1,6 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { Layout } from '../../src/gvisor/layout.mts'
 import { imageMarker, rootfsDirectory } from '../../src/gvisor/rootfs.mts'
 
 export interface FakeRunscOptions {
@@ -49,7 +50,7 @@ esac
 
 /** Where the fake runsc keeps a container's status, to change it from a test. */
 export function fakeContainerFile(directory: string, id: string): string {
-	return path.join(directory, 'runsc', 'fake-containers', id)
+	return path.join(new Layout(directory).runscRoot, 'fake-containers', id)
 }
 
 /** Writes the fake runsc and an already unpacked image into `directory`. Returns the command. */

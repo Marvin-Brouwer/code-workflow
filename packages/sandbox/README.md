@@ -139,10 +139,10 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 
 - **Every call takes an `AbortSignal`**, and aborting settles it right away. The microsandbox SDK takes no signals, so its calls are raced against the signal; a command still running is killed, and a sandbox created too late is removed.
 - **A pause keeps memory, processes and the stack.** A pending `await` resolves in the same process after a resume. Open connections don't survive a pause, so nothing may hold one across a wait ([design section 5](../../docs/design.md#5-durability)).
-- **The id stays the same** across a pause and resume.
+- **The id stays the same** across a pause and resume. A sandbox runs once: resuming one that already runs, or is being resumed, is refused.
 - **A pause only resumes on the backend that made it.** Anything else is a `BackendMismatchError`.
 - **Egress is deny by default.** `egress.allow` lists lowercase host names, matched exactly; an empty list means no network. Wildcards, ports, IP addresses and CIDR ranges are refused, because the backends can't all enforce them the same way.
-- **Specs are checked** with zod on `create`, so a bad host name fails there and not inside a backend.
+- **Input is checked** with zod: the spec on `create` and the paused sandbox on `resume`, so a bad host name fails there and not inside a backend.
 - **Commands are argv arrays**, never a shell line. A non-zero exit code is a result, not an error.
 
 ## Where they differ

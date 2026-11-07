@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 
 const sdk = vi.hoisted(() => {
@@ -27,6 +27,10 @@ const { e2bBackend } = await import('../../src/e2b/e2b.backend.mts')
 const spec: SandboxSpec = { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 
 describe('E2B backend, on a fake SDK', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
 	test('close kills the sandboxes it still runs', async () => {
 		// Arrange
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:22-slim': 'node-22' } })
@@ -42,7 +46,6 @@ describe('E2B backend, on a fake SDK', () => {
 	test('refuses an image without a template, before calling E2B', async () => {
 		// Arrange
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: {} })
-		sdk.create.mockClear()
 
 		// Act
 		const creating = backend.create(spec, AbortSignal.timeout(1000))

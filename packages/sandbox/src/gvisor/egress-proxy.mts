@@ -13,6 +13,8 @@ export interface EgressProxyOptions {
 	readonly allow: readonly string[]
 	/** An HTTP proxy between this machine and the internet, as `http://host:port`. */
 	readonly upstreamProxy?: string
+	/** Stops a start that hasn't finished. Once started, only `close` stops the proxy. */
+	readonly signal: AbortSignal
 }
 
 const connectTimeoutMs = 10_000
@@ -33,8 +35,7 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 			client.end('HTTP/1.1 403 Forbidden\r\n\r\n')
 			return
 		}
-		open.add(client)
-		client.once('close', () => open.delete(client))
+		trackUntilClosed(open, client)
 		client.once('error', () => client.destroy())
 		const upstream = openUpstream(host, options.upstreamProxy)
 		open.add(upstream.connecting)
@@ -42,13 +43,8 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 		upstream.socket.then(
 			(remote) => {
 				open.delete(upstream.connecting)
-				open.add(remote)
-				remote.once('close', () => open.delete(remote))
-				remote.once('error', () => client.destroy())
-				client.once('close', () => remote.destroy())
-				client.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-				remote.write(head)
-				remote.pipe(client).pipe(remote)
+				trackUntilClosed(open, remote)
+				pipeTunnel(client, remote, head)
 			},
 			() => {
 				open.delete(upstream.connecting)
@@ -57,11 +53,19 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 		)
 	})
 
+	// Not listen's own signal option: that closes the server whenever the signal aborts, also
+	// long after this start is done. Listening on a Unix socket is quick, so a check either side
+	// is enough.
+	options.signal.throwIfAborted()
 	await rm(options.socketPath, { force: true })
 	await new Promise<void>((resolve, reject) => {
 		server.once('error', reject)
 		server.listen(options.socketPath, resolve)
 	})
+	if (options.signal.aborted) {
+		server.close()
+		options.signal.throwIfAborted()
+	}
 	// runsc's gofer opens the socket for the sandbox. It runs as root without CAP_DAC_OVERRIDE,
 	// so a socket made by another user has to be writable for everyone.
 	await chmod(options.socketPath, 0o666)
@@ -77,6 +81,20 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 				server.closeAllConnections()
 			}),
 	}
+}
+
+function trackUntilClosed(open: Set<{ destroy(): unknown }>, socket: Socket): void {
+	open.add(socket)
+	socket.once('close', () => open.delete(socket))
+}
+
+/** Confirms the tunnel to the client and connects both ends. Either end closing ends the other. */
+function pipeTunnel(client: Socket, remote: Socket, head: Buffer): void {
+	remote.once('error', () => client.destroy())
+	client.once('close', () => remote.destroy())
+	client.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+	remote.write(head)
+	remote.pipe(client).pipe(remote)
 }
 
 /** Lowercase, without a trailing dot: `Registry.npmjs.org.` is `registry.npmjs.org`. */

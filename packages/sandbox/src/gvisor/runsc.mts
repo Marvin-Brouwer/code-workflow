@@ -49,6 +49,9 @@ export function runsc(config: RunscConfig, args: readonly string[], call: RunscC
 		stdio: [call.input === undefined ? 'ignore' : 'pipe', log ?? 'pipe', log ?? 'pipe'],
 	})
 	if (log !== undefined) closeSync(log)
+	// runsc may exit before it read all of its input (a container that is gone). That is an EPIPE
+	// here, and runsc's exit code already says what went wrong.
+	child.stdin?.on('error', () => undefined)
 	child.stdin?.end(call.input)
 
 	let stdout = ''

@@ -1,4 +1,4 @@
-import { Sandbox as MicrosandboxSdkSandbox, Snapshot } from 'microsandbox'
+import { Sandbox as MicrosandboxSdkSandbox, Snapshot, type SandboxHandle } from 'microsandbox'
 import { abortable } from '../abortable.mts'
 import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
@@ -21,7 +21,7 @@ export class MicrosandboxSandbox implements Sandbox {
 		this.#sandbox = sandbox
 		this.#spec = spec
 		this.#lifetime = lifetime
-		lifetime.track(this.id, (signal) => abortable(lifetime.keep(removeSandbox(sandbox)), signal))
+		lifetime.track(this.id, (signal) => abortable(lifetime.keep(removeSandboxAndSnapshots(sandbox.name)), signal))
 	}
 
 	get id(): string {
@@ -83,8 +83,8 @@ export class MicrosandboxSandbox implements Sandbox {
 }
 
 /**
- * Kills rather than stops: `stop()` waits for the processes in it, which may never exit. Exported
- * for the backend, which removes a VM that was created too late with it.
+ * Kills rather than stops: `stop()` waits for the processes in it, which may never exit. The
+ * backend removes a VM that was created too late with it.
  */
 export async function removeSandbox(sandbox: MicrosandboxSdkSandbox): Promise<void> {
 	await sandbox.kill()
@@ -99,5 +99,28 @@ async function removeEarlierSnapshots(id: string, keep: string): Promise<void> {
 	for (const snapshot of await snapshotsOf(id)) {
 		if (snapshot.reference === keep || snapshot.name === null) continue
 		await Snapshot.remove(snapshot.name).catch(() => undefined)
+	}
+}
+
+export async function allSandboxes(): Promise<SandboxHandle[]> {
+	const handles: SandboxHandle[] = []
+	let cursor: string | undefined
+	do {
+		const page = await MicrosandboxSdkSandbox.listWith((list) => (cursor === undefined ? list : list.cursor(cursor)))
+		handles.push(...page.sandboxes)
+		cursor = page.nextCursor
+	} while (cursor !== undefined)
+	return handles
+}
+
+/** The VM, if there is one, and every snapshot of it: what `destroy` and `remove` take away. */
+export async function removeSandboxAndSnapshots(id: string): Promise<void> {
+	const handle = (await allSandboxes()).find((candidate) => candidate.name === id)
+	if (handle) {
+		if (handle.status !== 'stopped' && handle.status !== 'crashed') await handle.kill()
+		await handle.remove()
+	}
+	for (const snapshot of await snapshotsOf(id)) {
+		if (snapshot.name !== null) await Snapshot.remove(snapshot.name, { force: true })
 	}
 }
