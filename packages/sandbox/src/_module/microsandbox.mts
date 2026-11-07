@@ -3,4 +3,4 @@
  *
  * @module
  */
-export { microsandboxBackend } from '../microsandbox/microsandbox-backend.mts'
+export { microsandboxBackend } from '../microsandbox/microsandbox.backend.mts'

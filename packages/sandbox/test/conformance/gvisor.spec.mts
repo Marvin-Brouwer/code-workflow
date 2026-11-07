@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { gvisorBackend } from '../../src/gvisor/gvisor-backend.mts'
+import { gvisorBackend } from '../../src/gvisor/gvisor.backend.mts'
 import { describeConformance } from './conformance.mts'
 
 // RUNSC='sudo runsc' when the tests don't run as root. MESH_FLOW_GVISOR_DIRECTORY keeps the

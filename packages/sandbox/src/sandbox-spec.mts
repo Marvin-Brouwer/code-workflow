@@ -1,13 +1,30 @@
 import { z } from 'zod'
 
+const label = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
+const hostName = new RegExp(`^(?=.{1,253}$)${label}(?:\\.${label})*$`)
+
 /**
- * Where a sandbox may connect to. Hosts are names, matched exactly: `registry.npmjs.org` allows
- * that host only, not its subdomains. An empty list means no network at all.
+ * A host a sandbox may connect to: a lowercase DNS name, matched exactly. No wildcards, ports,
+ * IP addresses or CIDR ranges, because not every backend can enforce those the same way.
+ */
+export const EgressHost = z
+	.string()
+	.regex(hostName, 'Use a lowercase host name, such as registry.npmjs.org.')
+	.refine((host) => !/^[\d.]+$/.test(host), 'IP addresses are not allowed; use a host name.')
+
+/**
+ * Where a sandbox may connect to, over HTTPS. `registry.npmjs.org` allows that host only, not its
+ * subdomains. An empty list means no network at all.
  */
 export const EgressPolicy = z.object({
-	allow: z.array(z.string().min(1)).readonly(),
+	allow: z.array(EgressHost).readonly(),
 })
 export type EgressPolicy = z.infer<typeof EgressPolicy>
+
+/** Whether the policy lets the sandbox reach any host at all. */
+export function allowsEgress(egress: EgressPolicy): boolean {
+	return egress.allow.length > 0
+}
 
 /**
  * What a sandbox is made from. Kept with a paused sandbox, because some backends need the same
@@ -16,11 +33,11 @@ export type EgressPolicy = z.infer<typeof EgressPolicy>
  * @example
  * ```ts
  * const spec: SandboxSpec = {
- *     image: 'node:22-slim',
- *     cpus: 2,
- *     memoryMb: 2048,
- *     egress: { allow: ['registry.npmjs.org'] },
- * };
+ * 	image: 'node:22-slim',
+ * 	cpus: 2,
+ * 	memoryMb: 2048,
+ * 	egress: { allow: ['registry.npmjs.org'] },
+ * }
  * ```
  */
 export const SandboxSpec = z.object({

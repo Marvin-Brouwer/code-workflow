@@ -8,11 +8,7 @@
 export function abortable<T>(work: Promise<T>, signal: AbortSignal, discard?: (late: T) => Promise<unknown>): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		const onAbort = () => {
-			try {
-				signal.throwIfAborted()
-			} catch (error) {
-				reject(error)
-			}
+			reject(abortReason(signal))
 			work
 				.then(
 					(late) => discard?.(late),
@@ -36,4 +32,10 @@ export function abortable<T>(work: Promise<T>, signal: AbortSignal, discard?: (l
 			},
 		)
 	})
+}
+
+/** The reason an aborted signal carries, which is always set, as an `Error` to reject with. */
+function abortReason(signal: AbortSignal): Error {
+	const reason: unknown = signal.reason
+	return reason instanceof Error ? reason : new Error(String(reason))
 }

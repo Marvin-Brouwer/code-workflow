@@ -1,5 +1,6 @@
 import { accessSync, constants } from 'node:fs'
 
+/** Whether `/dev/kvm` can be used, and if not, why not. */
 export type KvmAccess = { readonly usable: true } | { readonly usable: false; readonly reason: string }
 
 /** What backend selection needs to know about this machine. */

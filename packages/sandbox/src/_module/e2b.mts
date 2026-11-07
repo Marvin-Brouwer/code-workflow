@@ -3,4 +3,4 @@
  *
  * @module
  */
-export { e2bBackend, type E2bBackendOptions } from '../e2b/e2b-backend.mts'
+export { e2bBackend, type E2bBackendOptions } from '../e2b/e2b.backend.mts'

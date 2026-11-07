@@ -4,7 +4,7 @@ import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
-import { sandboxIdOfSnapshot, snapshotName } from './snapshot-name.mts'
+import { snapshotName, snapshotsOf } from './snapshots.mts'
 
 /**
  * A running microVM. Its microsandbox name is the sandbox id.
@@ -21,7 +21,7 @@ export class MicrosandboxSandbox implements Sandbox {
 		this.#sandbox = sandbox
 		this.#spec = spec
 		this.#lifetime = lifetime
-		lifetime.track(this.id, (signal) => abortable(removeSandbox(sandbox), signal))
+		lifetime.track(this.id, (signal) => abortable(lifetime.keep(removeSandbox(sandbox)), signal))
 	}
 
 	get id(): string {
@@ -29,7 +29,7 @@ export class MicrosandboxSandbox implements Sandbox {
 	}
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
-		const signal = this.#lifetime.signal(options.signal)
+		const signal = this.#lifetime.bind(options.signal)
 		const [program, ...args] = command
 		const handle = await abortable(
 			this.#sandbox.execStreamWith(program, (builder) => {
@@ -43,6 +43,8 @@ export class MicrosandboxSandbox implements Sandbox {
 			handle.kill().catch(() => undefined)
 		}
 		signal.addEventListener('abort', kill, { once: true })
+		// The signal may have aborted while the command was starting, before there was a listener.
+		if (signal.aborted) kill()
 		try {
 			const output = await abortable(handle.collect(), signal)
 			return { exitCode: output.code, stdout: output.stdout(), stderr: output.stderr() }
@@ -52,13 +54,13 @@ export class MicrosandboxSandbox implements Sandbox {
 	}
 
 	readFile(path: string, signal: AbortSignal): Promise<string> {
-		return abortable(this.#sandbox.fs().readToString(path), this.#lifetime.signal(signal))
+		return abortable(this.#sandbox.fs().readToString(path), this.#lifetime.bind(signal))
 	}
 
 	async writeFile(path: string, content: string, signal: AbortSignal): Promise<void> {
-		const combined = this.#lifetime.signal(signal)
-		await abortable(this.#sandbox.fs().write(`${path}.tmp`, content), combined)
-		await abortable(this.#sandbox.fs().rename(`${path}.tmp`, path), combined)
+		const bound = this.#lifetime.bind(signal)
+		await abortable(this.#sandbox.fs().write(`${path}.tmp`, content), bound)
+		await abortable(this.#sandbox.fs().rename(`${path}.tmp`, path), bound)
 	}
 
 	/**
@@ -66,22 +68,24 @@ export class MicrosandboxSandbox implements Sandbox {
 	 * refuses a full snapshot while it manages a running job, see `startInBackground`.
 	 */
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {
-		const combined = this.#lifetime.signal(signal)
-		const snapshot = await abortable(Snapshot.builder(snapshotName(this.id)).fromSandbox(this.id).full().create(), combined)
-		await abortable(removeSandbox(this.#sandbox), combined)
+		const bound = this.#lifetime.bind(signal)
+		const snapshot = await abortable(Snapshot.builder(snapshotName(this.id)).fromSandbox(this.id).full().create(), bound)
+		await abortable(removeSandbox(this.#sandbox), bound)
 		this.#lifetime.untrack(this.id)
 		// Housekeeping only: neither a failure nor an abort here may lose the pause that just worked.
-		await abortable(removeOlderSnapshots(this.id, snapshot.reference), combined).catch(() => undefined)
+		await abortable(removeEarlierSnapshots(this.id, snapshot.reference), bound).catch(() => undefined)
 		return { backend: 'microsandbox', id: this.id, spec: this.#spec, snapshot: snapshot.reference }
 	}
 
-	async destroy(signal: AbortSignal): Promise<void> {
-		await abortable(removeSandbox(this.#sandbox), this.#lifetime.signal(signal))
-		this.#lifetime.untrack(this.id)
+	destroy(signal: AbortSignal): Promise<void> {
+		return this.#lifetime.destroy(this.id, signal)
 	}
 }
 
-/** Kills rather than stops: `stop()` waits for the processes in it, which may never exit. */
+/**
+ * Kills rather than stops: `stop()` waits for the processes in it, which may never exit. Exported
+ * for the backend, which removes a VM that was created too late with it.
+ */
 export async function removeSandbox(sandbox: MicrosandboxSdkSandbox): Promise<void> {
 	await sandbox.kill()
 	await MicrosandboxSdkSandbox.remove(sandbox.name)
@@ -91,9 +95,9 @@ export async function removeSandbox(sandbox: MicrosandboxSdkSandbox): Promise<vo
  * Earlier pauses of the same sandbox. microsandbox refuses to remove a snapshot another one
  * depends on, and that refusal is fine: it stays until the sandbox is removed.
  */
-async function removeOlderSnapshots(id: string, keep: string): Promise<void> {
-	for (const snapshot of await Snapshot.list()) {
-		if (snapshot.reference === keep || snapshot.name === null || sandboxIdOfSnapshot(snapshot.name) !== id) continue
+async function removeEarlierSnapshots(id: string, keep: string): Promise<void> {
+	for (const snapshot of await snapshotsOf(id)) {
+		if (snapshot.reference === keep || snapshot.name === null) continue
 		await Snapshot.remove(snapshot.name).catch(() => undefined)
 	}
 }

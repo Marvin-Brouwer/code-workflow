@@ -1,6 +1,7 @@
 import { detectHost, type Host } from './host.mts'
-import type { BackendName } from './paused-sandbox.mts'
+import type { BackendName } from './backend-name.mts'
 
+/** The backend for this machine, and why. */
 export interface BackendChoice {
 	readonly backend: BackendName
 	/** Why, in words, for the engine's startup log. */
@@ -8,10 +9,10 @@ export interface BackendChoice {
 }
 
 export interface ChooseBackendOptions {
-	/** Hosted runs use E2B Cloud. */
+	/** Hosted runs use E2B. */
 	readonly hosted: boolean
-	/** Host configuration that names a backend wins over everything else. */
-	readonly force?: BackendName
+	/** A backend named in the host configuration wins over everything else. */
+	readonly backend?: BackendName
 }
 
 /**
@@ -20,7 +21,7 @@ export interface ChooseBackendOptions {
  *
  * | Host | Backend |
  * |---|---|
- * | `force` set | that one |
+ * | `backend` set | that one |
  * | hosted | E2B |
  * | macOS | microsandbox (Hypervisor.framework) |
  * | Windows | microsandbox (Windows Hypervisor Platform, untried; gVisor has no Windows build) |
@@ -31,12 +32,12 @@ export interface ChooseBackendOptions {
  *
  * @example
  * ```ts
- * const choice = chooseBackend({ hosted: false });
- * console.log(`sandbox backend: ${choice.backend} (${choice.reason})`);
+ * const choice = chooseBackend({ hosted: false })
+ * console.log(`sandbox backend: ${choice.backend} (${choice.reason})`)
  * ```
  */
 export function chooseBackend(options: ChooseBackendOptions, host: Host = detectHost()): BackendChoice {
-	if (options.force) return { backend: options.force, reason: 'set in the host configuration' }
+	if (options.backend) return { backend: options.backend, reason: 'set in the host configuration' }
 	if (options.hosted) return { backend: 'e2b', reason: 'hosted runs use E2B' }
 	if (host.platform === 'darwin') return { backend: 'microsandbox', reason: 'macOS has Hypervisor.framework' }
 	if (host.platform === 'win32') {

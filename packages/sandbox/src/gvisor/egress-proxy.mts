@@ -3,40 +3,47 @@ import { createServer, request } from 'node:http'
 import { connect, type Socket } from 'node:net'
 
 export interface EgressProxy {
-	/** Stops listening and ends every open tunnel. */
+	/** Stops listening, and ends every open tunnel and connection right away. */
 	close(): Promise<void>
 }
 
 export interface EgressProxyOptions {
 	readonly socketPath: string
-	/** Host names a tunnel may go to. Anything else gets a 403. */
+	/** Host names a tunnel may go to, on port 443. Anything else gets a 403. */
 	readonly allow: readonly string[]
 	/** An HTTP proxy between this machine and the internet, as `http://host:port`. */
 	readonly upstreamProxy?: string
 }
 
+const connectTimeoutMs = 10_000
+
 /**
- * An HTTP CONNECT proxy on a Unix socket that tunnels only to allowed hosts. A gVisor sandbox has
- * no network; this socket, bind-mounted into it, is its only way out.
+ * An HTTP CONNECT proxy on a Unix socket that tunnels only to allowed hosts, on port 443. A gVisor
+ * sandbox has no network; this socket, bind-mounted into it, is its only way out.
  */
 export async function startEgressProxy(options: EgressProxyOptions): Promise<EgressProxy> {
-	const tunnels = new Set<Socket>()
+	const allowed = new Set(options.allow.map(normalizeHost))
+	const open = new Set<{ destroy(): unknown }>()
 	const server = createServer((_request, response) => {
 		response.writeHead(405).end('Only CONNECT is supported.\n')
 	})
 	server.on('connect', (connectRequest, client: Socket, head: Buffer) => {
-		const { host, port } = parseTarget(connectRequest.url ?? '')
-		if (!options.allow.includes(host)) {
+		const host = allowedHost(connectRequest.url ?? '', allowed)
+		if (host === undefined) {
 			client.end('HTTP/1.1 403 Forbidden\r\n\r\n')
 			return
 		}
-		tunnels.add(client)
-		client.once('close', () => tunnels.delete(client))
+		open.add(client)
+		client.once('close', () => open.delete(client))
 		client.once('error', () => client.destroy())
-		openUpstream(host, port, options.upstreamProxy).then(
+		const upstream = openUpstream(host, options.upstreamProxy)
+		open.add(upstream.connecting)
+		client.once('close', () => upstream.connecting.destroy())
+		upstream.socket.then(
 			(remote) => {
-				tunnels.add(remote)
-				remote.once('close', () => tunnels.delete(remote))
+				open.delete(upstream.connecting)
+				open.add(remote)
+				remote.once('close', () => open.delete(remote))
 				remote.once('error', () => client.destroy())
 				client.once('close', () => remote.destroy())
 				client.write('HTTP/1.1 200 Connection Established\r\n\r\n')
@@ -44,6 +51,7 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 				remote.pipe(client).pipe(remote)
 			},
 			() => {
+				open.delete(upstream.connecting)
 				client.end('HTTP/1.1 502 Bad Gateway\r\n\r\n')
 			},
 		)
@@ -61,41 +69,78 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 	return {
 		close: () =>
 			new Promise((resolve) => {
-				for (const tunnel of tunnels) tunnel.destroy()
+				for (const connection of open) connection.destroy()
 				server.close(() => {
 					resolve()
 				})
+				// Requests that never finish their headers would keep `close` waiting.
+				server.closeAllConnections()
 			}),
 	}
 }
 
-function parseTarget(target: string): { host: string; port: number } {
-	const separator = target.lastIndexOf(':')
-	if (separator === -1) return { host: target, port: 443 }
-	return { host: target.slice(0, separator), port: Number(target.slice(separator + 1)) }
+/** Lowercase, without a trailing dot: `Registry.npmjs.org.` is `registry.npmjs.org`. */
+function normalizeHost(host: string): string {
+	return host.toLowerCase().replace(/\.$/, '')
 }
 
-function openUpstream(host: string, port: number, upstreamProxy: string | undefined): Promise<Socket> {
+/** The host of a `host:443` CONNECT target, when it's allowed. */
+function allowedHost(target: string, allowed: ReadonlySet<string>): string | undefined {
+	const match = /^([^:]+):443$/.exec(target)
+	if (match?.[1] === undefined) return undefined
+	const host = normalizeHost(match[1])
+	return allowed.has(host) ? host : undefined
+}
+
+interface Upstream {
+	/** Destroying it gives up on the connection while it is still being made. */
+	readonly connecting: { destroy(): unknown }
+	readonly socket: Promise<Socket>
+}
+
+function openUpstream(host: string, upstreamProxy: string | undefined): Upstream {
 	if (upstreamProxy === undefined) {
-		return new Promise((resolve, reject) => {
-			const socket = connect(port, host, () => {
-				resolve(socket)
-			})
-			socket.once('error', reject)
+		const socket = connect(443, host)
+		socket.setTimeout(connectTimeoutMs, () => {
+			socket.destroy(new Error(`Connecting to ${host} timed out.`))
 		})
+		return {
+			connecting: socket,
+			socket: new Promise((resolve, reject) => {
+				socket.once('connect', () => {
+					socket.setTimeout(0)
+					resolve(socket)
+				})
+				socket.once('error', reject)
+				socket.once('close', () => {
+					reject(new Error(`The connection to ${host} closed.`))
+				})
+			}),
+		}
 	}
 	const proxy = new URL(upstreamProxy)
-	return new Promise((resolve, reject) => {
-		const tunnel = request({ host: proxy.hostname, port: proxy.port, method: 'CONNECT', path: `${host}:${String(port)}` })
-		tunnel.once('connect', (response, socket) => {
-			if (response.statusCode === 200) {
-				resolve(socket)
-			} else {
-				socket.destroy()
-				reject(new Error(`The upstream proxy answered ${String(response.statusCode)}.`))
-			}
-		})
-		tunnel.once('error', reject)
-		tunnel.end()
+	const tunnel = request({ host: proxy.hostname, port: proxy.port, method: 'CONNECT', path: `${host}:443` })
+	tunnel.setTimeout(connectTimeoutMs, () => {
+		tunnel.destroy(new Error(`The upstream proxy didn't answer for ${host}.`))
 	})
+	return {
+		connecting: tunnel,
+		socket: new Promise((resolve, reject) => {
+			tunnel.once('connect', (response, socket, head) => {
+				if (response.statusCode === 200) {
+					// What the far end sent in the same packet as the 200 comes in head.
+					if (head.length > 0) socket.unshift(head)
+					resolve(socket)
+				} else {
+					socket.destroy()
+					reject(new Error(`The upstream proxy answered ${String(response.statusCode)}.`))
+				}
+			})
+			tunnel.once('error', reject)
+			tunnel.once('close', () => {
+				reject(new Error(`The upstream proxy closed the tunnel to ${host}.`))
+			})
+			tunnel.end()
+		}),
+	}
 }

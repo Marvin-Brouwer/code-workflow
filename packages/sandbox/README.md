@@ -42,6 +42,8 @@ const backend = e2bBackend({ apiKey, templates: { 'node:22-slim': 'mesh-flow-nod
 
 ### Create a sandbox and run commands
 
+`startInBackground` starts a process that outlives the call, such as the workflow runtime. It needs `setsid` (util-linux) in the image.
+
 ```ts
 import { startInBackground } from '@mesh-flow/sandbox'
 
@@ -78,9 +80,10 @@ const resumed = await backend.resume(PausedSandbox.parse(record.paused), signal)
 
 ### Shut down and reconcile
 
-On shutdown, pause what's worth keeping and close the backend. `close` aborts calls in flight and destroys every sandbox it still runs, so nothing is left behind:
+On shutdown, pause what's worth keeping and close the backend. `close` aborts calls in flight, destroys every sandbox it still runs and waits for cleanup still going, so nothing is left behind. The deadline bounds all of it:
 
 ```ts
+const deadline = AbortSignal.timeout(30_000)
 await Promise.allSettled(running.map((sandbox) => sandbox.pause(deadline)))
 await backend.close(deadline)
 ```
@@ -138,7 +141,8 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 - **A pause keeps memory, processes and the stack.** A pending `await` resolves in the same process after a resume. Open connections don't survive a pause, so nothing may hold one across a wait ([design section 5](../../docs/design.md#5-durability)).
 - **The id stays the same** across a pause and resume.
 - **A pause only resumes on the backend that made it.** Anything else is a `BackendMismatchError`.
-- **Egress is deny by default.** `egress.allow` lists host names; an empty list means no network.
+- **Egress is deny by default.** `egress.allow` lists lowercase host names, matched exactly; an empty list means no network. Wildcards, ports, IP addresses and CIDR ranges are refused, because the backends can't all enforce them the same way.
+- **Specs are checked** with zod on `create`, so a bad host name fails there and not inside a backend.
 - **Commands are argv arrays**, never a shell line. A non-zero exit code is a result, not an error.
 
 ## Where they differ
@@ -146,7 +150,14 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 - **Timers across a pause.** E2B stops the guest's monotonic clock, so a `setTimeout` inside the sandbox doesn't count paused time. gVisor's does. Wall-clock waits belong in the engine. `Date.now()` is right after a resume everywhere.
 - **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeoutMs` (24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
 - **microsandbox** needs TLS interception for hostname egress rules: allowed HTTPS goes through its proxy, with its own CA. Node in the sandbox needs `--use-system-ca` to trust it. A full snapshot is refused while microsandbox manages a running job, which is why `startInBackground` uses `setsid -f` instead.
-- **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise), and pulls images from Docker Hub itself, no Docker needed. Its sandboxes have no network; when hosts are allowed, a proxy on the host tunnels to those only, and the sandbox gets `HTTPS_PROXY` pointing at a forwarder that runs as its init. So only tools that honour `HTTPS_PROXY` get out, and the image needs `node`. A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one.
+- **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise). A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one. Its options:
+  - `directory`: images, bundles, checkpoints and runsc's state. Keep it across restarts.
+  - `platform`: runsc's platform, `systrap` by default; `kvm` is faster where `/dev/kvm` exists.
+  - `upstreamProxy`: an HTTP proxy between the machine and the internet, as `http://host:port`.
+
+  It pulls images from Docker Hub itself, no Docker needed: each layer is checked against its digest, and the image's `Env` and `WorkingDir` apply. Other registries aren't supported yet. The unpacked files belong to the user the engine runs as, so with `sudo runsc` setuid bits are lost; root in the sandbox gets Docker's default capabilities and can still write everywhere.
+
+  Its sandboxes have no network. When hosts are allowed, a proxy on the host tunnels to those only, on port 443, and the sandbox gets `HTTPS_PROXY` pointing at a forwarder that runs as its init. So only tools that honour `HTTPS_PROXY` get out, and the image needs Node 22.3 or later.
 
 ## Tests
 
@@ -154,7 +165,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 pnpm --filter @mesh-flow/sandbox test
 ```
 
-Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere. The gVisor backend runs against a fake `runsc` there, including the check that `close` finishes while a command never does.
+Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere, except the conformance suite below. The gVisor backend runs against a fake `runsc` there, including the checks that `close` finishes while a command or a create never does.
 
 The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; `list`, `remove` and `close` leave nothing behind. It needs the backend on the machine, so it only runs when asked:
 
@@ -170,4 +181,6 @@ MESH_FLOW_SANDBOX_TESTS=e2b E2B_API_KEY=... MESH_FLOW_E2B_TEMPLATE=... pnpm --fi
 - **Egress to the gateway** on microsandbox by IP rule instead of hostname is unverified ([open question 11](../../docs/design.md#open-questions)).
 - **microsandbox on native Windows** is untried ([open question 12](../../docs/design.md#open-questions)).
 - **Running agent shell commands as a separate, unprivileged user** ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)) needs a `user` on `exec`. The backends can all do it, but what a user is differs per backend (a name on E2B and microsandbox, a uid for runsc), so it waits for the engine that decides it.
+- **DNS is a way out on E2B and microsandbox.** For hostname rules to work, both let the sandbox reach a DNS server whenever a host is allowed, and a DNS query can carry data out. gVisor resolves names on the host, so it doesn't have this gap.
+- **An aborted create on E2B** can still make a sandbox, when E2B received the request before the abort. It carries the mesh-flow metadata, so `list` finds it and reconciliation removes it.
 - **`create` isn't idempotent**: every call makes a new sandbox. Runs own their sandbox, and reconciliation removes what a crash left behind.

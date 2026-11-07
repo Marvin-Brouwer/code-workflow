@@ -15,7 +15,9 @@ export class E2bSandbox implements Sandbox {
 		this.#sandbox = sandbox
 		this.#spec = spec
 		this.#lifetime = lifetime
-		lifetime.track(this.id, (signal) => this.#kill(signal))
+		lifetime.track(this.id, async (signal) => {
+			await sandbox.kill({ signal })
+		})
 	}
 
 	get id(): string {
@@ -23,7 +25,7 @@ export class E2bSandbox implements Sandbox {
 	}
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
-		const signal = this.#lifetime.signal(options.signal)
+		const signal = this.#lifetime.bind(options.signal)
 		try {
 			// E2B runs a command line through a shell, so the arguments are quoted for it.
 			const result = await this.#sandbox.commands.run(quote(command), {
@@ -41,28 +43,23 @@ export class E2bSandbox implements Sandbox {
 	}
 
 	readFile(path: string, signal: AbortSignal): Promise<string> {
-		return this.#sandbox.files.read(path, { signal: this.#lifetime.signal(signal) })
+		return this.#sandbox.files.read(path, { signal: this.#lifetime.bind(signal) })
 	}
 
 	async writeFile(path: string, content: string, signal: AbortSignal): Promise<void> {
-		const combined = this.#lifetime.signal(signal)
-		await this.#sandbox.files.write(`${path}.tmp`, content, { signal: combined })
-		await this.#sandbox.files.rename(`${path}.tmp`, path, { signal: combined })
+		const bound = this.#lifetime.bind(signal)
+		await this.#sandbox.files.write(`${path}.tmp`, content, { signal: bound })
+		await this.#sandbox.files.rename(`${path}.tmp`, path, { signal: bound })
 	}
 
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {
-		await this.#sandbox.pause({ signal: this.#lifetime.signal(signal) })
+		await this.#sandbox.pause({ signal: this.#lifetime.bind(signal) })
 		this.#lifetime.untrack(this.id)
 		return { backend: 'e2b', id: this.id, spec: this.#spec }
 	}
 
-	async destroy(signal: AbortSignal): Promise<void> {
-		await this.#kill(this.#lifetime.signal(signal))
-		this.#lifetime.untrack(this.id)
-	}
-
-	async #kill(signal: AbortSignal): Promise<void> {
-		await this.#sandbox.kill({ signal })
+	destroy(signal: AbortSignal): Promise<void> {
+		return this.#lifetime.destroy(this.id, signal)
 	}
 }
 

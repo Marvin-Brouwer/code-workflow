@@ -3,8 +3,8 @@
  * `{ host: status }` as JSON, with '000' for anything that didn't get through.
  *
  * The test transpiles it to JavaScript first. Goes through HTTPS_PROXY when it is set (gVisor),
- * directly otherwise. Run it with
- * `node --use-system-ca`, so a TLS-intercepting proxy (microsandbox) is trusted.
+ * directly otherwise. Run it with `node --use-system-ca`, so a TLS-intercepting proxy
+ * (microsandbox) is trusted.
  */
 import { request } from 'node:http'
 import { connect } from 'node:tls'

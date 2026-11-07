@@ -1,26 +1,42 @@
 import { existsSync } from 'node:fs'
+import { readdir, writeFile } from 'node:fs/promises'
 import { describe, expect, onTestFinished, test } from 'vitest'
-import { gvisorBackend } from '../src/gvisor/gvisor-backend.mts'
-import { Layout } from '../src/gvisor/layout.mts'
-import { BackendMismatchError, type PausedSandbox } from '../src/paused-sandbox.mts'
-import type { SandboxBackend } from '../src/sandbox-backend.mts'
-import type { SandboxSpec } from '../src/sandbox-spec.mts'
-import { fakeRunsc } from './support/fake-runsc.mts'
-import { temporaryDirectory } from './support/temporary-directory.mts'
+import { BackendMismatchError } from '../../src/backend-mismatch-error.mts'
+import { gvisorBackend } from '../../src/gvisor/gvisor.backend.mts'
+import { Layout } from '../../src/gvisor/layout.mts'
+import type { PausedSandbox } from '../../src/paused-sandbox.mts'
+import type { SandboxBackend } from '../../src/sandbox-backend.mts'
+import type { SandboxSpec } from '../../src/sandbox-spec.mts'
+import { fakeContainerFile, fakeRunsc, type FakeRunscOptions } from '../support/fake-runsc.mts'
+import { temporaryDirectory } from '../support/temporary-directory.mts'
 
 const spec: SandboxSpec = { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 
-async function backendOnFakeRunsc(): Promise<{ backend: SandboxBackend; directory: string; reopen: () => SandboxBackend }> {
-	const directory = await temporaryDirectory()
-	const runsc = await fakeRunsc(directory, spec.image)
-	const open = () => gvisorBackend({ directory, runsc })
-	const backend = open()
-	onTestFinished(() => backend.close(AbortSignal.timeout(5000)).catch(() => undefined))
-	return { backend, directory, reopen: open }
-}
-
 function timeout(): AbortSignal {
 	return AbortSignal.timeout(5000)
+}
+
+interface FakeBackend {
+	readonly backend: SandboxBackend
+	readonly directory: string
+	/** Another backend on the same directory, as after a restart. Closed when the test ends. */
+	readonly reopen: () => SandboxBackend
+}
+
+async function backendOnFakeRunsc(options: FakeRunscOptions = {}): Promise<FakeBackend> {
+	const directory = await temporaryDirectory()
+	const runsc = await fakeRunsc(directory, spec.image, options)
+	const open = () => {
+		const backend = gvisorBackend({ directory, runsc })
+		onTestFinished(() => backend.close(timeout()).catch(() => undefined))
+		return backend
+	}
+	return { backend: open(), directory, reopen: open }
+}
+
+async function sandboxDirectories(directory: string): Promise<string[]> {
+	const { sandboxes } = new Layout(directory)
+	return existsSync(sandboxes) ? readdir(sandboxes) : []
 }
 
 describe('gVisor backend, on a fake runsc', () => {
@@ -54,6 +70,18 @@ describe('gVisor backend, on a fake runsc', () => {
 		expect(result).toEqual({ exitCode: 3, stdout: 'out\n', stderr: 'err\n' })
 	})
 
+	test('returns when a command ends, even if it leaves a process behind that holds stdout', async () => {
+		// Arrange
+		const { backend } = await backendOnFakeRunsc()
+		const sandbox = await backend.create(spec, timeout())
+
+		// Act
+		const result = await sandbox.exec(['sh', '-c', 'sleep 5 & echo started'], { signal: timeout() })
+
+		// Assert
+		expect(result).toEqual({ exitCode: 0, stdout: 'started\n', stderr: '' })
+	})
+
 	test('refuses to resume a pause made by another backend', async () => {
 		// Arrange
 		const { backend } = await backendOnFakeRunsc()
@@ -64,6 +92,34 @@ describe('gVisor backend, on a fake runsc', () => {
 
 		// Assert
 		await expect(resuming).rejects.toThrow(BackendMismatchError)
+	})
+
+	test('refuses to resume a sandbox that is already running again', async () => {
+		// Arrange
+		const { backend } = await backendOnFakeRunsc()
+		const paused = await (await backend.create(spec, timeout())).pause(timeout())
+		await backend.resume(paused, timeout())
+
+		// Act
+		const again = backend.resume(paused, timeout())
+
+		// Assert
+		await expect(again).rejects.toThrow('already running')
+	})
+
+	test('lists a stopped container with a finished checkpoint as paused', async () => {
+		// Arrange
+		const { backend, directory } = await backendOnFakeRunsc()
+		const sandbox = await backend.create(spec, timeout())
+		await sandbox.pause(timeout())
+		// As when the pause couldn't delete its container.
+		await writeFile(fakeContainerFile(directory, sandbox.id), 'stopped\n')
+
+		// Act
+		const listed = await backend.list(timeout())
+
+		// Assert
+		expect(listed).toEqual([{ id: sandbox.id, state: 'paused' }])
 	})
 
 	test('settles an exec that never ends as soon as its signal aborts', async () => {
@@ -93,7 +149,22 @@ describe('gVisor backend, on a fake runsc', () => {
 		// Assert
 		await expect(running).rejects.toThrow()
 		expect(await reopen().list(timeout())).toEqual([])
-		expect(existsSync(new Layout(directory).sandbox(sandbox.id).directory)).toBe(false)
+		expect(await sandboxDirectories(directory)).toEqual([])
+	})
+
+	test('closes while a create never finishes, and leaves nothing behind', async () => {
+		// Arrange
+		const { backend, directory, reopen } = await backendOnFakeRunsc({ hangOn: 'run' })
+		const creating = backend.create(spec, new AbortController().signal)
+		creating.catch(() => undefined)
+
+		// Act
+		await backend.close(timeout())
+
+		// Assert
+		await expect(creating).rejects.toThrow()
+		expect(await reopen().list(timeout())).toEqual([])
+		expect(await sandboxDirectories(directory)).toEqual([])
 	})
 
 	test('keeps paused sandboxes on close, for the next start to find', async () => {

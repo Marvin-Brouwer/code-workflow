@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { afterAll, describe, expect, test } from 'vitest'
+import { afterAll, describe, expect, onTestFinished, test } from 'vitest'
 import ts from 'typescript'
 import { z } from 'zod'
-import type { BackendName } from '../../src/paused-sandbox.mts'
+import type { BackendName } from '../../src/backend-name.mts'
 import type { SandboxBackend } from '../../src/sandbox-backend.mts'
 import type { Sandbox } from '../../src/sandbox.mts'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
@@ -32,7 +32,8 @@ function timeout(seconds = 60): AbortSignal {
 	return AbortSignal.timeout(seconds * 1000)
 }
 
-async function readJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string): Promise<T> {
+/** Reads a JSON file in the sandbox, again and again until it is there and valid, for a minute. */
+async function pollJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string): Promise<T> {
 	const deadline = Date.now() + 60_000
 	for (;;) {
 		try {
@@ -56,42 +57,48 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 		const backend = open()
 		afterAll(() => backend.close(timeout()))
 
+		/** Removes the sandbox when the test ends, also when an assertion fails. */
+		function cleanUp(id: string): void {
+			onTestFinished(() => backend.remove(id, timeout()))
+		}
+
 		test('a pending await resolves after pause and resume, in the same process, memory and stack', async () => {
 			// Arrange
 			const sandbox = await backend.create(spec, timeout())
+			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
 			await startInBackground(sandbox, ['node', '/var/tmp/stub.mjs'], { signal: timeout(), env: { STATE_DIR: stateDir } })
-			const waiting = await readJson(Waiting, sandbox, `${stateDir}/waiting.json`)
+			const waiting = await pollJson(Waiting, sandbox, `${stateDir}/waiting.json`)
 
 			// Act
 			const paused = await sandbox.pause(timeout(120))
 			const resumed = await backend.resume(paused, timeout(120))
 			await resumed.writeFile(`${stateDir}/answer.json`, JSON.stringify({ approved: true }), timeout())
-			const done = await readJson(Done, resumed, `${stateDir}/done.json`)
+			const done = await pollJson(Done, resumed, `${stateDir}/done.json`)
 
 			// Assert
 			expect(done).toMatchObject({ pid: waiting.pid, token: waiting.token, checksum: waiting.checksum, answer: { approved: true } })
 			expect(done.stack).toContain('at input')
 			expect(done.stack).toContain('at async loop')
 			expect(done.stack).toContain('at async workflow')
-			await resumed.destroy(timeout())
 		})
 
 		test('the spec environment reaches every command', async () => {
 			// Arrange
 			const sandbox = await backend.create({ ...spec, env: { MESH_FLOW_CHECK: 'present' } }, timeout())
+			cleanUp(sandbox.id)
 
 			// Act
 			const result = await sandbox.exec(['sh', '-c', 'echo "$MESH_FLOW_CHECK $EXTRA"'], { signal: timeout(), env: { EXTRA: 'too' } })
 
 			// Assert
 			expect(result.stdout.trim()).toBe('present too')
-			await sandbox.destroy(timeout())
 		})
 
 		test('egress reaches allowed hosts only', async () => {
 			// Arrange
 			const sandbox = await backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
+			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/probe.mjs', probe, timeout())
 
 			// Act
@@ -103,7 +110,6 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const statuses = z.record(z.string(), z.string()).parse(JSON.parse(result.stdout))
 			expect(statuses['registry.npmjs.org']).not.toBe('000')
 			expect(statuses['example.com']).toBe('000')
-			await sandbox.destroy(timeout())
 		})
 
 		test('list shows a paused sandbox until it is removed', async () => {

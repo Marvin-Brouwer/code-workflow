@@ -1,4 +1,5 @@
-import type { BackendName, PausedSandbox } from './paused-sandbox.mts'
+import type { BackendName } from './backend-name.mts'
+import type { PausedSandbox } from './paused-sandbox.mts'
 import type { Sandbox } from './sandbox.mts'
 import type { SandboxSpec } from './sandbox-spec.mts'
 
@@ -16,12 +17,17 @@ export interface HeldSandbox {
  */
 export interface SandboxBackend {
 	readonly name: BackendName
+	/** Starts a new sandbox. Every call makes a new one, with a new id. */
 	create(spec: SandboxSpec, signal: AbortSignal): Promise<Sandbox>
-	/** Throws a `BackendMismatchError` when another backend made the pause. */
+	/**
+	 * Starts a paused sandbox again, with the same id. Throws a `BackendMismatchError` when another
+	 * backend made the pause, and refuses a sandbox that is already running here.
+	 */
 	resume(paused: PausedSandbox, signal: AbortSignal): Promise<Sandbox>
 	/** Every mesh-flow sandbox this backend holds, running or paused, also from earlier processes. */
 	list(signal: AbortSignal): Promise<HeldSandbox[]>
 	/** Removes a sandbox by id, running or paused. Removing one that is already gone is fine. */
 	remove(id: string, signal: AbortSignal): Promise<void>
+	/** Destroys every running sandbox and waits for cleanup in flight, as long as `signal` allows. */
 	close(signal: AbortSignal): Promise<void>
 }

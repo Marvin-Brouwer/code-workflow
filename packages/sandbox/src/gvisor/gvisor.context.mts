@@ -1,14 +1,14 @@
 import type { BackendLifetime } from '../backend-lifetime.mts'
+import type { EgressProxies } from './egress-proxies.mts'
 import type { Layout } from './layout.mts'
-import type { Runsc } from './runsc.mts'
+import type { RunscConfig } from './runsc.mts'
 
 /** What a gVisor sandbox needs from the backend that made it. */
 export interface GvisorContext {
-	readonly runsc: Runsc
+	readonly runsc: RunscConfig
 	readonly layout: Layout
 	readonly lifetime: BackendLifetime
-	/** Stops the sandbox's egress proxy, if it has one. */
-	stopEgress(id: string): Promise<void>
+	readonly proxies: EgressProxies
 	/** Kills and deletes the container, and removes everything of it on disk. */
 	remove(id: string, signal: AbortSignal): Promise<void>
 }

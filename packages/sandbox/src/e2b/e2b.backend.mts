@@ -1,13 +1,15 @@
 import { ALL_TRAFFIC, Sandbox as E2bSdkSandbox, type SandboxOpts } from 'e2b'
+import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
-import { assertPausedBy, type PausedSandbox } from '../paused-sandbox.mts'
+import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import type { Sandbox } from '../sandbox.mts'
-import type { EgressPolicy, SandboxSpec } from '../sandbox-spec.mts'
-import { E2bSandbox } from './e2b-sandbox.mts'
+import { allowsEgress, type EgressPolicy, SandboxSpec } from '../sandbox-spec.mts'
+import { E2bSandbox } from './e2b.sandbox.mts'
 
 /** Metadata on every sandbox this package creates, so `list` finds only those. */
-const ownerKey = 'mesh-flow'
+const ownerMetadata = { 'mesh-flow': 'true' }
+const defaultTimeoutMs = 24 * 60 * 60 * 1000
 
 export interface E2bBackendOptions {
 	/** Comes from the engine's credential store. It stays on the host. */
@@ -28,60 +30,70 @@ export interface E2bBackendOptions {
 }
 
 /**
- * The hosted backend: sandboxes on E2B Cloud, paused with memory and processes.
+ * The hosted backend: sandboxes on E2B, paused with memory and processes.
  *
  * Mind that E2B stops the guest's monotonic clock while paused: a `setTimeout` inside the
  * sandbox doesn't count paused time. Wall-clock waits belong in the engine.
+ *
+ * A create that is aborted after E2B received it can still make a sandbox this process never
+ * hears of. It carries the mesh-flow metadata, so `list` finds it and reconciliation removes it.
  */
 export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 	const lifetime = new BackendLifetime()
-	const timeoutMs = options.timeoutMs ?? 24 * 60 * 60 * 1000
+	const timeoutMs = options.timeoutMs ?? defaultTimeoutMs
 	const connection = { apiKey: options.apiKey, ...(options.domain === undefined ? {} : { domain: options.domain }) }
 
 	return {
 		name: 'e2b',
 
-		async create(spec: SandboxSpec, signal: AbortSignal): Promise<Sandbox> {
+		async create(input: SandboxSpec, signal: AbortSignal): Promise<Sandbox> {
+			const spec = SandboxSpec.parse(input)
 			const template = options.templates[spec.image]
 			if (template === undefined) throw new Error(`No E2B template is configured for the image '${spec.image}'.`)
 			const sandbox = await E2bSdkSandbox.create(template, {
 				...connection,
-				metadata: { [ownerKey]: 'true' },
+				metadata: ownerMetadata,
 				envs: { ...spec.env },
 				timeoutMs,
 				lifecycle: { onTimeout: 'pause' },
-				...network(spec.egress),
-				signal: lifetime.signal(signal),
+				...networkOptions(spec.egress),
+				signal: lifetime.bind(signal),
 			})
 			return new E2bSandbox(sandbox, spec, lifetime)
 		},
 
 		async resume(paused: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
 			assertPausedBy(paused, 'e2b')
-			const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs, signal: lifetime.signal(signal) })
+			if (lifetime.tracks(paused.id)) throw new Error(`The sandbox ${paused.id} is already running.`)
+			const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs, signal: lifetime.bind(signal) })
 			return new E2bSandbox(sandbox, paused.spec, lifetime)
 		},
 
 		async list(signal: AbortSignal): Promise<HeldSandbox[]> {
-			const combined = lifetime.signal(signal)
-			const paginator = E2bSdkSandbox.list({ ...connection, query: { metadata: { [ownerKey]: 'true' } } })
+			const bound = lifetime.bind(signal)
+			const paginator = E2bSdkSandbox.list({ ...connection, query: { metadata: ownerMetadata } })
 			const held: HeldSandbox[] = []
 			while (paginator.hasNext) {
-				for (const info of await paginator.nextItems({ signal: combined })) held.push({ id: info.sandboxId, state: info.state })
+				for (const info of await paginator.nextItems({ signal: bound })) held.push({ id: info.sandboxId, state: info.state })
 			}
 			return held
 		},
 
 		async remove(id: string, signal: AbortSignal): Promise<void> {
 			// Returns false when the sandbox is already gone, which is fine here.
-			await E2bSdkSandbox.kill(id, { ...connection, signal: lifetime.signal(signal) })
+			await E2bSdkSandbox.kill(id, { ...connection, signal: lifetime.bind(signal) })
+			lifetime.untrack(id)
 		},
 
 		close: (signal: AbortSignal) => lifetime.close(signal),
 	}
 }
 
-function network(egress: EgressPolicy): Pick<SandboxOpts, 'allowInternetAccess' | 'network'> {
-	if (egress.allow.length === 0) return { allowInternetAccess: false }
+/**
+ * Deny everything but the allowed hosts. E2B also lets the sandbox reach its DNS servers whenever
+ * a host is allowed, see the README's known gaps.
+ */
+function networkOptions(egress: EgressPolicy): Pick<SandboxOpts, 'allowInternetAccess' | 'network'> {
+	if (!allowsEgress(egress)) return { allowInternetAccess: false }
 	return { network: { allowOut: [...egress.allow], denyOut: [ALL_TRAFFIC] } }
 }

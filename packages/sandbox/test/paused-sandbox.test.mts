@@ -1,20 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { assertPausedBy, BackendMismatchError, PausedSandbox } from '../src/paused-sandbox.mts'
+import { PausedSandbox } from '../src/paused-sandbox.mts'
 
 const paused: PausedSandbox = {
 	backend: 'gvisor',
 	id: 'mesh-flow-0123456789ab',
 	spec: { image: 'node:22-slim', cpus: 1, memoryMb: 1024, egress: { allow: [] } },
 	snapshot: 'mhol3k2',
-}
-
-function catchError(work: () => void): unknown {
-	try {
-		work()
-	} catch (error) {
-		return error
-	}
-	return undefined
 }
 
 describe('PausedSandbox', () => {
@@ -32,25 +23,5 @@ describe('PausedSandbox', () => {
 
 		// Assert
 		expect(result.success).toBe(false)
-	})
-})
-
-describe('assertPausedBy', () => {
-	test('accepts a pause made by the same backend', () => {
-		// Assert
-		expect(() => {
-			assertPausedBy(paused, 'gvisor')
-		}).not.toThrow()
-	})
-
-	test('refuses a pause made by another backend, naming both', () => {
-		// Act
-		const error = catchError(() => {
-			assertPausedBy(paused, 'microsandbox')
-		})
-
-		// Assert
-		expect(error).toBeInstanceOf(BackendMismatchError)
-		expect(error).toHaveProperty('message', 'This sandbox was paused by gvisor and can only be resumed there, not on microsandbox.')
 	})
 })

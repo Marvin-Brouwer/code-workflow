@@ -1,10 +1,16 @@
 import { randomBytes } from 'node:crypto'
 
-const pattern = /^mesh-flow-[0-9a-f]{12}$/
+/** How `list` tells mesh-flow's sandboxes from anything else on a backend. */
+export const sandboxIdPrefix = 'mesh-flow-'
+const randomHexLength = 12
 
-/** A new sandbox id. The prefix is how `list` tells mesh-flow's sandboxes from anything else. */
+/** Every sandbox id is exactly this long. */
+export const sandboxIdLength = sandboxIdPrefix.length + randomHexLength
+
+const pattern = new RegExp(`^${sandboxIdPrefix}[0-9a-f]{${String(randomHexLength)}}$`)
+
 export function newSandboxId(): string {
-	return `mesh-flow-${randomBytes(6).toString('hex')}`
+	return `${sandboxIdPrefix}${randomBytes(randomHexLength / 2).toString('hex')}`
 }
 
 export function isSandboxId(id: string): boolean {
