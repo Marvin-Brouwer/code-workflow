@@ -32,7 +32,7 @@ interface Submission {
 	readonly command: [string, string[]]
 }
 
-/** `submitJobCommand` for the host: a job in `directory`, and a FIFO there instead of the sandbox's. */
+/** `submitJobCommand` for the host: the job and a FIFO in `directory`. */
 async function submission(
 	directory: string,
 	options: Parameters<typeof submitJobCommand>[1],
