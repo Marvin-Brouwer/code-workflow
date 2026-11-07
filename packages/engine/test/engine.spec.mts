@@ -1,0 +1,245 @@
+import path from 'node:path'
+import { describe, expect, test, vi } from 'vitest'
+import { Engine } from '../src/engine/engine.mts'
+import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
+import { RunStore } from '../src/runs/run-store.mts'
+import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
+import { temporaryDirectory } from './support/temporary-directory.mts'
+import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+
+const signal = new AbortController().signal
+const deadlines = () => ({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
+
+async function openEngine(home?: string) {
+	const directory = home ?? (await temporaryDirectory())
+	const backend = hostBackend(path.join(directory, 'sandboxes'))
+	const store = new RunStore(path.join(directory, 'runs'))
+	const log = vi.fn<(message: string) => void>()
+	const engine = await Engine.open({ backend, store, layout: hostSandboxLayout, log }, signal)
+	return { engine, backend, store, log, home: directory }
+}
+
+async function untilStatus(engine: Engine, id: string, status: RunStatus): Promise<RunRecord> {
+	return vi.waitFor(
+		() => {
+			const record = engine.get(id)
+			if (record.status !== status) throw new Error(`Run is ${record.status}${record.error ? `: ${record.error}` : ''}`)
+			return record
+		},
+		{ timeout: 20_000, interval: 50 },
+	)
+}
+
+async function untilPending(engine: Engine, id: string, requestId: string): Promise<void> {
+	await vi.waitFor(
+		() => {
+			if (!engine.get(id).pending.some((request) => request.id === requestId)) throw new Error(`Not waiting for ${requestId} yet`)
+		},
+		{ timeout: 20_000, interval: 50 },
+	)
+}
+
+const askAndEcho = runtimeScript(`
+mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: { key: { type: 'string' } } } })
+const answer = await mailbox.answer('story', signal)
+event('answered', 'input-answered', { value: answer.value })
+mailbox.send({ type: 'succeeded' })
+`)
+
+describe.skipIf(process.platform !== 'linux')('Engine', () => {
+	test('runs a workflow to the end, keeps its events and removes its sandbox', async () => {
+		// Arrange
+		const directory = await workflowRepository({
+			hello: runtimeScript(
+				`event('root', 'workflow-started')\nevent('child', 'log', { parentId: 'root' })\nmailbox.send({ type: 'succeeded' })`,
+			),
+		})
+		const { engine, backend } = await openEngine()
+
+		// Act
+		const started = await engine.startRun({ directory, workflow: 'hello', signal })
+		const finished = await untilStatus(engine, started.id, 'succeeded')
+
+		// Assert
+		expect(finished.source.dirty).toBe(false)
+		expect((await engine.events(started.id)).map((event) => event.type)).toEqual(['workflow-started', 'log'])
+		expect(finished.sandbox).toBeUndefined()
+		expect(await backend.list(signal)).toEqual([])
+		await engine.close(deadlines())
+	})
+
+	test('relays an input request and its answer', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+
+		// Act
+		await engine.answer(id, 'story', { key: 'ABC-1' }, signal)
+		await untilStatus(engine, id, 'succeeded')
+
+		// Assert
+		const events = await engine.events(id)
+		expect(events).toEqual([expect.objectContaining({ type: 'input-answered', value: { key: 'ABC-1' } })])
+		await engine.close(deadlines())
+	})
+
+	test('refuses an answer to a request the run does not wait for', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+
+		// Act
+		const answering = engine.answer(id, 'something-else', 1, signal)
+
+		// Assert
+		await expect(answering).rejects.toMatchObject({ code: 'not-found' })
+		await engine.close(deadlines())
+	})
+
+	test('answers a wake request on its own clock', async () => {
+		// Arrange
+		const directory = await workflowRepository({
+			later: runtimeScript(`
+const at = new Date(Date.now() + 300).toISOString()
+mailbox.send({ type: 'request', request: { kind: 'wake', id: 'later', at } })
+await mailbox.answer('later', signal)
+event('woke', 'woke', { early: Date.now() < Date.parse(at) })
+mailbox.send({ type: 'succeeded' })
+`),
+		})
+		const { engine } = await openEngine()
+
+		// Act
+		const { id } = await engine.startRun({ directory, workflow: 'later', signal })
+		await untilStatus(engine, id, 'succeeded')
+
+		// Assert
+		expect(await engine.events(id)).toEqual([expect.objectContaining({ type: 'woke', early: false })])
+		await engine.close(deadlines())
+	})
+
+	test('fails a run whose runtime reports a failure', async () => {
+		// Arrange
+		const directory = await workflowRepository({
+			broken: runtimeScript(`mailbox.send({ type: 'failed', error: 'The plan was rejected.' })`),
+		})
+		const { engine, backend } = await openEngine()
+
+		// Act
+		const { id } = await engine.startRun({ directory, workflow: 'broken', signal })
+		const failed = await untilStatus(engine, id, 'failed')
+
+		// Assert
+		expect(failed.error).toBe('The plan was rejected.')
+		expect(await backend.list(signal)).toEqual([])
+		await engine.close(deadlines())
+	})
+
+	test('fails a run whose runtime exits without an outcome, with the end of its log', async () => {
+		// Arrange
+		const directory = await workflowRepository({ crash: runtimeScript(`console.error('out of cheese')\nprocess.exit(2)`) })
+		const { engine } = await openEngine()
+
+		// Act
+		const { id } = await engine.startRun({ directory, workflow: 'crash', signal })
+		const failed = await untilStatus(engine, id, 'failed')
+
+		// Assert
+		expect(failed.error).toContain('exited without saying how the run ended')
+		expect(failed.error).toContain('out of cheese')
+		await engine.close(deadlines())
+	})
+
+	test('fails a run whose setup fails, before the runtime starts', async () => {
+		// Arrange
+		const directory = await workflowRepository(
+			{ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
+			{ setup: [['sh', '-c', 'echo "no lockfile" >&2; exit 4']] },
+		)
+		const { engine } = await openEngine()
+
+		// Act
+		const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
+		const failed = await untilStatus(engine, id, 'failed')
+
+		// Assert
+		expect(failed.error).toContain('exit code 4')
+		expect(failed.error).toContain('no lockfile')
+	})
+
+	test('refuses a workflow that has no file', async () => {
+		// Arrange
+		const directory = await workflowRepository({})
+		const { engine } = await openEngine()
+
+		// Act
+		const starting = engine.startRun({ directory, workflow: 'missing', signal })
+
+		// Assert
+		await expect(starting).rejects.toMatchObject({ code: 'invalid' })
+		expect(engine.list()).toEqual([])
+	})
+
+	test('stops a run and removes its sandbox', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine, backend } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+		const sandbox = engine.get(id).sandbox?.id ?? ''
+		const [runtime = 0] = await pidsOf(backend.root, sandbox)
+
+		// Act
+		const stopped = await engine.stop(id, signal)
+
+		// Assert
+		expect(stopped).toMatchObject({ status: 'stopped', pending: [] })
+		expect(await backend.list(signal)).toEqual([])
+		await vi.waitFor(() => {
+			expect(isAlive(runtime)).toBe(false)
+		})
+	})
+
+	test('pauses a waiting run on close and resumes it after a restart of the engine', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const first = await openEngine()
+		const { id } = await first.engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(first.engine, id, 'story')
+		await first.engine.close(deadlines())
+		const second = await openEngine(first.home)
+
+		// Act
+		const resumed = await second.engine.resume(id, signal)
+		await second.engine.answer(id, 'story', 'after the restart', signal)
+		await untilStatus(second.engine, id, 'succeeded')
+
+		// Assert
+		expect(resumed.pending).toEqual([expect.objectContaining({ id: 'story' })])
+		expect(await second.engine.events(id)).toEqual([expect.objectContaining({ value: 'after the restart' })])
+		await second.engine.close(deadlines())
+	})
+
+	test('restarts a stopped run from the top, with the code it first ran', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+		await engine.stop(id, signal)
+
+		// Act
+		await engine.restart(id, signal)
+		await untilPending(engine, id, 'story')
+		await engine.answer(id, 'story', 'second try', signal)
+		await untilStatus(engine, id, 'succeeded')
+
+		// Assert
+		expect((await engine.events(id)).map((event) => event.type)).toEqual(['run-restarted', 'input-answered'])
+		await engine.close(deadlines())
+	})
+})

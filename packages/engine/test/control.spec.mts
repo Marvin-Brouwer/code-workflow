@@ -1,0 +1,80 @@
+import path from 'node:path'
+import { describe, expect, test, vi } from 'vitest'
+import { main } from '../src/cli/main.mts'
+import { ControlClient } from '../src/control/control-client.mts'
+import { serveEngine } from '../src/serve/serve-engine.mts'
+import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
+import { temporaryDirectory } from './support/temporary-directory.mts'
+import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+
+const signal = new AbortController().signal
+
+async function serve() {
+	const home = await temporaryDirectory()
+	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	const client = new ControlClient(served.socketPath)
+	return { served, client, home }
+}
+
+const ask = runtimeScript(`
+mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: {} } })
+const { value } = await mailbox.answer('story', signal)
+event('answered', 'input-answered', { value })
+mailbox.send({ type: 'succeeded' })
+`)
+
+describe.skipIf(process.platform !== 'linux')('the control API', () => {
+	test('starts a run, answers its request and shows its events', async () => {
+		// Arrange
+		const { served, client } = await serve()
+		const directory = await workflowRepository({ ask })
+
+		// Act
+		const started = await client.startRun(directory, 'ask', signal)
+		await vi.waitFor(async () => {
+			expect((await client.get(started.id, signal)).pending).toHaveLength(1)
+		}, 20_000)
+		await client.answer(started.id, 'story', 'ABC-1', signal)
+		await vi.waitFor(async () => {
+			expect((await client.get(started.id, signal)).status).toBe('succeeded')
+		}, 20_000)
+
+		// Assert
+		expect(await client.list(signal)).toEqual([expect.objectContaining({ id: started.id, workflow: 'ask' })])
+		expect(await client.events(started.id, signal)).toEqual([expect.objectContaining({ type: 'input-answered', value: 'ABC-1' })])
+		await served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
+	})
+
+	test.each([
+		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
+		['a workflow that does not exist', (client: ControlClient) => client.startRun('/nowhere', 'develop', signal), 400],
+		['resuming a run that is not paused', (client: ControlClient) => client.act('run-000000000000', 'resume', signal), 404],
+	])('refuses %s with the right status', async (_name, call, status) => {
+		// Arrange
+		const { served, client } = await serve()
+
+		// Act
+		const calling = call(client)
+
+		// Assert
+		await expect(calling).rejects.toMatchObject({ status })
+		await served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
+	})
+})
+
+describe('the mesh-flow command', () => {
+	test('says when no engine is running', async () => {
+		// Arrange
+		const home = await temporaryDirectory()
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+		// Act
+		await main(['node', 'mesh-flow', '--home', home, 'list'])
+
+		// Assert
+		expect(errors).toHaveBeenCalledWith(expect.stringContaining('No engine is running'))
+		expect(process.exitCode).toBe(1)
+		process.exitCode = 0
+		errors.mockRestore()
+	})
+})

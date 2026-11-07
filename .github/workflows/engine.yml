@@ -1,0 +1,81 @@
+name: engine
+
+# The engine's own checks, then one run end to end on each real backend this OS has. Lint and
+# format run repo-wide in the sandbox workflow.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mesh-flow/engine typecheck
+      - run: pnpm --filter @mesh-flow/engine... build
+      - run: pnpm --filter @mesh-flow/engine test
+
+  real-backend:
+    name: real backend (${{ matrix.os }}, ${{ matrix.backend }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, backend: gvisor }
+          - { os: ubuntu-latest, backend: microsandbox }
+          - { os: windows-latest, backend: microsandbox }
+    runs-on: ${{ matrix.os }}
+    env:
+      MESH_FLOW_ENGINE_TESTS: ${{ matrix.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install runsc
+        if: matrix.backend == 'gvisor'
+        run: |
+          curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list
+          sudo apt-get update
+          sudo apt-get install -y runsc
+
+      - name: Allow KVM
+        if: matrix.backend == 'microsandbox' && runner.os == 'Linux'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Test
+        run: pnpm --filter @mesh-flow/engine exec vitest run test/real-backend.spec.mts
+        env:
+          RUNSC: ${{ matrix.backend == 'gvisor' && 'sudo runsc' || '' }}

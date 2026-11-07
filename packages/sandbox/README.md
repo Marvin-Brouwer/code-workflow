@@ -180,7 +180,7 @@ CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/work
 
 ## Known gaps
 
-- **The host to sandbox channel** for the workflow runtime and tool calls isn't here yet. It comes with the engine and the gateway ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)).
+- **The host to sandbox channel** isn't part of this package. The workflow runtime's mailbox is in [`@mesh-flow/engine`](../engine/README.md#the-mailbox), on top of `exec` and `writeFile`; tool calls come with the gateway ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)).
 - **Egress to the gateway** on microsandbox by IP rule instead of hostname is unverified ([open question 11](../../docs/design.md#open-questions)).
 - **microsandbox on native Windows** passes the conformance suite in CI, but is untried on a developer machine ([open question 12](../../docs/design.md#open-questions)).
 - **macOS** is untested: `chooseBackend` picks microsandbox on Apple Silicon with a warning saying so, and throws on an Intel Mac, where microsandbox has no build and gVisor doesn't run.

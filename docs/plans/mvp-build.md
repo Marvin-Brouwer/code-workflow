@@ -1,7 +1,8 @@
 # Plan: MVP build
 
-Status: in progress. Package 1, [`@mesh-flow/sandbox`](../../packages/sandbox/README.md), is built;
-its conformance suite still has to run on real backends. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+Status: in progress. Package 1, [`@mesh-flow/sandbox`](../../packages/sandbox/README.md), is built
+and its conformance suite runs on real backends in CI. Package 2,
+[`@mesh-flow/engine`](../../packages/engine/README.md), is built. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
@@ -64,6 +65,11 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
 - **Lifecycle:** create a sandbox per run, start the workflow runtime in it, relay input requests
   and answers over the `WorkflowRuntime` seam. In the MVP a waiting run keeps its sandbox running;
   pausing on wait is roadmap step 3.
+- **The seam** is a mailbox in the sandbox, built on `exec` and `writeFile` only: the runtime
+  appends messages (events, input and wake requests, the outcome) to an outbox, the engine
+  long-polls it with a short shell loop and writes answers to an inbox. The engine makes every
+  call, so nothing in the sandbox reaches the host, and it aborts its poll before a pause.
+  Wake requests are the engine-side timed waits.
 - **Shutdown** ([design section 5](../design.md#5-durability)): on `SIGINT`, `SIGTERM`, an uncaught
   error or a normal exit, abort the root signal, pause every running sandbox to disk within a
   deadline, flush the run records, close every backend process the engine started, then exit. A
@@ -71,7 +77,9 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
   synchronously, so all of this happens before it.
 - **Reconciliation** on every start: remove sandboxes the engine has no record of, mark runs whose
   sandbox is gone for restart, resume nothing automatically.
-- **CLI:** `run <workflow>`, `answer <run> <request>`, `list`, `stop <run>`.
+- **CLI:** `serve` (the engine, in the foreground, one per machine and user), and clients that
+  talk to it over a local socket: `run <workflow>`, `answer <run> <request> <value>`, `list`,
+  `show`, `events`, `stop`, `resume` and `restart <run>`.
 
 ### 3. `@mesh-flow/core`
 

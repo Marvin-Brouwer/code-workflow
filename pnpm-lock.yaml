@@ -21,6 +21,49 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
+  packages/engine:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^2.1.6
+        version: 2.1.6(hono@4.13.16)
+      '@mesh-flow/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
+      env-paths:
+        specifier: ^4.0.0
+        version: 4.0.0
+      hono:
+        specifier: ^4.13.16
+        version: 4.13.16
+      tar:
+        specifier: ^7.5.22
+        version: 7.5.22
+      write-file-atomic:
+        specifier: ^7.0.0
+        version: 7.0.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      '@types/write-file-atomic':
+        specifier: ^4.0.3
+        version: 4.0.3
+      tsdown:
+        specifier: ^0.23.4
+        version: 0.23.7(tsx@4.23.15)(typescript@6.0.3)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))
+
   packages/sandbox:
     dependencies:
       e2b:
@@ -350,6 +393,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4 || ^5.0.0-0
 
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
@@ -911,6 +960,9 @@ packages:
   '@types/shell-quote@1.7.5':
     resolution: {integrity: sha512-+UE8GAGRPbJVQDdxi16dgadcBfQ+KG2vgZhV1+3A1XmHbmwcdwhCUwIdy+d3pAGrbvgRoVSjeI9vOWyq376Yzw==}
 
+  '@types/write-file-atomic@4.0.3':
+    resolution: {integrity: sha512-qdo+vZRchyJIHNeuI1nrpsLw+hnkgqP/8mlaN6Wle/NKhydHmUN9l4p3ZE8yP90AJNJW4uB8HQhedb4f1vNayQ==}
+
   '@vitest/mocker@5.1.0':
     resolution: {integrity: sha512-5umB9/jlWcqVS6fsrFmv5Gdnpu6wAUio/lEOwAmvB7v+lFo/IW2B9FhAD0p19GCULTgMzLCdUmuCDCnAzWgppQ==}
     peerDependencies:
@@ -983,6 +1035,10 @@ packages:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
     engines: {node: '>=18'}
 
+  commander@14.0.3:
+    resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
+    engines: {node: '>=20'}
+
   compare-versions@6.1.1:
     resolution: {integrity: sha512-4hm4VPpIecmlg59CHXnRDnqGplJFrbLG4aFEl5vl6cK1u76ws3LLvX7ikFnTDl5vo39sjWD6AaDPYodJp/NNHg==}
 
@@ -1016,6 +1072,10 @@ packages:
   empathic@2.1.0:
     resolution: {integrity: sha512-AnfC1ATldl49/cvZdLPDjBfrRNwbDO05aibiOtzQu3qtlbJtomNLhF30HEtn/7iBz50dlMECqATo3fG0LrdEgw==}
     engines: {node: '>=14'}
+
+  env-paths@4.0.0:
+    resolution: {integrity: sha512-pxP8eL2SwwaTRi/KHYwLYXinDs7gL3jxFcBYmEdYfZmZXbaVDvdppd0XBU8qVz03rDfKZMXg1omHCbsJjZrMsw==}
+    engines: {node: '>=20'}
 
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
@@ -1058,12 +1118,20 @@ packages:
     resolution: {integrity: sha512-mMiwNKoJZ4HAIRVJxotO6LsNRReA30gQwP9E2/p94tfLv+jygCNpKDjhhSL6OLY6LE371EZm5EAf7RpYuUqlsw==}
     engines: {node: 18 || 20 || >=22}
 
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
+    engines: {node: '>=16.9.0'}
+
   hookable@6.1.2:
     resolution: {integrity: sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg==}
 
   import-without-cache@0.4.1:
     resolution: {integrity: sha512-vXoV9PjKHEednCUu01e98TkImxy67e3BJXbTIOmIq4Hyzw3IAwYRcuPkfeTzJzwyyts4kjuA73x+pWJLc4f86A==}
     engines: {node: ^22.18.0 || >=24.0.0}
+
+  is-safe-filename@0.1.1:
+    resolution: {integrity: sha512-4SrR7AdnY11LHfDKTZY1u6Ga3RuxZdl3YKWWShO5iyuG5h8QS4GD2tOb04peBJ5I7pXbR+CGBNEhTcwK+FzN3g==}
+    engines: {node: '>=20'}
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -1285,6 +1353,10 @@ packages:
     resolution: {integrity: sha512-PcByqNyT/38F2kDNi006HAMRJaULuBzq/FOsw3qdZvX/GA9W/jamDaRskgHjubHiftXK5sIFxLNkvrXUwcof6Q==}
     engines: {node: '>= 0.4'}
 
+  signal-exit@4.1.0:
+    resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
+    engines: {node: '>=14'}
+
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
@@ -1479,6 +1551,10 @@ packages:
     engines: {node: '>=20.11'}
     hasBin: true
 
+  write-file-atomic@7.0.1:
+    resolution: {integrity: sha512-OTIk8iR8/aCRWBqvxrzxR0hgxWpnYBblY1S5hDWBQfk/VFmJwzmJgQFN3WsoUKHISv2eAwe+PpbUzyL1CKTLXg==}
+    engines: {node: ^20.17.0 || >=22.9.0}
+
   yallist@5.0.0:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
@@ -1603,6 +1679,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@hono/node-server@2.1.6(hono@4.13.16)':
+    dependencies:
+      hono: 4.13.16
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
@@ -1902,6 +1982,10 @@ snapshots:
 
   '@types/shell-quote@1.7.5': {}
 
+  '@types/write-file-atomic@4.0.3':
+    dependencies:
+      '@types/node': 22.20.5
+
   '@vitest/mocker@5.1.0(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
@@ -1947,6 +2031,8 @@ snapshots:
 
   chownr@3.0.0: {}
 
+  commander@14.0.3: {}
+
   compare-versions@6.1.1: {}
 
   defu@6.1.7: {}
@@ -1991,6 +2077,10 @@ snapshots:
       undici: 8.12.4
 
   empathic@2.1.0: {}
+
+  env-paths@4.0.0:
+    dependencies:
+      is-safe-filename: 0.1.1
 
   es-module-lexer@2.3.2: {}
 
@@ -2052,9 +2142,13 @@ snapshots:
       minipass: 7.1.3
       path-scurry: 3.0.0
 
+  hono@4.13.16: {}
+
   hookable@6.1.2: {}
 
   import-without-cache@0.4.1: {}
+
+  is-safe-filename@0.1.1: {}
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -2292,6 +2386,8 @@ snapshots:
 
   shell-quote@1.12.0: {}
 
+  signal-exit@4.1.0: {}
+
   source-map-js@1.2.2: {}
 
   std-env@4.3.0: {}
@@ -2410,6 +2506,10 @@ snapshots:
   vscode-languageserver-types@3.18.5: {}
 
   why-is-node-running@3.2.1: {}
+
+  write-file-atomic@7.0.1:
+    dependencies:
+      signal-exit: 4.1.0
 
   yallist@5.0.0: {}
 
