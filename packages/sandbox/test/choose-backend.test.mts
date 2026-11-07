@@ -3,8 +3,8 @@ import { chooseBackend } from '../src/choose-backend.mts'
 import type { Host, KvmAccess } from '../src/host.mts'
 
 const noKvm: KvmAccess = { usable: false, reason: "/dev/kvm isn't usable (ENOENT)" }
-const linuxWithKvm: Host = { platform: 'linux', kvm: { usable: true } }
-const linuxWithoutKvm: Host = { platform: 'linux', kvm: noKvm }
+const linuxWithKvm: Host = { platform: 'linux', arch: 'x64', kvm: { usable: true } }
+const linuxWithoutKvm: Host = { platform: 'linux', arch: 'x64', kvm: noKvm }
 
 describe('chooseBackend', () => {
 	test('picks E2B for hosted runs', () => {
@@ -23,12 +23,33 @@ describe('chooseBackend', () => {
 		expect(choice).toEqual({ backend: 'gvisor', reason: 'set in the host configuration' })
 	})
 
-	test.each(['darwin', 'win32'] as const)('picks microsandbox on %s', (platform) => {
+	test('picks microsandbox on Windows', () => {
 		// Act
-		const choice = chooseBackend({ hosted: false }, { platform, kvm: noKvm })
+		const choice = chooseBackend({ hosted: false }, { platform: 'win32', arch: 'x64', kvm: noKvm })
 
 		// Assert
 		expect(choice.backend).toBe('microsandbox')
+		expect(choice.warning).toBeUndefined()
+	})
+
+	test('picks microsandbox on Apple Silicon, with a warning that it is untested', () => {
+		// Act
+		const choice = chooseBackend({ hosted: false }, { platform: 'darwin', arch: 'arm64', kvm: noKvm })
+
+		// Assert
+		expect(choice.backend).toBe('microsandbox')
+		expect(choice.warning).toMatch(/untested/)
+	})
+
+	test('throws on an Intel Mac, saying why', () => {
+		// Arrange
+		const intelMac: Host = { platform: 'darwin', arch: 'x64', kvm: noKvm }
+
+		// Act
+		const choose = () => chooseBackend({ hosted: false }, intelMac)
+
+		// Assert
+		expect(choose).toThrow(/Intel Mac: microsandbox only ships for Apple Silicon/)
 	})
 
 	test('picks microsandbox on Linux with a usable /dev/kvm', () => {
@@ -49,7 +70,7 @@ describe('chooseBackend', () => {
 
 	test('throws on a platform no backend runs on', () => {
 		// Arrange
-		const freebsd: Host = { platform: 'freebsd', kvm: noKvm }
+		const freebsd: Host = { platform: 'freebsd', arch: 'x64', kvm: noKvm }
 
 		// Act
 		const choose = () => chooseBackend({ hosted: false }, freebsd)

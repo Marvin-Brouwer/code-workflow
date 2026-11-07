@@ -7,7 +7,7 @@ Three backends, picked per machine ([design section 3](../../docs/design.md#3-ar
 | Backend | Where | Entry point |
 |---|---|---|
 | E2B | hosted runs, E2B Cloud | `@mesh-flow/sandbox/e2b` |
-| microsandbox | locally, with a hypervisor (KVM, Hypervisor.framework, Windows Hypervisor Platform) | `@mesh-flow/sandbox/microsandbox` |
+| microsandbox | locally, with a hypervisor (KVM, Windows Hypervisor Platform, Hypervisor.framework on Apple Silicon) | `@mesh-flow/sandbox/microsandbox` |
 | gVisor | locally on Linux without one, such as CI | `@mesh-flow/sandbox/gvisor` |
 
 The backends are separate entry points, so an engine only loads the SDK it uses.
@@ -25,6 +25,7 @@ import { chooseBackend, type SandboxBackend } from '@mesh-flow/sandbox'
 
 const choice = chooseBackend({ hosted: false })
 console.log(`sandbox backend: ${choice.backend} (${choice.reason})`)
+if (choice.warning) console.warn(choice.warning)
 
 const backend: SandboxBackend =
 	choice.backend === 'gvisor'
@@ -182,6 +183,7 @@ CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/work
 - **The host to sandbox channel** for the workflow runtime and tool calls isn't here yet. It comes with the engine and the gateway ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)).
 - **Egress to the gateway** on microsandbox by IP rule instead of hostname is unverified ([open question 11](../../docs/design.md#open-questions)).
 - **microsandbox on native Windows** passes the conformance suite in CI, but is untried on a developer machine ([open question 12](../../docs/design.md#open-questions)).
+- **macOS** is untested: `chooseBackend` picks microsandbox on Apple Silicon with a warning saying so, and throws on an Intel Mac, where microsandbox has no build and gVisor doesn't run.
 - **Running agent shell commands as a separate, unprivileged user** ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)) needs a `user` on `exec`. The backends can all do it, but what a user is differs per backend (a name on E2B and microsandbox, a uid for runsc), so it waits for the engine that decides it.
 - **DNS is a way out on E2B and microsandbox.** For hostname rules to work, both let the sandbox reach a DNS server whenever a host is allowed, and a DNS query can carry data out. gVisor resolves names on the host, so it doesn't have this gap.
 - **An aborted create on E2B** can still make a sandbox, when E2B received the request before the abort. It carries the mesh-flow metadata, so `list` finds it and reconciliation removes it.
