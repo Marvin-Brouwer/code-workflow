@@ -1,8 +1,11 @@
 import { quote } from 'shell-quote'
 import type { Command, StartInBackgroundOptions } from '../sandbox.mts'
 
-/** Where the sandbox's init takes jobs from: a FIFO, and the scripts it names. */
-export const jobDirectory = '/run/mesh-flow'
+/**
+ * Where the sandbox's init takes jobs from: a FIFO, and the scripts it names. Not under the egress
+ * mount point, which is read-only.
+ */
+export const jobDirectory = '/run/mesh-flow-jobs'
 export const jobFifo = `${jobDirectory}/start`
 
 /**

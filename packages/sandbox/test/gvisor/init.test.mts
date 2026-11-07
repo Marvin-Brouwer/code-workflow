@@ -3,7 +3,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, test } from 'vitest'
-import { initCommand, jobScript } from '../../src/gvisor/init.mts'
+import { initCommand, jobDirectory, jobScript } from '../../src/gvisor/init.mts'
+import { egressMountPoint } from '../../src/gvisor/layout.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
 const run = promisify(execFile)
@@ -59,5 +60,10 @@ describe('initCommand', () => {
 		expect([program, flag]).toEqual(['sh', '-c'])
 		expect(args).toEqual(['sh', 'node', '-e', 'forward()'])
 		await expect(run('sh', ['-n', '-c', script ?? ''])).resolves.toBeDefined()
+	})
+
+	test('keeps its jobs out of the read-only egress mount', () => {
+		// Assert
+		expect(`${jobDirectory}/`.startsWith(`${egressMountPoint}/`)).toBe(false)
 	})
 })
