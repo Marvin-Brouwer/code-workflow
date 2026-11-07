@@ -1,5 +1,13 @@
-export interface WorkspaceFile { readonly kind: 'file'; readonly path: string; append(entry: object): Promise<void> }
-export interface WorkspaceFolder { readonly kind: 'folder'; readonly path: string; files(): Promise<readonly WorkspaceFile[]> }
+export interface WorkspaceFile {
+	readonly kind: 'file'
+	readonly path: string
+	append(entry: object): Promise<void>
+}
+export interface WorkspaceFolder {
+	readonly kind: 'folder'
+	readonly path: string
+	files(): Promise<readonly WorkspaceFile[]>
+}
 
 /**
  * The run's workspace in the sandbox.
@@ -13,6 +21,6 @@ export interface WorkspaceFolder { readonly kind: 'folder'; readonly path: strin
  * meets its constraints, and the loop's result is the folder itself.
  */
 export const workspace: {
-    file(path: string): WorkspaceFile;
-    folder(path: string, options?: { description?: string; minFiles?: number }): WorkspaceFolder;
-};
+	file(path: string): WorkspaceFile
+	folder(path: string, options?: { description?: string; minFiles?: number }): WorkspaceFolder
+}

@@ -21,11 +21,11 @@ with gVisor instead of E2B and no Docker.
   `runsc checkpoint --image-path=<dir> <id>` writes memory, processes and the sandbox's in-memory
   filesystem to `<dir>` and ends the sandbox; `runsc restore --image-path=<dir> --bundle=<bundle> <new id>`
   brings it back in a new container.
-- **No Docker**: [`src/image.ts`](src/image.ts) pulls `node:22-slim` from Docker Hub and unpacks it
-  into `.work/rootfs` (layers in order, whiteouts applied). [`src/host.ts`](src/host.ts) writes an
+- **No Docker**: [`src/image.mts`](src/image.mts) pulls `node:22-slim` from Docker Hub and unpacks it
+  into `.work/rootfs` (layers in order, whiteouts applied). [`src/host.mts`](src/host.mts) writes an
   OCI bundle around it with `runsc spec`.
 - **No network** (`--network=none`): the sandbox has only loopback. Its one way out is a Unix
-  socket bind-mounted from the host, [`src/gateway.ts`](src/gateway.ts): an HTTP CONNECT proxy that
+  socket bind-mounted from the host, [`src/gateway.mts`](src/gateway.mts): an HTTP CONNECT proxy that
   tunnels only to allowed hosts. That is the shape the engine's gateway would have, without
   iptables, tap devices or bridges.
 

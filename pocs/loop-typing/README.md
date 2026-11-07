@@ -3,7 +3,7 @@
 **Outcome: ✅ adopted.** ``agent.loop`...` `` infers its result type from the interpolated exits,
 with nothing at the call site. Every case in the plan passes, the sketches type-check, an editor's
 hover shows the resolved type, and wide templates stay cheap. The fixed types are in
-[`src/core.ts`](src/core.ts) and should replace the exit types in
+[`src/core.mts`](src/core.mts) and should replace the exit types in
 `packages/core/src/index.d.ts`.
 
 Plan and criteria: [docs/plans/poc-loop-typing.md](../../docs/plans/poc-loop-typing.md).
@@ -16,13 +16,13 @@ pnpm poc:loop-typing
 
 That runs four checks, and any failure fails the command:
 
-1. `tsc -p tsconfig.json`: the type tests in [`test/loop-result.ts`](test/loop-result.ts),
+1. `tsc -p tsconfig.json`: the type tests in [`test/loop-result.mts`](test/loop-result.mts),
    written with `expect-type`.
 2. `tsc -p tsconfig.sketches.json`: `examples/example` and the sketch packages, against
-   `src/core.ts`, with [`stubs/`](stubs/README.md) for the modules they import that don't exist yet.
-3. `scripts/hover.ts`: asks the TypeScript language service, the same call an editor's hover
-   makes, what `research` and `plan` in `develop.ts` show.
-4. `scripts/timing.ts`: generates one `loop` with 20 interpolated values, and a file with 50 of
+   `src/core.mts`, with [`stubs/`](stubs/README.md) for the modules they import that don't exist yet.
+3. `scripts/hover.mts`: asks the TypeScript language service, the same call an editor's hover
+   makes, what `research` and `plan` in `develop.mts` show.
+4. `scripts/timing.mts`: generates one `loop` with 20 interpolated values, and a file with 50 of
    them, and type-checks them against a 2 s budget.
 
 ## What changed in the types
@@ -67,7 +67,7 @@ Ran 2026-10-30 with TypeScript 6.0.3 and zod 4.6.7.
 
 **One sketch edit, not about `loop`.** `inDependencyOrder` can't infer `Result` from a callback that
 both returns it and receives it as `upstream`; TypeScript gives `upstream` the type `unknown[]`.
-`develop.ts` now annotates the callback's return type
+`develop.mts` now annotates the callback's return type
 (`async (part, upstream): Promise<{ packages: string[] }> =>`). That's the only change to the
 sketches; not even import paths needed editing, because the stubs and `paths` in
 `tsconfig.sketches.json` cover the imports. Options for later, when `inDependencyOrder` is built (design open question 5):
@@ -78,7 +78,7 @@ one word.
 
 - The sketches import connectors as namespaces (`import { jira } from
   '@mesh-flow/connector-atlassian'`) while each module exported its members directly. Since
-  then each package's `index.ts` exports its namespace (`export * as jira from './jira'`).
+  then each package's `index.mts` exports its namespace (`export * as jira from './jira'`).
 - The sketches use extensionless relative imports, so they type-check under `bundler` resolution,
   not under the repo's `NodeNext`.
 - `Tool` is an opaque `{ name }`, not callable. "A tool is also a function" (`CLAUDE.md`) isn't

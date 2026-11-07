@@ -42,7 +42,7 @@ The current sketch already has two bugs this POC has to fix:
 - Every case in the table passes as a type test, with no call-site annotations.
 - Negative tests with `@ts-expect-error` pass. Examples: using a `Plan` result as `string`, and
   passing a non-exit that happens to have `kind: 'exit'`.
-- `examples/example/workflows/develop.ts` and `packages/preset-development` type-check against
+- `examples/example/workflows/develop.mts` and `packages/preset-development` type-check against
   the POC's types. The only allowed edits are import paths; any other change they need is listed
   in the README.
 - The editor hover on the result shows the resolved type (`Plan`), not `ResultOf<[…]>`. This is

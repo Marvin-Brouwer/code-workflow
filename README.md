@@ -16,6 +16,6 @@ with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 
 ```bash
 pnpm install
-pnpm lint && pnpm typecheck
+pnpm format:check && pnpm lint && pnpm typecheck
 pnpm poc:loop-typing
 ```

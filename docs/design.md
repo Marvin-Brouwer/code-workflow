@@ -107,7 +107,7 @@ export const planner = agent({
 });
 ```
 
-- Agents are defined in the workflow repo (`agents.ts`): models and conventions are team
+- Agents are defined in the workflow repo (`agents.mts`): models and conventions are team
   specific. Packages take agents as parameters.
 - `system` is a tagged template like `loop`: tools interpolated there are available in every loop
   of that agent.

@@ -76,7 +76,7 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
 
 Turns `packages/core/src/*.d.ts` into an implementation that runs inside the sandbox.
 
-- `loop`'s result types come from [`pocs/loop-typing/src/core.ts`](../../pocs/loop-typing/src/core.ts)
+- `loop`'s result types come from [`pocs/loop-typing/src/core.mts`](../../pocs/loop-typing/src/core.mts)
   (proven in the typing POC).
 - Exits as in [design section 4](../design.md#exit-tools-gates-on-may-this-agent-finish), plus
   `limit({ turns?, minutes? })` ([Loop limits](../design.md#loop-limits)): `minutes` counts agent
@@ -155,7 +155,7 @@ against one repository at a time. `inDependencyOrder` runs sequentially until ro
 
 - **Name and shape.** `@mesh-flow/<name>` under `packages/`. These are publishable libraries, not
   POCs: one concept per file, grouped in folders by concept, no comment section boundaries.
-  `index.ts` is only the public surface; connectors and toolchains export their namespace
+  `index.mts` is only the public surface; connectors and toolchains export their namespace
   (`export * as jira from './jira'`).
 - **TypeScript and lint.** `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`,
   `exactOptionalPropertyTypes`). `pnpm lint` (oxlint, type-aware) and `pnpm typecheck` pass before
