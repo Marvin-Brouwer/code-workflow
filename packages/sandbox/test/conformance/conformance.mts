@@ -7,7 +7,6 @@ import type { BackendName } from '../../src/backend-name.mts'
 import type { SandboxBackend } from '../../src/sandbox-backend.mts'
 import type { Sandbox } from '../../src/sandbox.mts'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
-import { startInBackground } from '../../src/start-in-background.mts'
 
 const stub = guestScript('stub.mts')
 const probe = guestScript('probe.mts')
@@ -75,7 +74,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const sandbox = await backend.create(spec, timeout())
 			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
-			await startInBackground(sandbox, ['node', '/var/tmp/stub.mjs'], {
+			await sandbox.startInBackground(['node', '/var/tmp/stub.mjs'], {
 				signal: timeout(),
 				env: { STATE_DIR: stateDir },
 				logFile: stubLog,

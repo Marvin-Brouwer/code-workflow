@@ -1,30 +1,25 @@
 import { describe, expect, test } from 'vitest'
 import type { Command, ExecOptions, ExecResult, Sandbox } from '../src/sandbox.mts'
-import { startInBackground } from '../src/start-in-background.mts'
+import { startInOwnSession } from '../src/start-in-background.mts'
 
-function recordingSandbox(result: ExecResult): { sandbox: Sandbox; commands: Command[] } {
+function recordingSandbox(result: ExecResult): { sandbox: Pick<Sandbox, 'exec'>; commands: Command[] } {
 	const commands: Command[] = []
-	const sandbox: Sandbox = {
-		id: 'mesh-flow-0123456789ab',
+	const sandbox = {
 		exec(command: Command, _options: ExecOptions) {
 			commands.push(command)
 			return Promise.resolve(result)
 		},
-		readFile: () => Promise.reject(new Error('not used')),
-		writeFile: () => Promise.reject(new Error('not used')),
-		pause: () => Promise.reject(new Error('not used')),
-		destroy: () => Promise.reject(new Error('not used')),
 	}
 	return { sandbox, commands }
 }
 
-describe('startInBackground', () => {
+describe('startInOwnSession', () => {
 	test('starts the command in its own session, with its arguments untouched', async () => {
 		// Arrange
 		const { sandbox, commands } = recordingSandbox({ exitCode: 0, stdout: '', stderr: '' })
 
 		// Act
-		await startInBackground(sandbox, ['node', 'runtime.mjs', '--name', "it's"], {
+		await startInOwnSession(sandbox, ['node', 'runtime.mjs', '--name', "it's"], {
 			signal: AbortSignal.timeout(1000),
 			logFile: '/var/log/runtime.log',
 		})
@@ -50,7 +45,7 @@ describe('startInBackground', () => {
 		const { sandbox } = recordingSandbox({ exitCode: 127, stdout: '', stderr: 'setsid: not found\n' })
 
 		// Act
-		const starting = startInBackground(sandbox, ['node'], { signal: AbortSignal.timeout(1000) })
+		const starting = startInOwnSession(sandbox, ['node'], { signal: AbortSignal.timeout(1000) })
 
 		// Assert
 		await expect(starting).rejects.toThrow('Starting node failed with exit code 127: setsid: not found')

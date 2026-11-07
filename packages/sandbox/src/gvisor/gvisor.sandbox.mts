@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PausedSandbox } from '../paused-sandbox.mts'
-import type { Command, ExecOptions, ExecResult, Sandbox } from '../sandbox.mts'
+import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
 import { newCheckpointName, partialCheckpoint, removeEarlierCheckpoints } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
+import { jobDirectory, jobFifo, jobScript } from './init.mts'
 import { runsc, runscOrThrow } from './runsc.mts'
 
 /** A running gVisor container. Its runsc container id is the sandbox id. */
@@ -28,6 +30,16 @@ export class GvisorSandbox implements Sandbox {
 		return runsc(this.#context.runsc, ['exec', ...flags, this.id, ...command], {
 			signal: this.#context.lifetime.bind(options.signal),
 		})
+	}
+
+	/** Hands the command to the sandbox's init (`initCommand`): exec'd processes don't survive a pause. */
+	async startInBackground(command: Command, options: StartInBackgroundOptions): Promise<void> {
+		const job = `${jobDirectory}/job-${randomUUID()}.sh`
+		await this.writeFile(job, jobScript(command, options), options.signal)
+		const result = await this.exec(['sh', '-c', 'printf "%s\\n" "$1" > "$2"', 'sh', job, jobFifo], { signal: options.signal })
+		if (result.exitCode !== 0) {
+			throw new Error(`Starting ${command[0]} failed with exit code ${String(result.exitCode)}: ${result.stderr.trim()}`)
+		}
 	}
 
 	async readFile(path: string, signal: AbortSignal): Promise<string> {

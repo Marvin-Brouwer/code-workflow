@@ -2,8 +2,9 @@ import { Snapshot, type Sandbox as MicrosandboxSdkSandbox } from 'microsandbox'
 import { abortable } from '../abortable.mts'
 import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
-import type { Command, ExecOptions, ExecResult, Sandbox } from '../sandbox.mts'
+import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
+import { startInOwnSession } from '../start-in-background.mts'
 import { snapshotName, snapshotsOf } from './snapshots.mts'
 import { removeSandbox, removeSandboxAndSnapshots, removeSnapshot } from './vms.mts'
 
@@ -54,6 +55,10 @@ export class MicrosandboxSandbox implements Sandbox {
 		}
 	}
 
+	startInBackground(command: Command, options: StartInBackgroundOptions): Promise<void> {
+		return startInOwnSession(this, command, options)
+	}
+
 	readFile(path: string, signal: AbortSignal): Promise<string> {
 		return abortable(this.#sandbox.fs().readToString(path), this.#lifetime.bind(signal))
 	}
@@ -66,7 +71,7 @@ export class MicrosandboxSandbox implements Sandbox {
 
 	/**
 	 * A full snapshot (disk, memory and processes), then the VM is killed and removed. microsandbox
-	 * refuses a full snapshot while it manages a running job, see `startInBackground`.
+	 * refuses a full snapshot while it manages a running job, see `startInOwnSession`.
 	 */
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {
 		const bound = this.#lifetime.bind(signal)

@@ -1,17 +1,15 @@
-import type { Command, ExecOptions, Sandbox } from './sandbox.mts'
-
-export interface StartInBackgroundOptions extends ExecOptions {
-	/** Where stdout and stderr go, inside the sandbox. Default `/dev/null`. */
-	readonly logFile?: string
-}
+import type { Command, Sandbox, StartInBackgroundOptions } from './sandbox.mts'
 
 /**
- * Starts a command that keeps running after this call returns, such as the workflow runtime.
- *
- * It runs in its own session (`setsid -f`), not as a job the backend manages: microsandbox
- * refuses a full snapshot while it manages a running job. The image needs `setsid` (util-linux).
+ * `startInBackground` for backends whose `exec` may leave a process behind: it runs in its own
+ * session (`setsid -f`), not as a job the backend manages, because microsandbox refuses a full
+ * snapshot while it manages a running job. The image needs `setsid` (util-linux).
  */
-export async function startInBackground(sandbox: Sandbox, command: Command, options: StartInBackgroundOptions): Promise<void> {
+export async function startInOwnSession(
+	sandbox: Pick<Sandbox, 'exec'>,
+	command: Command,
+	options: StartInBackgroundOptions,
+): Promise<void> {
 	const { logFile = '/dev/null', ...execOptions } = options
 	const script = 'log=$1; shift; exec setsid -f "$@" > "$log" 2>&1 < /dev/null'
 	const result = await sandbox.exec(['sh', '-c', script, 'sh', logFile, ...command], execOptions)

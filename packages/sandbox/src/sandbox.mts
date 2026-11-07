@@ -11,6 +11,11 @@ export interface ExecOptions {
 	readonly cwd?: string
 }
 
+export interface StartInBackgroundOptions extends ExecOptions {
+	/** Where stdout and stderr go, inside the sandbox. Default `/dev/null`. */
+	readonly logFile?: string
+}
+
 export interface ExecResult {
 	readonly exitCode: number
 	readonly stdout: string
@@ -28,6 +33,11 @@ export interface Sandbox {
 	readonly id: string
 	/** Runs a command to the end. A non-zero exit code is a result, not an error. */
 	exec(command: Command, options: ExecOptions): Promise<ExecResult>
+	/**
+	 * Starts a command that keeps running after this call returns, such as the workflow runtime,
+	 * and survives a pause. A start that fails after this call returns shows in the log file.
+	 */
+	startInBackground(command: Command, options: StartInBackgroundOptions): Promise<void>
 	/** Reads a text file, as UTF-8. */
 	readFile(path: string, signal: AbortSignal): Promise<string>
 	/** Writes to a temporary file and renames it, so a reader never sees half a file. */

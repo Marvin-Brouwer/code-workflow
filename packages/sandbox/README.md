@@ -42,11 +42,9 @@ const backend = e2bBackend({ apiKey, templates: { 'node:22-slim': 'mesh-flow-nod
 
 ### Create a sandbox and run commands
 
-`startInBackground` starts a process that outlives the call, such as the workflow runtime. It needs `setsid` (util-linux) in the image.
+`sandbox.startInBackground` starts a process that outlives the call and survives a pause, such as the workflow runtime. On E2B and microsandbox it needs `setsid` (util-linux) in the image.
 
 ```ts
-import { startInBackground } from '@mesh-flow/sandbox'
-
 const sandbox = await backend.create(
 	{
 		image: 'node:22-slim',
@@ -61,7 +59,7 @@ const result = await sandbox.exec(['npm', 'ci'], { signal, cwd: '/work' })
 if (result.exitCode !== 0) throw new Error(result.stderr)
 
 await sandbox.writeFile('/srv/runtime.mjs', runtimeSource, signal)
-await startInBackground(sandbox, ['node', '/srv/runtime.mjs'], { signal, logFile: '/var/log/runtime.log' })
+await sandbox.startInBackground(['node', '/srv/runtime.mjs'], { signal, logFile: '/var/log/runtime.log' })
 ```
 
 ### Pause and resume
@@ -150,6 +148,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 - **Timers across a pause.** E2B stops the guest's monotonic clock, so a `setTimeout` inside the sandbox doesn't count paused time. gVisor's does. Wall-clock waits belong in the engine. `Date.now()` is right after a resume everywhere.
 - **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeoutMs` (24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
 - **microsandbox** needs TLS interception for hostname egress rules: allowed HTTPS goes through its proxy, with its own CA. Node in the sandbox needs `--use-system-ca` to trust it. A full snapshot is refused while microsandbox manages a running job, which is why `startInBackground` uses `setsid -f` instead.
+- **gVisor** doesn't keep processes started with `runsc exec` across a checkpoint, only the container's init and its children. The init is a small shell that starts each background process as its own child, so `startInBackground` goes through it.
 - **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise). A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one. Its options:
   - `directory`: images, bundles, checkpoints and runsc's state. Keep it across restarts.
   - `platform`: runsc's platform, `systrap` by default; `kvm` is faster where `/dev/kvm` exists.

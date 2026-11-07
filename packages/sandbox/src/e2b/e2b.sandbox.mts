@@ -2,8 +2,9 @@ import { CommandExitError, type Sandbox as E2bSdkSandbox } from 'e2b'
 import { quote } from 'shell-quote'
 import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
-import type { Command, ExecOptions, ExecResult, Sandbox } from '../sandbox.mts'
+import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
+import { startInOwnSession } from '../start-in-background.mts'
 
 /** A running E2B sandbox. Its id is E2B's own sandbox id. */
 export class E2bSandbox implements Sandbox {
@@ -40,6 +41,10 @@ export class E2bSandbox implements Sandbox {
 			if (!isExitWithOutput(error)) throw error
 			return { exitCode: error.exitCode, stdout: error.stdout, stderr: error.stderr }
 		}
+	}
+
+	startInBackground(command: Command, options: StartInBackgroundOptions): Promise<void> {
+		return startInOwnSession(this, command, options)
 	}
 
 	readFile(path: string, signal: AbortSignal): Promise<string> {
