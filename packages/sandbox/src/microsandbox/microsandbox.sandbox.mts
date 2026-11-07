@@ -70,11 +70,12 @@ export class MicrosandboxSandbox implements Sandbox {
 	 */
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {
 		const bound = this.#lifetime.bind(signal)
-		const snapshot = await abortable(Snapshot.builder(snapshotName(this.id)).fromSandbox(this.id).full().create(), bound)
+		const name = snapshotName(this.id)
+		const snapshot = await abortable(Snapshot.builder(name).fromSandbox(this.id).full().create(), bound)
 		await abortable(removeSandbox(this.#sandbox), bound)
 		this.#lifetime.untrack(this.id)
 		// Housekeeping only: neither a failure nor an abort here may lose the pause that just worked.
-		await abortable(removeEarlierSnapshots(this.id, snapshot.reference), bound).catch(() => undefined)
+		await abortable(removeEarlierSnapshots(this.id, name), bound).catch(() => undefined)
 		return { backend: 'microsandbox', id: this.id, spec: this.#spec, snapshot: snapshot.reference }
 	}
 
@@ -85,11 +86,13 @@ export class MicrosandboxSandbox implements Sandbox {
 
 /**
  * Earlier pauses of the same sandbox. microsandbox refuses to remove a snapshot another one
- * depends on, and that refusal is fine: it stays until the sandbox is removed.
+ * depends on, and that refusal is fine: it stays until the sandbox is removed. The new one is
+ * known by the name it was given: a listed reference isn't guaranteed to be spelled like the one
+ * `create()` returns (Windows paths), and comparing those removed the new snapshot there.
  */
 async function removeEarlierSnapshots(id: string, keep: string): Promise<void> {
 	for (const snapshot of await snapshotsOf(id)) {
-		if (snapshot.reference === keep) continue
+		if (snapshot.name === keep) continue
 		await removeSnapshot(snapshot).catch(() => undefined)
 	}
 }
