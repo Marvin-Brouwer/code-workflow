@@ -1,12 +1,12 @@
 import { Script } from 'node:vm'
 import { describe, expect, test } from 'vitest'
-import { forwarderInit } from '../../src/gvisor/egress-forwarder.mts'
+import { forwarderService } from '../../src/gvisor/egress-forwarder.mts'
 import { egressMountPoint } from '../../src/gvisor/layout.mts'
 
-describe('forwarderInit', () => {
+describe('forwarderService', () => {
 	test('is a script node can run, that connects to the egress socket', () => {
 		// Arrange
-		const [program, flag, source = ''] = forwarderInit
+		const [program, flag, source = ''] = forwarderService
 
 		// Act
 		const compile = () => new Script(source)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { Command, ExecOptions, ExecResult, Sandbox } from '../src/sandbox.mts'
-import { startInOwnSession } from '../src/start-in-background.mts'
+import { startInOwnSession } from '../src/start-in-own-session.mts'
 
 function recordingSandbox(result: ExecResult): { sandbox: Pick<Sandbox, 'exec'>; commands: Command[] } {
 	const commands: Command[] = []

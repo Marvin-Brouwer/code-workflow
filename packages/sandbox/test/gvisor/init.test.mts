@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, test } from 'vitest'
-import { initCommand, jobDirectory, jobScript } from '../../src/gvisor/init.mts'
+import { initCommand, jobDirectory, jobFifo, jobScript, submitJobCommand } from '../../src/gvisor/init.mts'
 import { egressMountPoint } from '../../src/gvisor/layout.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
@@ -16,7 +16,6 @@ describe('jobScript', () => {
 		const job = path.join(directory, 'job.sh')
 		const log = path.join(directory, 'job.log')
 		const script = jobScript(['sh', '-c', 'echo "$1|$NAME|$PWD"', 'sh', "it's $HOME"], {
-			signal: AbortSignal.timeout(5000),
 			env: { NAME: 'a "quoted" value' },
 			cwd: directory,
 			logFile: log,
@@ -34,7 +33,7 @@ describe('jobScript', () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		const job = path.join(directory, 'job.sh')
-		await writeFile(job, jobScript(['true'], { signal: AbortSignal.timeout(5000) }))
+		await writeFile(job, jobScript(['true'], {}))
 
 		// Act
 		await run('sh', [job])
@@ -45,9 +44,7 @@ describe('jobScript', () => {
 
 	test('refuses an environment variable name the shell would read as code', () => {
 		// Act and assert
-		expect(() => jobScript(['true'], { signal: AbortSignal.timeout(5000), env: { 'A=$(reboot)': 'x' } })).toThrow(
-			'A=$(reboot) is not a valid environment variable name.',
-		)
+		expect(() => jobScript(['true'], { env: { 'A=$(reboot)': 'x' } })).toThrow('A=$(reboot) is not a valid environment variable name.')
 	})
 })
 
@@ -65,5 +62,57 @@ describe('initCommand', () => {
 	test('keeps its jobs out of the read-only egress mount', () => {
 		// Assert
 		expect(`${jobDirectory}/`.startsWith(`${egressMountPoint}/`)).toBe(false)
+	})
+})
+
+/** Runs `submitJobCommand` on the host, against a FIFO in `directory` instead of the sandbox's. */
+async function submit(directory: string, options: Parameters<typeof submitJobCommand>[1], fifo = true) {
+	const job = path.join(directory, 'job.sh')
+	await writeFile(job, 'true\n')
+	const [program, ...args] = submitJobCommand(job, options)
+	const fifoPath = path.join(directory, 'start')
+	if (fifo) await run('mkfifo', [fifoPath])
+	const reading = fifo ? readFile(fifoPath, 'utf8') : Promise.resolve('')
+	const submitting = run(
+		program,
+		args.map((arg) => (arg === jobFifo ? fifoPath : arg)),
+	)
+	return { job, submitting, reading }
+}
+
+describe('submitJobCommand', () => {
+	test('hands the job to init', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+
+		// Act
+		const { job, submitting, reading } = await submit(directory, { cwd: directory, logFile: path.join(directory, 'job.log') })
+
+		// Assert
+		await expect(submitting).resolves.toBeDefined()
+		expect(await reading).toBe(`${job}\n`)
+	})
+
+	test('fails, and removes the job, when its directory is missing', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+
+		// Act
+		const { job, submitting } = await submit(directory, { cwd: path.join(directory, 'missing') }, false)
+
+		// Assert
+		await expect(submitting).rejects.toThrow()
+		await expect(readFile(job, 'utf8')).rejects.toThrow('ENOENT')
+	})
+
+	test('fails when the log file cannot be written', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+
+		// Act
+		const { submitting } = await submit(directory, { logFile: path.join(directory, 'missing', 'job.log') }, false)
+
+		// Assert
+		await expect(submitting).rejects.toThrow()
 	})
 })

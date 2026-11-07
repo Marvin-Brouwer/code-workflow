@@ -19,12 +19,7 @@ jobs:
     uses: ./.github/workflows/sandbox-track.yml
     with:
       os: ubuntu-latest
-      backends: >-
-        [
-          { "backend": "gvisor", "experimental": false },
-          { "backend": "microsandbox", "experimental": false },
-          { "backend": "e2b", "experimental": false }
-        ]
+      backends: '["gvisor", "microsandbox", "e2b"]'
     secrets:
       E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
 
@@ -32,10 +27,6 @@ jobs:
     uses: ./.github/workflows/sandbox-track.yml
     with:
       os: windows-latest
-      backends: >-
-        [
-          { "backend": "microsandbox", "experimental": false },
-          { "backend": "e2b", "experimental": false }
-        ]
+      backends: '["microsandbox", "e2b"]'
     secrets:
       E2B_API_KEY: ${{ secrets.E2B_API_KEY }}

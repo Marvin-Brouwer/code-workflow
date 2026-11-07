@@ -1,9 +1,9 @@
 import type { Command, Sandbox, StartInBackgroundOptions } from './sandbox.mts'
 
 /**
- * `startInBackground` for backends whose `exec` may leave a process behind: it runs in its own
- * session (`setsid -f`), not as a job the backend manages, because microsandbox refuses a full
- * snapshot while it manages a running job. The image needs `setsid` (util-linux).
+ * Starts a command in its own session (`setsid -f`), not as a job the backend manages, because
+ * microsandbox refuses a full snapshot while it manages a running job. The E2B and microsandbox
+ * `startInBackground`. The image needs `setsid` (util-linux).
  */
 export async function startInOwnSession(
 	sandbox: Pick<Sandbox, 'exec'>,

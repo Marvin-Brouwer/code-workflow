@@ -4,7 +4,7 @@ import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
-import { startInOwnSession } from '../start-in-background.mts'
+import { startInOwnSession } from '../start-in-own-session.mts'
 
 /** A running E2B sandbox. Its id is E2B's own sandbox id. */
 export class E2bSandbox implements Sandbox {

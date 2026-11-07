@@ -13,24 +13,27 @@ export const jobFifo = `${jobDirectory}/start`
  *
  * Processes started with `runsc exec` don't survive a checkpoint, children of init do. So a
  * background process goes through init rather than through exec. A `service`, such as the egress
- * forwarder, is started first. Holding the FIFO open for reading and writing means it never ends.
+ * forwarder, is started first. Init holds the FIFO open for reading and writing, so `read` never
+ * sees end of file and the loop never ends. Jobs don't get that descriptor, and `jobs` lets the
+ * shell reap the ones that ended.
  */
-export function initCommand(service?: readonly string[]): string[] {
+export function initCommand(service: readonly string[] = []): string[] {
 	const script = [
 		`mkdir -p ${jobDirectory} && rm -f ${jobFifo} && mkfifo ${jobFifo} || exit 1`,
 		'[ $# -gt 0 ] && "$@" &',
 		`exec 3<> ${jobFifo}`,
 		'while :; do',
-		'	if read -r job <&3; then sh "$job" & fi',
+		'	if read -r job <&3; then sh "$job" 3<&- & fi',
+		'	jobs > /dev/null',
 		'done',
 	].join('\n')
-	return ['sh', '-c', script, 'sh', ...(service ?? [])]
+	return ['sh', '-c', script, 'sh', ...service]
 }
 
 const environmentName = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /** The script init runs for a job. It removes itself first, so jobs leave nothing behind. */
-export function jobScript(command: Command, options: StartInBackgroundOptions): string {
+export function jobScript(command: Command, options: Omit<StartInBackgroundOptions, 'signal'>): string {
 	const lines = ['rm -f -- "$0"']
 	if (options.cwd !== undefined) lines.push(`cd -- ${quote([options.cwd])} || exit 1`)
 	for (const [name, value] of Object.entries(options.env ?? {})) {
@@ -39,4 +42,18 @@ export function jobScript(command: Command, options: StartInBackgroundOptions): 
 	}
 	lines.push(`exec ${quote(command)} > ${quote([options.logFile ?? '/dev/null'])} 2>&1 < /dev/null`)
 	return `${lines.join('\n')}\n`
+}
+
+/**
+ * Hands a job to init. It checks first what the job needs, so a bad directory or log file fails
+ * this call, as it does on the other backends, instead of only showing in init's own log. A job
+ * that isn't handed over is removed.
+ */
+export function submitJobCommand(job: string, options: Omit<StartInBackgroundOptions, 'signal'>): Command {
+	const script = [
+		`[ -p "$2" ] || { echo "The sandbox's init isn't taking jobs." >&2; rm -f -- "$1"; exit 1; }`,
+		'{ [ -z "$4" ] || cd -- "$4"; } && : >> "$3" || { rm -f -- "$1"; exit 1; }',
+		`printf '%s\\n' "$1" > "$2"`,
+	].join('\n')
+	return ['sh', '-c', script, 'sh', job, jobFifo, options.logFile ?? '/dev/null', options.cwd ?? '']
 }

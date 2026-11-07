@@ -6,7 +6,7 @@ import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOption
 import type { SandboxSpec } from '../sandbox-spec.mts'
 import { newCheckpointName, partialCheckpoint, removeEarlierCheckpoints } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
-import { jobDirectory, jobFifo, jobScript } from './init.mts'
+import { jobDirectory, jobScript, submitJobCommand } from './init.mts'
 import { runsc, runscOrThrow } from './runsc.mts'
 
 /** A running gVisor container. Its runsc container id is the sandbox id. */
@@ -36,7 +36,7 @@ export class GvisorSandbox implements Sandbox {
 	async startInBackground(command: Command, options: StartInBackgroundOptions): Promise<void> {
 		const job = `${jobDirectory}/job-${randomUUID()}.sh`
 		await this.writeFile(job, jobScript(command, options), options.signal)
-		const result = await this.exec(['sh', '-c', 'printf "%s\\n" "$1" > "$2"', 'sh', job, jobFifo], { signal: options.signal })
+		const result = await this.exec(submitJobCommand(job, options), { signal: options.signal })
 		if (result.exitCode !== 0) {
 			throw new Error(`Starting ${command[0]} failed with exit code ${String(result.exitCode)}: ${result.stderr.trim()}`)
 		}

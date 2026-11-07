@@ -24,7 +24,11 @@ function forward(socketPath: string, listenPort: number): void {
  * The service init starts when egress is allowed: the forwarder, so tools that honour `HTTPS_PROXY`
  * reach the allowed hosts. Needs Node 22.3 or later in the image.
  */
-export const forwarderInit: readonly string[] = ['node', '-e', `(${forward.toString()})(${JSON.stringify(egressSocket)}, ${String(port)})`]
+export const forwarderService: readonly string[] = [
+	'node',
+	'-e',
+	`(${forward.toString()})(${JSON.stringify(egressSocket)}, ${String(port)})`,
+]
 
 /** What the sandbox's processes need to find the forwarder. Plain HTTP stays blocked. */
 export const forwarderEnv: Readonly<Record<string, string>> = {

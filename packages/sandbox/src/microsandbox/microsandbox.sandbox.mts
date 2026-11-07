@@ -4,7 +4,7 @@ import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
-import { startInOwnSession } from '../start-in-background.mts'
+import { startInOwnSession } from '../start-in-own-session.mts'
 import { snapshotName, snapshotsOf } from './snapshots.mts'
 import { removeSandbox, removeSandboxAndSnapshots, removeSnapshot } from './vms.mts'
 
@@ -91,9 +91,9 @@ export class MicrosandboxSandbox implements Sandbox {
 
 /**
  * Earlier pauses of the same sandbox. microsandbox refuses to remove a snapshot another one
- * depends on, and that refusal is fine: it stays until the sandbox is removed. The new one is
- * known by the name it was given: a listed reference isn't guaranteed to be spelled like the one
- * `create()` returns (Windows paths), and comparing those removed the new snapshot there.
+ * depends on, and that refusal is fine: it stays until the sandbox is removed. The new one is kept
+ * by name: a listed reference can be spelled differently from the one `create()` returns (Windows
+ * paths).
  */
 async function removeEarlierSnapshots(id: string, keep: string): Promise<void> {
 	for (const snapshot of await snapshotsOf(id)) {

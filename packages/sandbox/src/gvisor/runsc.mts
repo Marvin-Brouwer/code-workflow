@@ -102,10 +102,11 @@ export async function runscOrThrow(config: RunscConfig, args: readonly string[],
 	throw new Error(`runsc ${args[0] ?? ''} exited with ${String(result.exitCode)}: ${output.trim()}`)
 }
 
+/** The last {@link logTailLines} lines of a file. */
 function tailOf(file: string): string {
 	try {
 		return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-logTailLines).join('\n')
 	} catch {
-		return `(no output in ${file})`
+		return `(could not read ${file})`
 	}
 }

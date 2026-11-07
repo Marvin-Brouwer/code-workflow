@@ -11,11 +11,11 @@ import type { Sandbox } from '../sandbox.mts'
 import { allowsEgress, SandboxSpec } from '../sandbox-spec.mts'
 import { writeBundle } from './bundle.mts'
 import { hasCheckpoint, isCheckpointName } from './checkpoint.mts'
-import { forwarderEnv, forwarderInit } from './egress-forwarder.mts'
-import { initCommand } from './init.mts'
+import { forwarderEnv, forwarderService } from './egress-forwarder.mts'
 import { EgressProxies } from './egress-proxies.mts'
 import type { GvisorContext } from './gvisor.context.mts'
 import { GvisorSandbox } from './gvisor.sandbox.mts'
+import { initCommand } from './init.mts'
 import { egressMountPoint, Layout } from './layout.mts'
 import { RootfsCache } from './rootfs.mts'
 import { runsc, runscOrThrow, type RunscConfig } from './runsc.mts'
@@ -99,7 +99,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				await mkdir(paths.egress, { recursive: true })
 				await writeBundle(paths.bundle, {
 					rootfs,
-					init: initCommand(egress ? forwarderInit : undefined),
+					init: initCommand(egress ? forwarderService : []),
 					env: { ...spec.env, ...(egress ? forwarderEnv : {}) },
 					cpus: spec.cpus,
 					memoryMb: spec.memoryMb,

@@ -1,14 +1,15 @@
 name: sandbox track
 
 # One operating system: the checks, then the conformance suite for each backend it runs. The
-# tracks run side by side, so a slow Windows runner doesn't hold up Linux.
+# tracks run side by side, so a slow Windows runner doesn't hold up Linux. Lint and format run on
+# both on purpose: the Windows checkout is where line endings would go wrong.
 on:
   workflow_call:
     inputs:
       os:
         type: string
         required: true
-      # A JSON list of { backend, experimental }.
+      # A JSON list of backend names.
       backends:
         type: string
         required: true
@@ -45,9 +46,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.backends) }}
+        backend: ${{ fromJSON(inputs.backends) }}
     runs-on: ${{ inputs.os }}
-    continue-on-error: ${{ matrix.experimental }}
     env:
       MESH_FLOW_SANDBOX_TESTS: ${{ matrix.backend }}
       # The key stays on the runner, the host side; it never enters a sandbox.

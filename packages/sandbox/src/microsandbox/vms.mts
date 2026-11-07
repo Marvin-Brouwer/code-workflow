@@ -44,6 +44,7 @@ export async function removeSnapshot(snapshot: SnapshotHandle, options: { readon
 	}
 }
 
+/** By message: the SDK's `MicrosandboxErrorCode` has no code for a missing snapshot. */
 function isSnapshotNotFound(error: unknown): boolean {
 	return error instanceof Error && error.message.includes('SnapshotNotFound')
 }

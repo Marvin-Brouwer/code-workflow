@@ -38,6 +38,7 @@ async function input(): Promise<{ answer: unknown; stack: string | undefined }> 
 }
 
 async function loop(): ReturnType<typeof input> {
+	// The await keeps loop in the stack trace the check reads.
 	return await input()
 }
 
