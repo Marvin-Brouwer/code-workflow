@@ -12,81 +12,30 @@ concurrency:
   group: sandbox-${{ github.ref }}
   cancel-in-progress: true
 
+# gVisor is Linux only. microsandbox needs a hypervisor: KVM on Linux, the Windows Hypervisor
+# Platform on Windows, where it reports without failing the build until it is known to pass there.
 jobs:
-  checks:
-    name: checks (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm --filter @mesh-flow/sandbox typecheck
-      - run: pnpm --filter @mesh-flow/sandbox build
-      - run: pnpm --filter @mesh-flow/sandbox test
-
-  # Each backend against a real sandbox. gVisor is Linux only. microsandbox needs a hypervisor: KVM
-  # on the Linux runners, the Windows Hypervisor Platform on Windows, which hosted runners may not
-  # offer, so that row reports without failing the build until it is known to work there.
-  conformance:
-    name: conformance (${{ matrix.backend }}, ${{ matrix.os }})
-    needs: checks
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { backend: gvisor, os: ubuntu-latest, experimental: false }
-          - { backend: microsandbox, os: ubuntu-latest, experimental: false }
-          - { backend: microsandbox, os: windows-latest, experimental: true }
-          - { backend: e2b, os: ubuntu-latest, experimental: false }
-          - { backend: e2b, os: windows-latest, experimental: false }
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
-    env:
-      MESH_FLOW_SANDBOX_TESTS: ${{ matrix.backend }}
-      # The key stays on the runner, the host side; it never enters a sandbox.
+  ubuntu:
+    uses: ./.github/workflows/sandbox-track.yml
+    with:
+      os: ubuntu-latest
+      backends: >-
+        [
+          { "backend": "gvisor", "experimental": false },
+          { "backend": "microsandbox", "experimental": false },
+          { "backend": "e2b", "experimental": false }
+        ]
+    secrets:
       E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
-      MESH_FLOW_E2B_TEMPLATE: ${{ vars.MESH_FLOW_E2B_TEMPLATE }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
 
-      - name: Install runsc
-        if: matrix.backend == 'gvisor'
-        run: |
-          curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list
-          sudo apt-get update
-          sudo apt-get install -y runsc
-
-      - name: Allow KVM
-        if: matrix.backend == 'microsandbox' && runner.os == 'Linux'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      # Pull requests from forks get no secrets; E2B is then left out rather than failing.
-      - name: Test
-        if: matrix.backend != 'e2b' || env.E2B_API_KEY != ''
-        run: pnpm --filter @mesh-flow/sandbox test
-        env:
-          RUNSC: ${{ matrix.backend == 'gvisor' && 'sudo runsc' || '' }}
+  windows:
+    uses: ./.github/workflows/sandbox-track.yml
+    with:
+      os: windows-latest
+      backends: >-
+        [
+          { "backend": "microsandbox", "experimental": true },
+          { "backend": "e2b", "experimental": false }
+        ]
+    secrets:
+      E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
