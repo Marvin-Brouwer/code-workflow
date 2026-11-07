@@ -1,4 +1,4 @@
-import { chmod, writeFile } from 'node:fs/promises'
+import { chmod, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { expect, test } from 'vitest'
 import { runscOrThrow } from '../../src/gvisor/runsc.mts'
@@ -34,4 +34,20 @@ test('a failed call with a log file carries the end of that log', async () => {
 
 	// Assert
 	await expect(call).rejects.toThrow('runsc run exited with 1: creating container: cannot read spec')
+})
+
+test('a log file the engine can no longer write is replaced', async () => {
+	// Arrange
+	const directory = await temporaryDirectory()
+	const config = { command: await failingRunsc(directory), root: directory }
+	const logFile = path.join(directory, 'init.log')
+	await writeFile(logFile, 'an earlier run\n')
+	await chmod(logFile, 0o444)
+
+	// Act
+	const call = runscOrThrow(config, ['restore', 'id'], { signal: AbortSignal.timeout(5000), logFile })
+
+	// Assert
+	await expect(call).rejects.toThrow('runsc restore exited with 1: creating container: cannot read spec')
+	expect(await readFile(logFile, 'utf8')).toBe('creating container: cannot read spec\n')
 })

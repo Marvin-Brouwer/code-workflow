@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { closeSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, rmSync } from 'node:fs'
 
 /** How to call runsc, and the flags every call shares. */
 export interface RunscConfig {
@@ -17,7 +17,8 @@ export interface RunscCall {
 	readonly input?: string
 	/**
 	 * Sends output to this file instead of returning it. `run --detach` and `restore --detach`
-	 * need it: the container keeps the stdio it was started with open.
+	 * need it: the container keeps the stdio it was started with open. Each call starts the file
+	 * afresh, because runsc as root leaves it unwritable for the engine's own user.
 	 */
 	readonly logFile?: string
 }
@@ -43,7 +44,7 @@ export function runsc(config: RunscConfig, args: readonly string[], call: RunscC
 	const flags = [`--root=${config.root}`, '--network=none', '--host-uds=open']
 	if (config.platform !== undefined) flags.push(`--platform=${config.platform}`)
 
-	const log = call.logFile === undefined ? undefined : openSync(call.logFile, 'a')
+	const log = call.logFile === undefined ? undefined : freshFile(call.logFile)
 	const child = spawn(program, [...prefix, ...flags, ...args], {
 		signal: call.signal,
 		stdio: [call.input === undefined ? 'ignore' : 'pipe', log ?? 'pipe', log ?? 'pipe'],
@@ -79,6 +80,12 @@ export function runsc(config: RunscConfig, args: readonly string[], call: RunscC
 			resolve({ exitCode: code ?? 1, stdout, stderr })
 		})
 	})
+}
+
+/** Replaces the file rather than opening it: removing only needs the directory to be writable. */
+function freshFile(file: string): number {
+	rmSync(file, { force: true })
+	return openSync(file, 'w')
 }
 
 /** How much of a log file an error carries. */
