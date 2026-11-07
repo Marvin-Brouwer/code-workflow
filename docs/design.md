@@ -433,8 +433,8 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     hostname rules only allow HTTPS through its TLS-intercepting proxy; the gateway itself should be
     an IP and port rule instead, which is unverified. E2B has allow/deny lists (proven for one host).
     Public package sources by hostname mean either interception or a gateway-side package proxy.
-12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) is untried; until it
-    is, Windows means WSL.
+12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) passes the conformance
+    suite on GitHub's hosted Windows runners in CI. Not yet tried on a developer machine.
 
 13. **Typed fields on `requestUserInput`**, like `input(question, fields)`, so an agent can ask for a
     choice or a value instead of free text. An idea, not decided.
