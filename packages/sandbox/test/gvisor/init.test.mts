@@ -7,7 +7,44 @@ import { initCommand, jobDirectory, jobFifo, jobScript, submitJobCommand } from 
 import { egressMountPoint } from '../../src/gvisor/layout.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
-const run = promisify(execFile)
+const execFileAsync = promisify(execFile)
+
+/** Runs a command on the host. A command that blocks on the FIFO fails after a few seconds. */
+function run(program: string, args: readonly string[]) {
+	return execFileAsync(program, args, { timeout: 5000 })
+}
+
+/** What a command that had to fail wrote to stderr. */
+async function stderrOf(running: Promise<unknown>): Promise<string> {
+	const error = await running.then(
+		() => undefined,
+		(caught: unknown) => caught,
+	)
+	if (!(error instanceof Error) || !('stderr' in error) || typeof error.stderr !== 'string') {
+		throw new Error('The command should have failed with output on stderr.')
+	}
+	return error.stderr
+}
+
+interface Submission {
+	readonly job: string
+	readonly fifo: string
+	readonly command: [string, string[]]
+}
+
+/** `submitJobCommand` for the host: a job in `directory`, and a FIFO there instead of the sandbox's. */
+async function submission(
+	directory: string,
+	options: Parameters<typeof submitJobCommand>[1],
+	{ fifo: withFifo = true } = {},
+): Promise<Submission> {
+	const job = path.join(directory, 'job.sh')
+	const fifo = path.join(directory, 'start')
+	await writeFile(job, 'true\n')
+	if (withFifo) await run('mkfifo', [fifo])
+	const [program, ...args] = submitJobCommand(job, options)
+	return { job, fifo, command: [program, args.map((arg) => (arg === jobFifo ? fifo : arg))] }
+}
 
 describe('jobScript', () => {
 	test('runs the command with its arguments, environment and directory untouched', async () => {
@@ -65,54 +102,54 @@ describe('initCommand', () => {
 	})
 })
 
-/** Runs `submitJobCommand` on the host, against a FIFO in `directory` instead of the sandbox's. */
-async function submit(directory: string, options: Parameters<typeof submitJobCommand>[1], fifo = true) {
-	const job = path.join(directory, 'job.sh')
-	await writeFile(job, 'true\n')
-	const [program, ...args] = submitJobCommand(job, options)
-	const fifoPath = path.join(directory, 'start')
-	if (fifo) await run('mkfifo', [fifoPath])
-	const reading = fifo ? readFile(fifoPath, 'utf8') : Promise.resolve('')
-	const submitting = run(
-		program,
-		args.map((arg) => (arg === jobFifo ? fifoPath : arg)),
-	)
-	return { job, submitting, reading }
-}
-
 describe('submitJobCommand', () => {
 	test('hands the job to init', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
+		const { job, fifo, command } = await submission(directory, { cwd: directory, logFile: path.join(directory, 'job.log') })
+		const reading = readFile(fifo, 'utf8')
 
 		// Act
-		const { job, submitting, reading } = await submit(directory, { cwd: directory, logFile: path.join(directory, 'job.log') })
+		await run(...command)
 
 		// Assert
-		await expect(submitting).resolves.toBeDefined()
 		expect(await reading).toBe(`${job}\n`)
 	})
 
 	test('fails, and removes the job, when its directory is missing', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
+		const { job, command } = await submission(directory, { cwd: path.join(directory, 'missing') })
 
 		// Act
-		const { job, submitting } = await submit(directory, { cwd: path.join(directory, 'missing') }, false)
+		const submitting = run(...command)
 
 		// Assert
-		await expect(submitting).rejects.toThrow()
+		expect(await stderrOf(submitting)).toContain(path.join(directory, 'missing'))
 		await expect(readFile(job, 'utf8')).rejects.toThrow('ENOENT')
 	})
 
 	test('fails when the log file cannot be written', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
+		const { command } = await submission(directory, { logFile: path.join(directory, 'missing', 'job.log') })
 
 		// Act
-		const { submitting } = await submit(directory, { logFile: path.join(directory, 'missing', 'job.log') }, false)
+		const submitting = run(...command)
 
 		// Assert
-		await expect(submitting).rejects.toThrow()
+		expect(await stderrOf(submitting)).toContain('job.log')
+	})
+
+	test('fails when init is not taking jobs', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const { command } = await submission(directory, {}, { fifo: false })
+
+		// Act
+		const submitting = run(...command)
+
+		// Assert
+		expect(await stderrOf(submitting)).toBe("The sandbox's init isn't taking jobs.\n")
 	})
 })

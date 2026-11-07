@@ -14,8 +14,8 @@ export const jobFifo = `${jobDirectory}/start`
  * Processes started with `runsc exec` don't survive a checkpoint, children of init do. So a
  * background process goes through init rather than through exec. A `service`, such as the egress
  * forwarder, is started first. Init holds the FIFO open for reading and writing, so `read` never
- * sees end of file and the loop never ends. Jobs don't get that descriptor, and `jobs` lets the
- * shell reap the ones that ended.
+ * sees end of file and the loop never ends. Jobs don't get that descriptor. Each time a job
+ * arrives, `jobs` lets the shell reap the ones that ended since.
  */
 export function initCommand(service: readonly string[] = []): string[] {
 	const script = [
@@ -51,9 +51,10 @@ export function jobScript(command: Command, options: Omit<StartInBackgroundOptio
  */
 export function submitJobCommand(job: string, options: Omit<StartInBackgroundOptions, 'signal'>): Command {
 	const script = [
-		`[ -p "$2" ] || { echo "The sandbox's init isn't taking jobs." >&2; rm -f -- "$1"; exit 1; }`,
-		'{ [ -z "$4" ] || cd -- "$4"; } && : >> "$3" || { rm -f -- "$1"; exit 1; }',
-		`printf '%s\\n' "$1" > "$2"`,
+		'job=$1 fifo=$2 log=$3 cwd=$4',
+		`[ -p "$fifo" ] || { echo "The sandbox's init isn't taking jobs." >&2; rm -f -- "$job"; exit 1; }`,
+		'{ [ -z "$cwd" ] || cd -- "$cwd"; } && : >> "$log" || { rm -f -- "$job"; exit 1; }',
+		`printf '%s\\n' "$job" > "$fifo"`,
 	].join('\n')
 	return ['sh', '-c', script, 'sh', job, jobFifo, options.logFile ?? '/dev/null', options.cwd ?? '']
 }

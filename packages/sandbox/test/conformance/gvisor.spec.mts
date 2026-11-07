@@ -3,8 +3,8 @@ import path from 'node:path'
 import { gvisorBackend } from '../../src/gvisor/gvisor.backend.mts'
 import { describeConformance } from './conformance.mts'
 
-// RUNSC="sudo $(command -v runsc)" when the tests don't run as root. MESH_FLOW_GVISOR_DIRECTORY keeps the
-// unpacked image between runs.
+// RUNSC="sudo $(command -v runsc)" when the tests don't run as root. MESH_FLOW_GVISOR_DIRECTORY
+// keeps the unpacked image between runs.
 describeConformance(
 	'gvisor',
 	() =>
