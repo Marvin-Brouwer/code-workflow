@@ -1,4 +1,4 @@
-import { Sandbox as MicrosandboxSdkSandbox, type SandboxHandle, type SnapshotHandle } from 'microsandbox'
+import { Sandbox as MicrosandboxSdkSandbox, Snapshot, type SandboxHandle, type SnapshotHandle } from 'microsandbox'
 import { snapshotsOf } from './snapshots.mts'
 
 /**
@@ -32,12 +32,13 @@ export async function removeSandboxAndSnapshots(id: string): Promise<void> {
 }
 
 /**
- * Removes through the handle: a bare name only resolves inside the sandbox's own group. Forcing
- * the removal of a parent also removes its children, so a snapshot that is already gone is fine.
+ * Removes by digest: a bare name only resolves inside the sandbox's own group, and the handles
+ * `Snapshot.list()` returns are read-only. Forcing the removal of a parent also removes its
+ * children, so a snapshot that is already gone is fine.
  */
 export async function removeSnapshot(snapshot: SnapshotHandle, options: { readonly force?: boolean } = {}): Promise<void> {
 	try {
-		await snapshot.remove(options)
+		await Snapshot.remove(snapshot.digest, options)
 	} catch (error) {
 		if (!isSnapshotNotFound(error)) throw error
 	}

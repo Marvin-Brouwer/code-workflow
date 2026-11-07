@@ -170,10 +170,14 @@ Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere, exce
 The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; `list`, `remove` and `close` leave nothing behind. It needs the backend on the machine, so it only runs when asked:
 
 ```bash
-MESH_FLOW_SANDBOX_TESTS=gvisor RUNSC='sudo runsc' pnpm --filter @mesh-flow/sandbox test
+MESH_FLOW_SANDBOX_TESTS=gvisor RUNSC="sudo $(command -v runsc)" pnpm --filter @mesh-flow/sandbox test
 MESH_FLOW_SANDBOX_TESTS=microsandbox pnpm --filter @mesh-flow/sandbox test
 MESH_FLOW_SANDBOX_TESTS=e2b E2B_API_KEY=... MESH_FLOW_E2B_TEMPLATE=... pnpm --filter @mesh-flow/sandbox test
 ```
+
+The full path to `runsc` matters where sudo has its own `PATH` (`secure_path`), as on NixOS.
+
+CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/workflows/sandbox.yml)): gVisor and microsandbox on Linux, microsandbox on Windows (allowed to fail until hosted runners are known to offer the Windows Hypervisor Platform), and E2B on both when the `E2B_API_KEY` secret is set.
 
 ## Known gaps
 
