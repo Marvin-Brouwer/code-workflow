@@ -176,13 +176,13 @@ MESH_FLOW_SANDBOX_TESTS=e2b E2B_API_KEY=... MESH_FLOW_E2B_TEMPLATE=... pnpm --fi
 
 The full path to `runsc` matters where sudo has its own `PATH` (`secure_path`), as on NixOS.
 
-CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/workflows/sandbox.yml)): gVisor and microsandbox on Linux, microsandbox on Windows (allowed to fail until hosted runners are known to offer the Windows Hypervisor Platform), and E2B on both when the `E2B_API_KEY` secret is set.
+CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/workflows/sandbox.yml)): gVisor and microsandbox on Linux, microsandbox on Windows, and E2B on both when the `E2B_API_KEY` secret is set.
 
 ## Known gaps
 
 - **The host to sandbox channel** for the workflow runtime and tool calls isn't here yet. It comes with the engine and the gateway ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)).
 - **Egress to the gateway** on microsandbox by IP rule instead of hostname is unverified ([open question 11](../../docs/design.md#open-questions)).
-- **microsandbox on native Windows** is untried ([open question 12](../../docs/design.md#open-questions)).
+- **microsandbox on native Windows** passes the conformance suite in CI, but is untried on a developer machine ([open question 12](../../docs/design.md#open-questions)).
 - **Running agent shell commands as a separate, unprivileged user** ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)) needs a `user` on `exec`. The backends can all do it, but what a user is differs per backend (a name on E2B and microsandbox, a uid for runsc), so it waits for the engine that decides it.
 - **DNS is a way out on E2B and microsandbox.** For hostname rules to work, both let the sandbox reach a DNS server whenever a host is allowed, and a DNS query can carry data out. gVisor resolves names on the host, so it doesn't have this gap.
 - **An aborted create on E2B** can still make a sandbox, when E2B received the request before the abort. It carries the mesh-flow metadata, so `list` finds it and reconciliation removes it.

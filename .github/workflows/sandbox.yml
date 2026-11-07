@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 # gVisor is Linux only. microsandbox needs a hypervisor: KVM on Linux, the Windows Hypervisor
-# Platform on Windows, where it reports without failing the build until it is known to pass there.
+# Platform on Windows, which the hosted runners offer.
 jobs:
   ubuntu:
     uses: ./.github/workflows/sandbox-track.yml
@@ -34,7 +34,7 @@ jobs:
       os: windows-latest
       backends: >-
         [
-          { "backend": "microsandbox", "experimental": true },
+          { "backend": "microsandbox", "experimental": false },
           { "backend": "e2b", "experimental": false }
         ]
     secrets:
