@@ -237,6 +237,8 @@ pick up deviations found earlier.
   snapshots the sandbox (every backend keeps memory and processes) and stops it. The answer resumes
   it, and the await resolves in the same stack. The snapshot also pins the code version per run.
 - **Design rule: no open connections across a wait.** Primitives open connections per call.
+  A pause drops open connections: an HTTP stream into an E2B sandbox ended within 0.4 s of the
+  pause ([e2b-pause](../pocs/e2b-pause/README.md#findings)).
 - **Design rule: the engine leaves nothing running when it exits.** On shutdown (a signal, a
   fatal error, a normal exit) the engine aborts its work, pauses every running sandbox to disk,
   flushes its own state and closes every backend process it started. A local backend never
