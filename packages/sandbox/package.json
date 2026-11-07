@@ -1,0 +1,77 @@
+{
+	"name": "@mesh-flow/sandbox",
+	"version": "0.0.0",
+	"description": "One interface over the sandboxes a mesh-flow run lives in: E2B, microsandbox and gVisor",
+	"keywords": [
+		"agents",
+		"e2b",
+		"gvisor",
+		"mesh-flow",
+		"microsandbox",
+		"microvm",
+		"sandbox"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/sandbox#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/sandbox"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/sandbox.mts",
+			"types": "./dist/sandbox.d.mts",
+			"import": "./dist/sandbox.mjs"
+		},
+		"./e2b": {
+			"source": "./src/_module/e2b.mts",
+			"types": "./dist/e2b.d.mts",
+			"import": "./dist/e2b.mjs"
+		},
+		"./microsandbox": {
+			"source": "./src/_module/microsandbox.mts",
+			"types": "./dist/microsandbox.d.mts",
+			"import": "./dist/microsandbox.mjs"
+		},
+		"./gvisor": {
+			"source": "./src/_module/gvisor.mts",
+			"types": "./dist/gvisor.d.mts",
+			"import": "./dist/gvisor.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"e2b": "^2.63.0",
+		"microsandbox": "0.7.13",
+		"shell-quote": "^1.12.0",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@types/node": "^22.20.5",
+		"@types/shell-quote": "^1.7.5",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

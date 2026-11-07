@@ -1,0 +1,32 @@
+name: sandbox
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+# gVisor is Linux only. microsandbox needs a hypervisor: KVM on Linux, the Windows Hypervisor
+# Platform on Windows, which the hosted runners offer.
+jobs:
+  ubuntu:
+    uses: ./.github/workflows/sandbox-track.yml
+    with:
+      os: ubuntu-latest
+      backends: '["gvisor", "microsandbox", "e2b"]'
+    secrets:
+      E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+
+  windows:
+    uses: ./.github/workflows/sandbox-track.yml
+    with:
+      os: windows-latest
+      backends: '["microsandbox", "e2b"]'
+    secrets:
+      E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
