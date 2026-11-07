@@ -3,7 +3,8 @@
 **Outcome: ✅ adopted for hosted (E2B Cloud); ❌ Embed not adopted as the local backend** (setup effort; see [decisions](../../docs/decisions.md#sandboxes)). On self-hosted E2B (Embed), in an Ubuntu
 WSL distro, in the [`windows/`](windows/) container on Docker Desktop, and in that container on
 NixOS on WSL, a paused sandbox kept its memory and processes: a pending `await` resolved in the
-same process and stack after 60 s paused, and again after an Embed restart. Embed can't use Docker
+same process and stack after 60 s paused, after an Embed restart, and after 16 hours paused
+with a host (WSL) shutdown in between. Embed can't use Docker
 Desktop or NixOS as its host directly; the `windows/` container gives it one. See
 [Findings](#findings).
 
@@ -235,6 +236,7 @@ the container.
 | Pending `await` resolves after resume, same PID, memory and stack | ✅ PID 1518 → 1518, token and 236 MB checksum unchanged, `input`/`loop`/`workflow` frames intact, after 64 s waiting |
 | No CPU or RAM on the host while paused | ✅ firecracker processes 1 → 0 |
 | Survives a restart of the E2B service | ✅ `pause`, `docker compose restart`, `resume`: same PID, memory and stack, after 34 s waiting |
+| Survives a long pause and a host reboot | ✅ NixOS on WSL: paused 16 h 15 min, Embed stopped, `wsl --shutdown`, started again, `resume`: same PID, memory and stack (2026-11-07) |
 | Runs on a machine used for development | ✅ in an Ubuntu WSL distro, and on Docker Desktop through the `windows/` container (not on Docker Desktop directly); and on NixOS on WSL through that container, see [Prerequisites](#prerequisites-per-setup) |
 | Egress limited to an allowlist (should) | ✅ `registry.npmjs.org` → 200, `example.com` blocked |
 | Same script against E2B cloud (should) | not run |
@@ -247,7 +249,7 @@ Measured:
 | Pause (236 MB in use, 473 MB VM) | 113 ms |
 | Resume | 238 ms; 660 ms after an Embed restart |
 | `windows/` container | create 373 ms, pause 91 ms, resume 212 ms; 649 ms after a container restart (Embed back up in 69 s) |
-| NixOS on WSL (`windows/` container) | create 204 ms, pause 94 ms, resume 128 ms; 334 ms after a container restart (Embed back up in 77 s); firecracker processes 1 → 0 while paused |
+| NixOS on WSL (`windows/` container) | create 204 ms, pause 94 ms, resume 128 ms; 334 ms after a container restart (Embed back up in 77 s); 463 ms after 16 h paused and a WSL shutdown; firecracker processes 1 → 0 while paused |
 | Snapshot size | not separated per sandbox; Embed's storage on NixOS was 2.8 GB in `/var/lib/e2b` (templates, build cache and the snapshots of the runs so far) and 11 MB in `/orchestrator` |
 
 Observations that matter for the engine:
@@ -271,12 +273,12 @@ Observations that matter for the engine:
 - **Pause is much faster than the docs' estimate** of about 4 s per GiB: 113 ms for a 473 MB VM.
   Pause may return before the snapshot is fully written; the restart test shows it was complete
   34 s later.
-- **Open stream across a pause: not observed yet.** The first run used the SDK's default domain
-  (`8080-<id>.e2b.app`) instead of Embed's proxy. The NixOS run connected through the proxy
-  (`localhost:3002`) and the stream later ended with `terminated`, but it reported 0 lines because
-  the host script counted newlines in undecoded bytes; that's fixed, and the report now records
-  when the stream ended relative to the pause and resume. The "no open connections across a wait"
-  rule stays a design rule until a rerun shows what happens.
+- **An open stream doesn't survive a pause.** A `GET /ticks` stream through Embed's proxy
+  (`localhost:3002`) received 2 lines before the pause and 1 more, then ended with `terminated`
+  364 ms after the pause started, a minute before the resume. Embed's proxy drops the connection
+  when the sandbox pauses; it isn't held and continued. So "no open connections across a wait"
+  is required, not just a design preference: anything that waits durably has to reconnect after
+  resume or not hold a connection at all.
 - **Default template:** Node 20.9.0 and 473 MB RAM. The engine's sandbox template needs its own
   Node version and memory size.
 
@@ -290,5 +292,4 @@ while paused" was measured there: 1 process before, 0 while paused. Its RSS read
 because the guest's memory lives in hugepages, which `ps` doesn't count; the process count is the
 evidence.
 
-Not done: the E2B cloud comparison, the snapshot size, and a longer pause (hours or
-days).
+Not done: the E2B cloud comparison and a per-sandbox snapshot size.
