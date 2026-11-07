@@ -12,6 +12,7 @@ import { startInBackground } from '../../src/start-in-background.mts'
 const stub = guestScript('stub.mts')
 const probe = guestScript('probe.mts')
 const stateDir = '/var/tmp/conformance'
+const stubLog = '/var/tmp/stub.log'
 
 /** A script from `guest/`, transpiled to JavaScript for the image's own Node. */
 function guestScript(name: string): string {
@@ -45,6 +46,13 @@ async function pollJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string)
 	}
 }
 
+/** What a failure needs to tell: whether the stub still runs, what it wrote, and the state files. */
+async function stubState(sandbox: Sandbox, pid: number): Promise<string> {
+	const script = `head -n 3 /proc/${String(pid)}/status 2>&1; echo '--- log'; cat ${stubLog} 2>&1; echo '--- files'; ls -la ${stateDir} 2>&1`
+	const result = await sandbox.exec(['sh', '-c', script], { signal: timeout() }).catch((error: unknown) => ({ stdout: String(error) }))
+	return result.stdout
+}
+
 /**
  * The checks every backend has to pass, from the pause POCs: a pending await survives a pause
  * in the same process, memory and stack; egress reaches the allowlist only; list, remove and
@@ -67,14 +75,20 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const sandbox = await backend.create(spec, timeout())
 			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
-			await startInBackground(sandbox, ['node', '/var/tmp/stub.mjs'], { signal: timeout(), env: { STATE_DIR: stateDir } })
+			await startInBackground(sandbox, ['node', '/var/tmp/stub.mjs'], {
+				signal: timeout(),
+				env: { STATE_DIR: stateDir },
+				logFile: stubLog,
+			})
 			const waiting = await pollJson(Waiting, sandbox, `${stateDir}/waiting.json`)
 
 			// Act
 			const paused = await sandbox.pause(timeout(120))
 			const resumed = await backend.resume(paused, timeout(120))
 			await resumed.writeFile(`${stateDir}/answer.json`, JSON.stringify({ approved: true }), timeout())
-			const done = await pollJson(Done, resumed, `${stateDir}/done.json`)
+			const done = await pollJson(Done, resumed, `${stateDir}/done.json`).catch(async (error: unknown) => {
+				throw new Error(`The stub didn't finish. ${await stubState(resumed, waiting.pid)}`, { cause: error })
+			})
 
 			// Assert
 			expect(done).toMatchObject({ pid: waiting.pid, token: waiting.token, checksum: waiting.checksum, answer: { approved: true } })
