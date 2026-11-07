@@ -1,9 +1,9 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { RuntimeMailbox } from '../src/mailbox/runtime-mailbox.mts'
 import { SandboxChannel } from '../src/mailbox/sandbox-channel.mts'
-import { hostBackend } from './support/host-backend.mts'
+import { hostBackend, isAlive } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const signal = new AbortController().signal
@@ -101,6 +101,21 @@ describe.skipIf(process.platform !== 'linux')('SandboxChannel', () => {
 
 		// Assert
 		await expect(polling).rejects.toThrow()
+	})
+
+	test('ends a poll still running in the sandbox, so nothing an exec started is left for a pause', async () => {
+		// Arrange
+		const { channel, mailbox } = await channelOnHost()
+		void channel.poll(0, signal).catch(() => undefined)
+		const polls = path.join(mailbox, 'polls')
+		const pid = await vi.waitFor(async () => Number(await readFile(path.join(polls, (await readdir(polls))[0] ?? ''), 'utf8')))
+
+		// Act
+		await channel.stopPolls(signal)
+
+		// Assert
+		expect(isAlive(pid)).toBe(false)
+		expect(await readdir(polls)).toEqual([])
 	})
 
 	test('puts an answer where the runtime picks it up', async () => {

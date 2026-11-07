@@ -228,12 +228,12 @@ export class Engine {
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
-		await Promise.allSettled(active.map(([id, run]) => this.#pauseOnClose(id, run.sandbox, pause)))
+		await Promise.allSettled(active.map(([id, run]) => this.#pauseOnClose(id, run, pause)))
 		await settleWithin(this.#store.flush(), close)
 		await untilAborted(this.#backend.close(close), close)
 	}
 
-	async #pauseOnClose(id: RunId, sandbox: Sandbox | undefined, signal: AbortSignal): Promise<void> {
+	async #pauseOnClose(id: RunId, { sandbox, channel }: ActiveRun, signal: AbortSignal): Promise<void> {
 		const record = this.get(id)
 		if (finishedStatuses.has(record.status)) return
 		if (!sandbox || record.status !== 'running') {
@@ -241,6 +241,7 @@ export class Engine {
 			return
 		}
 		try {
+			await untilAborted(channel?.stopPolls(signal) ?? Promise.resolve(), signal)
 			const paused = await untilAborted(sandbox.pause(signal), signal)
 			await this.#update(id, { status: 'paused', paused })
 		} catch (error) {

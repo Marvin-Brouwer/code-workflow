@@ -2,7 +2,7 @@ import type { Command, Sandbox } from '@mesh-flow/sandbox'
 import type { Answer } from '../protocol/runtime-message.mts'
 import { RuntimeMessage } from '../protocol/runtime-message.mts'
 import { MailboxLayout, mailboxEnvironmentVariable } from './mailbox-layout.mts'
-import { pollScript, runtimeGoneExitCode } from './poll-script.mts'
+import { pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */
 export type Delivery =
@@ -55,13 +55,22 @@ export class SandboxChannel {
 	 */
 	async poll(cursor: number, signal: AbortSignal): Promise<Delivery> {
 		const tries = String(pollSeconds * 4)
-		const command: Command = ['sh', '-c', pollScript, 'sh', this.#layout.outbox, this.#layout.pidFile, String(cursor), tries]
+		const { outbox, pidFile, polls } = this.#layout
+		const command: Command = ['sh', '-c', pollScript, 'sh', outbox, pidFile, String(cursor), tries, polls]
 		const result = await this.#sandbox.exec(command, { signal })
 		if (result.exitCode === runtimeGoneExitCode) return { kind: 'gone' }
 		if (result.exitCode !== 0) throw new Error(`Reading the runtime's outbox failed (${String(result.exitCode)}): ${result.stderr.trim()}`)
 		const lines = result.stdout.split('\n').slice(0, -1)
 		const messages = lines.map((line, index) => parseLine(line, cursor + index + 1))
 		return { kind: 'messages', messages, cursor: cursor + lines.length }
+	}
+
+	/**
+	 * Ends every poll still running in the sandbox, so nothing an exec started is left in it.
+	 * Call it after aborting the poll and before pausing the sandbox.
+	 */
+	async stopPolls(signal: AbortSignal): Promise<void> {
+		await this.#run(['sh', '-c', stopPollsScript, 'sh', this.#layout.polls], signal)
 	}
 
 	async answer(requestId: string, answer: Answer, signal: AbortSignal): Promise<void> {

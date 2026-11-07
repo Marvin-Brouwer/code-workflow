@@ -25,6 +25,11 @@ export class MailboxLayout {
 		return path.posix.join(this.inbox, `${requestId}.json`)
 	}
 
+	/** Where each running poll keeps its pid. */
+	get polls(): string {
+		return path.posix.join(this.directory, 'polls')
+	}
+
 	get pidFile(): string {
 		return path.posix.join(this.directory, 'runtime.pid')
 	}
