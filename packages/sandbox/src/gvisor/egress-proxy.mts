@@ -63,6 +63,7 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
 		server.listen(options.socketPath, resolve)
 	})
 	if (options.signal.aborted) {
+		// The socket file stays, which is fine: the next start removes it first.
 		server.close()
 		options.signal.throwIfAborted()
 	}

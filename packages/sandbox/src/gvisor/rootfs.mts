@@ -80,7 +80,7 @@ export async function prepareRootfs(images: string, image: string, signal: Abort
 	const archive = `${partial}.tar`
 	try {
 		await mkdir(partial, { recursive: true })
-		const { repository: name, reference } = parseImage(image)
+		const { name, reference } = parseImage(image)
 		const repository = await openRepository(name, signal)
 		const manifest = await platformManifest(repository, reference, signal)
 		for (const layer of manifest.layers) {

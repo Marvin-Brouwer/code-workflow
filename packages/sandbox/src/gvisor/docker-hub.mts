@@ -35,7 +35,7 @@ export interface Repository {
  * `node:22-slim` → `library/node` and `22-slim`; `node@sha256:…` → `library/node` and the digest.
  * Docker Hub only: a reference that names another registry is refused.
  */
-export function parseImage(image: string): { repository: string; reference: string } {
+export function parseImage(image: string): { name: string; reference: string } {
 	const [nameAndTag = image, digest] = image.split('@')
 	const colon = nameAndTag.lastIndexOf(':')
 	const hasTag = colon > nameAndTag.lastIndexOf('/')
@@ -45,7 +45,7 @@ export function parseImage(image: string): { repository: string; reference: stri
 		throw new Error(`Only Docker Hub images are supported on gVisor, not ${image}.`)
 	}
 	return {
-		repository: rest.length > 0 ? name : `library/${name}`,
+		name: rest.length > 0 ? name : `library/${name}`,
 		reference: digest ?? (hasTag ? nameAndTag.slice(colon + 1) : 'latest'),
 	}
 }
