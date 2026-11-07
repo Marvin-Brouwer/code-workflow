@@ -1,6 +1,7 @@
 # Plan: MVP build
 
-Status: plan, nothing built yet. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+Status: in progress. Package 1, [`@mesh-flow/sandbox`](../../packages/sandbox/README.md), is built;
+its conformance suite still has to run on real backends. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
@@ -168,8 +169,12 @@ against one repository at a time. `inDependencyOrder` runs sequentially until ro
   mid-run, starts it again and checks that no sandbox or backend process is left behind.
 - **Idempotent creates.** Primitives that create things reuse what's already there.
 - **No credentials in the sandbox,** and no `.env` files for user settings.
-- **Tests** live next to the package (`test/`). The test runner is picked when the first package is
-  set up.
+- **Tests** live next to the package (`test/`) and run on [vitest](https://vitest.dev):
+  `*.test.ts` for unit tests, `*.spec.ts` for functional ones, each body as arrange, act, assert.
+  Tests that need something real on the machine (a sandbox backend, a service) are opt-in by
+  environment variable, so `pnpm test` runs anywhere.
+- **Build.** [tsdown](https://tsdown.dev) (on rolldown) to ESM with declarations, one entry per
+  public subpath.
 
 ## Done when
 

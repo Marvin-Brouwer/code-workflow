@@ -20,7 +20,11 @@
         "**/node_modules/",
         "**/dist/",
         "examples/",
-        "packages/"
+        "packages/connector-atlassian/",
+        "packages/connector-gitlab/",
+        "packages/core/",
+        "packages/preset-development/",
+        "packages/toolchain-dotnet/"
     ],
     "overrides": [
         {

@@ -4,6 +4,14 @@ Deterministic development pipelines
 Workflows are plain TypeScript in git that dispatch to AI agents where that makes sense. Start
 with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 
+## Packages
+
+| Package | What |
+|---|---|
+| [`@mesh-flow/sandbox`](packages/sandbox/README.md) | the sandbox a run lives in: E2B, microsandbox and gVisor behind one interface |
+
+The rest of `packages/` are sketches of the authoring vocabulary, not built yet. The build order is in [`docs/plans/mvp-build.md`](docs/plans/mvp-build.md).
+
 ## Validation POCs
 
 | POC | Outcome |
@@ -16,6 +24,7 @@ with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 
 ```bash
 pnpm install
-pnpm lint && pnpm typecheck
+pnpm lint && pnpm typecheck && pnpm test
+pnpm build
 pnpm poc:loop-typing
 ```

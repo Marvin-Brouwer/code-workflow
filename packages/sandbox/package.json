@@ -1,0 +1,57 @@
+{
+    "name": "@mesh-flow/sandbox",
+    "version": "0.0.0",
+    "description": "One interface over the sandboxes a mesh-flow run lives in: E2B, microsandbox and gVisor",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+        "directory": "packages/sandbox"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "sideEffects": false,
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        },
+        "./e2b": {
+            "types": "./dist/e2b.d.mts",
+            "import": "./dist/e2b.mjs"
+        },
+        "./microsandbox": {
+            "types": "./dist/microsandbox.d.mts",
+            "import": "./dist/microsandbox.mjs"
+        },
+        "./gvisor": {
+            "types": "./dist/gvisor.d.mts",
+            "import": "./dist/gvisor.mjs"
+        }
+    },
+    "scripts": {
+        "build": "tsdown",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "e2b": "^2.63.0",
+        "microsandbox": "0.7.13",
+        "shell-quote": "^1.12.0",
+        "zod": "^4.6.7"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "@types/shell-quote": "^1.7.5",
+        "tsdown": "^0.23.4",
+        "typescript": "~6.0.3",
+        "vitest": "^5.1.0"
+    }
+}
