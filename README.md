@@ -24,7 +24,7 @@ The rest of `packages/` are sketches of the authoring vocabulary, not built yet.
 
 ```bash
 pnpm install
-pnpm lint && pnpm typecheck && pnpm test
+pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
 pnpm build
 pnpm poc:loop-typing
 ```

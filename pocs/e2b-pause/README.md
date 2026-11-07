@@ -201,7 +201,7 @@ Embed's snapshot storage to also record the snapshot size.
   the sandbox's RAM, at most 500 MB), and writes its PID, a random token, the buffer's checksum and
   its stack to `waiting.json`. Then it polls for `answer.json`. No connection is open while it
   waits, as the design's rule says.
-- [`src/host.ts`](src/host.ts) creates the sandbox, starts the stub, pauses, resumes with
+- [`src/host.mts`](src/host.mts) creates the sandbox, starts the stub, pauses, resumes with
   `Sandbox.connect`, writes the answer and reads `done.json`.
 - **Success checks:** the stub's PID is still alive after resume; the await resolves; same PID,
   token and checksum; `input`, `async loop` and `async workflow` frames in the stack taken after

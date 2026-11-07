@@ -1,25 +1,28 @@
 {
-    "name": "@mesh-flow/repository",
-    "private": true,
-    "type": "module",
-    "engines": {
-        "node": ">=22",
-        "pnpm": ">=10"
-    },
-    "scripts": {
-        "poc:loop-typing": "pnpm --filter @pocs/loop-typing check",
-        "poc:e2b-pause": "pnpm --filter @pocs/e2b-pause start",
-        "poc:microsandbox-pause": "pnpm --filter @pocs/microsandbox-pause start",
-        "poc:gvisor-pause": "pnpm --filter @pocs/gvisor-pause start",
-        "poc:sandbox-pause": "pnpm --filter @pocs/sandbox-pause start",
-        "build": "pnpm -r build",
-        "test": "pnpm -r test",
-        "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives",
-        "typecheck": "pnpm -r typecheck"
-    },
-    "devDependencies": {
-        "oxlint": "1.91.0",
-        "oxlint-tsgolint": "7.0.2006",
-        "typescript": "~6.0.3"
-    }
+	"name": "@mesh-flow/repository",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"poc:loop-typing": "pnpm --filter @pocs/loop-typing check",
+		"poc:e2b-pause": "pnpm --filter @pocs/e2b-pause start",
+		"poc:microsandbox-pause": "pnpm --filter @pocs/microsandbox-pause start",
+		"poc:gvisor-pause": "pnpm --filter @pocs/gvisor-pause start",
+		"poc:sandbox-pause": "pnpm --filter @pocs/sandbox-pause start",
+		"build": "pnpm -r build",
+		"test": "pnpm -r test",
+		"format": "oxfmt",
+		"format:check": "oxfmt --check",
+		"lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives",
+		"typecheck": "pnpm -r typecheck"
+	},
+	"devDependencies": {
+		"oxfmt": "0.77.0",
+		"oxlint": "1.91.0",
+		"oxlint-tsgolint": "7.0.2006",
+		"typescript": "~6.0.3"
+	},
+	"engines": {
+		"node": ">=22",
+		"pnpm": ">=10"
+	}
 }

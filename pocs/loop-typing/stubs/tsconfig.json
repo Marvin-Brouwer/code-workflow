@@ -1,5 +1,5 @@
 {
-    // The stubs type-check with the sketches, under bundler resolution; this makes the linter
-    // pick up that project for them.
-    "extends": "../tsconfig.sketches.json"
+	// The stubs type-check with the sketches, under bundler resolution; this makes the linter
+	// pick up that project for them.
+	"extends": "../tsconfig.sketches.json"
 }

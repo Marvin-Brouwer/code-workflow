@@ -74,7 +74,7 @@ On start, reconcile: `list` returns every mesh-flow sandbox the backend holds, a
 pnpm --filter @mesh-flow/sandbox test
 ```
 
-Unit tests (`*.test.ts`) and functional tests (`*.spec.ts`) run anywhere. The gVisor backend runs against a fake `runsc` there, including the check that `close` finishes while a command never does.
+Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere. The gVisor backend runs against a fake `runsc` there, including the check that `close` finishes while a command never does.
 
 The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; `list`, `remove` and `close` leave nothing behind. It needs the backend on the machine, so it only runs when asked:
 

@@ -16,7 +16,7 @@ Running it needs `/dev/kvm`, so it runs on a developer machine, not in a cloud C
   requirements and whether pause is supported there. Then check `/dev/kvm` on NixOS under WSL2
   with nested virtualization. If that doesn't work, the fallback is a separate Linux box, and the
   README names which one was used.
-- **Host script** (`pocs/e2b-pause/src/host.ts`, E2B SDK): creates a sandbox, uploads the stub
+- **Host script** (`pocs/e2b-pause/src/host.mts`, E2B SDK): creates a sandbox, uploads the stub
   and starts it, waits for it to report "waiting", then pauses, resumes, delivers the answer and
   checks the result.
 - **Sandbox stub** (`src/stub.ts`): a fake workflow with a real async stack,

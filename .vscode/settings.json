@@ -1,15 +1,17 @@
 {
-    "workbench.colorCustomizations": {
-        "activityBar.background": "#0f2c33",
-        "titleBar.activeBackground": "#163c48",
-        "titleBar.activeForeground": "#F5FCFA",
-        "titleBar.inactiveBackground": "#0f2c33",
-        "titleBar.inactiveForeground": "#F5FCFA",
-        "statusBar.background": "#0f2c33",
-        "statusBar.foreground": "#F5FCFA",
-        "statusBar.debuggingBackground": "#0f2c33",
-        "statusBar.debuggingForeground": "#F5FCFA",
-        "statusBar.noFolderBackground": "#0f2c33",
-        "statusBar.noFolderForeground": "#F5FCFA"
-    }
+	"workbench.colorCustomizations": {
+		"activityBar.background": "#0f2c33",
+		"titleBar.activeBackground": "#163c48",
+		"titleBar.activeForeground": "#F5FCFA",
+		"titleBar.inactiveBackground": "#0f2c33",
+		"titleBar.inactiveForeground": "#F5FCFA",
+		"statusBar.background": "#0f2c33",
+		"statusBar.foreground": "#F5FCFA",
+		"statusBar.debuggingBackground": "#0f2c33",
+		"statusBar.debuggingForeground": "#F5FCFA",
+		"statusBar.noFolderBackground": "#0f2c33",
+		"statusBar.noFolderForeground": "#F5FCFA"
+	},
+	"editor.defaultFormatter": "oxc.oxc-vscode",
+	"editor.formatOnSave": true
 }
