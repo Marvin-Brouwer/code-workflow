@@ -5,7 +5,7 @@ import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
 import { snapshotName, snapshotsOf } from './snapshots.mts'
-import { removeSandbox, removeSandboxAndSnapshots } from './vms.mts'
+import { removeSandbox, removeSandboxAndSnapshots, removeSnapshot } from './vms.mts'
 
 /**
  * A running microVM. Its microsandbox name is the sandbox id.
@@ -89,7 +89,7 @@ export class MicrosandboxSandbox implements Sandbox {
  */
 async function removeEarlierSnapshots(id: string, keep: string): Promise<void> {
 	for (const snapshot of await snapshotsOf(id)) {
-		if (snapshot.reference === keep || snapshot.name === null) continue
-		await Snapshot.remove(snapshot.name).catch(() => undefined)
+		if (snapshot.reference === keep) continue
+		await removeSnapshot(snapshot).catch(() => undefined)
 	}
 }

@@ -38,7 +38,7 @@ async function input(): Promise<{ answer: unknown; stack: string | undefined }> 
 }
 
 async function loop(): ReturnType<typeof input> {
-	return input()
+	return await input()
 }
 
 async function workflow(): Promise<void> {

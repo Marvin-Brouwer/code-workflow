@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { closeSync, openSync } from 'node:fs'
+import { closeSync, openSync, readFileSync } from 'node:fs'
 
 /** How to call runsc, and the flags every call shares. */
 export interface RunscConfig {
@@ -81,9 +81,24 @@ export function runsc(config: RunscConfig, args: readonly string[], call: RunscC
 	})
 }
 
-/** Like {@link runsc}, but a non-zero exit code is an error that carries runsc's stderr. */
+/** How much of a log file an error carries. */
+const logTailLines = 20
+
+/**
+ * Like {@link runsc}, but a non-zero exit code is an error that carries runsc's stderr, or the end
+ * of the log file when the call wrote its output there.
+ */
 export async function runscOrThrow(config: RunscConfig, args: readonly string[], call: RunscCall): Promise<string> {
 	const result = await runsc(config, args, call)
-	if (result.exitCode !== 0) throw new Error(`runsc ${args[0] ?? ''} exited with ${String(result.exitCode)}: ${result.stderr.trim()}`)
-	return result.stdout
+	if (result.exitCode === 0) return result.stdout
+	const output = call.logFile === undefined ? result.stderr : tailOf(call.logFile)
+	throw new Error(`runsc ${args[0] ?? ''} exited with ${String(result.exitCode)}: ${output.trim()}`)
+}
+
+function tailOf(file: string): string {
+	try {
+		return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-logTailLines).join('\n')
+	} catch {
+		return `(no output in ${file})`
+	}
 }
