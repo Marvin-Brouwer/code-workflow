@@ -1,7 +1,7 @@
 import { request } from 'node:http'
 import { RuntimeEvent } from '@mesh-flow/protocol'
-import { hasErrorCode } from '../error-code.mts'
 import { z } from 'zod'
+import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
 
 /** Thrown when the engine refused a request or isn't running. */

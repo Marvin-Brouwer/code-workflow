@@ -14,11 +14,6 @@ const answerPollMs = 250
  *
  * Node built-ins only: this runs in the sandbox next to the workflow.
  */
-/** The engine writes `{ value }`, or `{}` for a wake. */
-function toAnswer(parsed: unknown): Answer {
-	return typeof parsed === 'object' && parsed !== null && 'value' in parsed ? { value: parsed.value } : {}
-}
-
 export class RuntimeMailbox {
 	readonly #layout: MailboxLayout
 
@@ -56,6 +51,12 @@ export class RuntimeMailbox {
 	}
 }
 
+/** The engine writes `{ value }`, or `{}` for a wake. */
+function toAnswer(parsed: unknown): Answer {
+	return typeof parsed === 'object' && parsed !== null && 'value' in parsed ? { value: parsed.value } : {}
+}
+
+/** Kept here rather than shared with the engine, because this file may only use Node built-ins. */
 function isMissing(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }

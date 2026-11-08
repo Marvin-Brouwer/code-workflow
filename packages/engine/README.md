@@ -77,10 +77,6 @@ await engine.close({ pause: AbortSignal.timeout(30_000), close: AbortSignal.time
 
 `Engine.open` reconciles before it returns. `close` is what `serve` calls on Ctrl+C. `serveEngine` and `handleShutdown` are the rest of `serve`, for a process of your own.
 
-### The runtime's side
-
-Inside the sandbox, the workflow runtime talks to the engine through a mailbox. Its side of it, and the messages both sides send, are in [`@mesh-flow/protocol`](../protocol/README.md).
-
 ## How it works
 
 ### The mailbox

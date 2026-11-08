@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { main } from '../src/cli/main.mts'
 import { ControlClient } from '../src/control/control-client.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
@@ -12,8 +12,9 @@ const signal = new AbortController().signal
 async function serve() {
 	const home = await temporaryDirectory()
 	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	onTestFinished(() => served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) }))
 	const client = new ControlClient(served.socketPath)
-	return { served, client, home }
+	return { client, home }
 }
 
 const ask = runtimeScript(`
@@ -26,7 +27,7 @@ mailbox.send({ type: 'succeeded' })
 describe.skipIf(process.platform !== 'linux')('the control API', () => {
 	test('starts a run, answers its request and shows its events', async () => {
 		// Arrange
-		const { served, client } = await serve()
+		const { client } = await serve()
 		const directory = await workflowRepository({ ask })
 
 		// Act
@@ -42,7 +43,6 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		// Assert
 		expect(await client.list(signal)).toEqual([expect.objectContaining({ id: started.id, workflow: 'ask' })])
 		expect(await client.events(started.id, signal)).toEqual([expect.objectContaining({ type: 'input-answered', value: 'ABC-1' })])
-		await served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
 	})
 
 	test.each([
@@ -51,14 +51,13 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		['resuming a run that is not paused', (client: ControlClient) => client.act('run-000000000000', 'resume', signal), 404],
 	])('refuses %s with the right status', async (_name, call, status) => {
 		// Arrange
-		const { served, client } = await serve()
+		const { client } = await serve()
 
 		// Act
 		const calling = call(client)
 
 		// Assert
 		await expect(calling).rejects.toMatchObject({ status })
-		await served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
 	})
 })
 

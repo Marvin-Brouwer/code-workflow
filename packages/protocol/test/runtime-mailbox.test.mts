@@ -51,15 +51,13 @@ describe('RuntimeMailbox', () => {
 	})
 
 	test('refuses to start outside the engine', () => {
+		// Arrange
+		const environment = {}
+
 		// Act
-		let error: unknown
-		try {
-			RuntimeMailbox.fromEnvironment({})
-		} catch (thrown) {
-			error = thrown
-		}
+		const starting = () => RuntimeMailbox.fromEnvironment(environment)
 
 		// Assert
-		expect(String(error)).toContain('MESH_FLOW_MAILBOX')
+		expect(starting).toThrow('MESH_FLOW_MAILBOX')
 	})
 })

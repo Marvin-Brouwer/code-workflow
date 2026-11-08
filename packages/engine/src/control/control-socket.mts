@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import { connect, type Server } from 'node:net'
 import path from 'node:path'
-import { hasErrorCode } from '../error-code.mts'
+import { hasErrorCode } from '../errors.mts'
 
 /**
  * Where the engine for a home directory listens: a Unix socket in it, or a named pipe on Windows.

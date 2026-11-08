@@ -95,6 +95,12 @@ for (const held of await backend.list(signal)) {
 }
 ```
 
+`abortable` bounds work that takes no signal, or may ignore it, by a signal of yours. The work keeps going, but the caller moves on when the signal aborts:
+
+```ts
+await abortable(sandbox.pause(deadline), deadline)
+```
+
 ## Setting up E2B
 
 The E2B backend needs two things: an API key and a template for each image a spec names.

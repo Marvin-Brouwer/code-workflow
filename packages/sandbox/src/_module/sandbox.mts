@@ -4,6 +4,7 @@
  *
  * @module
  */
+export { abortable } from '../abortable.mts'
 export { assertPausedBy, BackendMismatchError } from '../backend-mismatch-error.mts'
 export { BackendName } from '../backend-name.mts'
 export { chooseBackend, type BackendChoice, type ChooseBackendOptions } from '../choose-backend.mts'

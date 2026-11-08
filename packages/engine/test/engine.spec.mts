@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { RunStore } from '../src/runs/run-store.mts'
@@ -16,6 +16,7 @@ async function openEngine(home?: string) {
 	const store = new RunStore(path.join(directory, 'runs'))
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, layout: hostSandboxLayout, log }, signal)
+	onTestFinished(() => engine.close(deadlines()))
 	return { engine, backend, store, log, home: directory }
 }
 
@@ -65,7 +66,6 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		expect((await engine.events(started.id)).map((event) => event.type)).toEqual(['workflow-started', 'log'])
 		expect(finished.sandbox).toBeUndefined()
 		expect(await backend.list(signal)).toEqual([])
-		await engine.close(deadlines())
 	})
 
 	test('relays an input request and its answer', async () => {
@@ -82,7 +82,6 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Assert
 		const events = await engine.events(id)
 		expect(events).toEqual([expect.objectContaining({ type: 'input-answered', value: { key: 'ABC-1' } })])
-		await engine.close(deadlines())
 	})
 
 	test('refuses an answer to a request the run does not wait for', async () => {
@@ -97,7 +96,6 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 		// Assert
 		await expect(answering).rejects.toMatchObject({ code: 'not-found' })
-		await engine.close(deadlines())
 	})
 
 	test('answers a wake request on its own clock', async () => {
@@ -119,7 +117,6 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect(await engine.events(id)).toEqual([expect.objectContaining({ type: 'woke', early: false })])
-		await engine.close(deadlines())
 	})
 
 	test('fails a run whose runtime reports a failure', async () => {
@@ -136,7 +133,6 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		expect(failed.error).toBe('The plan was rejected.')
 		expect(await backend.list(signal)).toEqual([])
-		await engine.close(deadlines())
 	})
 
 	test('fails a run whose runtime exits without an outcome, with the end of its log', async () => {
@@ -151,7 +147,6 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		expect(failed.error).toContain('exited without saying how the run ended')
 		expect(failed.error).toContain('out of cheese')
-		await engine.close(deadlines())
 	})
 
 	test('fails a run whose setup fails, before the runtime starts', async () => {
@@ -221,7 +216,6 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		expect(resumed.pending).toEqual([expect.objectContaining({ id: 'story' })])
 		expect(await second.engine.events(id)).toEqual([expect.objectContaining({ value: 'after the restart' })])
-		await second.engine.close(deadlines())
 	})
 
 	test('restarts a stopped run from the top, with the code it first ran', async () => {
@@ -240,6 +234,5 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect((await engine.events(id)).map((event) => event.type)).toEqual(['run-restarted', 'input-answered'])
-		await engine.close(deadlines())
 	})
 })

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { ControlClient } from '../src/control/control-client.mts'
 import { controlSocketPath } from '../src/control/control-socket.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
@@ -16,6 +16,13 @@ mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question:
 await mailbox.answer('story', signal)
 mailbox.send({ type: 'succeeded' })
 `)
+
+/** Serves an engine on the host backend in this process, closed when the test ends. */
+async function serveHere(home: string) {
+	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	onTestFinished(() => served.close(deadlines()))
+	return served
+}
 
 /** Starts a run in an engine process and waits until it asks for input. Returns the runtime's pid. */
 async function startWaitingRun(home: string) {
@@ -46,7 +53,7 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		const leftBehind = isAlive(run.runtime)
 
 		// Act
-		const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+		const served = await serveHere(home)
 
 		// Assert
 		expect(leftBehind).toBe(true)
@@ -54,7 +61,6 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		await vi.waitFor(() => {
 			expect(isAlive(run.runtime)).toBe(false)
 		})
-		await served.close(deadlines())
 	})
 
 	test('pauses the running sandboxes on SIGINT, and resumes them after a restart', async () => {
@@ -66,7 +72,7 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		// Act
 		engine.kill('SIGINT')
 		const exitCode = await exitOf(engine)
-		const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+		const served = await serveHere(home)
 		const paused = served.engine.get(run.id)
 		await served.engine.resume(run.id, signal)
 		await served.engine.answer(run.id, 'story', 'resumed', signal)
@@ -77,7 +83,6 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		await vi.waitFor(() => {
 			expect(served.engine.get(run.id).status).toBe('succeeded')
 		}, 20_000)
-		await served.close(deadlines())
 	})
 
 	test('refuses to start a second engine on the same home', async () => {

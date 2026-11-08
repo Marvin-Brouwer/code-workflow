@@ -1,3 +1,6 @@
+/** The exit code of {@link pollScript} when the runtime is gone. */
+export const runtimeGoneExitCode = 3
+
 /**
  * Waits inside the sandbox until the outbox has more lines than the engine has read, then prints
  * the new ones. Plain POSIX shell, so nothing has to be copied into the sandbox for it.
@@ -20,7 +23,7 @@ alive() {
 i=0
 while [ "$(lines)" -le "$after" ]; do
 	if ! alive; then
-		[ "$(lines)" -le "$after" ] && exit 3
+		[ "$(lines)" -le "$after" ] && exit ${String(runtimeGoneExitCode)}
 		break
 	fi
 	[ "$i" -ge "$tries" ] && exit 0
@@ -43,6 +46,3 @@ for file in "$1"/*; do
 done
 sleep 0.5
 `
-
-/** The exit code of {@link pollScript} when the runtime is gone. */
-export const runtimeGoneExitCode = 3

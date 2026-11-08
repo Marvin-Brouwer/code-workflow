@@ -1,7 +1,7 @@
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import { RunStore } from '../src/runs/run-store.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -45,6 +45,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		const store = () => new RunStore(path.join(home, 'runs'))
 		const directory = await workflowRepository({ ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
 		const first = await Engine.open({ backend: await openBackend(), store: store() }, signal)
+		onTestFinished(() => first.close(deadlines()))
 		const { id } = await first.startRun({ directory, workflow: 'ask', signal })
 		await vi.waitFor(
 			() => {
@@ -64,6 +65,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		// Act
 		const backend = await openBackend()
 		const second = await Engine.open({ backend, store: store() }, signal)
+		onTestFinished(() => second.close(deadlines()))
 		await second.resume(id, signal)
 		await second.answer(id, 'second', 2, signal)
 		await vi.waitFor(
@@ -78,6 +80,5 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		expect(events.map((event) => event['value'])).toEqual([1, 2])
 		expect(events[0]?.['pid']).toBe(events[1]?.['pid'])
 		expect(await backend.list(signal)).toEqual([])
-		await second.close(deadlines())
 	})
 })

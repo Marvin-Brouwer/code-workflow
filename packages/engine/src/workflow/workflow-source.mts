@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { create } from 'tar'
 import type { RunSource } from '../runs/run-record.mts'
-import { runOnHost } from './run-command.mts'
+import { runOnHost } from './run-on-host.mts'
 
 /**
  * Packs the git files of a workflow repository into a tarball: tracked files and untracked ones

@@ -13,14 +13,17 @@ export class MailboxLayout {
 		this.directory = directory
 	}
 
+	/** The runtime appends one message per line here. */
 	get outbox(): string {
 		return path.posix.join(this.directory, 'outbox.jsonl')
 	}
 
+	/** The engine writes its answers here. */
 	get inbox(): string {
 		return path.posix.join(this.directory, 'inbox')
 	}
 
+	/** The answer to one request. */
 	answer(requestId: string): string {
 		return path.posix.join(this.inbox, `${requestId}.json`)
 	}
@@ -30,10 +33,12 @@ export class MailboxLayout {
 		return path.posix.join(this.directory, 'polls')
 	}
 
+	/** The runtime's pid, so a poll sees it die. */
 	get pidFile(): string {
 		return path.posix.join(this.directory, 'runtime.pid')
 	}
 
+	/** The runtime's stdout and stderr. */
 	get logFile(): string {
 		return path.posix.join(this.directory, 'runtime.log')
 	}
@@ -44,3 +49,6 @@ export const defaultMailboxDirectory = '/var/lib/mesh-flow/mailbox'
 
 /** Tells the runtime where its mailbox is. */
 export const mailboxEnvironmentVariable = 'MESH_FLOW_MAILBOX'
+
+/** Tells the runtime which run it is. */
+export const runIdEnvironmentVariable = 'MESH_FLOW_RUN_ID'

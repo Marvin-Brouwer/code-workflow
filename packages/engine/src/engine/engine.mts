@@ -1,6 +1,13 @@
-import type { Answer, RuntimeEvent, RuntimeRequest, WakeRequest } from '@mesh-flow/protocol'
-import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
-import { messageOf } from '../error-code.mts'
+import {
+	runIdEnvironmentVariable,
+	type Answer,
+	type RuntimeEvent,
+	type RuntimeMessage,
+	type RuntimeRequest,
+	type WakeRequest,
+} from '@mesh-flow/protocol'
+import { abortable, type Command, type ExecResult, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
+import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
@@ -12,7 +19,7 @@ import { packWorkflowSource } from '../workflow/workflow-source.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
-import { settleWithin, untilAborted } from './settle-within.mts'
+import { settleWithin } from './settle-within.mts'
 import { wakeAt } from './wake-timer.mts'
 
 export interface EngineOptions {
@@ -22,6 +29,7 @@ export interface EngineOptions {
 	readonly layout?: SandboxLayout
 	/** Where the engine reports what it did on its own, such as reconciling. Default: nowhere. */
 	readonly log?: (message: string) => void
+	/** The engine's clock, for wakes and timestamps. Default: the system clock. */
 	readonly now?: () => Date
 }
 
@@ -120,7 +128,7 @@ export class Engine {
 	 */
 	async startRun(options: StartRunOptions): Promise<RunRecord> {
 		this.#assertOpen()
-		const signal = AbortSignal.any([options.signal, this.#lifetime.signal])
+		const signal = this.#bind(options.signal)
 		const { config, file } = await findWorkflow(options.directory, options.workflow).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
@@ -151,7 +159,7 @@ export class Engine {
 		const request = record.pending.find((pending) => pending.id === requestId)
 		if (request?.kind !== 'input') throw new EngineError('not-found', `Run ${id} doesn't wait for input ${requestId}.`)
 		if (record.status !== 'running') throw new EngineError('conflict', `Run ${id} is ${record.status}; resume it first.`)
-		await this.#deliver(record.id, requestId, { value }, AbortSignal.any([signal, this.#lifetime.signal]))
+		await this.#deliver(record.id, requestId, { value }, this.#bind(signal))
 		return this.get(id)
 	}
 
@@ -161,7 +169,7 @@ export class Engine {
 		const record = this.#requireStatus(id, ['starting', 'running', 'paused', 'restartable'])
 		await this.#halt(record.id, signal)
 		const sandbox = this.get(id).sandbox
-		if (sandbox) await this.#backend.remove(sandbox.id, AbortSignal.any([signal, this.#lifetime.signal]))
+		if (sandbox) await this.#backend.remove(sandbox.id, this.#bind(signal))
 		return this.#update(record.id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [] })
 	}
 
@@ -175,7 +183,7 @@ export class Engine {
 			throw new EngineError('conflict', `Run ${id} was paused on ${paused.backend}; this engine runs ${this.#backend.name}.`)
 		}
 		if (this.#active.has(record.id)) throw new EngineError('conflict', `Run ${id} is being resumed already.`)
-		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, this.#lifetime.signal]))
+		const sandbox = await this.#backend.resume(paused, this.#bind(signal))
 		const resumed = await this.#update(record.id, { status: 'running', paused: undefined })
 		this.#drive(record.id, async (active, runSignal) => {
 			active.sandbox = sandbox
@@ -193,7 +201,7 @@ export class Engine {
 		const record = this.#requireStatus(id, ['restartable', 'failed', 'stopped'])
 		const leftOver = record.sandbox
 		// The status changes before anything is awaited, so a second restart is refused.
-		const restarting = this.#update(record.id, {
+		const restarted = await this.#update(record.id, {
 			status: 'starting',
 			sandbox: undefined,
 			paused: undefined,
@@ -201,11 +209,9 @@ export class Engine {
 			pending: [],
 			error: undefined,
 		})
-		const restarted = await restarting
-		if (leftOver) await this.#backend.remove(leftOver.id, AbortSignal.any([signal, this.#lifetime.signal]))
-		await this.#store.appendEvents(record.id, [
-			{ id: `restart-${this.#now().getTime().toString(36)}`, type: 'run-restarted', at: this.#now().toISOString() },
-		])
+		if (leftOver) await this.#backend.remove(leftOver.id, this.#bind(signal))
+		const at = this.#now()
+		await this.#store.appendEvents(record.id, [{ id: `restart-${at.getTime().toString(36)}`, type: 'run-restarted', at: at.toISOString() }])
 		const file = workflowFile(restarted.config, restarted.workflow)
 		this.#drive(record.id, (active, runSignal) => this.#start(record.id, file, active, runSignal))
 		return restarted
@@ -229,7 +235,7 @@ export class Engine {
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
 		await Promise.allSettled(active.map(([id, run]) => this.#pauseOnClose(id, run, pause)))
 		await settleWithin(this.#store.flush(), close)
-		await untilAborted(this.#backend.close(close), close)
+		await abortable(this.#backend.close(close), close)
 	}
 
 	async #pauseOnClose(id: RunId, { sandbox, channel }: ActiveRun, signal: AbortSignal): Promise<void> {
@@ -240,8 +246,8 @@ export class Engine {
 			return
 		}
 		try {
-			await untilAborted(channel?.stopPolls(signal) ?? Promise.resolve(), signal)
-			const paused = await untilAborted(sandbox.pause(signal), signal)
+			await abortable(channel?.stopPolls(signal) ?? Promise.resolve(), signal)
+			const paused = await abortable(sandbox.pause(signal), signal)
 			await this.#update(id, { status: 'paused', paused })
 		} catch (error) {
 			await this.#update(id, { status: 'restartable', sandbox: undefined, error: `Pausing on shutdown failed: ${messageOf(error)}` })
@@ -261,12 +267,9 @@ export class Engine {
 		await uploadWorkflowSource(sandbox, this.#store.sourceOf(id), this.#layout.workflow, signal)
 		for (const command of config.setup) {
 			const result = await sandbox.exec(command, { signal, cwd: this.#layout.workflow })
-			if (result.exitCode !== 0) {
-				const output = (result.stderr.trim() || result.stdout.trim()).split('\n').slice(-20).join('\n')
-				throw new Error(`Setup step '${command.join(' ')}' failed with exit code ${String(result.exitCode)}:\n${output}`)
-			}
+			if (result.exitCode !== 0) throw setupFailure(command, result)
 		}
-		await channel.startRuntime([...config.start, file], { signal, cwd: this.#layout.workflow, env: { MESH_FLOW_RUN_ID: id } })
+		await channel.startRuntime([...config.start, file], { signal, cwd: this.#layout.workflow, env: { [runIdEnvironmentVariable]: id } })
 		await this.#update(id, { status: 'running' })
 		await this.#pump(id, channel, signal)
 	}
@@ -279,15 +282,7 @@ export class Engine {
 				const log = await channel.logTail(signal).catch(() => '')
 				throw new Error(`The runtime exited without saying how the run ended.${log ? `\n${log}` : ''}`)
 			}
-			const events: RuntimeEvent[] = []
-			const requests: RuntimeRequest[] = []
-			let outcome: RunChange | undefined
-			for (const message of delivery.messages) {
-				if (message.type === 'event') events.push(message.event)
-				else if (message.type === 'request') requests.push(message.request)
-				else if (message.type === 'succeeded') outcome = { status: 'succeeded' }
-				else outcome = { status: 'failed', error: message.error }
-			}
+			const { events, requests, outcome } = sortMessages(delivery.messages)
 			await this.#store.appendEvents(id, events)
 			await this.#update(id, (record) => ({
 				cursor: delivery.cursor,
@@ -366,6 +361,11 @@ export class Engine {
 		return record
 	}
 
+	/** The caller's signal, aborted on shutdown as well. */
+	#bind(signal: AbortSignal): AbortSignal {
+		return AbortSignal.any([signal, this.#lifetime.signal])
+	}
+
 	#assertOpen(): void {
 		if (this.#lifetime.signal.aborted) throw new EngineError('conflict', 'The engine is shutting down.')
 	}
@@ -378,4 +378,24 @@ export class Engine {
 		await this.#store.save(next)
 		return next
 	}
+}
+
+/** A setup step that failed, with the end of what it wrote. */
+function setupFailure(command: Command, result: ExecResult): Error {
+	const output = (result.stderr.trim() || result.stdout.trim()).split('\n').slice(-20).join('\n')
+	return new Error(`Setup step '${command.join(' ')}' failed with exit code ${String(result.exitCode)}:\n${output}`)
+}
+
+/** Splits what one poll delivered into events to keep, requests to wait on, and how the run ended. */
+function sortMessages(messages: readonly RuntimeMessage[]): { events: RuntimeEvent[]; requests: RuntimeRequest[]; outcome?: RunChange } {
+	const events: RuntimeEvent[] = []
+	const requests: RuntimeRequest[] = []
+	let outcome: RunChange | undefined
+	for (const message of messages) {
+		if (message.type === 'event') events.push(message.event)
+		else if (message.type === 'request') requests.push(message.request)
+		else if (message.type === 'succeeded') outcome = { status: 'succeeded' }
+		else outcome = { status: 'failed', error: message.error }
+	}
+	return { events, requests, ...(outcome ? { outcome } : {}) }
 }

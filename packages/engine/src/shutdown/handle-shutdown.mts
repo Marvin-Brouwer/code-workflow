@@ -1,5 +1,5 @@
 import type { CloseOptions } from '../engine/engine.mts'
-import { messageOf } from '../error-code.mts'
+import { messageOf } from '../errors.mts'
 
 /** The part of `process` shutdown handling uses, so tests can pass their own. */
 export interface ShutdownProcess {

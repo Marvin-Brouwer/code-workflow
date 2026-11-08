@@ -1,11 +1,12 @@
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import type { RunChange } from '../runs/run-change.mts'
+import type { RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunRecord } from '../runs/run-record.mts'
 
 /** What reconciliation did: the sandboxes it removed and the changes to make to records. */
 export interface Reconciliation {
 	readonly removed: readonly string[]
-	readonly changes: ReadonlyMap<RunRecord['id'], RunChange>
+	readonly changes: ReadonlyMap<RunId, RunChange>
 }
 
 /**
@@ -37,7 +38,7 @@ export async function reconcile(records: readonly RunRecord[], backend: SandboxB
 		removed.push(id)
 	}
 
-	const changes = new Map<RunRecord['id'], RunChange>()
+	const changes = new Map<RunId, RunChange>()
 	for (const record of ours) {
 		if (record.sandbox && kept.has(record.sandbox.id)) continue
 		if (record.status === 'restartable') continue

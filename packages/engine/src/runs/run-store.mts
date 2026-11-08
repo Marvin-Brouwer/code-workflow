@@ -2,7 +2,7 @@ import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
-import { messageOf } from '../error-code.mts'
+import { hasErrorCode, messageOf } from '../errors.mts'
 import { RunId } from './run-id.mts'
 import { RunRecord } from './run-record.mts'
 
@@ -56,7 +56,10 @@ export class RunStore {
 	}
 
 	async events(id: RunId): Promise<RuntimeEvent[]> {
-		const text = await readFile(path.join(this.directoryOf(id), 'events.jsonl'), 'utf8').catch(() => '')
+		const text = await readFile(path.join(this.directoryOf(id), 'events.jsonl'), 'utf8').catch((error: unknown) => {
+			if (hasErrorCode(error, 'ENOENT')) return ''
+			throw error
+		})
 		return text
 			.split('\n')
 			.filter((line) => line.length > 0)
@@ -68,7 +71,10 @@ export class RunStore {
 	 * doesn't keep the engine from starting.
 	 */
 	async loadAll(): Promise<LoadedRuns> {
-		const entries = await readdir(this.#directory, { withFileTypes: true }).catch(() => [])
+		const entries = await readdir(this.#directory, { withFileTypes: true }).catch((error: unknown) => {
+			if (hasErrorCode(error, 'ENOENT')) return []
+			throw error
+		})
 		const records: RunRecord[] = []
 		const problems: string[] = []
 		for (const entry of entries) {
