@@ -2,12 +2,14 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { answerFile, mailboxLayout, RuntimeMessage } from '@mesh-flow/protocol'
-import { describe, expect, test } from 'vitest'
+import { answerFile, mailboxEnvironmentVariable, mailboxLayout, runIdEnvironmentVariable, RuntimeMessage } from '@mesh-flow/protocol'
+import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const core = pathToFileURL(path.join(import.meta.dirname, '../src/_module/core.mts')).href
 const zod = import.meta.resolve('zod')
+/** How long a started workflow may take to ask for its input: node starting and loading the sources. */
+const requestTimeoutMs = 10_000
 // A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
 const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
 
@@ -22,8 +24,11 @@ async function startLikeTheEngine(source: string) {
 	await writeFile(file, source)
 	const child = spawn(process.execPath, ['--import', loader, file], {
 		cwd: directory,
-		env: { ...process.env, MESH_FLOW_MAILBOX: mailbox, MESH_FLOW_RUN_ID: 'run-1', HOME: directory },
+		env: { ...process.env, [mailboxEnvironmentVariable]: mailbox, [runIdEnvironmentVariable]: 'run-1', HOME: directory },
 		stdio: ['ignore', 'ignore', 'pipe'],
+	})
+	onTestFinished(() => {
+		child.kill('SIGKILL')
 	})
 	let stderr = ''
 	child.stderr.on('data', (chunk: Buffer) => {
@@ -35,7 +40,9 @@ async function startLikeTheEngine(source: string) {
 			.split('\n')
 			.filter(Boolean)
 			.map((line) => RuntimeMessage.parse(JSON.parse(line)))
-	return { child, exited, messages, layout, stderr: () => stderr }
+	const untilRequested = () =>
+		expect.poll(async () => (await messages()).some((message) => message.type === 'request'), { timeout: requestTimeoutMs }).toBe(true)
+	return { child, exited, messages, layout, untilRequested, stderr: () => stderr }
 }
 
 const greet = `
@@ -52,7 +59,7 @@ describe('a workflow started by the engine', () => {
 	test('runs by itself on the mailbox and exits once it succeeded', async () => {
 		// Arrange
 		const run = await startLikeTheEngine(greet)
-		await expect.poll(async () => (await run.messages()).some((message) => message.type === 'request'), { timeout: 10_000 }).toBe(true)
+		await run.untilRequested()
 
 		// Act
 		await writeFile(answerFile(run.layout, 'input-1'), JSON.stringify({ value: { name: 'Ada' } }))
@@ -67,7 +74,7 @@ describe('a workflow started by the engine', () => {
 	test('says it failed and exits with 1 when the body throws', async () => {
 		// Arrange
 		const run = await startLikeTheEngine(greet)
-		await expect.poll(async () => (await run.messages()).some((message) => message.type === 'request'), { timeout: 10_000 }).toBe(true)
+		await run.untilRequested()
 
 		// Act
 		await writeFile(answerFile(run.layout, 'input-1'), JSON.stringify({ value: { name: 'nobody' } }))
@@ -81,7 +88,7 @@ describe('a workflow started by the engine', () => {
 	test.skipIf(process.platform === 'win32')('stops on SIGTERM while it waits, and says so', async () => {
 		// Arrange
 		const run = await startLikeTheEngine(greet)
-		await expect.poll(async () => (await run.messages()).some((message) => message.type === 'request'), { timeout: 10_000 }).toBe(true)
+		await run.untilRequested()
 
 		// Act
 		run.child.kill('SIGTERM')

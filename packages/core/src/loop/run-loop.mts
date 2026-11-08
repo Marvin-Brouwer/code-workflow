@@ -1,3 +1,4 @@
+import type { Context } from '@earendil-works/chord/context'
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import {
 	AssistantEntry,
@@ -7,20 +8,23 @@ import {
 	ToolTask,
 	type Conversation,
 	type EntryId,
+	type Extension,
 	type SettledSubmissionRecord,
 } from '@earendil-works/pi-durable'
 import { CodingTools } from '@earendil-works/pi-durable/tools'
+import { z } from 'zod'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
 import { emitEvent, inEvent } from '../run/run-events.mts'
 import { currentScope, type Scope } from '../run/run-scope.mts'
-import type { ToolSpec } from '../tool/tool.mts'
-import type { AgentHarness } from './agent-harness.mts'
+import type { ExitSpec } from '../exits/exit.mts'
+import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
+import type { AgentHarness, StoredResult } from './agent-harness.mts'
 import { exitTools, verifyTool } from './exit-tools.mts'
-import { gateOf } from './gate.mts'
+import { runGateOf } from './run-gate.mts'
 import { startLoopClock } from './loop-clock.mts'
 import { ExitNotCalled, LoopFailed, LoopLimitExceeded } from './loop-errors.mts'
 import type { LoopOutcome, LoopSession, Stop } from './loop-session.mts'
-import { exitName, readTemplate, type LoopTemplate } from './loop-template.mts'
+import { exitName, readTemplate, uniqueTools, type LoopTemplate } from './loop-template.mts'
 import { agentTool } from './loop-tools.mts'
 
 /** What a loop needs of its agent. */
@@ -36,7 +40,7 @@ const maxReminders = 3
 /**
  * Runs one loop: the agent works on the template until it calls an exit. One Pi Durable
  * conversation per loop, keyed by the call site, the names of the nodes around it and how often that
- * call site ran there.
+ * call site ran there. A loop that finished in an earlier attempt of the run returns its kept result.
  */
 export async function runLoop(
 	agent: LoopAgent,
@@ -44,16 +48,25 @@ export async function runLoop(
 	site: string,
 ): Promise<unknown> {
 	const scope = currentScope('loop')
-	const template = await readTemplate(parts, 'loop')
-	const system = agent.system === undefined ? undefined : await readTemplate(agent.system[promptParts], 'system')
+	// Counted before anything is awaited, so concurrent loops from one call site get their keys in call order.
 	const base = [scope.run.workflow, site, ...scope.names].join(' ')
 	const key = `${base} #${scope.run.count(`loop ${base}`)}`
-	return inEvent('loop', { model: agent.model, key, prompt: template.text }, async (loopScope) =>
-		driveLoop({ agent, template, system, key, scope: loopScope, harness: await loopScope.run.agents() }),
-	)
+	const template = await readTemplate(parts, 'loop')
+	const system = agent.system === undefined ? undefined : await readTemplate(agent.system[promptParts], 'system')
+	return inEvent('loop', { model: agent.model, key, prompt: template.text }, async (loopScope) => {
+		const harness = await loopScope.run.agents()
+		const kept = await harness.result(key, loopScope.run.signal)
+		if (kept !== undefined) {
+			emitEvent(loopScope, 'loop-kept', {})
+			return keptValue(kept, template)
+		}
+		const result = await driveLoop({ agent, template, system, key, scope: loopScope, harness })
+		await harness.keepResult(key, toStored(result, template), loopScope.run.signal)
+		return result
+	})
 }
 
-interface LoopRun {
+interface DriveLoopInput {
 	readonly agent: LoopAgent
 	readonly template: LoopTemplate
 	readonly system: LoopTemplate | undefined
@@ -62,18 +75,20 @@ interface LoopRun {
 	readonly harness: AgentHarness
 }
 
-async function driveLoop({ agent, template, system, key, scope: eventScope, harness }: LoopRun): Promise<unknown> {
+async function driveLoop({ agent, template, system, key, scope: eventScope, harness }: DriveLoopInput): Promise<unknown> {
 	const { run } = eventScope
+	const model = harness.model(agent.model)
 	const stopNow = new AbortController()
 	const signal = AbortSignal.any([run.signal, stopNow.signal])
-	const ended = signals()
+	const ended = loopEndSignals()
 	let outcome: LoopOutcome | undefined
 	let stop: Stop | undefined
 	const finish = (value: LoopOutcome, how: Stop) => {
+		// A later `now` still stops a round that an exit let finish: a used-up limit or a stopped run doesn't wait for it.
+		if (how === 'now') stopNow.abort(value.kind === 'error' ? value.error : undefined)
 		if (outcome !== undefined) return
 		outcome = value
 		stop = how
-		if (how === 'now') stopNow.abort(value.kind === 'error' ? value.error : undefined)
 		ended.finished()
 	}
 
@@ -81,116 +96,153 @@ async function driveLoop({ agent, template, system, key, scope: eventScope, harn
 	const clock = startLoopClock(minutes, () => {
 		finish({ kind: 'error', error: new LoopLimitExceeded('minutes', minutes ?? 0) }, 'now')
 	})
-	const scope: Scope = { ...eventScope, loop: { clock } }
-	const session: LoopSession = { scope, signal, finish }
-	const gate = gateOf(template.gate, session)
-	const handIns = template.exits.filter((spec) => spec.kind !== 'fail')
-	const tools = [
-		...combine(system?.tools ?? [], template.tools).map((spec) => agentTool(spec, session)),
-		...exitTools(template.exits, gate, session),
-		...(template.gate !== undefined && handIns.length === 0
-			? [
-					verifyTool(
-						template.gate.checks.map((check) => check.name),
-						gate,
-						session,
-					),
-				]
-			: []),
-	]
-	const own = new Set(tools.map((registration) => registration.name))
-	let turns = 0
-	const extension = defineExtension({
-		name: `mesh-flow.loop-${run.count('loop extension')}`,
-		tools,
-		hooks: [
-			hook(GenerationTask, {
-				afterResponse: (message) => {
-					if (message.stopReason === 'error' || message.stopReason === 'aborted') return
-					turns++
-					emitEvent(scope, 'turn', { turn: turns, text: textOf(message) })
-				},
-				afterTools: () => {
-					if (outcome !== undefined) ended.roundDone()
-				},
-			}),
-			hook(ToolTask, {
-				// The loop's own tools have their own events; this covers the coding tools.
-				afterTool: (call, result) => {
-					if (!own.has(call.name))
-						emitEvent(scope, 'tool-call', { tool: call.name, from: 'agent', input: call.arguments, failed: result.isError === true })
-					return undefined
-				},
-			}),
-		],
-	})
-	harness.install(extension)
-
-	const context = harness.context(signal)
-	const conversation = await harness.conversation(
-		key,
-		{
-			model: harness.model(agent.model),
-			thinkingLevel: agent.reasoning ?? null,
-			extensions: [CodingTools, extension],
-			instructions: system?.text ?? null,
-			cwd: run.workspace,
-			maxTurns: null,
-		},
-		signal,
-	)
 	const onAbort = () => {
 		finish({ kind: 'error', error: run.signal.reason }, 'now')
 	}
 	run.signal.addEventListener('abort', onAbort, { once: true })
+	let extension: Extension | undefined
+	let idle: Promise<unknown> = Promise.resolve()
 	try {
+		// Every loop around this one stands still too while this one waits on a human.
+		const scope: Scope = { ...eventScope, loop: { clocks: [...(eventScope.loop?.clocks ?? []), clock] } }
+		const session: LoopSession = { scope, signal, finish }
+		const gate = runGateOf(template.gate, session)
+		const handIns = handInExits(template)
+		const tools = [
+			...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((spec) => agentTool(spec, session)),
+			...exitTools(template.exits, gate, session),
+			...(template.gate !== undefined && handIns.length === 0
+				? [
+						verifyTool(
+							template.gate.checks.map((check) => check.name),
+							gate,
+							session,
+						),
+					]
+				: []),
+		]
+		const own = new Set(tools.map((registration) => registration.name))
+		let turns = 0
+		extension = defineExtension({
+			// Named by the loop's key: stored work finds its own loop's tools, never another loop's.
+			name: `mesh-flow.loop ${key}`,
+			tools,
+			hooks: [
+				hook(GenerationTask, {
+					afterResponse: (message) => {
+						if (message.stopReason === 'error' || message.stopReason === 'aborted') return
+						turns++
+						emitEvent(scope, 'turn', { turn: turns, text: textOf(message) })
+					},
+					afterTools: () => {
+						if (outcome !== undefined) ended.roundDone()
+					},
+				}),
+				hook(ToolTask, {
+					// The loop's own tools have their own events; this covers the coding tools.
+					afterTool: (call, result) => {
+						if (!own.has(call.name))
+							emitEvent(scope, 'tool-call', { tool: call.name, from: 'agent', input: call.arguments, failed: result.isError === true })
+						return undefined
+					},
+				}),
+			],
+		})
+		harness.install(extension)
+
+		const context = harness.context(signal)
+		const conversation = await harness.conversation(
+			key,
+			{
+				model,
+				thinkingLevel: agent.reasoning ?? null,
+				extensions: [CodingTools, extension],
+				instructions: system?.text ?? null,
+				cwd: run.workspace,
+				maxTurns: null,
+			},
+			signal,
+		)
 		let content = template.text
 		for (let reminder = 0; ; reminder++) {
 			if (maxTurns !== undefined) {
 				if (turns >= maxTurns) throw new LoopLimitExceeded('turns', maxTurns)
 				await conversation.configure({ maxTurns: maxTurns - turns }, context)
 			}
-			const submission = await conversation.submit({ type: 'input', content, requestId: `${key} input ${reminder}` }, context)
+			// The attempt is in the id: a rerun's input is new, never the settled record of an earlier attempt.
+			const requestId = `${key} ${run.attempt} input ${reminder}`
+			const submission = await conversation.submit({ type: 'input', content, requestId }, context)
 			const settled = submission.wait(context).then(
 				(record) => ({ record }),
 				(error: unknown) => ({ error }),
 			)
 			await Promise.race([settled, ended.whenFinished])
-			if (outcome !== undefined) return await conclude(outcome, stop, settled, ended.whenRoundDone, conversation, harness)
+			if (outcome !== undefined) {
+				const ending = await endRun(stop, settled, ended.whenRoundDone, conversation, harness)
+				idle = ending.idle
+				if (outcome.kind === 'error') throw outcome.error
+				return outcome.value
+			}
 			const result = await settled
 			if ('error' in result) throw result.error
 			const answer = answerOf(result.record, maxTurns)
 			if (handIns.length === 0 && template.gate === undefined) return await answerText(conversation, answer, context)
-			if (reminder === maxReminders) throw new ExitNotCalled(exitNames(template), maxReminders)
+			if (reminder === maxReminders) throw new ExitNotCalled(exitNames(handIns), maxReminders)
 			emitEvent(scope, 'reminder', { reminder: reminder + 1 })
-			content = `You stopped without finishing the task. When the work is done, call ${exitNames(template)
+			content = `You stopped without finishing the task. When the work is done, call ${exitNames(handIns)
 				.map((name) => `\`${name}\``)
 				.join(' or ')}.`
 		}
 	} finally {
 		clock.stop()
 		run.signal.removeEventListener('abort', onAbort)
+		const installed = extension
+		if (installed !== undefined) {
+			void idle.finally(() => {
+				harness.uninstall(installed)
+			})
+		}
 	}
 }
 
 /**
- * Ends the agent's run for an outcome and returns the result or throws the error. After an exit or
- * a tool's throw, the current tool round finishes first; a stopped run or a used-up limit stops it
- * at once, without waiting for work that may never settle.
+ * Ends the agent's run once the loop has its outcome. After an exit or a tool's throw, the current
+ * tool round finishes first; a stopped run or a used-up limit stops it at once, without waiting for
+ * work that may never settle. Resolves to a promise that settles once the conversation is done
+ * with the loop's tools.
  */
-async function conclude(
-	outcome: LoopOutcome,
+async function endRun(
 	stop: Stop | undefined,
 	settled: Promise<unknown>,
 	roundDone: Promise<undefined>,
 	conversation: Conversation,
 	harness: AgentHarness,
-): Promise<unknown> {
-	const runEnded = stop === 'round' && (await Promise.race([settled.then(() => true), roundDone.then(() => false)]))
-	// The run may have gone on with another request after the round, when the exit wasn't the only call.
-	if (!runEnded) void conversation.abort(harness.context(new AbortController().signal)).catch(() => undefined)
-	if (outcome.kind === 'error') throw outcome.error
-	return outcome.value
+): Promise<{ readonly idle: Promise<void> }> {
+	const submissionSettled = stop === 'round' && (await Promise.race([settled.then(() => true), roundDone.then(() => false)]))
+	if (submissionSettled) return { idle: Promise.resolve() }
+	// The run may go on with another request after the round, when the exit wasn't the only call.
+	return { idle: conversation.abort(harness.context(neverAborted)).catch(() => undefined) }
+}
+
+/** For work that has to finish even when the loop's own signal is aborted, such as ending its run. */
+const neverAborted = new AbortController().signal
+
+/** A loop's result as the store keeps it. */
+function toStored(result: unknown, template: LoopTemplate): StoredResult {
+	if (folderOf(template) !== undefined && folderOf(template) === result) return { folder: true }
+	// Exit results come from the agent's JSON arguments; a schema that transforms them into more than JSON loses that on a rerun.
+	return result === undefined ? {} : { value: z.json().parse(JSON.parse(JSON.stringify(result))) }
+}
+
+/** A kept result as the loop returns it. */
+function keptValue(kept: StoredResult, template: LoopTemplate): unknown {
+	if ('folder' in kept) return folderOf(template)
+	return kept.value
+}
+
+function folderOf(template: LoopTemplate): WorkspaceFolder | undefined {
+	for (const spec of template.exits) if (spec.kind === 'succeed' && spec.folder !== undefined) return spec.folder
+	return undefined
 }
 
 function answerOf(record: SettledSubmissionRecord, maxTurns: number | undefined): EntryId {
@@ -202,7 +254,7 @@ function answerOf(record: SettledSubmissionRecord, maxTurns: number | undefined)
 	throw new LoopFailed(record.reason, record.detail)
 }
 
-async function answerText(conversation: Conversation, answer: EntryId, context: ReturnType<AgentHarness['context']>): Promise<string> {
+async function answerText(conversation: Conversation, answer: EntryId, context: Context): Promise<string> {
 	const entry = await conversation.commit((tx) => tx.entry(AssistantEntry, answer), context)
 	const message = entry?.model?.[0]
 	return message?.role === 'assistant' ? textOf(message) : ''
@@ -215,25 +267,23 @@ function textOf(message: AssistantMessage): string {
 		.trim()
 }
 
-function exitNames(template: LoopTemplate): string[] {
-	const handIns = template.exits.filter((spec) => spec.kind !== 'fail').map(exitName)
-	return handIns.length === 0 ? ['verify'] : handIns
+/** The exits the agent finishes with: all but `fail`. */
+function handInExits(template: LoopTemplate): readonly ExitSpec[] {
+	return template.exits.filter((spec) => spec.kind !== 'fail')
 }
 
-/** The agent's system tools and the loop's, once each. */
-function combine(system: readonly ToolSpec[], loop: readonly ToolSpec[]): ToolSpec[] {
-	const byName = new Map<string, ToolSpec>()
-	for (const spec of [...system, ...loop]) {
-		const known = byName.get(spec.name)
-		if (known !== undefined && known !== spec)
-			throw new Error(`Two different tools are named ${spec.name} in this loop and its agent's system prompt: rename one.`)
-		byName.set(spec.name, spec)
-	}
-	return [...byName.values()]
+/** What the agent is reminded to call: its hand-in exits, or `verify` when that's the hand-in. */
+function exitNames(handIns: readonly ExitSpec[]): string[] {
+	return handIns.length === 0 ? ['verify'] : handIns.map(exitName)
 }
 
 /** Two one-shot signals the loop waits on: an outcome was set, and the tool round after it is done. */
-function signals() {
+function loopEndSignals(): {
+	readonly whenFinished: Promise<undefined>
+	readonly whenRoundDone: Promise<undefined>
+	readonly finished: () => void
+	readonly roundDone: () => void
+} {
 	const finished = Promise.withResolvers<undefined>()
 	const roundDone = Promise.withResolvers<undefined>()
 	return {

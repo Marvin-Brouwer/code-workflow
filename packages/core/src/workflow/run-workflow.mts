@@ -7,7 +7,8 @@ import { describeError } from '../run/describe-error.mts'
 import type { RunChannel } from '../run/run-channel.mts'
 import { emitEvent, inEventOf } from '../run/run-events.mts'
 import type { RunContext, Scope } from '../run/run-scope.mts'
-import { settledWithin, untilAborted } from '../run/until-aborted.mts'
+import { settledWithin } from '../run/settled-within.mts'
+import { untilAborted } from '../run/until-aborted.mts'
 import type { Workflow } from './workflow.mts'
 
 export interface RunOptions {
@@ -21,6 +22,7 @@ export interface RunOptions {
 	readonly workspace?: string
 	/** A SQLite file for the agents' conversations. Default: in memory. */
 	readonly agentStore?: string
+	/** The run's id, as the engine gave it. A new random id without one. */
 	readonly runId?: string
 }
 

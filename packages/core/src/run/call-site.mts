@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getCallSites } from 'node:util'
+import { toPosix } from '../workspace/workspace-path.mts'
 
 /** Where a function was called from. */
 export interface CallSite {
@@ -25,6 +26,6 @@ export function callSite(above: number): CallSite | undefined {
 /** A call site as text that stays the same on every machine: the file relative to the working directory. */
 export function callSiteText(site: CallSite | undefined): string {
 	if (site === undefined) return 'unknown'
-	const file = path.relative(process.cwd(), site.file).split(path.sep).join('/')
+	const file = toPosix(path.relative(process.cwd(), site.file))
 	return `${file}:${site.line}:${site.column}`
 }

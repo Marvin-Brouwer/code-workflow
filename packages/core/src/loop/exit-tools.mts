@@ -1,18 +1,20 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
 import { z } from 'zod'
 import type { ExitSpec } from '../exits/exit.mts'
+import { counted } from '../render/counted.mts'
 import { renderValue } from '../render/to-prompt.mts'
+import { describeError } from '../run/describe-error.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { toolParameters } from '../tool/json-schema.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
 import { input } from '../workflow/input.mts'
-import { findingsText, type Gate } from './gate.mts'
+import { findingsText, type RunGate, type Verdict } from './run-gate.mts'
 import { AgentGaveUp } from './loop-errors.mts'
 import type { LoopSession } from './loop-session.mts'
 import { errorResult, finalResult, textResult } from './tool-result.mts'
 
 /** The agent's tools for a loop's exits. `gate` runs before an exit lets the agent finish. */
-export function exitTools(exits: readonly ExitSpec[], gate: Gate, session: LoopSession): ToolRegistration[] {
+export function exitTools(exits: readonly ExitSpec[], gate: RunGate, session: LoopSession): ToolRegistration[] {
 	return exits.map((spec) => {
 		if (spec.kind === 'propose') return proposeTool(spec.schema, gate, session)
 		if (spec.kind === 'fail') return failTool(session)
@@ -21,7 +23,7 @@ export function exitTools(exits: readonly ExitSpec[], gate: Gate, session: LoopS
 }
 
 /** `verify` alone: the agent hands in, and finishes once the checks pass. */
-export function verifyTool(checks: readonly string[], gate: Gate, session: LoopSession): ToolRegistration {
+export function verifyTool(checks: readonly string[], gate: RunGate, session: LoopSession): ToolRegistration {
 	return exitTool(
 		'verify',
 		`Hand in your work. The checks (${checks.join(', ')}) run; when they all pass the task is done, otherwise you get what they found to fix.`,
@@ -31,7 +33,7 @@ export function verifyTool(checks: readonly string[], gate: Gate, session: LoopS
 	)
 }
 
-function succeedTool(schema: z.ZodType | undefined, gate: Gate, session: LoopSession): ToolRegistration {
+function succeedTool(schema: z.ZodType | undefined, gate: RunGate, session: LoopSession): ToolRegistration {
 	const { parameters, unwrap } = toolParameters(schema)
 	const description =
 		schema === undefined
@@ -46,11 +48,11 @@ function succeedTool(schema: z.ZodType | undefined, gate: Gate, session: LoopSes
 	})
 }
 
-function folderTool(folder: WorkspaceFolder, gate: Gate, session: LoopSession): ToolRegistration {
+function folderTool(folder: WorkspaceFolder, gate: RunGate, session: LoopSession): ToolRegistration {
 	const minFiles = folder.options.minFiles ?? 0
 	return exitTool(
 		'succeed',
-		`Finish the task, once ${folder.path}/ holds your work${minFiles > 0 ? ` (at least ${minFiles} ${minFiles === 1 ? 'file' : 'files'})` : ''}.`,
+		`Finish the task, once ${folder.path}/ holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,
 		{ type: 'object', properties: {} },
 		session,
 		async () => {
@@ -62,7 +64,7 @@ function folderTool(folder: WorkspaceFolder, gate: Gate, session: LoopSession): 
 	)
 }
 
-function proposeTool(schema: z.ZodType, gate: Gate, session: LoopSession): ToolRegistration {
+function proposeTool(schema: z.ZodType, gate: RunGate, session: LoopSession): ToolRegistration {
 	const { parameters, unwrap } = toolParameters(schema)
 	const description =
 		'Propose your result to a human. The arguments are the proposal. Approved, the task is done. Rejected, you get their feedback: revise and propose again.'
@@ -70,7 +72,7 @@ function proposeTool(schema: z.ZodType, gate: Gate, session: LoopSession): ToolR
 		const parsed = schema.safeParse(unwrap(args))
 		if (!parsed.success) return errorResult(`The proposal doesn't fit:\n${z.prettifyError(parsed.error)}\nFix it and propose again.`)
 		const verdict = await gate()
-		if (!verdict.passed) return verdict.last ? finalResult(errorResult(findingsText(verdict))) : errorResult(findingsText(verdict))
+		if (!verdict.passed) return rejectedResult(verdict)
 		const answer = await input(`Approve this proposal?\n\n${await renderValue(parsed.data)}`, {
 			approved: z.boolean().describe('Whether the proposal is approved'),
 			feedback: z.string().optional().describe('What to change, when it is not approved'),
@@ -97,11 +99,16 @@ function failTool(session: LoopSession): ToolRegistration {
 }
 
 /** Lets the agent finish with `result` once the gate passes. */
-async function handIn(gate: Gate, session: LoopSession, result: () => Promise<unknown>): Promise<ToolExecutionResult> {
+async function handIn(gate: RunGate, session: LoopSession, result: () => Promise<unknown>): Promise<ToolExecutionResult> {
 	const verdict = await gate()
-	if (!verdict.passed) return verdict.last ? finalResult(errorResult(findingsText(verdict))) : errorResult(findingsText(verdict))
+	if (!verdict.passed) return rejectedResult(verdict)
 	session.finish({ kind: 'result', value: await result() }, 'round')
 	return finalResult(textResult('Done. The task is finished.'))
+}
+
+/** What the agent gets when the checks reject its hand-in: the findings, and the end of its run after the last rejection. */
+function rejectedResult(verdict: Extract<Verdict, { passed: false }>): ToolExecutionResult {
+	return verdict.last ? finalResult(errorResult(findingsText(verdict))) : errorResult(findingsText(verdict))
 }
 
 function exitTool(
@@ -118,6 +125,15 @@ function exitTool(
 		// Never run twice: a hand-in may ask a human.
 		replay: 'unsafe',
 		executionMode: 'sequential',
-		execute: (args) => inEventOf(session.scope, 'exit-call', { exit: name, input: args }, () => execute(args)),
+		execute: (args) =>
+			inEventOf(session.scope, 'exit-call', { exit: name, input: args }, async () => {
+				try {
+					return await execute(args)
+				} catch (error) {
+					// A check, a folder listing or a human wait that throws fails the loop, like any tool's throw.
+					session.finish({ kind: 'error', error }, 'round')
+					return finalResult(errorResult(`${name} failed, which ends this task: ${describeError(error)}`))
+				}
+			}),
 	}
 }

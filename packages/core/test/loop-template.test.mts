@@ -42,11 +42,11 @@ describe('readTemplate', () => {
 	test('renders verify as the hand-in alone, and as the gate next to propose', async () => {
 		// Act
 		const alone = await readTemplate(parts`Hand in with ${verify(tests)}.`, 'loop')
-		const gate = await readTemplate(parts`${verify(tests)} ${propose(z.object({}))}`, 'loop')
+		const gate = await readTemplate(parts`Mind ${verify(tests)}. Then ${propose(z.object({}))}.`, 'loop')
 
 		// Assert
 		expect(alone.text).toBe('Hand in with `verify`.')
-		expect(gate.text).toBe('the checks (tests), which run when you call `propose` `propose`')
+		expect(gate.text).toBe('Mind the checks (tests), which run when you call `propose`. Then `propose`.')
 	})
 
 	test('renders the limit as a line and keeps it', async () => {
@@ -79,6 +79,16 @@ describe('readTemplate', () => {
 		const reading = readTemplate(parts`${succeed()}`, 'system')
 
 		// Assert
-		await expect(reading).rejects.toThrow('belong in a loop')
+		await expect(reading).rejects.toThrow("An agent's system prompt can't hold exits such as succeed")
+	})
+
+	test('refuses exits and limits in a prompt nested in the template', async () => {
+		// Act
+		const withExit = readTemplate(parts`Do it. ${prompt`Then ${succeed()}.`}`, 'loop')
+		const withLimit = readTemplate(parts`Do it. ${prompt`In ${limit({ turns: 2 })}.`}`, 'loop')
+
+		// Assert
+		await expect(withExit).rejects.toThrow("A prompt inside a loop can't hold exits such as succeed")
+		await expect(withLimit).rejects.toThrow("A prompt inside a loop can't hold a limit")
 	})
 })

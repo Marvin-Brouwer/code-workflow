@@ -35,6 +35,11 @@ export function check(name: string, run: (context: ToolContext) => Promise<reado
 }
 
 /** Runs a check. */
-export function runCheck(value: Check, context: ToolContext): Promise<readonly Finding[]> {
-	return value[checkRun](context)
+export function runCheck(toRun: Check, context: ToolContext): Promise<readonly Finding[]> {
+	return toRun[checkRun](context)
+}
+
+/** Findings as a list, one line each, for the agent and for errors. */
+export function findingLines(findings: readonly Finding[]): string {
+	return findings.map((finding) => `- ${finding.source}: ${finding.message}`).join('\n')
 }

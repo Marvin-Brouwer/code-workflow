@@ -1,4 +1,4 @@
-import { runCheck, type Finding } from '../check/check.mts'
+import { findingLines, runCheck, type Finding } from '../check/check.mts'
 import type { GateSpec } from '../exits/exit.mts'
 import { emitEvent, inEventOf } from '../run/run-events.mts'
 import { ChecksFailed } from './loop-errors.mts'
@@ -8,10 +8,10 @@ import type { LoopSession } from './loop-session.mts'
 export type Verdict = { readonly passed: true } | { readonly passed: false; readonly findings: readonly Finding[]; readonly last: boolean }
 
 /** Runs a loop's `verify` gate: every check at once, counting rejections up to `maxRejections`. */
-export type Gate = () => Promise<Verdict>
+export type RunGate = () => Promise<Verdict>
 
 /** A gate for the loop. Without a `verify`, every hand-in passes. */
-export function gateOf(spec: GateSpec | undefined, session: LoopSession): Gate {
+export function runGateOf(spec: GateSpec | undefined, session: LoopSession): RunGate {
 	if (spec === undefined) return async () => ({ passed: true })
 	let rejections = 0
 	return () =>
@@ -29,7 +29,7 @@ export function gateOf(spec: GateSpec | undefined, session: LoopSession): Gate {
 
 /** Findings as the agent reads them. */
 export function findingsText(verdict: Extract<Verdict, { passed: false }>): string {
-	const list = verdict.findings.map((finding) => `- ${finding.source}: ${finding.message}`).join('\n')
+	const list = findingLines(verdict.findings)
 	if (verdict.last) return `The checks rejected the work again, which ends this task:\n${list}`
 	return `The checks found problems. Fix them and hand in again:\n${list}`
 }

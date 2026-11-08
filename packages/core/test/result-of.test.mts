@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, test } from 'vitest'
 import { z } from 'zod'
 import { check } from '../src/check/check.mts'
-import type { ResultOf } from '../src/exits/exit.mts'
+import type { ResultOf } from '../src/exits/result-of.mts'
 import type { fail } from '../src/exits/fail.mts'
 import { propose } from '../src/exits/propose.mts'
 import { succeed } from '../src/exits/succeed.mts'

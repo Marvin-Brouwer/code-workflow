@@ -1,7 +1,7 @@
 import type { Answer, InputRequest, RuntimeEvent, RuntimeMessage } from '@mesh-flow/protocol'
 import type { RunChannel } from '../../src/run/run-channel.mts'
 
-/** A channel in memory: it keeps what the run sends, and answers requests with `answer`. */
+/** A channel in memory: it keeps what the run sends, and the test answers requests through `reply`. */
 export interface MemoryChannel extends RunChannel {
 	readonly messages: readonly RuntimeMessage[]
 	readonly events: readonly RuntimeEvent[]

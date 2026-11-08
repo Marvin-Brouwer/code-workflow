@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { FauxResponseStep } from '@earendil-works/pi-ai/providers/faux'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -12,13 +13,29 @@ import { succeed } from '../src/exits/succeed.mts'
 import { verify } from '../src/exits/verify.mts'
 import { limit } from '../src/limit/limit.mts'
 import { AgentGaveUp, ChecksFailed, ExitNotCalled, LoopLimitExceeded } from '../src/loop/loop-errors.mts'
+import { toPrompt } from '../src/render/to-prompt.mts'
 import { tool } from '../src/tool/tool.mts'
 import { workspace } from '../src/workspace/workspace.mts'
-import type { FauxResponseStep } from '@earendil-works/pi-ai/providers/faux'
 import { runBody } from './support/run-body.mts'
 import { callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
 
 const Answer = z.object({ answer: z.number() })
+
+/** A minutes limit the scripted model never comes near, but a human wait would use up: 300 ms. */
+const budgetMinutes = 0.005
+/** Longer than `budgetMinutes`. */
+const humanWaitMs = 600
+/** A minutes limit that's up while the model is still thinking: 120 ms. */
+const tinyBudgetMinutes = 0.002
+/** How long a stopped run may take to settle: the body's and the store's grace, with a margin. */
+const promptlyMs = 3_000
+/** The same, when a tool never settles, so closing the store takes its whole grace. */
+const promptlyWithStuckToolMs = 3_500
+
+/** How many timers the process has running. */
+function timers(): number {
+	return process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length
+}
 
 describe('loop', () => {
 	test('resolves to the final text when the template has no exits', async () => {
@@ -119,6 +136,39 @@ describe('loop', () => {
 		expect(model.calls()).toBe(1)
 	})
 
+	test('fails the loop when a tool its action calls gets input that does not fit', async () => {
+		// Arrange
+		const lookup = tool('lookup', { input: z.object({ key: z.string() }), action: async ({ key }) => key })
+		const wrapper = tool('wrapper', {
+			input: z.object({}),
+			// @ts-expect-error: a bug in the action, calling another tool with the wrong input
+			action: () => lookup({ key: 42 }),
+		})
+		const model = scriptedModel([callsTool('wrapper'), says('I will improvise')])
+		const helper = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(() => helper.loop`Use ${wrapper}.`, model)
+
+		// Assert
+		await expect(run.result).rejects.toThrow('The input of lookup')
+		expect(model.calls()).toBe(1)
+	})
+
+	test('fails the loop when a check throws, instead of handing the error to the agent', async () => {
+		// Arrange
+		const tests = check('tests', () => Promise.reject(new Error('pipeline credential expired')))
+		const model = scriptedModel([callsTool('verify'), callsTool('verify')])
+		const developer = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(() => developer.loop`Fix it, then ${verify(tests)}.`, model)
+
+		// Assert
+		await expect(run.result).rejects.toThrow('pipeline credential expired')
+		expect(model.calls()).toBe(1)
+	})
+
 	test('hands verify findings back to the agent and finishes once the checks pass', async () => {
 		// Arrange
 		let attempt = 0
@@ -205,11 +255,10 @@ describe('loop', () => {
 		// Arrange
 		const Research = workspace.folder('research', { minFiles: 1 })
 		let directory = ''
-		const writesThenSucceeds: FauxResponseStep = async (...args) => {
+		const writesThenSucceeds: FauxResponseStep = async () => {
 			await mkdir(path.join(directory, 'research'), { recursive: true })
 			await writeFile(path.join(directory, 'research', 'overview.md'), '# Overview')
-			const step = callsTool('succeed')
-			return typeof step === 'function' ? step(...args) : step
+			return callsTool('succeed')
 		}
 		const model = scriptedModel([callsTool('succeed'), writesThenSucceeds])
 		const planner = agent({ model: model.id })
@@ -259,7 +308,7 @@ describe('loop', () => {
 		const helper = agent({ model: model.id })
 
 		// Act
-		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ minutes: 0.002 })}`, model)
+		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ minutes: tinyBudgetMinutes })}`, model)
 
 		// Assert
 		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
@@ -271,13 +320,74 @@ describe('loop', () => {
 		const helper = agent({ model: model.id })
 
 		// Act
-		const run = await runBody(() => helper.loop`Ask with ${requestUserInput}. ${succeed()} ${limit({ minutes: 0.005 })}`, model)
+		const run = await runBody(() => helper.loop`Ask with ${requestUserInput}. ${succeed()} ${limit({ minutes: budgetMinutes })}`, model)
 		const asked = await run.channel.nextInput()
-		await new Promise((resolve) => setTimeout(resolve, 600))
+		await new Promise((resolve) => setTimeout(resolve, humanWaitMs))
 		run.channel.reply(asked.id, { answer: 'yes' })
 
 		// Assert
 		await expect(run.result).resolves.toBeUndefined()
+	})
+
+	test('does not count a human wait of an agent it called as a tool toward its minutes', async () => {
+		// Arrange
+		const model = scriptedModel([
+			callsTool('changeCode', { task: 'rename x' }),
+			callsTool('requestUserInput', { question: 'which x?' }),
+			says('renamed'),
+			callsTool('succeed'),
+		])
+		const developer = agent({ model: model.id, system: prompt`Ask with ${requestUserInput}.` })
+		const reviewer = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(
+			() => reviewer.loop`Ask ${developer.as('changeCode')} for changes. ${succeed()} ${limit({ minutes: budgetMinutes })}`,
+			model,
+		)
+		const asked = await run.channel.nextInput()
+		await new Promise((resolve) => setTimeout(resolve, humanWaitMs))
+		run.channel.reply(asked.id, { answer: 'the first one' })
+
+		// Assert
+		await expect(run.result).resolves.toBeUndefined()
+	})
+
+	test('leaves no timer running when the loop fails before it starts', async () => {
+		// Arrange
+		const helper = agent({ model: 'no-such-model' })
+		const before = timers()
+
+		// Act
+		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ minutes: 10 })}`, scriptedModel([]))
+		await run.outcome
+
+		// Assert
+		await expect(run.result).rejects.toThrow('no-such-model')
+		expect(timers()).toBeLessThanOrEqual(before)
+	})
+})
+
+describe('loop keys', () => {
+	test('go by call order when loops from one call site run concurrently', async () => {
+		// Arrange
+		const model = scriptedModel([says('one'), says('two')])
+		const helper = agent({ model: model.id })
+		const slowToRender = { [toPrompt]: () => new Promise<string>((resolve) => setTimeout(resolve, 50, 'first item')) }
+		const items = [slowToRender, 'second item']
+
+		// Act
+		const run = await runBody(() => Promise.all(items.map((item) => helper.loop`Do ${item}.`)), model)
+		await run.result
+
+		// Assert
+		const keys = run.channel.events.flatMap((event) => (event.type === 'loop' ? [[event.prompt, event.key]] : []))
+		expect(keys).toEqual(
+			expect.arrayContaining([
+				['Do first item.', expect.stringMatching(/#1$/)],
+				['Do second item.', expect.stringMatching(/#2$/)],
+			]),
+		)
 	})
 })
 
@@ -317,7 +427,7 @@ describe('stopping a run', () => {
 
 		// Assert
 		expect((await run.outcome).status).toBe('failed')
-		expect(Date.now() - started).toBeLessThan(3_000)
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 	})
 
 	test('settles promptly while a tool never settles and ignores its signal', async () => {
@@ -334,7 +444,7 @@ describe('stopping a run', () => {
 
 		// Assert
 		expect((await run.outcome).status).toBe('failed')
-		expect(Date.now() - started).toBeLessThan(3_500)
+		expect(Date.now() - started).toBeLessThan(promptlyWithStuckToolMs)
 	})
 
 	test('settles promptly while waiting on a human', async () => {

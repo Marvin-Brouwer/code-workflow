@@ -31,7 +31,7 @@ interface Parts {
  * nested prompts in place, and every other value renders itself (see `toPrompt`).
  *
  * `where` is `system` for an agent's system prompt, which may only hold tools and text: exits and
- * limits belong to a loop.
+ * limits belong to a loop's own template, not to the system prompt or a prompt nested in it.
  */
 export async function readTemplate(parts: Parts, where: 'loop' | 'system'): Promise<LoopTemplate> {
 	const tools = new Map<string, ToolSpec>()
@@ -39,14 +39,14 @@ export async function readTemplate(parts: Parts, where: 'loop' | 'system'): Prom
 	let gate: GateSpec | undefined
 	let limit: LimitSpec | undefined
 
-	const collect = ({ values }: Parts) => {
+	// Exits and limits only count in the loop's own template: that's where `loop` reads its result type from.
+	const collect = ({ values }: Parts, holder: string | undefined) => {
 		for (const value of values) {
-			if (isPrompt(value)) collect(value[promptParts])
+			if (isPrompt(value)) collect(value[promptParts], holder ?? 'A prompt inside a loop')
 			else if (isTool(value)) addTool(tools, specOf(value))
 			else if (isExit(value)) {
-				if (where === 'system')
-					throw new Error(`An agent's system prompt can't hold exits such as ${value[exitSpec].kind}: they belong in a loop.`)
 				const spec = value[exitSpec]
+				if (holder !== undefined) throw new Error(`${holder} can't hold exits such as ${spec.kind}: put them in the loop's template.`)
 				if (spec.kind === 'verify') {
 					if (gate !== undefined && gate !== spec) throw new Error('A loop takes one verify: put every check in it.')
 					gate = spec
@@ -56,14 +56,14 @@ export async function readTemplate(parts: Parts, where: 'loop' | 'system'): Prom
 					exits.set(spec.kind, spec)
 				}
 			} else if (isLimit(value)) {
-				if (where === 'system') throw new Error("An agent's system prompt can't hold a limit: it belongs in a loop.")
+				if (holder !== undefined) throw new Error(`${holder} can't hold a limit: put it in the loop's template.`)
 				if (limit !== undefined && limit !== value[limitSpec]) throw new Error('A loop takes one limit.')
 				limit = value[limitSpec]
 			}
 		}
 	}
-	collect(parts)
-	for (const name of [...exits.keys(), ...(gate === undefined ? [] : ['verify'])]) {
+	collect(parts, where === 'system' ? "An agent's system prompt" : undefined)
+	for (const name of [...exits.keys(), ...(gate === undefined ? [] : [exitName(gate)])]) {
 		if (tools.has(name)) throw new Error(`A tool is named ${name}, like the exit: rename the tool.`)
 	}
 
@@ -87,8 +87,16 @@ export async function readTemplate(parts: Parts, where: 'loop' | 'system'): Prom
 	return { text: await renderParts(parts), tools: [...tools.values()], exits: [...exits.values()], gate, limit }
 }
 
+/** The tools of a loop and its agent's system prompt, once each. Two different tools can't share a name. */
+export function uniqueTools(specs: readonly ToolSpec[]): ToolSpec[] {
+	const tools = new Map<string, ToolSpec>()
+	for (const spec of specs) addTool(tools, spec)
+	return [...tools.values()]
+}
+
 function addTool(tools: Map<string, ToolSpec>, spec: ToolSpec): void {
 	const known = tools.get(spec.name)
-	if (known !== undefined && known !== spec) throw new Error(`Two different tools are named ${spec.name} in one loop: rename one.`)
+	if (known !== undefined && known !== spec)
+		throw new Error(`Two different tools are named ${spec.name} in one loop or its agent's system prompt: rename one.`)
 	tools.set(spec.name, spec)
 }

@@ -15,6 +15,7 @@ export interface ToolParameters {
 	readonly unwrap: (args: unknown) => unknown
 }
 
+/** The tool parameters for an input schema, and how to take the input out of the arguments again. */
 export function toolParameters(schema: z.ZodType | undefined): ToolParameters {
 	if (schema === undefined) return { parameters: { type: 'object', properties: {} }, unwrap: () => undefined }
 	if (schema instanceof z.ZodObject) return { parameters: jsonSchemaOf(schema), unwrap: (args) => args }

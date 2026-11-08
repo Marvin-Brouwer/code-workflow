@@ -31,8 +31,8 @@ export interface Scope {
 	readonly eventId?: string
 	/** Names of the nodes around this code, outermost first, such as `inDependencyOrder` node ids. */
 	readonly names: readonly string[]
-	/** The loop this code runs in, when it's a tool call of an agent. */
-	readonly loop?: { readonly clock: LoopClock }
+	/** The loops this code runs in, outermost first, when it's a tool call of an agent. */
+	readonly loop?: { readonly clocks: readonly LoopClock[] }
 }
 
 const storage = new AsyncLocalStorage<Scope>()

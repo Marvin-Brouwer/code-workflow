@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '../render/to-prompt.mts'
 import { workspaceFile, type WorkspaceFile } from './workspace-file.mts'
-import { onDisk, workspacePath } from './workspace-path.mts'
+import { onDisk, toPosix, workspacePath } from './workspace-path.mts'
 
 export interface WorkspaceFolderOptions {
 	/** What the folder holds, for the agent. */
@@ -36,7 +36,7 @@ export function workspaceFolder(relative: string, options: WorkspaceFolderOption
 		})
 		return entries
 			.filter((entry) => entry.isFile())
-			.map((entry) => path.relative(directory, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'))
+			.map((entry) => toPosix(path.relative(directory, path.join(entry.parentPath, entry.name))))
 			.toSorted()
 			.map((name) => workspaceFile(path.posix.join(folderPath, name)))
 	}

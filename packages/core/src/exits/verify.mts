@@ -1,11 +1,11 @@
 import type { Check } from '../check/check.mts'
 import { makeGate, type Gate } from './exit.mts'
 
-/** How many times the checks may reject a hand-in before the loop fails. */
-export const defaultMaxRejections = 5
+/** How many times the checks may reject a hand-in before the loop fails, unless `maxRejections` says otherwise. */
+const defaultMaxRejections = 5
 
 export interface VerifyOptions {
-	/** How many rejected hand-ins the loop allows before it fails with the last findings. Default 5. */
+	/** How many rejected hand-ins the loop allows before it fails with the last findings. Default: 5. */
 	readonly maxRejections: number
 }
 

@@ -86,7 +86,8 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
 
 ### 3. `@mesh-flow/core`
 
-Turns the `packages/core/src/*.d.ts` sketch into an implementation that runs inside the sandbox.
+Implements the authoring vocabulary (now `packages/core/src/_module/core.mts`), running inside the
+sandbox.
 
 - `loop`'s result types come from [`pocs/loop-typing/src/core.mts`](../../pocs/loop-typing/src/core.mts)
   (proven in the typing POC).

@@ -85,6 +85,22 @@ describe('RuntimeMailbox', () => {
 		await expect(waiting).rejects.toThrow()
 	})
 
+	test('rejects with the reason the signal aborted with, also between two looks', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await mkdir(mailboxLayout(directory).inbox)
+		const controller = new AbortController()
+		const waiting = new RuntimeMailbox(directory).answer('story', controller.signal)
+		// Past the first look, so the abort lands while it waits for the next one.
+		await new Promise((resolve) => setTimeout(resolve, 50))
+
+		// Act
+		controller.abort(new Error('The run was stopped (SIGTERM).'))
+
+		// Assert
+		await expect(waiting).rejects.toThrow('The run was stopped (SIGTERM).')
+	})
+
 	test('refuses to start outside the engine', () => {
 		// Arrange
 		const environment = {}

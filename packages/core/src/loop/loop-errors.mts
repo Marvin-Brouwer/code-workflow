@@ -1,4 +1,4 @@
-import type { Finding } from '../check/check.mts'
+import { findingLines, type Finding } from '../check/check.mts'
 
 /** The agent called `fail`. */
 export class AgentGaveUp extends Error {
@@ -30,9 +30,7 @@ export class ChecksFailed extends Error {
 	readonly findings: readonly Finding[]
 
 	constructor(rejections: number, findings: readonly Finding[]) {
-		super(
-			`The checks rejected the work ${rejections} times. Last findings:\n${findings.map((finding) => `- ${finding.source}: ${finding.message}`).join('\n')}`,
-		)
+		super(`The checks rejected the work ${rejections} times. Last findings:\n${findingLines(findings)}`)
 		this.findings = findings
 	}
 }

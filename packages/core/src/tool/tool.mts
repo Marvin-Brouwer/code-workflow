@@ -14,8 +14,12 @@ export interface ToolSpec {
 	readonly name: string
 	readonly description: string | undefined
 	readonly input: z.ZodType
-	/** Checks the input against `input`, throwing a {@link ToolInputError} when it doesn't fit, then runs the action. */
-	readonly run: (input: unknown, context: ToolContext) => Promise<unknown>
+	/**
+	 * Checks the input against `input` and returns the action, ready to run with it. Throws a
+	 * {@link ToolInputError} when the input doesn't fit, so a caller can tell a bad input from a
+	 * failing action.
+	 */
+	readonly prepare: (input: unknown) => (context: ToolContext) => Promise<unknown>
 }
 
 /** A tool's input didn't fit its schema. From code that fails the call; from an agent it goes back to the agent. */
@@ -69,13 +73,13 @@ export function tool<Input extends z.ZodType, Output>(
 ): Tool<z.input<Input>, Output> {
 	if (!toolNamePattern.test(name))
 		throw new Error(`Tool name ${name} doesn't work for every model provider: use letters, digits, _ and -, up to 64.`)
-	const run = async (input: unknown, context: ToolContext): Promise<Output> => {
+	const prepare = (input: unknown) => {
 		const parsed = definition.input.safeParse(input)
 		if (!parsed.success) throw new ToolInputError(`The input of ${name} doesn't fit:\n${z.prettifyError(parsed.error)}`)
-		return definition.action(parsed.data, context)
+		return (context: ToolContext): Promise<Output> => definition.action(parsed.data, context)
 	}
-	const spec: ToolSpec = { name, description: definition.description, input: definition.input, run }
-	const call = (input: z.input<Input>, context?: ToolContext): Promise<Output> => callFromCode(spec.name, run, input, context)
+	const spec: ToolSpec = { name, description: definition.description, input: definition.input, prepare }
+	const call = (input: z.input<Input>, context?: ToolContext): Promise<Output> => callFromCode(spec.name, prepare, input, context)
 	Object.defineProperty(call, 'name', { value: name })
 	return Object.assign(call, { description: definition.description, [toolSpec]: spec })
 }
@@ -92,13 +96,14 @@ export function specOf(value: Tool): ToolSpec {
 
 async function callFromCode<Output>(
 	name: string,
-	run: (input: unknown, context: ToolContext) => Promise<Output>,
+	prepare: (input: unknown) => (context: ToolContext) => Promise<Output>,
 	input: unknown,
 	context: ToolContext | undefined,
 ): Promise<Output> {
 	const scope = findScope()
 	const signal = context?.signal ?? scope?.run.signal
 	if (signal === undefined) throw new Error(`Tool ${name} was called outside a workflow run: pass { signal }.`)
-	if (scope === undefined) return untilAborted(run(input, { signal }), signal)
-	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, () => untilAborted(run(input, { signal }), signal))
+	const run = async () => untilAborted(prepare(input)({ signal }), signal)
+	if (scope === undefined) return run()
+	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, run)
 }

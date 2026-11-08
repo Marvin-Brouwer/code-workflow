@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
 import { tool } from '../src/tool/tool.mts'
 import { runBody } from './support/run-body.mts'
+import { scriptedModel } from './support/scripted-model.mts'
 
 describe('runWorkflow', () => {
 	test('sends the event tree and succeeded', async () => {
@@ -45,7 +46,6 @@ describe('runWorkflow', () => {
 
 	test('fails a loop whose model no provider offers', async () => {
 		// Arrange
-		const { scriptedModel } = await import('./support/scripted-model.mts')
 		const model = scriptedModel([])
 		const helper = agent({ model: 'claude-opus-5-5' })
 

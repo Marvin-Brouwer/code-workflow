@@ -1,3 +1,4 @@
+import { counted } from '../render/counted.mts'
 import { toPrompt } from '../render/to-prompt.mts'
 
 /** A loop-wide limit. */
@@ -8,6 +9,7 @@ export interface LimitSpec {
 	readonly minutes?: number
 }
 
+/** Where a limit keeps its spec, for the loop to read. */
 export const limitSpec: unique symbol = Symbol.for('mesh-flow.limit')
 
 /** A loop's limit, interpolated in its template. */
@@ -44,8 +46,8 @@ export function isLimit(value: unknown): value is Limit {
 
 function limitLine({ turns, minutes }: LimitSpec): string {
 	const parts = [
-		turns === undefined ? undefined : `${turns} model ${turns === 1 ? 'turn' : 'turns'}`,
-		minutes === undefined ? undefined : `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} of work`,
+		turns === undefined ? undefined : counted(turns, 'model turn'),
+		minutes === undefined ? undefined : `${counted(minutes, 'minute')} of work`,
 	]
 	return `You have at most ${parts.filter((part) => part !== undefined).join(' and ')} for this task.`
 }

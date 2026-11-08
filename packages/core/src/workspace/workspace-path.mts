@@ -6,11 +6,16 @@ import { currentScope } from '../run/run-scope.mts'
  * and prompts see it.
  */
 export function workspacePath(value: string): string {
-	const normal = path.posix.normalize(value.split(path.sep).join('/'))
+	const normal = path.posix.normalize(toPosix(value))
 	if (path.posix.isAbsolute(normal) || normal === '..' || normal.startsWith('../')) {
 		throw new Error(`${value} isn't inside the workspace: use a path relative to it.`)
 	}
 	return normal
+}
+
+/** A path of this platform with `/` as the separator, as agents, prompts and keys see paths. */
+export function toPosix(file: string): string {
+	return file.split(path.sep).join('/')
 }
 
 /** Where a workspace path is on disk, in the current run's workspace. */

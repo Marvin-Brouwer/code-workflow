@@ -11,7 +11,8 @@ export interface Workflow {
 	readonly body: () => Promise<void>
 }
 
-const namePattern = /^[a-z0-9][a-z0-9-]*$/
+/** Workflow names: they go into run ids, loop keys and file names. */
+const workflowNamePattern = /^[a-z0-9][a-z0-9-]*$/
 
 /**
  * Defines a workflow. The body is ordinary async code: `await`, `if`, `for`, `Promise.all` and
@@ -30,7 +31,7 @@ const namePattern = /^[a-z0-9][a-z0-9-]*$/
  * workflow starts by itself once the file is loaded. Anywhere else, run it with `runWorkflow`.
  */
 export function workflow(name: string, body: () => Promise<void>): Workflow {
-	if (!namePattern.test(name)) throw new Error(`Workflow name ${name}: use lowercase letters, digits and dashes.`)
+	if (!workflowNamePattern.test(name)) throw new Error(`Workflow name ${name}: use lowercase letters, digits and dashes.`)
 	const definition: Workflow = Object.freeze({ name, body })
 	if (isEntryOfEngineRun(callSite(1)?.file)) {
 		// After the whole module has loaded, so the body can use everything the file defines.

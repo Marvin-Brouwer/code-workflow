@@ -2,22 +2,24 @@
 
 The mesh-flow authoring vocabulary, and the runtime that runs it inside a sandbox. A workflow is plain async TypeScript: code owns the control flow, and agents are calls inside it. An agent's result only comes through the exit tools in its template.
 
-Agent loops run on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable): conversations, tool calls and turns are stored in SQLite, keyed by the loop's call site, so a run that restarts on the same store picks its conversations up again.
+Agent loops run on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable). Conversations, tool calls and turns are stored in SQLite, keyed by the loop's call site, so a run that starts again on the same store is cheap: see [Reruns](#reruns).
 
 ## Usage
 
-### Agents
-
-Agents belong to the workflow repository, not to packages: model, reasoning and system prompt are team specific.
+The samples share an `agents.mts` like this one. Agents belong to the workflow repository, not to packages: model, reasoning and system prompt are team specific.
 
 ```ts
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
+
+export const planner = agent({ model: 'claude-opus-5-5', reasoning: 'high' })
 
 export const developer = agent({
 	model: 'claude-sonnet-5-5',
 	reasoning: 'medium',
 	system: prompt`You are a senior developer. When the plan doesn't fit, ${requestUserInput}.`,
 })
+
+export const reviewer = agent({ model: 'claude-opus-5-5' })
 ```
 
 ### Loops and exits
@@ -25,59 +27,75 @@ export const developer = agent({
 `loop` runs the agent until it calls one of the exits in its template, and resolves to that exit's result. Its type comes from the exits:
 
 ```ts
-import { fail, limit, propose, succeed, verify } from '@mesh-flow/core'
+import { check, fail, limit, propose, succeed, verify } from '@mesh-flow/core'
 import { z } from 'zod'
+import { developer, planner } from './agents.mts'
 
+const story = 'stories/ABC-1.md'
 const Plan = z.object({ steps: z.array(z.string()) })
+const lint = check('lint', async () => [])
 
 // Plan: a human approves it, or the agent gets their feedback and tries again.
 const plan = await planner.loop`Plan ${story}. Propose the plan with ${propose(Plan)}, or ${fail} when it can't be done.`
 
 // void: the agent hands in with verify, and finishes only when the checks pass.
-await developer.loop`Implement ${plan}. Hand in with ${verify(tests(repository))}. ${limit({ turns: 40, minutes: 30 })}`
+await developer.loop`Implement ${plan}. Hand in with ${verify(lint)}. ${limit({ turns: 40, minutes: 30 })}`
 
 // { title: string }: the checks run before succeed is accepted.
-const summary = await developer.loop`Summarise the change with ${succeed(z.object({ title: z.string() }))}, after ${verify(lint(repository))}.`
+const summary = await developer.loop`Summarise the change with ${succeed(z.object({ title: z.string() }))}, after ${verify(lint)}.`
 
 // string: no exits, so the agent's final text.
-const answer = await researcher.loop`What does ${repository} use for logging?`
+const answer = await planner.loop`What does ${story} ask for, in one sentence?`
 ```
 
 | Exit | Result | |
 | --- | --- | --- |
 | `succeed()` | `void` | The agent says it's done. |
 | `succeed(schema)` | the schema's output | Input that doesn't fit goes back to the agent. |
-| `succeed(folder)` | `void` | Done once the workspace folder has its `minFiles`. |
+| `succeed(folder)` | the folder (`WorkspaceFolder`) | Done once the workspace folder has its `minFiles`. |
 | `propose(schema)` | the schema's output | A human approves it; a rejection goes back to the agent with the feedback. |
 | `fail` | never | The loop rejects with `AgentGaveUp`. |
 | `verify(...checks)` | `void` | Alone, how the agent hands in. Next to `succeed` or `propose`, a gate in front of them. Findings go back to the agent; after `maxRejections` (default 5) the loop rejects with `ChecksFailed`. |
 
-`limit({ turns, minutes })` caps a loop. `minutes` counts the agent's own time and stops while it waits on a human. The loop rejects with `LoopLimitExceeded` when a limit runs out, `ExitNotCalled` when the agent stops without an exit three times after a reminder, and `LoopFailed` when the model fails or hits its context limit. There is no compaction.
+Exits and limits go in the loop's own template, never in a nested `prompt` or a system prompt: that's where `loop` reads its result type from.
 
-A tool that throws ends the loop with that error, after the current round. Input that doesn't fit a tool's schema goes back to the agent instead.
+`limit({ turns, minutes })` caps a loop. `minutes` counts the agent's own time, and stops while it, or an agent it called as a tool, waits on a human. The loop rejects with:
+- `LoopLimitExceeded` when a limit runs out;
+- `ExitNotCalled` when the agent stops without an exit, and still does after three reminders;
+- `LoopFailed` when the model fails or hits its context limit. There is no compaction.
+
+A tool, a check or an exit that throws ends the loop with that error, after the current round. Input from the agent that doesn't fit a tool's schema goes back to the agent instead.
 
 ### Tools
 
-A tool is also a function: interpolated into a template, the agent can call it; called from code, it runs with the run's signal.
+A tool is also a function. Interpolated into a template, the agent can call it. Called from code inside a run, it gets the run's signal; outside a run, pass `{ signal }`.
 
 ```ts
 import { tool } from '@mesh-flow/core'
 import { z } from 'zod'
+import { developer } from './agents.mts'
+
+const tickets = new Map([['ABC-1', 'The login button does nothing on Safari.']])
 
 export const readTicket = tool('readTicket', {
 	description: 'Reads a ticket by its key',
 	input: z.object({ key: z.string() }),
-	action: async ({ key }, { signal }) => tickets.read(key, signal),
+	action: async ({ key }) => tickets.get(key) ?? `No ticket ${key}.`,
 })
 
 const ticket = await readTicket({ key: 'ABC-1' })
-await developer.loop`Fix ${ticket}. Look up related tickets with ${readTicket}.`
+await developer.loop`Fix this: ${ticket} Look up related tickets with ${readTicket}.`
 ```
 
 An agent becomes a tool for another agent with `as`. With `verify`, its work has to pass those checks before the tool returns:
 
 ```ts
-await reviewer.loop`Review ${mergeRequest}. Ask ${developer.as('changeCode', { in: repository, verify: [tests(repository)] })} for code changes.`
+import { check } from '@mesh-flow/core'
+import { developer, reviewer } from './agents.mts'
+
+const tests = check('tests', async () => [])
+
+await reviewer.loop`Review the change in web/. Ask ${developer.as('changeCode', { in: 'web/', verify: [tests] })} for code changes.`
 ```
 
 ### Checks
@@ -85,26 +103,27 @@ await reviewer.loop`Review ${mergeRequest}. Ask ${developer.as('changeCode', { i
 A check returns findings; no findings means it passed. Checks run concurrently when the agent hands in.
 
 ```ts
+import { readFile } from 'node:fs/promises'
 import { check } from '@mesh-flow/core'
 
-export const tests = (repository: Repository) =>
-	check('tests', async ({ signal }) => {
-		const { failures } = await repository.run('dotnet test', signal)
-		return failures.map((failure) => ({ source: failure.test, message: failure.message }))
-	})
+export const noTodos = check('no TODOs', async ({ signal }) => {
+	const source = await readFile('web/src/app.ts', { encoding: 'utf8', signal })
+	return source.includes('TODO') ? [{ source: 'web/src/app.ts', message: 'Resolve the TODO before handing in.' }] : []
+})
 ```
 
 ### Values in prompts
 
-Values render themselves: tools as their name, a nested `prompt` in place, a value with a `toPrompt` method as what that returns, strings as they are, and anything else as indented JSON. Templates are dedented.
+Values render themselves: tools as their name, a nested `prompt` in place, a value with a `[toPrompt]` method (the exported symbol) as what that returns, strings as they are, and anything else as indented JSON. Templates are dedented.
 
 ```ts
-import { toPrompt, workspace } from '@mesh-flow/core'
+import { succeed, toPrompt, workspace } from '@mesh-flow/core'
+import { planner } from './agents.mts'
 
 const story = { key: 'ABC-1', [toPrompt]: () => 'stories/ABC-1.md' }
 const research = workspace.folder('research', { description: 'one file per finding', minFiles: 1 })
 
-await researcher.loop`Research ${story}. Write your findings to ${research} and finish with ${succeed(research)}.`
+await planner.loop`Research ${story}. Write your findings to ${research} and finish with ${succeed(research)}.`
 const findings = await research.files()
 ```
 
@@ -124,27 +143,48 @@ const { key } = await input('Which story?', { key: z.string() })
 `workflow` names the body. Under the engine, the file starts itself: `node workflows/develop.mts` runs it on the sandbox's mailbox, stops on `SIGTERM` or `SIGINT`, and exits with 0 or 1.
 
 ```ts
-import { inDependencyOrder, workflow } from '@mesh-flow/core'
+import { check, inDependencyOrder, propose, verify, workflow } from '@mesh-flow/core'
+import { z } from 'zod'
+import { developer, planner } from './agents.mts'
+
+const Plan = z.object({ parts: z.array(z.object({ id: z.string(), dependsOn: z.array(z.string()), task: z.string() })) })
+const tests = check('tests', async () => [])
 
 export default workflow('develop', async () => {
-	const plan = await planner.loop`Plan ${story} with ${propose(Plan)}.`
+	const plan = await planner.loop`Plan stories/ABC-1.md in parts with ${propose(Plan)}.`
 	await inDependencyOrder(plan.parts, async (part, upstream) => {
-		await developer.loop`Implement ${part}, using ${upstream}. Hand in with ${verify(tests(part.repository))}.`
+		await developer.loop`Do ${part.task}, after ${upstream}. Hand in with ${verify(tests)}.`
 	})
 })
 ```
 
 `inDependencyOrder` starts each node once the nodes it depends on have returned, so independent nodes run concurrently. A failed node blocks only the nodes that depend on it; the others go on, and the call rejects with `DependencyOrderFailed`, which holds every result, failure and blocked node.
 
-Anywhere else, such as in a test, run it with a channel of your own:
+Anywhere else, such as in a test, run it with a channel of your own. A channel sends the run's messages and answers its requests:
 
 ```ts
-import { runWorkflow } from '@mesh-flow/core'
+import { runWorkflow, type RunChannel } from '@mesh-flow/core'
+import develop from './workflows/develop.mts'
 
-const outcome = await runWorkflow(develop, { channel, signal, models, workspace: 'workspace' })
+const channel: RunChannel = {
+	send: (message) => {
+		console.log(message)
+	},
+	// Approves every proposal.
+	answer: async () => ({ value: { approved: true } }),
+}
+
+const outcome = await runWorkflow(develop, { channel, signal: AbortSignal.timeout(60 * 60_000), workspace: 'workspace' })
 ```
 
 Under the engine the workspace is `~/workspace` and the agents' store is `~/.mesh-flow/agents.sqlite`.
+
+## Reruns
+
+When a run starts again on the same agents' store, as after a crash:
+- a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON, so a schema that turns them into more than JSON gets the JSON back;
+- a loop that didn't finish goes on from its conversation, with what the agent did so far;
+- work the earlier attempt left running, such as a model request cut off by the crash, is stopped first, so it never runs outside its loop.
 
 ## Events
 
@@ -158,7 +198,6 @@ Every tool gets an `AbortSignal`. When the run is stopped, waits end at once wit
 
 - Model providers come with the gateway. Until then a loop in an engine run fails up front with a clear error; `runWorkflow` takes `models` directly.
 - Tools run in the workflow process. Per-loop gateway endpoints, and the agent shell as a separate unprivileged user, come with the gateway.
-- A restarted run picks its conversations up only on the same agents' store.
 
 ## Development
 

@@ -63,8 +63,12 @@ export function startLoopClock(minutes: number | undefined, onExceeded: () => vo
 	}
 }
 
-/** Runs `body`, a wait on a human, with the current loop's clock stopped. Outside a loop it just runs it. */
+/**
+ * Runs `body`, a wait on a human, with the clocks of the loops it runs in stopped: the current loop
+ * and every loop around it, such as the one whose agent called this agent as a tool. Outside a loop
+ * it just runs it.
+ */
 export function waitingOnHuman<T>(body: () => Promise<T>): Promise<T> {
-	const clock = findScope()?.loop?.clock
-	return clock === undefined ? body() : clock.whileWaiting(body)
+	const clocks = findScope()?.loop?.clocks ?? []
+	return clocks.reduce<() => Promise<T>>((inner, clock) => () => clock.whileWaiting(inner), body)()
 }

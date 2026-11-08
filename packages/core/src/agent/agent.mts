@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Check } from '../check/check.mts'
-import type { ResultOf } from '../exits/exit.mts'
+import type { ResultOf } from '../exits/result-of.mts'
 import { verify } from '../exits/verify.mts'
 import { runLoop } from '../loop/run-loop.mts'
 import { callSite, callSiteText } from '../run/call-site.mts'
@@ -10,6 +10,7 @@ import type { Prompt } from './prompt.mts'
 export interface AgentOptions {
 	/** A model id, such as `claude-opus-5-5`. The run's providers resolve it, model first. */
 	readonly model: string
+	/** How much the model thinks before it answers. The model's default without it. */
 	readonly reasoning?: 'low' | 'medium' | 'high'
 	/** The system prompt. Tools interpolated in it are there in every loop of this agent. */
 	readonly system?: Prompt
@@ -23,6 +24,7 @@ export interface AsToolOptions {
 }
 
 export interface Agent {
+	/** The model id the agent runs on. */
 	readonly model: string
 	/**
 	 * Runs the agent until it calls one of the exits interpolated in the template, and resolves to
@@ -62,7 +64,7 @@ export interface Agent {
  */
 export function agent(options: AgentOptions): Agent {
 	const loopAgent = { model: options.model, reasoning: options.reasoning, system: options.system }
-	const self: Agent = {
+	return Object.freeze<Agent>({
 		model: options.model,
 		loop(template, ...values) {
 			const site = callSiteText(callSite(1))
@@ -72,21 +74,36 @@ export function agent(options: AgentOptions): Agent {
 		as(name, { in: target, verify: checks = [] } = {}) {
 			const site = `${callSiteText(callSite(1))} ${name}`
 			return tool(name, {
-				description: `Ask an agent to do a task${target === undefined ? '' : ' in a fixed place'}. Describe the task completely: the agent sees nothing else.${checks.length === 0 ? '' : ` Its work has to pass these checks: ${checks.map((check) => check.name).join(', ')}.`}`,
+				description: asToolDescription(target, checks),
 				input: z.object({ task: z.string().describe('The whole task, as the agent should do it') }),
 				action: async ({ task }) => {
-					const strings = [
-						'',
-						target === undefined ? '' : '\n\nWork in ',
-						checks.length === 0 ? '' : '\n\nWhen you are done, hand in your work with ',
-						'',
-					]
-					const values = [task, target === undefined ? '' : target, checks.length === 0 ? '' : verify(...checks)]
-					const result = await runLoop(loopAgent, { strings, values }, site)
+					const result = await runLoop(loopAgent, asToolTask(task, target, checks), site)
 					return typeof result === 'string' ? result : 'Done: the work passes the checks.'
 				},
 			})
 		},
+	})
+}
+
+/** What the other agent reads about an agent as a tool. */
+function asToolDescription(target: unknown, checks: readonly Check[]): string {
+	const where = target === undefined ? '' : ' in a fixed place'
+	const gate = checks.length === 0 ? '' : ` Its work has to pass these checks: ${checks.map((check) => check.name).join(', ')}.`
+	return `Ask an agent to do a task${where}. Describe the task completely: the agent sees nothing else.${gate}`
+}
+
+/** The loop template an agent as a tool works on: the task, where to work, and how to hand in. */
+function asToolTask(task: string, target: unknown, checks: readonly Check[]): { strings: string[]; values: unknown[] } {
+	const strings = ['']
+	const values: unknown[] = [task]
+	if (target !== undefined) {
+		strings.push('\n\nWork in ')
+		values.push(target)
 	}
-	return Object.freeze(self)
+	if (checks.length > 0) {
+		strings.push('\n\nWhen you are done, hand in your work with ')
+		values.push(verify(...checks))
+	}
+	strings.push('')
+	return { strings, values }
 }
