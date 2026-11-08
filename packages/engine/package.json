@@ -1,0 +1,70 @@
+{
+	"name": "@mesh-flow/engine",
+	"version": "0.0.0",
+	"description": "The mesh-flow host process: runs, their sandboxes, input requests, shutdown and the CLI",
+	"keywords": [
+		"agents",
+		"durable",
+		"mesh-flow",
+		"sandbox",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/engine#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/engine"
+	},
+	"bin": {
+		"mesh-flow": "./dist/cli.mjs"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/engine.mts",
+			"types": "./dist/engine.d.mts",
+			"import": "./dist/engine.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/protocol": "workspace:*",
+		"@mesh-flow/sandbox": "workspace:*",
+		"commander": "^14.0.3",
+		"env-paths": "^4.0.0",
+		"hono": "^4.13.16",
+		"proper-lockfile": "^4.1.2",
+		"tar": "^7.5.22",
+		"write-file-atomic": "^7.0.0",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@types/node": "^22.20.5",
+		"@types/proper-lockfile": "^4.1.4",
+		"@types/write-file-atomic": "^4.0.3",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

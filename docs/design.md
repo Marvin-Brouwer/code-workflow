@@ -66,7 +66,10 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
   was paused.
 - **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, relays
   human input and external events (webhooks), and serves the UI API. The prototype's
-  `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol.
+  `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol,
+  carried by a mailbox in the sandbox: the runtime appends messages to an outbox, the engine
+  long-polls it and writes answers to an inbox, all through the sandbox interface's `exec` and
+  `writeFile` ([engine README](../packages/engine/README.md#the-mailbox)).
 - **The gateway** holds every credential and runs every tool that needs one. The sandbox calls
   those tools over the host↔sandbox channel; it sends no credentialed traffic itself. Its network
   is locked down to the gateway and public package sources.

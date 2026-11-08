@@ -85,6 +85,28 @@ November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context]
   days; a crash would redo all agent work.
 - **Checkpoints at step boundaries only.** Superseded by sandbox snapshots plus Pi Durable.
 
+## Engine
+
+Came out of building `@mesh-flow/engine` in November 2026; its
+[README](../packages/engine/README.md#how-it-works) has what was chosen.
+
+- **The runtime connecting to the host** (a socket or HTTP server the sandbox calls) for its
+  events, requests and answers. The way out differs per backend (a bind-mounted socket on gVisor,
+  an unverified IP rule on microsandbox, the network on E2B), and the sandbox would need a way to
+  the host at all. Replaced by a mailbox the engine reads and writes with `exec` and `writeFile`,
+  which every backend has. Tool calls to the gateway are a separate question.
+- **Following the runtime's stdout, or one long `exec` stream.** An open connection across a
+  wait, which a pause breaks.
+- **Polling the outbox from the host on a timer** (`readFile` every second). One call per second
+  per run, even while nothing happens, and a second of delay on every message. Replaced by a
+  shell loop in the sandbox that returns as soon as there is news, or after 20 seconds.
+- **An engine per workflow repository or per `run`.** Reconciliation removes every mesh-flow
+  sandbox the engine has no record of, so two engines on one machine would remove each other's.
+  One engine per machine and user, with its socket as the lock.
+- **Attaching to a sandbox that still runs after a crash.** The sandbox interface can't attach to
+  a running sandbox or pause one it didn't start, and the runtime may have moved on unobserved.
+  It's removed, and the run is restartable.
+
 ## Credentials and settings
 
 - **Credentials in the sandbox (env vars, `.env`, written credential files).** Agents have a shell
