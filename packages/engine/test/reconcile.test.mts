@@ -50,6 +50,22 @@ describe('reconcile', () => {
 		expect(remove).toHaveBeenCalledWith('stray', signal)
 	})
 
+	test('reports a sandbox it cannot remove and carries on with the rest', async () => {
+		// Arrange
+		const { backend, remove } = backendHolding([
+			{ id: 'stuck', state: 'running' },
+			{ id: 'stray', state: 'running' },
+		])
+		remove.mockImplementationOnce(() => Promise.reject(new Error('device busy')))
+
+		// Act
+		const { removed, problems } = await reconcile([], backend, signal)
+
+		// Assert
+		expect(removed).toEqual(['stray'])
+		expect(problems).toEqual(['Removing sandbox stuck failed: device busy'])
+	})
+
 	test('keeps a paused run whose paused sandbox is still there', async () => {
 		// Arrange
 		const { backend, remove } = backendHolding([{ id: 'kept', state: 'paused' }])

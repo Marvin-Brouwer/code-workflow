@@ -8,7 +8,9 @@ export const runtimeGoneExitCode = 3
  * Arguments: the outbox, the runtime's pid file, the number of lines already read, how many
  * quarter seconds to wait at most, and a directory where it keeps its own pid while it runs, so
  * {@link stopPollsScript} can find it. Exits 0 with the new lines (or none, when the wait ran out),
- * and 3 when the runtime is gone and has nothing more to say. A zombie counts as gone.
+ * and 3 when the runtime is gone and has nothing more to say. A zombie counts as gone. The state is
+ * read after the last `)` of `/proc/<pid>/stat`, because a process name can hold spaces; no pid yet
+ * counts as alive.
  */
 export const pollScript = `
 outbox=$1 pidFile=$2 after=$3 tries=$4 polls=$5
@@ -16,8 +18,11 @@ mkdir -p "$polls" && echo $$ > "$polls/$$"
 trap 'rm -f "$polls/$$"' EXIT
 lines() { if [ -f "$outbox" ]; then wc -l < "$outbox"; else echo 0; fi; }
 alive() {
-	[ -f "$pidFile" ] || return 0
-	state=$(cut -d ' ' -f 3 "/proc/$(cat "$pidFile")/stat" 2>/dev/null) || return 1
+	pid=$(cat "$pidFile" 2>/dev/null)
+	[ -n "$pid" ] || return 0
+	stat=$(cat "/proc/$pid/stat" 2>/dev/null) || return 1
+	state=\${stat##*") "}
+	state=\${state%% *}
 	[ "$state" != Z ] && [ "$state" != X ]
 }
 i=0

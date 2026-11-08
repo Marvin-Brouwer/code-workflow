@@ -23,6 +23,20 @@ describe('RuntimeMailbox', () => {
 		expect(lines.slice(0, 2).map((line) => RuntimeMessage.parse(JSON.parse(line)).type)).toEqual(['event', 'succeeded'])
 	})
 
+	test('refuses a request id it sent already, which would get the old answer', async () => {
+		// Arrange
+		const mailbox = new RuntimeMailbox(await temporaryDirectory())
+		mailbox.send({ type: 'request', request: { kind: 'wake', id: 'poll-ci', at: '2026-11-08T08:00:00.000Z' } })
+
+		// Act
+		const sendingAgain = () => {
+			mailbox.send({ type: 'request', request: { kind: 'wake', id: 'poll-ci', at: '2026-11-08T08:05:00.000Z' } })
+		}
+
+		// Assert
+		expect(sendingAgain).toThrow('poll-ci was sent already')
+	})
+
 	test('picks up an answer once the engine has written it', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()

@@ -1,11 +1,14 @@
 import type { SandboxBackend } from '@mesh-flow/sandbox'
+import { messageOf } from '../errors.mts'
 import type { RunChange } from '../runs/run-change.mts'
 import type { RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunRecord } from '../runs/run-record.mts'
 
-/** What reconciliation did: the sandboxes it removed and the changes to make to records. */
+/** What reconciliation did: the sandboxes it removed, the ones it couldn't, and the changes to make to records. */
 export interface Reconciliation {
 	readonly removed: readonly string[]
+	/** Sandboxes that couldn't be removed, and why. The next start tries again. */
+	readonly problems: readonly string[]
 	readonly changes: ReadonlyMap<RunId, RunChange>
 }
 
@@ -18,7 +21,8 @@ export interface Reconciliation {
  *   has nobody polling its mailbox and can't be attached to, so it's removed, and the run becomes
  *   restartable.
  *
- * Runs whose sandbox lives on another backend are left alone. Nothing is resumed automatically.
+ * Runs whose sandbox lives on another backend are left alone. Nothing is resumed automatically. A
+ * sandbox that can't be removed doesn't stop the start: it's reported, and the next start tries again.
  */
 export async function reconcile(records: readonly RunRecord[], backend: SandboxBackend, signal: AbortSignal): Promise<Reconciliation> {
 	const held = new Map((await backend.list(signal)).map((sandbox) => [sandbox.id, sandbox]))
@@ -32,10 +36,16 @@ export async function reconcile(records: readonly RunRecord[], backend: SandboxB
 	}
 
 	const removed: string[] = []
+	const problems: string[] = []
 	for (const id of held.keys()) {
 		if (kept.has(id)) continue
-		await backend.remove(id, signal)
-		removed.push(id)
+		try {
+			await backend.remove(id, signal)
+			removed.push(id)
+		} catch (error) {
+			signal.throwIfAborted()
+			problems.push(`Removing sandbox ${id} failed: ${messageOf(error)}`)
+		}
 	}
 
 	const changes = new Map<RunId, RunChange>()
@@ -50,7 +60,7 @@ export async function reconcile(records: readonly RunRecord[], backend: SandboxB
 			error: whyRestartable(record),
 		})
 	}
-	return { removed, changes }
+	return { removed, problems, changes }
 }
 
 function whyRestartable(record: RunRecord): string {

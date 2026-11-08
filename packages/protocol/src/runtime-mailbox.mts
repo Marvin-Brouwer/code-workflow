@@ -16,6 +16,7 @@ const answerPollMs = 250
  */
 export class RuntimeMailbox {
 	readonly #layout: MailboxLayout
+	readonly #requested = new Set<string>()
 
 	constructor(directory: string) {
 		this.#layout = new MailboxLayout(directory)
@@ -31,8 +32,16 @@ export class RuntimeMailbox {
 	/**
 	 * Appends one message as one line. A single append of a line is one write, so the engine never
 	 * reads half of it as a whole message.
+	 *
+	 * A request id is used once per run attempt: its answer stays in the inbox, so asking again
+	 * under the same id would get the old answer. Sending it twice throws.
 	 */
 	send(message: RuntimeMessage): void {
+		if (message.type === 'request') {
+			if (this.#requested.has(message.request.id))
+				throw new Error(`Request ${message.request.id} was sent already. Use a new id for every request.`)
+			this.#requested.add(message.request.id)
+		}
 		appendFileSync(this.#layout.outbox, `${JSON.stringify(message)}\n`)
 	}
 

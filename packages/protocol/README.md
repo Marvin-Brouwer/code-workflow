@@ -56,7 +56,7 @@ There are two kinds of request:
 | `{ kind: 'input', id, question, fields }` | by a human. `fields` holds JSON Schema per field, and the runtime validates the answer |
 | `{ kind: 'wake', id, at }` | by the engine's clock at `at`. Timers inside a sandbox disagree across a pause, so the engine keeps the time |
 
-The engine writes each answer to `inbox/<request id>.json`, as `{ value }`, or `{}` for a wake. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters.
+The engine writes each answer to `inbox/<request id>.json`, as `{ value }`, or `{}` for a wake. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters. An answer stays in the inbox, so an id is used once per run attempt: a workflow that waits in a loop gives each wait its own id, such as `poll-ci-3`. `RuntimeMailbox` throws when a request id comes again.
 
 ## The mailbox
 

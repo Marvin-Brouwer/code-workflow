@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
@@ -35,6 +35,11 @@ export class RunStore {
 
 	sourceOf(id: RunId): string {
 		return path.join(this.directoryOf(id), 'source.tgz')
+	}
+
+	/** Removes what a run left behind before it had a record, such as a half-packed source. */
+	discard(id: RunId): Promise<void> {
+		return this.#enqueue(id, () => rm(this.directoryOf(id), { recursive: true, force: true }))
 	}
 
 	/** Saves a copy of the record as it is now. */

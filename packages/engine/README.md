@@ -114,6 +114,7 @@ Every start reconciles first, because a process can also die without warning (`S
 - A paused run whose paused sandbox is still there stays paused.
 - Any other run that was in progress becomes restartable. A sandbox that still runs after a crash is removed: nothing can attach to it again.
 - Nothing resumes by itself.
+- A sandbox that can't be removed doesn't block the start. It's logged, and the next start tries again.
 
 The control socket comes first and is the lock: a second engine on the same home refuses to start, so it can't reconcile away the first one's sandboxes.
 
