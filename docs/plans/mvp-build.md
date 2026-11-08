@@ -69,7 +69,9 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
   appends messages (events, input and wake requests, the outcome) to an outbox, the engine
   long-polls it with a short shell loop and writes answers to an inbox. The engine makes every
   call, so nothing in the sandbox reaches the host, and it aborts its poll before a pause.
-  Wake requests are the engine-side timed waits.
+  Wake requests are the engine-side timed waits. The messages and the runtime's side of the
+  mailbox are their own package, [`@mesh-flow/protocol`](../../packages/protocol/README.md), so
+  `core` doesn't depend on the engine.
 - **Shutdown** ([design section 5](../design.md#5-durability)): on `SIGINT`, `SIGTERM`, an uncaught
   error or a normal exit, abort the root signal, pause every running sandbox to disk within a
   deadline, flush the run records, close every backend process the engine started, then exit. A

@@ -2,7 +2,7 @@
 
 The mesh-flow host process. It runs every workflow run in a sandbox of its own, passes input requests and their answers between the run and a human, pauses everything when it shuts down, and cleans up after a crash the next time it starts. It never runs workflow code itself ([design section 3](../../docs/design.md#3-architecture)).
 
-It comes with the `mesh-flow` command. The CLI is how you use it day to day. The `Engine` class is for embedding it, and `@mesh-flow/engine/mailbox` is the runtime's side of the channel, for `@mesh-flow/core`.
+It comes with the `mesh-flow` command. The CLI is how you use it day to day. The `Engine` class is for embedding it. What it and the runtime in the sandbox say to each other is in [`@mesh-flow/protocol`](../protocol/README.md).
 
 ## Usage
 
@@ -79,24 +79,7 @@ await engine.close({ pause: AbortSignal.timeout(30_000), close: AbortSignal.time
 
 ### The runtime's side
 
-Inside the sandbox, the workflow runtime talks to the engine through a mailbox. `@mesh-flow/core` does this. It looks like this:
-
-```ts
-import { RuntimeMailbox } from '@mesh-flow/engine/mailbox'
-
-const mailbox = RuntimeMailbox.fromEnvironment()
-mailbox.send({ type: 'event', event: { id: 'run', type: 'workflow-started', at: new Date().toISOString() } })
-
-mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: { key: { type: 'string' } } } })
-const { value } = await mailbox.answer('story', signal)
-
-mailbox.send({ type: 'request', request: { kind: 'wake', id: 'tomorrow', at: '2026-11-08T09:00:00Z' } })
-await mailbox.answer('tomorrow', signal)
-
-mailbox.send({ type: 'succeeded' })
-```
-
-It only uses Node built-ins and needs no build: Node runs it straight from TypeScript.
+Inside the sandbox, the workflow runtime talks to the engine through a mailbox. Its side of it, and the messages both sides send, are in [`@mesh-flow/protocol`](../protocol/README.md).
 
 ## How it works
 
@@ -104,16 +87,12 @@ It only uses Node built-ins and needs no build: Node runs it straight from TypeS
 
 The engine and the runtime share a mailbox directory in the sandbox, `/var/lib/mesh-flow/mailbox`. The runtime appends one JSON message per line to `outbox.jsonl`. The engine writes each answer to `inbox/<request id>.json`. The runtime's pid and log sit next to them.
 
-| Message | Means |
-|---|---|
-| `{ type: 'event', event }` | a node of the run's event tree (`id`, `parentId`, `type`, `at`, anything else); the engine keeps it |
-| `{ type: 'request', request }` | the runtime waits: `input` for a human, `wake` for a moment in time |
-| `{ type: 'succeeded' }`, `{ type: 'failed', error }` | the run is over; the engine removes the sandbox |
+The messages are in [`@mesh-flow/protocol`](../protocol/README.md#messages): events the engine keeps, `input` and `wake` requests, and how the run ended.
 
 The engine makes every call. To read the outbox it runs a short POSIX shell loop in the sandbox (no script to copy in) that returns as soon as there are new lines, or after 20 seconds without any. To answer, it writes a file. So:
 
 - **Nothing in the sandbox has to reach the host**, and the channel is the same on all three backends: it's only `exec` and `writeFile`.
-- **No connection stays open across a wait.** The engine aborts its poll before it pauses a sandbox. A pause breaks open connections ([design section 5](../../docs/design.md#5-durability)).
+- **No connection stays open across a wait.** Before it pauses a sandbox, the engine aborts its poll and ends any poll loop still running inside, because gVisor can't restore a checkpoint that holds a process an exec started. A pause breaks open connections ([design section 5](../../docs/design.md#5-durability)).
 - **Timed waits are kept by the engine.** A `wake` request is answered by the engine's own clock, because timers inside a sandbox disagree across a pause.
 - **A runtime that dies says so.** When its process is gone (or a zombie) and the outbox has nothing new, the run fails with the end of its log.
 

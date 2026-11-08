@@ -1,6 +1,6 @@
+import { RuntimeRequest } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox } from '@mesh-flow/sandbox'
 import { z } from 'zod'
-import { RuntimeRequest } from '../protocol/runtime-request.mts'
 import { WorkflowConfig } from '../workflow/workflow-config.mts'
 import { RunId } from './run-id.mts'
 

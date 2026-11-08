@@ -4,16 +4,16 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { temporaryDirectory } from './temporary-directory.mts'
 
-const sources = path.join(import.meta.dirname, '../../src')
+const sources = path.join(import.meta.dirname, '../../../protocol/src')
 
-/** The files the runtime's mailbox needs, relative to `src`. Its other imports are types only. */
-const mailboxFiles = ['mailbox/runtime-mailbox.mts', 'mailbox/mailbox-layout.mts', 'error-code.mts']
+/** The files the runtime's mailbox needs from `@mesh-flow/protocol`. Its other imports are types only. */
+const mailboxFiles = ['runtime-mailbox.mts', 'mailbox-layout.mts']
 
 /** Imports the mailbox from this package's sources, for runtimes that run on the host. */
-export const hostMailbox = pathToFileURL(path.join(sources, 'mailbox/runtime-mailbox.mts')).href
+export const hostMailbox = pathToFileURL(path.join(sources, 'runtime-mailbox.mts')).href
 
 /** Imports the mailbox from the copy {@link workflowRepository} makes for a real sandbox. */
-export const copiedMailbox = '../mesh-flow/mailbox/runtime-mailbox.mts'
+export const copiedMailbox = '../mesh-flow/runtime-mailbox.mts'
 
 /**
  * A runtime for tests: the body runs with `mailbox`, `signal` and `event(id, type, fields)` in

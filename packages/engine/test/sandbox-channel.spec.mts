@@ -1,7 +1,7 @@
-import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
+import { appendFile, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { RuntimeMailbox } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
-import { RuntimeMailbox } from '../src/mailbox/runtime-mailbox.mts'
 import { SandboxChannel } from '../src/mailbox/sandbox-channel.mts'
 import { hostBackend, isAlive } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -129,34 +129,5 @@ describe.skipIf(process.platform !== 'linux')('SandboxChannel', () => {
 		// Assert
 		expect(await waiting).toEqual({ value: { key: 'ABC-1' } })
 		expect(JSON.parse(await readFile(path.join(mailbox, 'inbox', 'story.json'), 'utf8'))).toEqual({ value: { key: 'ABC-1' } })
-	})
-})
-
-describe('RuntimeMailbox', () => {
-	test('stops waiting for an answer when its signal aborts', async () => {
-		// Arrange
-		const directory = await temporaryDirectory()
-		await mkdir(path.join(directory, 'inbox'))
-		const controller = new AbortController()
-
-		// Act
-		const waiting = new RuntimeMailbox(directory).answer('story', controller.signal)
-		controller.abort()
-
-		// Assert
-		await expect(waiting).rejects.toThrow()
-	})
-
-	test('refuses to start outside the engine', () => {
-		// Act
-		let error: unknown
-		try {
-			RuntimeMailbox.fromEnvironment({})
-		} catch (thrown) {
-			error = thrown
-		}
-
-		// Assert
-		expect(String(error)).toContain('MESH_FLOW_MAILBOX')
 	})
 })

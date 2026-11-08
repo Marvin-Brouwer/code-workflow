@@ -1,7 +1,5 @@
+import { MailboxLayout, mailboxEnvironmentVariable, RuntimeMessage, type Answer } from '@mesh-flow/protocol'
 import type { Command, Sandbox } from '@mesh-flow/sandbox'
-import type { Answer } from '../protocol/runtime-message.mts'
-import { RuntimeMessage } from '../protocol/runtime-message.mts'
-import { MailboxLayout, mailboxEnvironmentVariable } from './mailbox-layout.mts'
 import { pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */

@@ -31,11 +31,6 @@
 			"source": "./src/_module/engine.mts",
 			"types": "./dist/engine.d.mts",
 			"import": "./dist/engine.mjs"
-		},
-		"./mailbox": {
-			"source": "./src/_module/mailbox.mts",
-			"types": "./dist/mailbox.d.mts",
-			"import": "./dist/mailbox.mjs"
 		}
 	},
 	"publishConfig": {
@@ -51,6 +46,7 @@
 	},
 	"dependencies": {
 		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/protocol": "workspace:*",
 		"@mesh-flow/sandbox": "workspace:*",
 		"commander": "^14.0.3",
 		"env-paths": "^4.0.0",

@@ -1,8 +1,8 @@
 import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
 import { messageOf } from '../error-code.mts'
-import { RuntimeEvent } from '../protocol/runtime-message.mts'
 import { RunId } from './run-id.mts'
 import { RunRecord } from './run-record.mts'
 

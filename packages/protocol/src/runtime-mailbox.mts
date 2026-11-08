@@ -1,8 +1,7 @@
 import { appendFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
-import { hasErrorCode } from '../error-code.mts'
-import type { Answer, RuntimeMessage } from '../protocol/runtime-message.mts'
+import type { Answer, RuntimeMessage } from './runtime-message.mts'
 import { MailboxLayout, mailboxEnvironmentVariable } from './mailbox-layout.mts'
 
 /** How often the runtime looks for an answer. Only a polling interval, never a wall-clock wait. */
@@ -48,11 +47,15 @@ export class RuntimeMailbox {
 		for (;;) {
 			signal.throwIfAborted()
 			const text = await readFile(file, 'utf8').catch((error: unknown) => {
-				if (hasErrorCode(error, 'ENOENT')) return undefined
+				if (isMissing(error)) return undefined
 				throw error
 			})
 			if (text !== undefined) return toAnswer(JSON.parse(text))
 			await delay(answerPollMs, undefined, { signal })
 		}
 	}
+}
+
+function isMissing(error: unknown): boolean {
+	return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }

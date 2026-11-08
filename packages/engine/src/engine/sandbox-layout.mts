@@ -1,4 +1,4 @@
-import { defaultMailboxDirectory } from '../mailbox/mailbox-layout.mts'
+import { defaultMailboxDirectory } from '@mesh-flow/protocol'
 
 /** Where the engine puts things inside a sandbox. POSIX paths. */
 export interface SandboxLayout {
