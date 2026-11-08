@@ -1,4 +1,4 @@
-import type { CloseOptions } from '../engine/engine.mts'
+import type { CloseDeadlines } from '../engine/engine.mts'
 import { messageOf } from '../errors.mts'
 
 /** The part of `process` shutdown handling uses, so tests can pass their own. */
@@ -8,14 +8,29 @@ export interface ShutdownProcess {
 	exit(code: number): void
 }
 
+/** How long pausing may take by default. */
+const defaultPauseTimeoutMs = 30_000
+
+/** How long closing the backend may take by default, after the pauses. */
+const defaultCloseTimeoutMs = 60_000
+
+/** How long past both deadlines a shutdown may run before the process exits anyway. */
+const cutOffGraceMs = 5_000
+
+/** The exit code after a third Ctrl+C: 128 plus SIGINT's number, as shells report it. */
+const interruptedExitCode = 130
+
+/** How to shut down, and what to talk to. */
 export interface HandleShutdownOptions {
 	/** Shuts everything down within the deadlines it gets. */
-	readonly shutdown: (deadlines: CloseOptions) => Promise<void>
+	readonly shutdown: (deadlines: CloseDeadlines) => Promise<void>
 	/** How long pausing may take. Default 30 seconds. */
 	readonly pauseTimeoutMs?: number
 	/** How long closing the backend may take after that. Default 60 seconds. */
 	readonly closeTimeoutMs?: number
+	/** Where progress goes. Default: stderr. */
 	readonly log?: (message: string) => void
+	/** The process to listen to and exit. Default: `process`. */
 	readonly process?: ShutdownProcess
 }
 
@@ -36,8 +51,8 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 		((message: string) => {
 			console.error(message)
 		})
-	const pauseTimeoutMs = options.pauseTimeoutMs ?? 30_000
-	const closeTimeoutMs = options.closeTimeoutMs ?? 60_000
+	const pauseTimeoutMs = options.pauseTimeoutMs ?? defaultPauseTimeoutMs
+	const closeTimeoutMs = options.closeTimeoutMs ?? defaultCloseTimeoutMs
 	const skipPauses = new AbortController()
 	let signals = 0
 	let started = false
@@ -49,12 +64,12 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 			() => {
 				target.exit(exitCode || 1)
 			},
-			pauseTimeoutMs + closeTimeoutMs + 5_000,
+			pauseTimeoutMs + closeTimeoutMs + cutOffGraceMs,
 		)
 		cutOff.unref()
-		const deadlines: CloseOptions = {
+		const deadlines: CloseDeadlines = {
 			pause: AbortSignal.any([skipPauses.signal, AbortSignal.timeout(pauseTimeoutMs)]),
-			close: AbortSignal.timeout(pauseTimeoutMs + closeTimeoutMs),
+			backend: AbortSignal.timeout(pauseTimeoutMs + closeTimeoutMs),
 		}
 		options.shutdown(deadlines).then(
 			() => {
@@ -76,7 +91,7 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 			log('Skipping the pauses. Press Ctrl+C once more to exit right away.')
 			skipPauses.abort(new Error('The pauses were skipped.'))
 		} else {
-			target.exit(130)
+			target.exit(interruptedExitCode)
 		}
 	}
 	const onError = (error: unknown) => {

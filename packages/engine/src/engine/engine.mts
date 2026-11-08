@@ -8,7 +8,7 @@ import {
 } from '@mesh-flow/protocol'
 import { abortable, type Command, type ExecResult, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
 import { messageOf } from '../errors.mts'
-import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
+import { SandboxChannel, tailLines } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunRecord, type RunStatus } from '../runs/run-record.mts'
@@ -20,10 +20,13 @@ import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
 import { settleWithin } from './settle-within.mts'
-import { wakeAt } from './wake-timer.mts'
+import { wakeAt } from './wake-at.mts'
 
+/** What an engine runs on. */
 export interface EngineOptions {
+	/** Where the runs' sandboxes are made. */
 	readonly backend: SandboxBackend
+	/** Where the run records are kept. */
 	readonly store: RunStore
 	/** Where things go inside a sandbox. */
 	readonly layout?: SandboxLayout
@@ -33,6 +36,7 @@ export interface EngineOptions {
 	readonly now?: () => Date
 }
 
+/** Which workflow to start a run of. */
 export interface StartRunOptions {
 	/** The workflow repository on the host, with its `mesh-flow.config.json`. */
 	readonly directory: string
@@ -41,11 +45,12 @@ export interface StartRunOptions {
 	readonly signal: AbortSignal
 }
 
-export interface CloseOptions {
+/** How long each step of a shutdown may take. */
+export interface CloseDeadlines {
 	/** Bounds pausing the running sandboxes. Abort it to skip the pauses, as on a second Ctrl+C. */
 	readonly pause: AbortSignal
 	/** Bounds closing the backend, which removes every sandbox that isn't paused. */
-	readonly close: AbortSignal
+	readonly backend: AbortSignal
 }
 
 /** A run the engine is driving in this process. */
@@ -66,10 +71,10 @@ const cleanupTimeoutMs = 60_000
  *
  * @example
  * ```ts
- * const engine = await Engine.open({ backend, store: new RunStore(directory) }, signal)
+ * const engine = await Engine.open({ backend, store: openRunStore(directory) }, signal)
  * const run = await engine.startRun({ directory: process.cwd(), workflow: 'develop', signal })
  * // ... later, on Ctrl+C:
- * await engine.close({ pause: AbortSignal.timeout(30_000), close: AbortSignal.timeout(60_000) })
+ * await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
  * ```
  */
 export class Engine {
@@ -108,10 +113,12 @@ export class Engine {
 		return engine
 	}
 
+	/** Every run the engine knows, also finished ones. */
 	list(): RunRecord[] {
 		return [...this.#records.values()]
 	}
 
+	/** One run as it is now. Throws `not-found` for an unknown id. */
 	get(id: string): RunRecord {
 		const record = RunId.safeParse(id).success ? this.#records.get(id) : undefined
 		if (!record) throw new EngineError('not-found', `There is no run ${id}.`)
@@ -129,7 +136,7 @@ export class Engine {
 	 */
 	async startRun(options: StartRunOptions): Promise<RunRecord> {
 		this.#assertOpen()
-		const signal = this.#bind(options.signal)
+		const signal = this.#withLifetime(options.signal)
 		const { config, file } = await findWorkflow(options.directory, options.workflow).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
@@ -165,7 +172,7 @@ export class Engine {
 		const request = record.pending.find((pending) => pending.id === requestId)
 		if (request?.kind !== 'input') throw new EngineError('not-found', `Run ${id} doesn't wait for input ${requestId}.`)
 		if (record.status !== 'running') throw new EngineError('conflict', `Run ${id} is ${record.status}; resume it first.`)
-		await this.#deliver(record.id, requestId, { value }, this.#bind(signal))
+		await this.#deliver(record.id, requestId, { value }, this.#withLifetime(signal))
 		return this.get(id)
 	}
 
@@ -176,7 +183,7 @@ export class Engine {
 	stop(id: string, signal: AbortSignal): Promise<RunRecord> {
 		this.#assertOpen()
 		const record = this.#requireStatus(id, ['starting', 'running', 'paused', 'restartable'])
-		return abortable(this.#stop(record.id), this.#bind(signal))
+		return abortable(this.#stop(record.id), this.#withLifetime(signal))
 	}
 
 	/** Resumes a paused run where it was, with every request it was waiting on. */
@@ -227,10 +234,7 @@ export class Engine {
 		})
 		this.#drive(record.id, async (active, runSignal) => {
 			if (leftOver) await this.#discard(record.id, leftOver.id)
-			const at = this.#now()
-			await this.#store.appendEvents(record.id, [
-				{ id: `restart-${at.getTime().toString(36)}`, type: 'run-restarted', at: at.toISOString() },
-			])
+			await this.#store.appendEvents(record.id, [restartEvent(this.#now())])
 			await this.#start(record.id, file, active, runSignal)
 		})
 		return restarted
@@ -242,19 +246,19 @@ export class Engine {
 	 * paused. A run that couldn't be paused becomes restartable. Calling it again waits for the
 	 * same shutdown.
 	 */
-	close(options: CloseOptions): Promise<void> {
-		this.#closing ??= this.#close(options)
+	close(deadlines: CloseDeadlines): Promise<void> {
+		this.#closing ??= this.#close(deadlines)
 		return this.#closing
 	}
 
-	async #close({ pause, close }: CloseOptions): Promise<void> {
+	async #close({ pause, backend }: CloseDeadlines): Promise<void> {
 		this.#lifetime.abort(new Error('The engine is shutting down.'))
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
 		await Promise.allSettled(active.map(([id, run]) => this.#pauseOnClose(id, run, pause)))
-		await settleWithin(this.#store.flush(), close)
-		await abortable(this.#backend.close(close), close)
+		await settleWithin(this.#store.flush(), backend)
+		await abortable(this.#backend.close(backend), backend)
 	}
 
 	async #pauseOnClose(id: RunId, { sandbox, channel }: ActiveRun, signal: AbortSignal): Promise<void> {
@@ -282,12 +286,17 @@ export class Engine {
 		signal: AbortSignal,
 		runSignal: AbortSignal,
 	): Promise<SandboxChannel> {
-		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
-		active.sandbox = sandbox
-		const channel = new SandboxChannel(sandbox, this.#layout.mailbox)
-		active.channel = channel
+		const channel = this.#attach(active, await this.#backend.resume(paused, AbortSignal.any([signal, runSignal])))
 		await this.#update(id, { status: 'running', paused: undefined })
 		runSignal.throwIfAborted()
+		return channel
+	}
+
+	/** Makes `sandbox` the run's, with a channel to its mailbox. The only place an attempt gets them. */
+	#attach(active: ActiveRun, sandbox: Sandbox): SandboxChannel {
+		const channel = new SandboxChannel(sandbox, this.#layout.mailbox)
+		active.sandbox = sandbox
+		active.channel = channel
 		return channel
 	}
 
@@ -295,11 +304,8 @@ export class Engine {
 	async #start(id: RunId, file: string, active: ActiveRun, signal: AbortSignal): Promise<void> {
 		const { config } = this.get(id)
 		const sandbox = await this.#backend.create(config.sandbox, signal)
-		active.sandbox = sandbox
+		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { sandbox: { backend: this.#backend.name, id: sandbox.id } })
-
-		const channel = new SandboxChannel(sandbox, this.#layout.mailbox)
-		active.channel = channel
 		await channel.prepare(signal)
 		await uploadWorkflowSource(sandbox, this.#store.sourceOf(id), this.#layout.workflow, signal)
 		for (const command of config.setup) {
@@ -339,7 +345,7 @@ export class Engine {
 	/** Wakes are answered by the engine's own clock, through the channel of the attempt that asked. */
 	#schedule(id: RunId, channel: SandboxChannel, request: RuntimeRequest, signal: AbortSignal): void {
 		if (request.kind !== 'wake') return
-		wakeAt(new Date(request.at), signal, () => void this.#wake(id, channel, request, signal), this.#now)
+		wakeAt(new Date(request.at), () => void this.#wake(id, channel, request, signal), signal, this.#now)
 	}
 
 	async #wake(id: RunId, channel: SandboxChannel, request: WakeRequest, signal: AbortSignal): Promise<void> {
@@ -392,6 +398,7 @@ export class Engine {
 			})
 	}
 
+	/** Records that a run failed, then removes its sandbox. */
 	async #fail(id: RunId, error: unknown): Promise<void> {
 		const { sandbox } = this.get(id)
 		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [] })
@@ -418,6 +425,7 @@ export class Engine {
 		await settleWithin(active.work, signal)
 	}
 
+	/** The run, when it's in one of `statuses`. Throws `conflict` otherwise. */
 	#requireStatus(id: string, statuses: readonly RunStatus[]): RunRecord {
 		const record = this.get(id)
 		if (!statuses.includes(record.status)) throw new EngineError('conflict', `Run ${id} is ${record.status}.`)
@@ -425,10 +433,11 @@ export class Engine {
 	}
 
 	/** The caller's signal, aborted on shutdown as well. */
-	#bind(signal: AbortSignal): AbortSignal {
+	#withLifetime(signal: AbortSignal): AbortSignal {
 		return AbortSignal.any([signal, this.#lifetime.signal])
 	}
 
+	/** Refuses new work once a shutdown has begun. */
 	#assertOpen(): void {
 		if (this.#lifetime.signal.aborted) throw new EngineError('conflict', 'The engine is shutting down.')
 	}
@@ -448,9 +457,14 @@ function cutShort(id: string, signal: AbortSignal): EngineError {
 	return new EngineError('conflict', `Resuming run ${id} was cut short: ${messageOf(signal.reason)}`)
 }
 
+/** The event that marks where a restarted run began again. */
+function restartEvent(at: Date): RuntimeEvent {
+	return { id: `restart-${at.getTime().toString(36)}`, type: 'run-restarted', at: at.toISOString() }
+}
+
 /** A setup step that failed, with the end of what it wrote. */
 function setupFailure(command: Command, result: ExecResult): Error {
-	const output = (result.stderr.trim() || result.stdout.trim()).split('\n').slice(-20).join('\n')
+	const output = (result.stderr.trim() || result.stdout.trim()).split('\n').slice(-tailLines).join('\n')
 	return new Error(`Setup step '${command.join(' ')}' failed with exit code ${String(result.exitCode)}:\n${output}`)
 }
 

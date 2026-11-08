@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { RunRecord } from '../src/runs/run-record.mts'
-import { RunStore } from '../src/runs/run-store.mts'
+import { openRunStore, runDirectory } from '../src/runs/run-store.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 function record(id: string, createdAt: string): RunRecord {
@@ -24,10 +24,10 @@ function record(id: string, createdAt: string): RunRecord {
 	}
 }
 
-describe('RunStore', () => {
+describe('openRunStore', () => {
 	test('loads what it saved, oldest first', async () => {
 		// Arrange
-		const store = new RunStore(await temporaryDirectory())
+		const store = openRunStore(await temporaryDirectory())
 		const newer = record('run-00000000000b', '2026-11-07T12:00:00.000Z')
 		const older = record('run-00000000000a', '2026-11-06T12:00:00.000Z')
 
@@ -42,7 +42,7 @@ describe('RunStore', () => {
 
 	test('keeps the last of several saves of one run', async () => {
 		// Arrange
-		const store = new RunStore(await temporaryDirectory())
+		const store = openRunStore(await temporaryDirectory())
 		const first = record('run-00000000000a', '2026-11-07T12:00:00.000Z')
 
 		// Act
@@ -58,7 +58,7 @@ describe('RunStore', () => {
 	test('skips and reports a record it cannot read', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		const store = new RunStore(directory)
+		const store = openRunStore(directory)
 		await store.save(record('run-00000000000a', '2026-11-07T12:00:00.000Z'))
 		await mkdir(path.join(directory, 'run-00000000000b'))
 		await writeFile(path.join(directory, 'run-00000000000b', 'run.json'), '{ "half": ')
@@ -73,7 +73,7 @@ describe('RunStore', () => {
 
 	test('appends events and reads them back in order', async () => {
 		// Arrange
-		const store = new RunStore(await temporaryDirectory())
+		const store = openRunStore(await temporaryDirectory())
 		const at = '2026-11-07T12:00:00.000Z'
 
 		// Act
@@ -89,10 +89,10 @@ describe('RunStore', () => {
 
 	test('refuses an id that is not a run id', () => {
 		// Arrange
-		const store = new RunStore('/runs')
+		const root = '/runs'
 
 		// Act
-		const resolve = () => store.directoryOf('../etc')
+		const resolve = () => runDirectory(root, '../etc')
 
 		// Assert
 		expect(resolve).toThrow()

@@ -63,6 +63,7 @@ export async function reconcile(records: readonly RunRecord[], backend: SandboxB
 	return { removed, problems, changes }
 }
 
+/** The error a run gets when reconciling makes it restartable. */
 function whyRestartable(record: RunRecord): string {
 	if (record.status === 'paused') return 'Its paused sandbox is gone.'
 	if (record.status === 'starting') return 'The engine stopped while the run was starting.'

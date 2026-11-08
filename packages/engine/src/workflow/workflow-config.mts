@@ -4,6 +4,7 @@ import path from 'node:path'
 import { SandboxSpec } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
+import { WorkflowName } from './workflow-name.mts'
 
 /** A command as its program and arguments, run without a shell. */
 const CommandLine = z.tuple([z.string().min(1)], z.string())
@@ -58,7 +59,7 @@ export async function loadWorkflowConfig(directory: string): Promise<WorkflowCon
 
 /** The workflow's file relative to the repository, with POSIX separators for the sandbox. */
 export function workflowFile(config: WorkflowConfig, workflow: string): string {
-	if (!/^[\w-]+(?:\/[\w-]+)*$/.test(workflow)) throw new Error(`'${workflow}' isn't a workflow name.`)
+	if (!WorkflowName.safeParse(workflow).success) throw new Error(`'${workflow}' isn't a workflow name.`)
 	return path.posix.join(config.workflows.replaceAll('\\', '/'), `${workflow}.mts`)
 }
 

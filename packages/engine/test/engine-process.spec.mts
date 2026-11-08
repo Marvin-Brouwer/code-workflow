@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { ControlClient } from '../src/control/control-client.mts'
+import { controlClient } from '../src/control/control-client.mts'
 import { controlSocketPath } from '../src/control/control-socket.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
@@ -9,7 +9,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
+const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
 
 const ask = runtimeScript(`
 mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: {} } })
@@ -27,8 +27,8 @@ async function serveHere(home: string) {
 /** Starts a run in an engine process and waits until it asks for input. Returns the runtime's pid. */
 async function startWaitingRun(home: string) {
 	const directory = await workflowRepository({ ask })
-	const client = new ControlClient(controlSocketPath(home))
-	const { id } = await client.startRun(directory, 'ask', signal)
+	const client = controlClient(controlSocketPath(home))
+	const { id } = await client.startRun({ directory, workflow: 'ask', signal })
 	const record = await vi.waitFor(
 		async () => {
 			const current = await client.get(id, signal)

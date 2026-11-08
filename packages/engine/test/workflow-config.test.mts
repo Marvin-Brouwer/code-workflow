@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { findWorkflow, loadWorkflowConfig, workflowFile } from '../src/workflow/workflow-config.mts'
+import { findWorkflow, loadWorkflowConfig, workflowConfigFile, workflowFile } from '../src/workflow/workflow-config.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const sandbox = { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['registry.npmjs.org'] } }
@@ -10,7 +10,7 @@ describe('loadWorkflowConfig', () => {
 	test('fills in the defaults', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		await writeFile(path.join(directory, 'mesh-flow.config.json'), JSON.stringify({ sandbox, start: ['node'] }))
+		await writeFile(path.join(directory, workflowConfigFile), JSON.stringify({ sandbox, start: ['node'] }))
 
 		// Act
 		const config = await loadWorkflowConfig(directory)
@@ -23,7 +23,7 @@ describe('loadWorkflowConfig', () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await writeFile(
-			path.join(directory, 'mesh-flow.config.json'),
+			path.join(directory, workflowConfigFile),
 			JSON.stringify({ sandbox: { ...sandbox, egress: { allow: ['*.example.com'] } }, start: [] }),
 		)
 
@@ -44,7 +44,7 @@ describe('loadWorkflowConfig', () => {
 		const loading = loadWorkflowConfig(directory)
 
 		// Assert
-		await expect(loading).rejects.toThrow('No mesh-flow.config.json')
+		await expect(loading).rejects.toThrow(`No ${workflowConfigFile}`)
 	})
 })
 
@@ -70,7 +70,7 @@ describe('workflowFile', () => {
 	test('refuses a workflow whose file is missing', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		await writeFile(path.join(directory, 'mesh-flow.config.json'), JSON.stringify({ sandbox, start: ['node'] }))
+		await writeFile(path.join(directory, workflowConfigFile), JSON.stringify({ sandbox, start: ['node'] }))
 
 		// Act
 		const finding = findWorkflow(directory, 'develop')

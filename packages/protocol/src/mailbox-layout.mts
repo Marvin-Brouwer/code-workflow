@@ -6,42 +6,35 @@ import path from 'node:path'
  *
  * Paths are POSIX, because the sandbox is Linux whatever the host is.
  */
-export class MailboxLayout {
+export interface MailboxLayout {
 	readonly directory: string
-
-	constructor(directory: string) {
-		this.directory = directory
-	}
-
 	/** The runtime appends one message per line here. */
-	get outbox(): string {
-		return path.posix.join(this.directory, 'outbox.jsonl')
-	}
-
-	/** The engine writes its answers here. */
-	get inbox(): string {
-		return path.posix.join(this.directory, 'inbox')
-	}
-
-	/** The answer to one request. */
-	answer(requestId: string): string {
-		return path.posix.join(this.inbox, `${requestId}.json`)
-	}
-
+	readonly outbox: string
+	/** The engine writes its answers here, one file per request: see {@link answerFile}. */
+	readonly inbox: string
 	/** Where each running poll keeps its pid. */
-	get polls(): string {
-		return path.posix.join(this.directory, 'polls')
-	}
-
+	readonly polls: string
 	/** The runtime's pid, so a poll sees it die. */
-	get pidFile(): string {
-		return path.posix.join(this.directory, 'runtime.pid')
-	}
-
+	readonly pidFile: string
 	/** The runtime's stdout and stderr. */
-	get logFile(): string {
-		return path.posix.join(this.directory, 'runtime.log')
-	}
+	readonly logFile: string
+}
+
+/** The layout of a mailbox in `directory`. */
+export function mailboxLayout(directory: string): MailboxLayout {
+	return Object.freeze({
+		directory,
+		outbox: path.posix.join(directory, 'outbox.jsonl'),
+		inbox: path.posix.join(directory, 'inbox'),
+		polls: path.posix.join(directory, 'polls'),
+		pidFile: path.posix.join(directory, 'runtime.pid'),
+		logFile: path.posix.join(directory, 'runtime.log'),
+	})
+}
+
+/** The file that holds the answer to one request. */
+export function answerFile(layout: MailboxLayout, requestId: string): string {
+	return path.posix.join(layout.inbox, `${requestId}.json`)
 }
 
 /** The default mailbox directory in a sandbox. */

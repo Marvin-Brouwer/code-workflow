@@ -15,74 +15,78 @@ export class ControlError extends Error {
 	}
 }
 
-/** Talks to a running engine over its control socket, for the CLI. */
-export class ControlClient {
-	readonly #socketPath: string
-
-	constructor(socketPath: string) {
-		this.#socketPath = socketPath
-	}
-
-	list(signal: AbortSignal): Promise<RunRecord[]> {
-		return this.#call(z.array(RunRecord), 'GET', '/runs', undefined, signal)
-	}
-
-	get(run: string, signal: AbortSignal): Promise<RunRecord> {
-		return this.#call(RunRecord, 'GET', `/runs/${encodeURIComponent(run)}`, undefined, signal)
-	}
-
-	events(run: string, signal: AbortSignal): Promise<RuntimeEvent[]> {
-		return this.#call(z.array(RuntimeEvent), 'GET', `/runs/${encodeURIComponent(run)}/events`, undefined, signal)
-	}
-
-	startRun(directory: string, workflow: string, signal: AbortSignal): Promise<RunRecord> {
-		return this.#call(RunRecord, 'POST', '/runs', { directory, workflow }, signal)
-	}
-
-	answer(run: string, requestId: string, value: unknown, signal: AbortSignal): Promise<RunRecord> {
-		return this.#call(RunRecord, 'POST', `/runs/${encodeURIComponent(run)}/answers/${encodeURIComponent(requestId)}`, { value }, signal)
-	}
-
-	act(run: string, action: 'stop' | 'resume' | 'restart', signal: AbortSignal): Promise<RunRecord> {
-		return this.#call(RunRecord, 'POST', `/runs/${encodeURIComponent(run)}/${action}`, {}, signal)
-	}
-
-	#call<T>(schema: z.ZodType<T>, method: string, route: string, body: unknown, signal: AbortSignal): Promise<T> {
-		const payload = body === undefined ? undefined : JSON.stringify(body)
-		return new Promise<T>((resolve, reject) => {
-			const outgoing = request(
-				{
-					socketPath: this.#socketPath,
-					path: route,
-					method,
-					signal,
-					headers: payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
-				},
-				(response) => {
-					const chunks: Buffer[] = []
-					response.on('data', (chunk: Buffer) => chunks.push(chunk))
-					response.on('error', reject)
-					response.on('end', () => {
-						const status = response.statusCode ?? 0
-						const parsed = parse(Buffer.concat(chunks).toString('utf8'))
-						if (status >= 200 && status < 300) resolve(schema.parse(parsed))
-						else reject(new ControlError(errorOf(parsed) ?? `The engine answered ${String(status)}.`, status))
-					})
-				},
-			)
-			outgoing.on('error', (error) => {
-				reject(
-					hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ECONNREFUSED')
-						? new ControlError('No engine is running. Start one with `mesh-flow serve`.')
-						: error,
-				)
-			})
-			outgoing.end(payload)
-		})
-	}
+/** Talks to a running engine over its control socket, for the CLI. Each call is one request. */
+export interface ControlClient {
+	list(signal: AbortSignal): Promise<RunRecord[]>
+	get(run: string, signal: AbortSignal): Promise<RunRecord>
+	/** The run's events, in the order the runtime sent them. */
+	events(run: string, signal: AbortSignal): Promise<RuntimeEvent[]>
+	startRun(options: { readonly directory: string; readonly workflow: string; readonly signal: AbortSignal }): Promise<RunRecord>
+	answer(run: string, requestId: string, value: unknown, signal: AbortSignal): Promise<RunRecord>
+	stop(run: string, signal: AbortSignal): Promise<RunRecord>
+	resume(run: string, signal: AbortSignal): Promise<RunRecord>
+	restart(run: string, signal: AbortSignal): Promise<RunRecord>
 }
 
-function parse(text: string): unknown {
+/** The route of one run. */
+function runPath(run: string): string {
+	return `/runs/${encodeURIComponent(run)}`
+}
+
+/** A client for the engine that serves on `socketPath`. */
+export function controlClient(socketPath: string): ControlClient {
+	const act = (action: 'stop' | 'resume' | 'restart') => (run: string, signal: AbortSignal) =>
+		call(socketPath, RunRecord, 'POST', `${runPath(run)}/${action}`, {}, signal)
+	return Object.freeze({
+		list: (signal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, signal),
+		get: (run, signal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, signal),
+		events: (run, signal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, signal),
+		startRun: ({ directory, workflow, signal }) => call(socketPath, RunRecord, 'POST', '/runs', { directory, workflow }, signal),
+		answer: (run, requestId, value, signal) =>
+			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, signal),
+		stop: act('stop'),
+		resume: act('resume'),
+		restart: act('restart'),
+	} satisfies ControlClient)
+}
+
+/** One request to the control API, with the response checked against `schema`. */
+function call<T>(socketPath: string, schema: z.ZodType<T>, method: string, route: string, body: unknown, signal: AbortSignal): Promise<T> {
+	const payload = body === undefined ? undefined : JSON.stringify(body)
+	return new Promise<T>((resolve, reject) => {
+		const outgoing = request(
+			{
+				socketPath,
+				path: route,
+				method,
+				signal,
+				headers: payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+			},
+			(response) => {
+				const chunks: Buffer[] = []
+				response.on('data', (chunk: Buffer) => chunks.push(chunk))
+				response.on('error', reject)
+				response.on('end', () => {
+					const status = response.statusCode ?? 0
+					const parsed = parseJsonOrUndefined(Buffer.concat(chunks).toString('utf8'))
+					if (status >= 200 && status < 300) resolve(schema.parse(parsed))
+					else reject(new ControlError(errorOf(parsed) ?? `The engine answered ${String(status)}.`, status))
+				})
+			},
+		)
+		outgoing.on('error', (error) => {
+			reject(
+				hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ECONNREFUSED')
+					? new ControlError('No engine is running. Start one with `mesh-flow serve`.')
+					: error,
+			)
+		})
+		outgoing.end(payload)
+	})
+}
+
+/** The body as JSON, or `undefined` when it isn't JSON, such as an empty body. */
+function parseJsonOrUndefined(text: string): unknown {
 	try {
 		return JSON.parse(text)
 	} catch {
@@ -90,6 +94,7 @@ function parse(text: string): unknown {
 	}
 }
 
+/** The `error` message of an error body, if it has one. */
 function errorOf(body: unknown): string | undefined {
 	return typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string' ? body.error : undefined
 }

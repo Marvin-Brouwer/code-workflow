@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, test, vi } from 'vitest'
-import type { CloseOptions } from '../src/engine/engine.mts'
+import type { CloseDeadlines } from '../src/engine/engine.mts'
 import { handleShutdown, type ShutdownProcess } from '../src/shutdown/handle-shutdown.mts'
 
 function fakeProcess() {
@@ -17,7 +17,7 @@ describe('handleShutdown', () => {
 	test('shuts down on the first signal and exits with 0', async () => {
 		// Arrange
 		const { events, exit, target } = fakeProcess()
-		const shutdown = vi.fn((_deadlines: CloseOptions) => Promise.resolve())
+		const shutdown = vi.fn((_deadlines: CloseDeadlines) => Promise.resolve())
 		handleShutdown({ shutdown, process: target, log: vi.fn() })
 
 		// Act
@@ -33,7 +33,7 @@ describe('handleShutdown', () => {
 	test('skips the pauses on a second signal, but still closes', () => {
 		// Arrange
 		const { events, target } = fakeProcess()
-		let deadlines: CloseOptions | undefined
+		let deadlines: CloseDeadlines | undefined
 		handleShutdown({
 			shutdown: (given) => {
 				deadlines = given
@@ -49,7 +49,7 @@ describe('handleShutdown', () => {
 
 		// Assert
 		expect(deadlines?.pause.aborted).toBe(true)
-		expect(deadlines?.close.aborted).toBe(false)
+		expect(deadlines?.backend.aborted).toBe(false)
 	})
 
 	test('exits right away on a third signal', () => {

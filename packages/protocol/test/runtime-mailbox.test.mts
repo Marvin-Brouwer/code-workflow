@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 import { describe, expect, test } from 'vitest'
+import { answerFile, mailboxLayout } from '../src/mailbox-layout.mts'
 import { RuntimeMailbox } from '../src/runtime-mailbox.mts'
 import { RuntimeMessage } from '../src/runtime-message.mts'
-import { temporaryDirectory } from './temporary-directory.mts'
+import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const signal = new AbortController().signal
 
@@ -18,7 +18,7 @@ describe('RuntimeMailbox', () => {
 		mailbox.send({ type: 'succeeded' })
 
 		// Assert
-		const lines = (await readFile(path.join(directory, 'outbox.jsonl'), 'utf8')).split('\n')
+		const lines = (await readFile(mailboxLayout(directory).outbox, 'utf8')).split('\n')
 		expect(lines).toHaveLength(3)
 		expect(lines.slice(0, 2).map((line) => RuntimeMessage.parse(JSON.parse(line)).type)).toEqual(['event', 'succeeded'])
 	})
@@ -40,11 +40,11 @@ describe('RuntimeMailbox', () => {
 	test('picks up an answer once the engine has written it', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		await mkdir(path.join(directory, 'inbox'))
+		await mkdir(mailboxLayout(directory).inbox)
 		const waiting = new RuntimeMailbox(directory).answer('story', signal)
 
 		// Act
-		await writeFile(path.join(directory, 'inbox', 'story.json'), JSON.stringify({ value: { key: 'ABC-1' } }))
+		await writeFile(answerFile(mailboxLayout(directory), 'story'), JSON.stringify({ value: { key: 'ABC-1' } }))
 
 		// Assert
 		expect(await waiting).toEqual({ value: { key: 'ABC-1' } })
@@ -53,7 +53,7 @@ describe('RuntimeMailbox', () => {
 	test('stops waiting for an answer when its signal aborts', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		await mkdir(path.join(directory, 'inbox'))
+		await mkdir(mailboxLayout(directory).inbox)
 		const controller = new AbortController()
 
 		// Act

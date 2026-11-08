@@ -2,7 +2,7 @@ import path from 'node:path'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError } from 'commander'
 import envPaths from 'env-paths'
-import { ControlClient } from '../control/control-client.mts'
+import { controlClient } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
@@ -39,7 +39,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.showHelpAfterError()
 
 	const home = () => path.resolve(program.opts<{ home: string }>().home)
-	const client = () => new ControlClient(controlSocketPath(home()))
+	const client = () => controlClient(controlSocketPath(home()))
 
 	program
 		.command('serve')
@@ -54,7 +54,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				log,
 				shutdown: async (deadlines) => {
 					startup.abort(new Error('The engine is shutting down.'))
-					await (served ? served.close(deadlines) : backend.close(deadlines.close))
+					await (served ? served.close(deadlines) : backend.close(deadlines.backend))
 				},
 			})
 			served = await serveEngine({ home: home(), backend, log, signal: startup.signal }).catch(async (error: unknown) => {
@@ -70,7 +70,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.argument('<workflow>', 'the workflow, as its file name in the workflows folder without .mts')
 		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
 		.action(async (workflow: string, options: { directory: string }) => {
-			const record = await client().startRun(path.resolve(options.directory), workflow, requestSignal())
+			const record = await client().startRun({ directory: path.resolve(options.directory), workflow, signal: requestSignal() })
 			console.log(formatRunLine(record))
 		})
 
@@ -117,7 +117,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			.description(actionDescriptions[action])
 			.argument('<run>')
 			.action(async (run: string) => {
-				console.log(formatRunLine(await client().act(run, action, requestSignal())))
+				console.log(formatRunLine(await client()[action](run, requestSignal())))
 			})
 	}
 

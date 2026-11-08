@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { main } from '../src/cli/main.mts'
-import { ControlClient } from '../src/control/control-client.mts'
+import { controlClient, type ControlClient } from '../src/control/control-client.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -12,8 +12,8 @@ const signal = new AbortController().signal
 async function serve() {
 	const home = await temporaryDirectory()
 	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
-	onTestFinished(() => served.close({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) }))
-	const client = new ControlClient(served.socketPath)
+	onTestFinished(() => served.close({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) }))
+	const client = controlClient(served.socketPath)
 	return { client, home }
 }
 
@@ -31,7 +31,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		const directory = await workflowRepository({ ask })
 
 		// Act
-		const started = await client.startRun(directory, 'ask', signal)
+		const started = await client.startRun({ directory, workflow: 'ask', signal })
 		await vi.waitFor(async () => {
 			expect((await client.get(started.id, signal)).pending).toHaveLength(1)
 		}, 20_000)
@@ -47,8 +47,12 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 
 	test.each([
 		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
-		['a workflow that does not exist', (client: ControlClient) => client.startRun('/nowhere', 'develop', signal), 400],
-		['resuming a run that is not paused', (client: ControlClient) => client.act('run-000000000000', 'resume', signal), 404],
+		[
+			'a workflow that does not exist',
+			(client: ControlClient) => client.startRun({ directory: '/nowhere', workflow: 'develop', signal }),
+			400,
+		],
+		['resuming a run that is not paused', (client: ControlClient) => client.resume('run-000000000000', signal), 404],
 	])('refuses %s with the right status', async (_name, call, status) => {
 		// Arrange
 		const { client } = await serve()

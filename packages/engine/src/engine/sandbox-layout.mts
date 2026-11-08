@@ -8,6 +8,7 @@ export interface SandboxLayout {
 	readonly workflow: string
 }
 
+/** The mailbox at the protocol's default place, and the workflow at `/workflow`. */
 export const defaultSandboxLayout: SandboxLayout = {
 	mailbox: defaultMailboxDirectory,
 	workflow: '/workflow',

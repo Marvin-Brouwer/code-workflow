@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
-import { RunStore } from '../src/runs/run-store.mts'
+import { openRunStore } from '../src/runs/run-store.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { copiedMailbox, runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
@@ -14,7 +14,7 @@ import { copiedMailbox, runtimeScript, workflowRepository } from './support/work
  */
 const backendName = process.env.MESH_FLOW_ENGINE_TESTS
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(60_000), close: AbortSignal.timeout(60_000) })
+const deadlines = () => ({ pause: AbortSignal.timeout(60_000), backend: AbortSignal.timeout(60_000) })
 
 /** Loads only the backend under test, so the other's SDK isn't needed. */
 async function openBackend(): Promise<SandboxBackend> {
@@ -42,7 +42,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 	test('runs a workflow across a shutdown and a restart of the engine, in the same process', { timeout: 300_000 }, async () => {
 		// Arrange
 		const home = await temporaryDirectory()
-		const store = () => new RunStore(path.join(home, 'runs'))
+		const store = () => openRunStore(path.join(home, 'runs'))
 		const directory = await workflowRepository({ ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
 		const first = await Engine.open({ backend: await openBackend(), store: store() }, signal)
 		onTestFinished(() => first.close(deadlines()))

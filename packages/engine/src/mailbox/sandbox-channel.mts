@@ -1,12 +1,13 @@
-import { MailboxLayout, mailboxEnvironmentVariable, RuntimeMessage, type Answer } from '@mesh-flow/protocol'
+import { answerFile, mailboxEnvironmentVariable, mailboxLayout, RuntimeMessage, type Answer, type MailboxLayout } from '@mesh-flow/protocol'
 import type { Command, Sandbox } from '@mesh-flow/sandbox'
-import { pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
+import { pollIntervalSeconds, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */
 export type Delivery =
 	| { readonly kind: 'messages'; readonly messages: readonly RuntimeMessage[]; readonly cursor: number }
 	| { readonly kind: 'gone' }
 
+/** How the runtime starts: where, with what environment, and the signal bounding the start. */
 export interface StartRuntimeOptions {
 	readonly signal: AbortSignal
 	readonly cwd: string
@@ -15,6 +16,9 @@ export interface StartRuntimeOptions {
 
 /** How long one poll waits for news, so a poll is a short call and not an open connection. */
 const pollSeconds = 20
+
+/** How many lines of the runtime's log go into an error message. */
+export const tailLines = 20
 
 /**
  * The engine's side of the mailbox in one sandbox. Every call is a short call into the sandbox
@@ -27,7 +31,7 @@ export class SandboxChannel {
 
 	constructor(sandbox: Sandbox, directory: string) {
 		this.#sandbox = sandbox
-		this.#layout = new MailboxLayout(directory)
+		this.#layout = mailboxLayout(directory)
 	}
 
 	/** Makes the mailbox, readable for the runtime's user only. */
@@ -52,7 +56,7 @@ export class SandboxChannel {
 	 * being written is left for the next poll.
 	 */
 	async poll(cursor: number, signal: AbortSignal): Promise<Delivery> {
-		const tries = String(pollSeconds * 4)
+		const tries = String(pollSeconds / pollIntervalSeconds)
 		const { outbox, pidFile, polls } = this.#layout
 		const command: Command = ['sh', '-c', pollScript, 'sh', outbox, pidFile, String(cursor), tries, polls]
 		const result = await this.#sandbox.exec(command, { signal })
@@ -71,13 +75,14 @@ export class SandboxChannel {
 		await this.#run(['sh', '-c', stopPollsScript, 'sh', this.#layout.polls], signal)
 	}
 
-	async answer(requestId: string, answer: Answer, signal: AbortSignal): Promise<void> {
-		await this.#sandbox.writeFile(this.#layout.answer(requestId), JSON.stringify(answer), signal)
+	/** Writes the answer to a request where the runtime looks for it. */
+	async answer(requestId: string, reply: Answer, signal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(answerFile(this.#layout, requestId), JSON.stringify(reply), signal)
 	}
 
 	/** The end of the runtime's log, for an error message. */
 	async logTail(signal: AbortSignal): Promise<string> {
-		const result = await this.#sandbox.exec(['tail', '-n', '20', this.#layout.logFile], { signal })
+		const result = await this.#sandbox.exec(['tail', '-n', String(tailLines), this.#layout.logFile], { signal })
 		return result.stdout.trim()
 	}
 
@@ -87,10 +92,11 @@ export class SandboxChannel {
 	}
 }
 
-function parseLine(line: string, number: number): RuntimeMessage {
+/** One line of the outbox as a message. `lineNumber` counts from 1, for the error. */
+function parseLine(line: string, lineNumber: number): RuntimeMessage {
 	try {
 		return RuntimeMessage.parse(JSON.parse(line))
 	} catch (error) {
-		throw new Error(`Line ${String(number)} of the runtime's outbox isn't a valid message.`, { cause: error })
+		throw new Error(`Line ${String(lineNumber)} of the runtime's outbox isn't a valid message.`, { cause: error })
 	}
 }

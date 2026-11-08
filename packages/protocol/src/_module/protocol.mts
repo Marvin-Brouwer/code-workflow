@@ -4,7 +4,14 @@
  *
  * @module
  */
-export { defaultMailboxDirectory, MailboxLayout, mailboxEnvironmentVariable, runIdEnvironmentVariable } from '../mailbox-layout.mts'
+export {
+	answerFile,
+	defaultMailboxDirectory,
+	mailboxEnvironmentVariable,
+	mailboxLayout,
+	runIdEnvironmentVariable,
+	type MailboxLayout,
+} from '../mailbox-layout.mts'
 export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'

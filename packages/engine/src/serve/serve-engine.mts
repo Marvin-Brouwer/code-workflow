@@ -5,16 +5,21 @@ import { getRequestListener } from '@hono/node-server'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
-import { Engine, type CloseOptions } from '../engine/engine.mts'
+import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
-import { RunStore } from '../runs/run-store.mts'
+import { openRunStore } from '../runs/run-store.mts'
 
+/** What to serve an engine on. */
 export interface ServeEngineOptions {
 	/** The engine's own directory: run records, the control socket, backend state. */
 	readonly home: string
+	/** Where the runs' sandboxes are made. */
 	readonly backend: SandboxBackend
+	/** Where things go inside a sandbox. Default: the engine's default layout. */
 	readonly layout?: SandboxLayout
+	/** Where the engine reports what it did on its own. Default: nowhere. */
 	readonly log?: (message: string) => void
+	/** Bounds starting up: taking the socket and reconciling. */
 	readonly signal: AbortSignal
 }
 
@@ -23,7 +28,7 @@ export interface ServedEngine {
 	readonly engine: Engine
 	readonly socketPath: string
 	/** Stops serving, then closes the engine. */
-	close(deadlines: CloseOptions): Promise<void>
+	close(deadlines: CloseDeadlines): Promise<void>
 }
 
 /**
@@ -45,7 +50,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		engine = await Engine.open(
 			{
 				backend: options.backend,
-				store: new RunStore(path.join(options.home, 'runs')),
+				store: openRunStore(path.join(options.home, 'runs')),
 				...(options.layout ? { layout: options.layout } : {}),
 				...(options.log ? { log: options.log } : {}),
 			},

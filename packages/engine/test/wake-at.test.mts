@@ -1,18 +1,20 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { wakeAt } from '../src/engine/wake-timer.mts'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
+import { wakeAt } from '../src/engine/wake-at.mts'
 
-describe('wakeAt', () => {
-	beforeEach(() => {
-		vi.useFakeTimers({ now: new Date('2026-11-07T12:00:00Z') })
-	})
-	afterEach(() => {
+/** Fakes the clock at 2026-11-07 12:00 UTC for one test. */
+function useClock(): void {
+	vi.useFakeTimers({ now: new Date('2026-11-07T12:00:00Z') })
+	onTestFinished(() => {
 		vi.useRealTimers()
 	})
+}
 
+describe('wakeAt', () => {
 	test('wakes at the moment, not before', () => {
 		// Arrange
+		useClock()
 		const wake = vi.fn()
-		wakeAt(new Date('2026-11-07T12:00:10Z'), new AbortController().signal, wake)
+		wakeAt(new Date('2026-11-07T12:00:10Z'), wake, new AbortController().signal)
 
 		// Act
 		vi.advanceTimersByTime(9_999)
@@ -26,10 +28,11 @@ describe('wakeAt', () => {
 
 	test('wakes right away when the moment has passed', () => {
 		// Arrange
+		useClock()
 		const wake = vi.fn()
 
 		// Act
-		wakeAt(new Date('2026-11-07T11:00:00Z'), new AbortController().signal, wake)
+		wakeAt(new Date('2026-11-07T11:00:00Z'), wake, new AbortController().signal)
 		vi.advanceTimersByTime(0)
 
 		// Assert
@@ -38,8 +41,9 @@ describe('wakeAt', () => {
 
 	test('waits out delays longer than setTimeout takes', () => {
 		// Arrange
+		useClock()
 		const wake = vi.fn()
-		wakeAt(new Date('2026-12-31T12:00:00Z'), new AbortController().signal, wake)
+		wakeAt(new Date('2026-12-31T12:00:00Z'), wake, new AbortController().signal)
 
 		// Act
 		vi.advanceTimersByTime(30 * 24 * 60 * 60 * 1000)
@@ -54,9 +58,10 @@ describe('wakeAt', () => {
 
 	test('never wakes once the signal aborts', () => {
 		// Arrange
+		useClock()
 		const wake = vi.fn()
 		const controller = new AbortController()
-		wakeAt(new Date('2026-11-07T12:00:10Z'), controller.signal, wake)
+		wakeAt(new Date('2026-11-07T12:00:10Z'), wake, controller.signal)
 
 		// Act
 		controller.abort()

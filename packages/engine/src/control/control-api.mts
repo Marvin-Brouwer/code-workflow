@@ -3,9 +3,10 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
+import { WorkflowName } from '../workflow/workflow-name.mts'
 
 /** The body of `POST /runs`. */
-export const StartRunBody = z.object({ directory: z.string().min(1), workflow: z.string().min(1) })
+export const StartRunBody = z.object({ directory: z.string().min(1), workflow: WorkflowName })
 
 /** The body of `POST /runs/:run/answers/:request`. */
 export const AnswerBody = z.object({ value: z.unknown() })

@@ -58,15 +58,17 @@ mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge re
 
 `run <name>` uploads the repository's git files, as they are on disk (tracked files, plus untracked ones that aren't ignored), into the sandbox at `/workflow`. It runs `setup` there one command at a time, then starts `start` with the workflow's file added, here `node workflows/develop.mts`. The run record pins the commit, and says when there were uncommitted changes. The upload is kept, so `restart` runs the same code.
 
-The image needs what the engine uses in it: `sh`, `tail`, `wc`, `cut`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+The image needs what the engine uses in it: `sh`, `cat`, `kill`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
 
 ### Embed the engine
 
 ```ts
-import { Engine, RunStore } from '@mesh-flow/engine'
+import { Engine, openRunStore } from '@mesh-flow/engine'
 import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
-const engine = await Engine.open({ backend: microsandboxBackend(), store: new RunStore(directory), log: console.error }, signal)
+const signal = AbortSignal.timeout(60_000)
+const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
+const engine = await Engine.open({ backend: microsandboxBackend(), store, log: console.error }, signal)
 
 const run = await engine.startRun({ directory: '/path/to/workflows', workflow: 'develop', signal })
 // ... later, when the run waits for input:
@@ -120,7 +122,7 @@ The control socket comes first and is the lock: a second engine on the same home
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. Only the user who owns the directory can reach it. `controlApi(engine)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, and `POST /runs/:run/stop`, `/resume` and `/restart`. `ControlClient` calls it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. Only the user who owns the directory can reach it. `controlApi(engine)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, and `POST /runs/:run/stop`, `/resume` and `/restart`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 

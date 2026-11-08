@@ -13,6 +13,7 @@ The engine starts the runtime with `MESH_FLOW_MAILBOX` set. `RuntimeMailbox` sen
 ```ts
 import { RuntimeMailbox } from '@mesh-flow/protocol'
 
+const signal = AbortSignal.timeout(24 * 60 * 60_000)
 const mailbox = RuntimeMailbox.fromEnvironment()
 mailbox.send({ type: 'event', event: { id: 'run', type: 'workflow-started', at: new Date().toISOString() } })
 
@@ -32,10 +33,12 @@ It uses only Node built-ins and holds no connection, so a pause of the sandbox c
 The engine checks every line it reads with the schemas:
 
 ```ts
-import { MailboxLayout, RuntimeMessage } from '@mesh-flow/protocol'
+import { answerFile, defaultMailboxDirectory, mailboxLayout, RuntimeMessage } from '@mesh-flow/protocol'
 
-const layout = new MailboxLayout('/var/lib/mesh-flow/mailbox')
-const message = RuntimeMessage.parse(JSON.parse(line)) // a line of layout.outbox
+const layout = mailboxLayout(defaultMailboxDirectory)
+const line = '{"type":"succeeded"}' // a line of layout.outbox
+const message = RuntimeMessage.parse(JSON.parse(line))
+const answerPath = answerFile(layout, 'story') // where the answer to request `story` goes
 ```
 
 ## Messages

@@ -102,7 +102,10 @@ import { abortable } from '@mesh-flow/sandbox'
 
 const deadline = AbortSignal.timeout(30_000)
 const paused = await abortable(sandbox.pause(deadline), deadline)
-const late = await abortable(createWithoutSignal(spec), deadline, (sandbox) => sandbox.destroy(AbortSignal.timeout(30_000)))
+
+// `createVm` stands for any SDK call that takes no signal and makes something that mustn't leak.
+const createVm = (): Promise<{ kill(): Promise<void> }> => sdk.vms.create({ image: 'node:22-slim' })
+const vm = await abortable(createVm(), deadline, (late) => late.kill())
 ```
 
 ## Setting up E2B

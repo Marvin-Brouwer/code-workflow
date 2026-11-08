@@ -1,12 +1,15 @@
 /** The exit code of {@link pollScript} when the runtime is gone. */
 export const runtimeGoneExitCode = 3
 
+/** How long {@link pollScript} sleeps between looks at the outbox. */
+export const pollIntervalSeconds = 0.25
+
 /**
  * Waits inside the sandbox until the outbox has more lines than the engine has read, then prints
  * the new ones. Plain POSIX shell, so nothing has to be copied into the sandbox for it.
  *
  * Arguments: the outbox, the runtime's pid file, the number of lines already read, how many
- * quarter seconds to wait at most, and a directory where it keeps its own pid while it runs, so
+ * intervals of {@link pollIntervalSeconds} to wait at most, and a directory where it keeps its own pid while it runs, so
  * {@link stopPollsScript} can find it. Exits 0 with the new lines (or none, when the wait ran out),
  * and {@link runtimeGoneExitCode} when the runtime is gone and has nothing more to say.
  *
@@ -33,7 +36,7 @@ while [ "$(lines)" -le "$after" ]; do
 		break
 	fi
 	[ "$i" -ge "$tries" ] && exit 0
-	sleep 0.25
+	sleep ${String(pollIntervalSeconds)}
 	i=$((i + 1))
 done
 tail -n "+$((after + 1))" "$outbox"
@@ -42,7 +45,7 @@ tail -n "+$((after + 1))" "$outbox"
 /**
  * Ends every {@link pollScript} still running in the sandbox. Aborting a poll ends the call on the
  * host, not always the loop inside the sandbox, and gVisor can't restore a checkpoint that holds a
- * process an exec started. It then waits out a last `sleep 0.25` of a loop it ended.
+ * process an exec started. It then waits out a last sleep of a loop it ended, two intervals to be safe.
  */
 export const stopPollsScript = `
 for file in "$1"/*; do
@@ -50,5 +53,5 @@ for file in "$1"/*; do
 	kill "$(cat "$file")" 2>/dev/null
 	rm -f "$file"
 done
-sleep 0.5
+sleep ${String(pollIntervalSeconds * 2)}
 `

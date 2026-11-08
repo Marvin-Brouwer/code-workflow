@@ -2,7 +2,7 @@ import { appendFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Answer, RuntimeMessage } from './runtime-message.mts'
-import { MailboxLayout, mailboxEnvironmentVariable } from './mailbox-layout.mts'
+import { answerFile, mailboxEnvironmentVariable, mailboxLayout, type MailboxLayout } from './mailbox-layout.mts'
 
 /** How often the runtime looks for an answer. Only a polling interval, never a wall-clock wait. */
 const answerPollMs = 250
@@ -19,7 +19,7 @@ export class RuntimeMailbox {
 	readonly #requested = new Set<string>()
 
 	constructor(directory: string) {
-		this.#layout = new MailboxLayout(directory)
+		this.#layout = mailboxLayout(directory)
 	}
 
 	/** The mailbox the engine started this process with. */
@@ -49,7 +49,7 @@ export class RuntimeMailbox {
 
 	/** Waits until the engine has answered the request with this id. */
 	async answer(requestId: string, signal: AbortSignal): Promise<Answer> {
-		const file = this.#layout.answer(requestId)
+		const file = answerFile(this.#layout, requestId)
 		for (;;) {
 			signal.throwIfAborted()
 			const text = await readFile(file, 'utf8').catch((error: unknown) => {

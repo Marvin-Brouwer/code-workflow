@@ -1,10 +1,10 @@
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import { pollScript } from '../src/mailbox/poll-script.mts'
-import { RunStore } from '../src/runs/run-store.mts'
+import { openRunStore } from '../src/runs/run-store.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
@@ -39,9 +39,14 @@ function stubBackend(parts: { create?: SandboxBackend['create']; poll?: () => Pr
 	return { backend, close }
 }
 
+/** Deadlines short enough that a hang shows as a slow test. */
+const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(400) })
+
+/** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
-	const engine = await Engine.open({ backend, store: new RunStore(path.join(home, 'runs')) }, signal)
+	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')) }, signal)
+	onTestFinished(() => engine.close(shortDeadlines()))
 	const directory = await workflowRepository({ hello: runtimeScript('') })
 	const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
 	return { engine, id }
@@ -55,7 +60,7 @@ describe('Engine.close', () => {
 		const started = Date.now()
 
 		// Act
-		await engine.close({ pause: AbortSignal.timeout(200), close: AbortSignal.timeout(400) })
+		await engine.close(shortDeadlines())
 
 		// Assert
 		expect(Date.now() - started).toBeLessThan(2_000)
@@ -73,7 +78,7 @@ describe('Engine.close', () => {
 		const started = Date.now()
 
 		// Act
-		await engine.close({ pause: AbortSignal.timeout(200), close: AbortSignal.timeout(400) })
+		await engine.close(shortDeadlines())
 
 		// Assert
 		expect(Date.now() - started).toBeLessThan(2_000)
@@ -85,7 +90,7 @@ describe('Engine.close', () => {
 	test('refuses new runs once it has started', async () => {
 		// Arrange
 		const { engine } = await startRun(stubBackend({}).backend)
-		await engine.close({ pause: AbortSignal.timeout(200), close: AbortSignal.timeout(400) })
+		await engine.close(shortDeadlines())
 
 		// Act
 		const starting = engine.startRun({ directory: '.', workflow: 'hello', signal })

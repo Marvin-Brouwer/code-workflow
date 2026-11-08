@@ -1,12 +1,15 @@
 import path from 'node:path'
 import { chooseBackend, type BackendName, type SandboxBackend } from '@mesh-flow/sandbox'
 
+/** Which backend `serve` opens, and where it keeps its state. */
 export interface OpenBackendOptions {
+	/** The engine's home; backend state goes in it. */
 	readonly home: string
 	/** A backend named on the command line wins over the machine's own choice. */
 	readonly backend?: BackendName
 	/** How to call runsc, for gVisor, such as `['sudo', '/usr/bin/runsc']`. */
 	readonly runsc?: readonly string[]
+	/** Where warnings about the choice go. */
 	readonly log: (message: string) => void
 }
 

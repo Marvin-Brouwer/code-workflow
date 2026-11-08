@@ -3,13 +3,13 @@ import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
-import { RunStore } from '../src/runs/run-store.mts'
+import { openRunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
+const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
 
 interface OpenEngineOptions {
 	/** An engine home to open again. Default: a new one. */
@@ -23,7 +23,7 @@ async function openEngine({ home, wrap = (backend) => backend }: OpenEngineOptio
 	const directory = home ?? (await temporaryDirectory())
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
-	const store = new RunStore(path.join(directory, 'runs'))
+	const store = openRunStore(path.join(directory, 'runs'))
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))
