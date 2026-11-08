@@ -150,7 +150,7 @@ export class Engine {
 		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), signal).catch(async (error: unknown) => {
 			// Best effort: the pack error is the one to report.
 			await this.#store.removeRun(id).catch(() => undefined)
-			if (signal.aborted) throw signal.reason
+			if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason))
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
 		})
 		if (this.#lifetime.signal.aborted) {
@@ -312,10 +312,11 @@ export class Engine {
 		runSignal: AbortSignal,
 	): Promise<SandboxChannel> {
 		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
+		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { status: 'running', paused: undefined }, ['paused']).catch(async (error: unknown) => {
 			// The run was stopped while its sandbox was being resumed: nobody else will remove it.
-			await this.#discard(id, { backend: this.#backend.name, id: sandbox.id })
+			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
 		runSignal.throwIfAborted()
@@ -338,7 +339,7 @@ export class Engine {
 		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { sandbox: ref }, ['starting']).catch(async (error: unknown) => {
 			// The run was given up on while the sandbox was being made: nobody else will remove it.
-			await this.#discard(id, ref)
+			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
 		await channel.prepare(signal)

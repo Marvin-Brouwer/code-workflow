@@ -13,6 +13,14 @@ const refreshMs = 1_000
 /** How often a start looks again at a lock that may be going stale. */
 const retryMs = 1_000
 
+/** Long enough for a dead engine's lock to go stale, and two more looks. */
+const giveUpAfterMs = staleMs + 2 * retryMs
+
+/** The lock of an engine home. */
+export function homeLockPath(home: string): string {
+	return path.join(home, 'engine.lock')
+}
+
 /**
  * Takes the lock on an engine home, so only one engine reconciles its sandboxes. The lock is a
  * directory the engine keeps fresh. When an engine answers on `socketPath`, the start fails at
@@ -29,8 +37,8 @@ export async function lockHome(
 	log: (message: string) => void,
 	signal: AbortSignal,
 ): Promise<() => Promise<void>> {
-	const lockfilePath = path.join(home, 'engine.lock')
-	const giveUpAt = Date.now() + staleMs + 2 * retryMs
+	const lockfilePath = homeLockPath(home)
+	const giveUpAt = Date.now() + giveUpAfterMs
 	for (;;) {
 		signal.throwIfAborted()
 		try {

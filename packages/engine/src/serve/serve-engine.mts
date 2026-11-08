@@ -6,6 +6,7 @@ import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
+import { messageOf } from '../errors.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { openRunStore } from '../runs/run-store.mts'
 import { lockHome } from './home-lock.mts'
@@ -45,13 +46,13 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	})
 	const socketPath = controlSocketPath(options.home)
 	const unlock = await lockHome(options.home, socketPath, options.log ?? (() => undefined), options.signal)
-	await (async () => {
+	try {
 		options.signal.throwIfAborted()
 		await listenOnControlSocket(server, socketPath)
-	})().catch(async (error: unknown) => {
+	} catch (error) {
 		await unlock()
 		throw error
-	})
+	}
 
 	let engine: Engine
 	try {
@@ -80,7 +81,10 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			await closeServer(server)
 			await engine.close(deadlines)
 		} finally {
-			await unlock()
+			// Reported, not thrown: an error closing the engine is the one to see.
+			await unlock().catch((error: unknown) => {
+				options.log?.(`Releasing the lock on ${options.home} failed: ${messageOf(error)}`)
+			})
 		}
 	}
 	return {

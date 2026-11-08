@@ -1,9 +1,8 @@
 import { mkdir, rm, utimes } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { controlSocketPath } from '../src/control/control-socket.mts'
-import { lockHome } from '../src/serve/home-lock.mts'
+import { homeLockPath, lockHome } from '../src/serve/home-lock.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const signal = new AbortController().signal
@@ -35,7 +34,7 @@ describe('lockHome', () => {
 	test('stops waiting for a lock that is going stale when its signal aborts', async () => {
 		// Arrange
 		const home = await temporaryDirectory()
-		const left = path.join(home, 'engine.lock')
+		const left = homeLockPath(home)
 		await mkdir(left)
 		const twoSecondsAgo = new Date(Date.now() - 2_000)
 		await utimes(left, twoSecondsAgo, twoSecondsAgo)
@@ -52,7 +51,7 @@ describe('lockHome', () => {
 	test('takes over a lock an engine left when it died', async () => {
 		// Arrange
 		const home = await temporaryDirectory()
-		const left = path.join(home, 'engine.lock')
+		const left = homeLockPath(home)
 		await mkdir(left)
 		const aMinuteAgo = new Date(Date.now() - 60_000)
 		await utimes(left, aMinuteAgo, aMinuteAgo)
@@ -69,7 +68,7 @@ describe('lockHome', () => {
 		const home = await temporaryDirectory()
 		const lost = vi.fn<(message: string) => void>()
 		const unlock = await lockHome(home, controlSocketPath(home), lost, signal)
-		await rm(path.join(home, 'engine.lock'), { recursive: true })
+		await rm(homeLockPath(home), { recursive: true })
 		await vi.waitFor(() => {
 			expect(lost).toHaveBeenCalledWith(expect.stringContaining('was lost'))
 		}, 10_000)
