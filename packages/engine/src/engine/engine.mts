@@ -136,6 +136,7 @@ export class Engine {
 
 		const id = newRunId()
 		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), signal).catch(async (error: unknown) => {
+			// Best effort: the pack error is the one to report.
 			await this.#store.removeRun(id).catch(() => undefined)
 			if (signal.aborted) throw error
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
