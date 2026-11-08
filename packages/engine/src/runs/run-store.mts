@@ -52,7 +52,7 @@ export function runDirectory(root: string, id: string): string {
 
 /** The run records under `root`. Nothing is read until it's asked for. */
 export function openRunStore(root: string): RunStore {
-	const enqueue = writeQueues()
+	const queues = writeQueues()
 	const file = (id: RunId, name: string) => path.join(runDirectory(root, id), name)
 
 	return Object.freeze({
@@ -60,7 +60,7 @@ export function openRunStore(root: string): RunStore {
 
 		save: (record) => {
 			const text = `${JSON.stringify(record, null, '\t')}\n`
-			return enqueue.write(record.id, async () => {
+			return queues.write(record.id, async () => {
 				await mkdir(runDirectory(root, record.id), { recursive: true })
 				await writeFileAtomic(file(record.id, recordFile), text)
 			})
@@ -69,7 +69,7 @@ export function openRunStore(root: string): RunStore {
 		appendEvents: (id, events) => {
 			if (events.length === 0) return Promise.resolve()
 			const text = events.map((event) => `${JSON.stringify(event)}\n`).join('')
-			return enqueue.write(id, async () => {
+			return queues.write(id, async () => {
 				await mkdir(runDirectory(root, id), { recursive: true })
 				await appendFile(file(id, eventsFile), text)
 			})
@@ -90,9 +90,9 @@ export function openRunStore(root: string): RunStore {
 
 		loadAll: () => loadAll(root),
 
-		removeRun: (id) => enqueue.write(id, () => rm(runDirectory(root, id), { recursive: true, force: true })),
+		removeRun: (id) => queues.write(id, () => rm(runDirectory(root, id), { recursive: true, force: true })),
 
-		flush: () => enqueue.flush(),
+		flush: () => queues.flush(),
 	} satisfies RunStore)
 }
 

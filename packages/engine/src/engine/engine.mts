@@ -150,7 +150,7 @@ export class Engine {
 		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), signal).catch(async (error: unknown) => {
 			// Best effort: the pack error is the one to report.
 			await this.#store.removeRun(id).catch(() => undefined)
-			if (signal.aborted) throw error
+			if (signal.aborted) throw signal.reason
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
 		})
 		if (this.#lifetime.signal.aborted) {
@@ -311,8 +311,13 @@ export class Engine {
 		signal: AbortSignal,
 		runSignal: AbortSignal,
 	): Promise<SandboxChannel> {
-		const channel = this.#attach(active, await this.#backend.resume(paused, AbortSignal.any([signal, runSignal])))
-		await this.#update(id, { status: 'running', paused: undefined }, ['paused'])
+		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
+		const channel = this.#attach(active, sandbox)
+		await this.#update(id, { status: 'running', paused: undefined }, ['paused']).catch(async (error: unknown) => {
+			// The run was stopped while its sandbox was being resumed: nobody else will remove it.
+			await this.#discard(id, { backend: this.#backend.name, id: sandbox.id })
+			throw error
+		})
 		runSignal.throwIfAborted()
 		return channel
 	}
@@ -329,8 +334,13 @@ export class Engine {
 	async #start(id: RunId, file: string, active: ActiveRun, signal: AbortSignal): Promise<void> {
 		const { config } = this.get(id)
 		const sandbox = await this.#backend.create(config.sandbox, signal)
+		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
-		await this.#update(id, { sandbox: { backend: this.#backend.name, id: sandbox.id } }, ['starting'])
+		await this.#update(id, { sandbox: ref }, ['starting']).catch(async (error: unknown) => {
+			// The run was given up on while the sandbox was being made: nobody else will remove it.
+			await this.#discard(id, ref)
+			throw error
+		})
 		await channel.prepare(signal)
 		await uploadWorkflowSource(sandbox, this.#store.sourceOf(id), this.#layout.workflow, signal)
 		for (const command of config.setup) {

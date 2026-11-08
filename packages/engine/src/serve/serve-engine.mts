@@ -44,8 +44,11 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		listener(request, response)
 	})
 	const socketPath = controlSocketPath(options.home)
-	const unlock = await lockHome(options.home, options.log ?? (() => undefined))
-	await listenOnControlSocket(server, socketPath).catch(async (error: unknown) => {
+	const unlock = await lockHome(options.home, socketPath, options.log ?? (() => undefined), options.signal)
+	await (async () => {
+		options.signal.throwIfAborted()
+		await listenOnControlSocket(server, socketPath)
+	})().catch(async (error: unknown) => {
 		await unlock()
 		throw error
 	})
@@ -73,9 +76,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 
 	let closing: Promise<void> | undefined
 	const close = async (deadlines: CloseDeadlines) => {
-		await closeServer(server)
-		await engine.close(deadlines)
-		await unlock()
+		try {
+			await closeServer(server)
+			await engine.close(deadlines)
+		} finally {
+			await unlock()
+		}
 	}
 	return {
 		engine,

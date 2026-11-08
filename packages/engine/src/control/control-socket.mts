@@ -27,7 +27,7 @@ export async function listenOnControlSocket(server: Server, socketPath: string):
 		await listen(server, socketPath)
 	} catch (error) {
 		if (!hasErrorCode(error, 'EADDRINUSE')) throw error
-		if (await answers(socketPath)) throw new Error(`An engine is already running on ${socketPath}.`, { cause: error })
+		if (await engineAnswers(socketPath)) throw new Error(`An engine is already running on ${socketPath}.`, { cause: error })
 		await rm(socketPath, { force: true })
 		await listen(server, socketPath)
 	}
@@ -46,7 +46,8 @@ function listen(server: Server, socketPath: string): Promise<void> {
 	})
 }
 
-function answers(socketPath: string): Promise<boolean> {
+/** Whether something accepts connections on the control socket. */
+export function engineAnswers(socketPath: string): Promise<boolean> {
 	return new Promise((resolve) => {
 		const socket = connect(socketPath)
 		socket.once('connect', () => {
