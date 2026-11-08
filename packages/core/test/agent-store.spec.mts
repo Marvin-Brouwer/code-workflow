@@ -82,6 +82,23 @@ describe('a run on an agent store an earlier attempt used', () => {
 		expect(textOf(second.requests[0])).not.toContain('comment A')
 	})
 
+	test('runs a loop again whose result JSON would change, such as a date', async () => {
+		// Arrange
+		const store = await sharedStore()
+		const helper = agent({ model: modelId })
+		const Due = z.object({ due: z.string().transform((due) => new Date(due)) })
+		const body = () => helper.loop`When is it due? ${succeed(Due)}`
+		const firstRun = await runBody(body, { ...scriptedModel([callsTool('succeed', { due: '2026-11-09' })]), ...store })
+		await firstRun.result
+		const second = scriptedModel([callsTool('succeed', { due: '2026-11-10' })])
+
+		// Act
+		const rerun = await runBody(body, { ...second, ...store })
+
+		// Assert
+		expect(await rerun.result).toEqual({ due: new Date('2026-11-10') })
+	})
+
 	test('returns a result that is not JSON, and runs that loop again on a rerun', async () => {
 		// Arrange
 		const store = await sharedStore()

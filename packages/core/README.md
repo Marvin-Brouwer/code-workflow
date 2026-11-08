@@ -189,7 +189,7 @@ Under the engine the workspace is `~/workspace` and the agents' store is `~/.mes
 ## Reruns
 
 When a run starts again on the same agents' store, as after a crash, a loop is the same loop when its call site, the dependency nodes around it, its count there and what the agent gets (model, reasoning, system prompt and template, as rendered) are the same. Then:
-- a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON: one that isn't JSON, such as a `bigint` from a schema's transform, isn't kept, and that loop runs again;
+- a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON: one that JSON would change, such as a `Date` or a `bigint` from a schema's transform, isn't kept, and that loop runs again;
 - a loop that didn't finish goes on from its conversation, with what the agent did so far, and its `turns` limit counts from 0 again;
 - work the earlier attempt left running, such as a model request cut off by the crash, is stopped first, so it never runs outside its loop.
 

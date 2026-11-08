@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import type { Context } from '@earendil-works/chord/context'
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import {
@@ -133,12 +134,12 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		const handIns = handInExits(template)
 		const tools = loopTools(template, system, handIns, session)
 		let turns = 0
-		extension = loopExtension(key, tools, scope, {
-			onTurn: (message) => {
+		extension = loopExtension(storeKey, tools, scope, {
+			turn: (message) => {
 				turns++
 				emitEvent(scope, 'turn', { turn: turns, text: textOf(message) })
 			},
-			onRoundDone: () => {
+			roundDone: () => {
 				if (outcome !== undefined) ended.roundDone()
 			},
 		})
@@ -207,7 +208,7 @@ function loopTools(
 	session: LoopSession,
 ): ToolRegistration[] {
 	const gate = runGateOf(template.gate, session)
-	const handInWithVerify =
+	const verifyHandIn =
 		template.gate !== undefined && handIns.length === 0
 			? [
 					verifyTool(
@@ -220,28 +221,28 @@ function loopTools(
 	return [
 		...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((spec) => agentTool(spec, session)),
 		...exitTools(template.exits, gate, session),
-		...handInWithVerify,
+		...verifyHandIn,
 	]
 }
 
 /** The loop's extension: its tools, and hooks that count turns, note round ends and emit coding tool calls. */
 function loopExtension(
-	key: string,
+	storeKey: string,
 	tools: readonly ToolRegistration[],
 	scope: Scope,
-	on: { readonly onTurn: (message: AssistantMessage) => void; readonly onRoundDone: () => void },
+	hooks: { readonly turn: (message: AssistantMessage) => void; readonly roundDone: () => void },
 ): Extension {
 	const own = new Set(tools.map((registration) => registration.name))
 	return defineExtension({
-		// Named by the loop's key: stored work finds its own loop's tools, never another loop's.
-		name: `mesh-flow.loop ${key}`,
+		// Named like the loop's conversation: stored work finds its own loop's tools, never another loop's.
+		name: `mesh-flow.loop ${storeKey}`,
 		tools,
 		hooks: [
 			hook(GenerationTask, {
 				afterResponse: (message) => {
-					if (message.stopReason !== 'error' && message.stopReason !== 'aborted') on.onTurn(message)
+					if (message.stopReason !== 'error' && message.stopReason !== 'aborted') hooks.turn(message)
 				},
-				afterTools: on.onRoundDone,
+				afterTools: hooks.roundDone,
 			}),
 			hook(ToolTask, {
 				// The loop's own tools have their own events; this covers the coding tools.
@@ -277,7 +278,7 @@ async function endRun(
 /**
  * A loop's result as the store keeps it, or `undefined` when it can't be kept. Exit results come
  * from the agent's JSON arguments; a schema can still transform them into something that isn't
- * JSON, such as a `bigint`.
+ * JSON, such as a `bigint` or a `Date`.
  */
 function toStored(result: unknown, template: LoopTemplate): StoredResult | undefined {
 	const folder = folderOf(template)
@@ -285,8 +286,9 @@ function toStored(result: unknown, template: LoopTemplate): StoredResult | undef
 	if (result === undefined) return {}
 	try {
 		const text = JSON.stringify(result) as string | undefined
-		const value = text === undefined ? undefined : z.json().safeParse(JSON.parse(text))
-		return value?.success === true ? { value: value.data } : undefined
+		const parsed = text === undefined ? undefined : z.json().safeParse(JSON.parse(text))
+		// Kept only when JSON gives back the same value: a `Date` would come back as a string, a `Map` as `{}`.
+		return parsed?.success === true && isDeepStrictEqual(parsed.data, result) ? { value: parsed.data } : undefined
 	} catch {
 		return undefined
 	}
