@@ -8,7 +8,8 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const core = pathToFileURL(path.join(import.meta.dirname, '../src/_module/core.mts')).href
 const zod = import.meta.resolve('zod')
-const loader = path.join(import.meta.dirname, 'support/protocol-from-source.mts')
+// A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
+const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
 
 /** Starts a workflow file the way the engine does: `node <file>` with the mailbox in the environment. */
 async function startLikeTheEngine(source: string) {

@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import path from 'node:path'
 import { mailboxEnvironmentVariable } from '@mesh-flow/protocol'
 import { callSite } from '../run/call-site.mts'
@@ -43,5 +44,15 @@ export function workflow(name: string, body: () => Promise<void>): Workflow {
 /** Whether `file` is the file the engine started this process with. */
 function isEntryOfEngineRun(file: string | undefined): boolean {
 	const entry = process.argv[1]
-	return process.env[mailboxEnvironmentVariable] !== undefined && file !== undefined && entry !== undefined && path.resolve(entry) === file
+	if (process.env[mailboxEnvironmentVariable] === undefined || file === undefined || entry === undefined) return false
+	// Node loads the entry by its real path, which can differ from argv: a symlink, or a Windows short name.
+	return realPath(entry) === realPath(file)
+}
+
+function realPath(file: string): string {
+	try {
+		return realpathSync.native(path.resolve(file))
+	} catch {
+		return path.resolve(file)
+	}
 }

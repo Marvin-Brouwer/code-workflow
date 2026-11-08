@@ -1,6 +1,4 @@
-import { pathToFileURL } from 'node:url'
-
-const protocol = pathToFileURL(new URL('../../../protocol/src/_module/protocol.mts', import.meta.url).pathname).href
+const protocol = new URL('../../../protocol/src/_module/protocol.mts', import.meta.url).href
 
 interface ResolveContext {
 	readonly conditions: readonly string[]
