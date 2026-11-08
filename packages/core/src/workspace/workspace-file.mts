@@ -1,0 +1,42 @@
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { toPrompt } from '../render/to-prompt.mts'
+import { onDisk, workspacePath } from './workspace-path.mts'
+
+/** A file in the run's workspace. In a prompt it renders as its path. */
+export interface WorkspaceFile {
+	readonly kind: 'file'
+	/** Relative to the workspace, POSIX. */
+	readonly path: string
+	read(): Promise<string>
+	/** Writes the file, making its folder when needed. */
+	write(text: string): Promise<void>
+	/** Appends `entry` as one line of JSON, making the file when needed. */
+	append(entry: object): Promise<void>
+	[toPrompt](): string
+}
+
+/**
+ * A file in the run's workspace. It can be made outside a run (at module level, say); reading and
+ * writing it only works inside one.
+ */
+export function workspaceFile(relative: string): WorkspaceFile {
+	const filePath = workspacePath(relative)
+	const located = (what: string) => onDisk(filePath, `${what} of workspace file ${filePath}`)
+	return Object.freeze({
+		kind: 'file' as const,
+		path: filePath,
+		read: () => readFile(located('Reading'), 'utf8'),
+		write: async (text: string) => {
+			const file = located('Writing')
+			await mkdir(path.dirname(file), { recursive: true })
+			await writeFile(file, text)
+		},
+		append: async (entry: object) => {
+			const file = located('Appending to')
+			await mkdir(path.dirname(file), { recursive: true })
+			await appendFile(file, `${JSON.stringify(entry)}\n`)
+		},
+		[toPrompt]: () => filePath,
+	})
+}

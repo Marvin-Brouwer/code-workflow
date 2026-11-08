@@ -10,7 +10,7 @@ TypeScript in git, not something clicked together in a UI.
 - `docs/decisions.md`: alternatives that were considered and rejected or superseded, and why.
   Don't propose these again unless something new changes the trade-off; if it does, say what
   changed.
-- `examples/example/`: the reference workflow, and `packages/core/src/index.d.ts`: the whole
+- `examples/example/`: the reference workflow, and `packages/core/src/_module/core.mts`: the whole
   authoring vocabulary.
 
 ## Conventions

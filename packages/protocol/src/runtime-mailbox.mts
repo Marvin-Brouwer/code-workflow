@@ -59,7 +59,10 @@ export class RuntimeMailbox {
 				throw error
 			})
 			if (text !== undefined) return toAnswer(JSON.parse(text))
-			await delay(answerPollMs, undefined, { signal })
+			// `delay` rejects with a plain AbortError; the signal's reason says why the wait stopped.
+			await delay(answerPollMs, undefined, { signal }).catch(() => {
+				signal.throwIfAborted()
+			})
 		}
 	}
 }
