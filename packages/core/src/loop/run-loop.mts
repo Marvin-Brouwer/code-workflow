@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Context } from '@earendil-works/chord/context'
 import type { AssistantMessage } from '@earendil-works/pi-ai'
 import {
@@ -10,22 +11,23 @@ import {
 	type EntryId,
 	type Extension,
 	type SettledSubmissionRecord,
+	type ToolRegistration,
 } from '@earendil-works/pi-durable'
 import { CodingTools } from '@earendil-works/pi-durable/tools'
 import { z } from 'zod'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
+import type { ExitSpec } from '../exits/exit.mts'
 import { emitEvent, inEvent } from '../run/run-events.mts'
 import { currentScope, type Scope } from '../run/run-scope.mts'
-import type { ExitSpec } from '../exits/exit.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
 import type { AgentHarness, StoredResult } from './agent-harness.mts'
 import { exitTools, verifyTool } from './exit-tools.mts'
-import { runGateOf } from './run-gate.mts'
 import { startLoopClock } from './loop-clock.mts'
 import { ExitNotCalled, LoopFailed, LoopLimitExceeded } from './loop-errors.mts'
 import type { LoopOutcome, LoopSession, Stop } from './loop-session.mts'
 import { exitName, readTemplate, uniqueTools, type LoopTemplate } from './loop-template.mts'
 import { agentTool } from './loop-tools.mts'
+import { runGateOf } from './run-gate.mts'
 
 /** What a loop needs of its agent. */
 export interface LoopAgent {
@@ -37,10 +39,21 @@ export interface LoopAgent {
 /** How often the agent is reminded to call an exit before the loop fails. */
 const maxReminders = 3
 
+/** For work that has to finish even when the loop's own signal is aborted, such as ending its run. */
+const neverAborted = new AbortController().signal
+
+/** Hex digits of a loop's fingerprint in its store key: enough that two inputs of one call site never meet. */
+const fingerprintLength = 16
+
 /**
  * Runs one loop: the agent works on the template until it calls an exit. One Pi Durable
  * conversation per loop, keyed by the call site, the names of the nodes around it and how often that
- * call site ran there. A loop that finished in an earlier attempt of the run returns its kept result.
+ * call site ran there.
+ *
+ * In the store, the key also holds a fingerprint of what the agent gets: model, reasoning, system
+ * prompt and template, as rendered. A loop that finished in an earlier attempt with the same input
+ * returns its kept result; a loop whose input changed, such as the next item of a list that grew,
+ * starts over.
  */
 export async function runLoop(
 	agent: LoopAgent,
@@ -53,17 +66,26 @@ export async function runLoop(
 	const key = `${base} #${scope.run.count(`loop ${base}`)}`
 	const template = await readTemplate(parts, 'loop')
 	const system = agent.system === undefined ? undefined : await readTemplate(agent.system[promptParts], 'system')
+	const storeKey = `${key} ${fingerprint(agent, system, template)}`
 	return inEvent('loop', { model: agent.model, key, prompt: template.text }, async (loopScope) => {
 		const harness = await loopScope.run.agents()
-		const kept = await harness.result(key, loopScope.run.signal)
+		const kept = await harness.keptResult(storeKey, loopScope.run.signal)
 		if (kept !== undefined) {
-			emitEvent(loopScope, 'loop-kept', {})
+			emitEvent(loopScope, 'loop-kept')
 			return keptValue(kept, template)
 		}
-		const result = await driveLoop({ agent, template, system, key, scope: loopScope, harness })
-		await harness.keepResult(key, toStored(result, template), loopScope.run.signal)
+		const result = await driveLoop({ agent, template, system, key, storeKey, scope: loopScope, harness })
+		const stored = toStored(result, template)
+		if (stored === undefined) emitEvent(loopScope, 'loop-not-kept', { reason: "The result isn't JSON, so a rerun runs the loop again." })
+		else await harness.keepResult(storeKey, stored, loopScope.run.signal)
 		return result
 	})
+}
+
+/** What the agent gets in a loop, in short: a different input never shares a conversation or a kept result. */
+function fingerprint(agent: LoopAgent, system: LoopTemplate | undefined, template: LoopTemplate): string {
+	const input = JSON.stringify([agent.model, agent.reasoning ?? null, system?.text ?? null, template.text])
+	return createHash('sha256').update(input).digest('hex').slice(0, fingerprintLength)
 }
 
 interface DriveLoopInput {
@@ -71,11 +93,13 @@ interface DriveLoopInput {
 	readonly template: LoopTemplate
 	readonly system: LoopTemplate | undefined
 	readonly key: string
+	/** The key with the loop's fingerprint, for the store. */
+	readonly storeKey: string
 	readonly scope: Scope
 	readonly harness: AgentHarness
 }
 
-async function driveLoop({ agent, template, system, key, scope: eventScope, harness }: DriveLoopInput): Promise<unknown> {
+async function driveLoop({ agent, template, system, key, storeKey, scope: eventScope, harness }: DriveLoopInput): Promise<unknown> {
 	const { run } = eventScope
 	const model = harness.model(agent.model)
 	const stopNow = new AbortController()
@@ -106,53 +130,23 @@ async function driveLoop({ agent, template, system, key, scope: eventScope, harn
 		// Every loop around this one stands still too while this one waits on a human.
 		const scope: Scope = { ...eventScope, loop: { clocks: [...(eventScope.loop?.clocks ?? []), clock] } }
 		const session: LoopSession = { scope, signal, finish }
-		const gate = runGateOf(template.gate, session)
 		const handIns = handInExits(template)
-		const tools = [
-			...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((spec) => agentTool(spec, session)),
-			...exitTools(template.exits, gate, session),
-			...(template.gate !== undefined && handIns.length === 0
-				? [
-						verifyTool(
-							template.gate.checks.map((check) => check.name),
-							gate,
-							session,
-						),
-					]
-				: []),
-		]
-		const own = new Set(tools.map((registration) => registration.name))
+		const tools = loopTools(template, system, handIns, session)
 		let turns = 0
-		extension = defineExtension({
-			// Named by the loop's key: stored work finds its own loop's tools, never another loop's.
-			name: `mesh-flow.loop ${key}`,
-			tools,
-			hooks: [
-				hook(GenerationTask, {
-					afterResponse: (message) => {
-						if (message.stopReason === 'error' || message.stopReason === 'aborted') return
-						turns++
-						emitEvent(scope, 'turn', { turn: turns, text: textOf(message) })
-					},
-					afterTools: () => {
-						if (outcome !== undefined) ended.roundDone()
-					},
-				}),
-				hook(ToolTask, {
-					// The loop's own tools have their own events; this covers the coding tools.
-					afterTool: (call, result) => {
-						if (!own.has(call.name))
-							emitEvent(scope, 'tool-call', { tool: call.name, from: 'agent', input: call.arguments, failed: result.isError === true })
-						return undefined
-					},
-				}),
-			],
+		extension = loopExtension(key, tools, scope, {
+			onTurn: (message) => {
+				turns++
+				emitEvent(scope, 'turn', { turn: turns, text: textOf(message) })
+			},
+			onRoundDone: () => {
+				if (outcome !== undefined) ended.roundDone()
+			},
 		})
 		harness.install(extension)
 
 		const context = harness.context(signal)
 		const conversation = await harness.conversation(
-			key,
+			storeKey,
 			{
 				model,
 				thinkingLevel: agent.reasoning ?? null,
@@ -205,6 +199,62 @@ async function driveLoop({ agent, template, system, key, scope: eventScope, harn
 	}
 }
 
+/** The agent's tools in a loop: its own and its system prompt's, the exits, and `verify` when that's the hand-in. */
+function loopTools(
+	template: LoopTemplate,
+	system: LoopTemplate | undefined,
+	handIns: readonly ExitSpec[],
+	session: LoopSession,
+): ToolRegistration[] {
+	const gate = runGateOf(template.gate, session)
+	const handInWithVerify =
+		template.gate !== undefined && handIns.length === 0
+			? [
+					verifyTool(
+						template.gate.checks.map((check) => check.name),
+						gate,
+						session,
+					),
+				]
+			: []
+	return [
+		...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((spec) => agentTool(spec, session)),
+		...exitTools(template.exits, gate, session),
+		...handInWithVerify,
+	]
+}
+
+/** The loop's extension: its tools, and hooks that count turns, note round ends and emit coding tool calls. */
+function loopExtension(
+	key: string,
+	tools: readonly ToolRegistration[],
+	scope: Scope,
+	on: { readonly onTurn: (message: AssistantMessage) => void; readonly onRoundDone: () => void },
+): Extension {
+	const own = new Set(tools.map((registration) => registration.name))
+	return defineExtension({
+		// Named by the loop's key: stored work finds its own loop's tools, never another loop's.
+		name: `mesh-flow.loop ${key}`,
+		tools,
+		hooks: [
+			hook(GenerationTask, {
+				afterResponse: (message) => {
+					if (message.stopReason !== 'error' && message.stopReason !== 'aborted') on.onTurn(message)
+				},
+				afterTools: on.onRoundDone,
+			}),
+			hook(ToolTask, {
+				// The loop's own tools have their own events; this covers the coding tools.
+				afterTool: (call, result) => {
+					if (!own.has(call.name))
+						emitEvent(scope, 'tool-call', { tool: call.name, from: 'agent', input: call.arguments, failed: result.isError === true })
+					return undefined
+				},
+			}),
+		],
+	})
+}
+
 /**
  * Ends the agent's run once the loop has its outcome. After an exit or a tool's throw, the current
  * tool round finishes first; a stopped run or a used-up limit stops it at once, without waiting for
@@ -224,14 +274,22 @@ async function endRun(
 	return { idle: conversation.abort(harness.context(neverAborted)).catch(() => undefined) }
 }
 
-/** For work that has to finish even when the loop's own signal is aborted, such as ending its run. */
-const neverAborted = new AbortController().signal
-
-/** A loop's result as the store keeps it. */
-function toStored(result: unknown, template: LoopTemplate): StoredResult {
-	if (folderOf(template) !== undefined && folderOf(template) === result) return { folder: true }
-	// Exit results come from the agent's JSON arguments; a schema that transforms them into more than JSON loses that on a rerun.
-	return result === undefined ? {} : { value: z.json().parse(JSON.parse(JSON.stringify(result))) }
+/**
+ * A loop's result as the store keeps it, or `undefined` when it can't be kept. Exit results come
+ * from the agent's JSON arguments; a schema can still transform them into something that isn't
+ * JSON, such as a `bigint`.
+ */
+function toStored(result: unknown, template: LoopTemplate): StoredResult | undefined {
+	const folder = folderOf(template)
+	if (folder !== undefined && folder === result) return { folder: true }
+	if (result === undefined) return {}
+	try {
+		const text = JSON.stringify(result) as string | undefined
+		const value = text === undefined ? undefined : z.json().safeParse(JSON.parse(text))
+		return value?.success === true ? { value: value.data } : undefined
+	} catch {
+		return undefined
+	}
 }
 
 /** A kept result as the loop returns it. */

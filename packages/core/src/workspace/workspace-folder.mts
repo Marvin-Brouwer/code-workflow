@@ -2,7 +2,8 @@ import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '../render/to-prompt.mts'
 import { workspaceFile, type WorkspaceFile } from './workspace-file.mts'
-import { onDisk, toPosix, workspacePath } from './workspace-path.mts'
+import { toPosix } from '../run/to-posix.mts'
+import { onDisk, workspacePath } from './workspace-path.mts'
 
 export interface WorkspaceFolderOptions {
 	/** What the folder holds, for the agent. */

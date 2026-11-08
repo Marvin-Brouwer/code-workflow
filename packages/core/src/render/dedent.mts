@@ -1,3 +1,6 @@
+/** Stands for an interpolation while the parts are dedented together. It can't occur in source text. */
+const placeholder = '\u0000'
+
 /**
  * Takes the source indentation out of a template's literal parts. Prompts are written indented in
  * code; the agent shouldn't get that indentation. The parts are dedented together, so a line that
@@ -16,9 +19,6 @@ export function dedentParts(parts: readonly string[]): string[] {
 		.replace(/\n\s*$/, '')
 	return text.split(placeholder)
 }
-
-/** Stands for an interpolation while the parts are dedented together. It can't occur in source text. */
-const placeholder = '\u0000'
 
 function indentOf(line: string): number {
 	return /^[ \t]*/.exec(line)?.[0].length ?? 0

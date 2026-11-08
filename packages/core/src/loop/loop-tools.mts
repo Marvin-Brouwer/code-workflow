@@ -6,7 +6,7 @@ import { untilAborted } from '../run/until-aborted.mts'
 import { toolParameters } from '../tool/json-schema.mts'
 import { ToolInputError, type ToolSpec } from '../tool/tool.mts'
 import type { LoopSession } from './loop-session.mts'
-import { errorResult, finalResult, textResult } from './tool-result.mts'
+import { endingErrorResult, errorResult, textResult } from './tool-result.mts'
 
 /**
  * A tool as the agent gets it. Input that doesn't fit its schema goes back to the agent to fix. A
@@ -25,7 +25,7 @@ export function agentTool(spec: ToolSpec, session: LoopSession): ToolRegistratio
 				const bail = (error: unknown) => {
 					emitEvent(scope, 'tool-error', { error: describeError(error) })
 					session.finish({ kind: 'error', error }, 'round')
-					return finalResult(errorResult(`${spec.name} failed, which ends this task: ${describeError(error)}`))
+					return endingErrorResult(spec.name, error)
 				}
 				let action: ReturnType<ToolSpec['prepare']>
 				try {

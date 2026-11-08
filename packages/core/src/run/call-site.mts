@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getCallSites } from 'node:util'
-import { toPosix } from '../workspace/workspace-path.mts'
+import { toPosix } from './to-posix.mts'
 
 /** Where a function was called from. */
 export interface CallSite {

@@ -29,7 +29,7 @@ export interface AgentHarness {
 	/** The conversation for a loop key, made on first use, then configured with `agent`. */
 	conversation(key: string, agent: AgentChange, signal: AbortSignal): Promise<Conversation>
 	/** The result a loop key finished with in an earlier attempt of the run, if it finished. */
-	result(key: string, signal: AbortSignal): Promise<StoredResult | undefined>
+	keptResult(key: string, signal: AbortSignal): Promise<StoredResult | undefined>
 	/** Keeps the result a loop key finished with, so a rerun returns it without running the loop again. */
 	keepResult(key: string, result: StoredResult, signal: AbortSignal): Promise<void>
 	/** Which provider serves a model id, model first. */
@@ -58,8 +58,8 @@ export interface AgentHarnessOptions {
 }
 
 /** Which conversation belongs to which loop key, and the results of the loops that finished, as JSON text. */
-const LoopConversations = defineDoc<{ byKey: Record<string, ConversationId>; results: Record<string, string> }>({
-	kind: 'mesh-flow.loop-conversations',
+const LoopRecords = defineDoc<{ byKey: Record<string, ConversationId>; results: Record<string, string> }>({
+	kind: 'mesh-flow.loop-records',
 	version: 1,
 	scope: 'session',
 	initial: () => ({ byKey: {}, results: {} }),
@@ -90,7 +90,7 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 	return {
 		async conversation(key, agent, signal) {
 			const id = await harness.commit(async (tx) => {
-				const loops = await tx.doc(LoopConversations)
+				const loops = await tx.doc(LoopRecords)
 				const known = loops.byKey[key]
 				if (known !== undefined) return known
 				const created = await tx.createConversation({ ownership: { kind: 'ownerless' } })
@@ -102,13 +102,13 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 			await conversation.configure(agent, context(signal))
 			return conversation
 		},
-		async result(key, signal) {
-			const text = await harness.commit(async (tx) => (await tx.doc(LoopConversations)).results[key], context(signal))
+		async keptResult(key, signal) {
+			const text = await harness.commit(async (tx) => (await tx.doc(LoopRecords)).results[key], context(signal))
 			return text === undefined ? undefined : StoredResult.parse(JSON.parse(text))
 		},
 		async keepResult(key, result, signal) {
 			await harness.commit(async (tx) => {
-				const loops = await tx.doc(LoopConversations)
+				const loops = await tx.doc(LoopRecords)
 				loops.results[key] = JSON.stringify(result)
 			}, context(signal))
 		},
@@ -132,8 +132,11 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
  * tools, limits and events. The transcripts stay, so a loop that runs again goes on from them.
  */
 async function stopLeftoverWork(harness: Harness, signal: AbortSignal): Promise<void> {
-	// Copied inside the commit: the document is only readable there.
-	const ids = await harness.commit(async (tx) => Object.values((await tx.doc(LoopConversations)).byKey), context(signal))
+	// Copied inside the commit: the document is only readable there. Loops that finished left nothing running.
+	const ids = await harness.commit(async (tx) => {
+		const { byKey, results } = await tx.doc(LoopRecords)
+		return Object.entries(byKey).flatMap(([key, id]) => (key in results ? [] : [id]))
+	}, context(signal))
 	for (const id of ids) {
 		await (await harness.conversation(id, context(signal)))?.abort(context(signal))
 	}

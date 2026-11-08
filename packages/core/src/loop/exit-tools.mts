@@ -3,15 +3,14 @@ import { z } from 'zod'
 import type { ExitSpec } from '../exits/exit.mts'
 import { counted } from '../render/counted.mts'
 import { renderValue } from '../render/to-prompt.mts'
-import { describeError } from '../run/describe-error.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { toolParameters } from '../tool/json-schema.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
 import { input } from '../workflow/input.mts'
-import { findingsText, type RunGate, type Verdict } from './run-gate.mts'
 import { AgentGaveUp } from './loop-errors.mts'
 import type { LoopSession } from './loop-session.mts'
-import { errorResult, finalResult, textResult } from './tool-result.mts'
+import { findingsText, type RunGate, type Verdict } from './run-gate.mts'
+import { endingErrorResult, errorResult, finalResult, textResult } from './tool-result.mts'
 
 /** The agent's tools for a loop's exits. `gate` runs before an exit lets the agent finish. */
 export function exitTools(exits: readonly ExitSpec[], gate: RunGate, session: LoopSession): ToolRegistration[] {
@@ -132,7 +131,7 @@ function exitTool(
 				} catch (error) {
 					// A check, a folder listing or a human wait that throws fails the loop, like any tool's throw.
 					session.finish({ kind: 'error', error }, 'round')
-					return finalResult(errorResult(`${name} failed, which ends this task: ${describeError(error)}`))
+					return endingErrorResult(name, error)
 				}
 			}),
 	}

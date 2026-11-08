@@ -103,7 +103,7 @@ async function callFromCode<Output>(
 	const scope = findScope()
 	const signal = context?.signal ?? scope?.run.signal
 	if (signal === undefined) throw new Error(`Tool ${name} was called outside a workflow run: pass { signal }.`)
-	const run = async () => untilAborted(prepare(input)({ signal }), signal)
-	if (scope === undefined) return run()
-	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, run)
+	const call = async () => untilAborted(prepare(input)({ signal }), signal)
+	if (scope === undefined) return call()
+	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, call)
 }

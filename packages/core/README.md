@@ -8,6 +8,8 @@ Agent loops run on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi
 
 The samples share an `agents.mts` like this one. Agents belong to the workflow repository, not to packages: model, reasoning and system prompt are team specific.
 
+Calls to `loop`, tools and `input` run inside a workflow body (see [Workflows](#workflows)); the samples leave the body out.
+
 ```ts
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
 
@@ -163,8 +165,13 @@ export default workflow('develop', async () => {
 Anywhere else, such as in a test, run it with a channel of your own. A channel sends the run's messages and answers its requests:
 
 ```ts
+import { createModels } from '@earendil-works/pi-ai/models'
 import { runWorkflow, type RunChannel } from '@mesh-flow/core'
 import develop from './workflows/develop.mts'
+
+// The providers the agents' models run on: under the engine they come from the gateway.
+const models = createModels()
+const anHourMs = 60 * 60_000
 
 const channel: RunChannel = {
 	send: (message) => {
@@ -174,17 +181,19 @@ const channel: RunChannel = {
 	answer: async () => ({ value: { approved: true } }),
 }
 
-const outcome = await runWorkflow(develop, { channel, signal: AbortSignal.timeout(60 * 60_000), workspace: 'workspace' })
+const outcome = await runWorkflow(develop, { channel, models, signal: AbortSignal.timeout(anHourMs), workspace: 'workspace' })
 ```
 
 Under the engine the workspace is `~/workspace` and the agents' store is `~/.mesh-flow/agents.sqlite`.
 
 ## Reruns
 
-When a run starts again on the same agents' store, as after a crash:
-- a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON, so a schema that turns them into more than JSON gets the JSON back;
-- a loop that didn't finish goes on from its conversation, with what the agent did so far;
+When a run starts again on the same agents' store, as after a crash, a loop is the same loop when its call site, the dependency nodes around it, its count there and what the agent gets (model, reasoning, system prompt and template, as rendered) are the same. Then:
+- a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON: one that isn't JSON, such as a `bigint` from a schema's transform, isn't kept, and that loop runs again;
+- a loop that didn't finish goes on from its conversation, with what the agent did so far, and its `turns` limit counts from 0 again;
 - work the earlier attempt left running, such as a model request cut off by the crash, is stopped first, so it never runs outside its loop.
+
+A loop whose input changed, such as the next comment of a list that grew, starts over with a new conversation.
 
 ## Events
 

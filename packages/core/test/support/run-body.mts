@@ -1,7 +1,7 @@
 import type { Models } from '@earendil-works/pi-ai'
+import { onTestFinished } from 'vitest'
 import { runWorkflow, type RunOutcome } from '../../src/workflow/run-workflow.mts'
 import { workflow } from '../../src/workflow/workflow.mts'
-import { onTestFinished } from 'vitest'
 import { memoryChannel, type MemoryChannel } from './memory-channel.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 

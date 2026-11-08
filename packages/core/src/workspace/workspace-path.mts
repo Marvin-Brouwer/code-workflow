@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { currentScope } from '../run/run-scope.mts'
+import { toPosix } from '../run/to-posix.mts'
 
 /**
  * Checks a workspace path: relative, and inside the workspace. Returns it in POSIX form, as agents
@@ -11,11 +12,6 @@ export function workspacePath(value: string): string {
 		throw new Error(`${value} isn't inside the workspace: use a path relative to it.`)
 	}
 	return normal
-}
-
-/** A path of this platform with `/` as the separator, as agents, prompts and keys see paths. */
-export function toPosix(file: string): string {
-	return file.split(path.sep).join('/')
 }
 
 /** Where a workspace path is on disk, in the current run's workspace. */
