@@ -8,7 +8,7 @@ export const runtimeGoneExitCode = 3
  * Arguments: the outbox, the runtime's pid file, the number of lines already read, how many
  * quarter seconds to wait at most, and a directory where it keeps its own pid while it runs, so
  * {@link stopPollsScript} can find it. Exits 0 with the new lines (or none, when the wait ran out),
- * and 3 when the runtime is gone and has nothing more to say. A zombie counts as gone. The state is
+ * and {@link runtimeGoneExitCode} when the runtime is gone and has nothing more to say. A zombie counts as gone. The state is
  * read after the last `)` of `/proc/<pid>/stat`, because a process name can hold spaces; no pid yet
  * counts as alive.
  */

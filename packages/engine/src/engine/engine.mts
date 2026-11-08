@@ -6,7 +6,7 @@ import {
 	type RuntimeRequest,
 	type WakeRequest,
 } from '@mesh-flow/protocol'
-import { abortable, type Command, type ExecResult, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
+import { abortable, type Command, type ExecResult, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
@@ -136,7 +136,7 @@ export class Engine {
 
 		const id = newRunId()
 		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), signal).catch(async (error: unknown) => {
-			await this.#store.discard(id)
+			await this.#store.removeRun(id).catch(() => undefined)
 			if (signal.aborted) throw error
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
 		})
@@ -191,31 +191,24 @@ export class Engine {
 		// Driven from the start, so a stop, a second resume or a shutdown sees the run as taken.
 		return new Promise((resolve, reject) => {
 			this.#drive(record.id, async (active, runSignal) => {
-				let resumed: RunRecord
-				let channel: SandboxChannel
-				try {
-					const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
-					active.sandbox = sandbox
-					channel = new SandboxChannel(sandbox, this.#layout.mailbox)
-					active.channel = channel
-					resumed = await this.#update(record.id, { status: 'running', paused: undefined })
-					runSignal.throwIfAborted()
-				} catch (error) {
-					reject(
-						runSignal.aborted ? new EngineError('conflict', `Resuming run ${id} was cut short: ${messageOf(runSignal.reason)}`) : error,
-					)
+				const channel = await this.#reattach(record.id, paused, active, signal, runSignal).catch((error: unknown) => {
+					reject(runSignal.aborted ? cutShort(id, runSignal) : error)
 					// Once the sandbox runs, a failure fails the run. Before that, the run stays paused.
 					if (active.sandbox) throw error
-					return
-				}
+				})
+				if (!channel) return
+				const resumed = this.get(record.id)
 				resolve(resumed)
-				for (const request of resumed.pending) this.#schedule(record.id, request, runSignal)
+				for (const request of resumed.pending) this.#schedule(record.id, channel, request, runSignal)
 				await this.#pump(record.id, channel, runSignal)
 			})
 		})
 	}
 
-	/** Runs a run again from the top, in a new sandbox, with the code it first ran. */
+	/**
+	 * Runs a run again from the top, in a new sandbox, with the code it first ran. Aborting `signal`
+	 * only refuses a restart that hasn't begun; the restart itself runs in the background.
+	 */
 	async restart(id: string, signal: AbortSignal): Promise<RunRecord> {
 		this.#assertOpen()
 		signal.throwIfAborted()
@@ -280,6 +273,23 @@ export class Engine {
 		}
 	}
 
+	/** Resumes a run's paused sandbox and marks the run running. `runSignal` is the drive's own. */
+	async #reattach(
+		id: RunId,
+		paused: PausedSandbox,
+		active: ActiveRun,
+		signal: AbortSignal,
+		runSignal: AbortSignal,
+	): Promise<SandboxChannel> {
+		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
+		active.sandbox = sandbox
+		const channel = new SandboxChannel(sandbox, this.#layout.mailbox)
+		active.channel = channel
+		await this.#update(id, { status: 'running', paused: undefined })
+		runSignal.throwIfAborted()
+		return channel
+	}
+
 	/** Makes the sandbox, uploads and sets up the workflow, starts the runtime and follows it. */
 	async #start(id: RunId, file: string, active: ActiveRun, signal: AbortSignal): Promise<void> {
 		const { config } = this.get(id)
@@ -321,17 +331,19 @@ export class Engine {
 				cursor: delivery.cursor,
 				pending: [...record.pending, ...requests.filter((request) => !record.pending.some((known) => known.id === request.id))],
 			}))
-			for (const request of requests) this.#schedule(id, request, signal)
+			for (const request of requests) this.#schedule(id, channel, request, signal)
 		}
 	}
 
-	/** Wakes are answered by the engine's own clock. */
-	#schedule(id: RunId, request: RuntimeRequest, signal: AbortSignal): void {
+	/** Wakes are answered by the engine's own clock, through the channel of the attempt that asked. */
+	#schedule(id: RunId, channel: SandboxChannel, request: RuntimeRequest, signal: AbortSignal): void {
 		if (request.kind !== 'wake') return
-		wakeAt(new Date(request.at), signal, () => void this.#wake(id, request, signal), this.#now)
+		wakeAt(new Date(request.at), signal, () => void this.#wake(id, channel, request, signal), this.#now)
 	}
 
-	async #wake(id: RunId, request: WakeRequest, signal: AbortSignal): Promise<void> {
+	async #wake(id: RunId, channel: SandboxChannel, request: WakeRequest, signal: AbortSignal): Promise<void> {
+		// A wake of an attempt that ended, while its drive is still cleaning up, isn't for the next one.
+		if (this.#active.get(id)?.channel !== channel) return
 		try {
 			await this.#deliver(id, request.id, {}, signal)
 		} catch (error) {
@@ -349,7 +361,10 @@ export class Engine {
 	/** Stops a run once the caller has checked it may. Bounded by the cleanup timeout, not by the caller. */
 	async #stop(id: RunId): Promise<RunRecord> {
 		await this.#halt(id, this.#cleanupSignal())
-		const { sandbox } = this.get(id)
+		const current = this.get(id)
+		// The run may have ended while it was being halted; how it ended stands.
+		if (finishedStatuses.has(current.status)) return current
+		const { sandbox } = current
 		const stopped = await this.#update(id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [] })
 		if (sandbox) await this.#discard(id, sandbox.id)
 		return stopped
@@ -368,7 +383,7 @@ export class Engine {
 		active.work = work(active, signal)
 			.catch((error: unknown) => (signal.aborted ? undefined : this.#fail(id, error)))
 			.catch((error: unknown) => {
-				this.#log(`Recording that run ${id} failed, failed: ${messageOf(error)}`)
+				this.#log(`Couldn't save that run ${id} failed: ${messageOf(error)}`)
 			})
 			.finally(() => {
 				controller.abort(new Error(`Run ${id} isn't driven any more.`))
@@ -427,14 +442,26 @@ export class Engine {
 	}
 }
 
+/** Why a resume was refused once the run's drive was aborted, by a stop or a shutdown. */
+function cutShort(id: string, signal: AbortSignal): EngineError {
+	return new EngineError('conflict', `Resuming run ${id} was cut short: ${messageOf(signal.reason)}`)
+}
+
 /** A setup step that failed, with the end of what it wrote. */
 function setupFailure(command: Command, result: ExecResult): Error {
 	const output = (result.stderr.trim() || result.stdout.trim()).split('\n').slice(-20).join('\n')
 	return new Error(`Setup step '${command.join(' ')}' failed with exit code ${String(result.exitCode)}:\n${output}`)
 }
 
+/** One poll's messages, sorted. */
+interface SortedMessages {
+	readonly events: RuntimeEvent[]
+	readonly requests: RuntimeRequest[]
+	readonly outcome?: RunChange
+}
+
 /** Splits what one poll delivered into events to keep, requests to wait on, and how the run ended. */
-function sortMessages(messages: readonly RuntimeMessage[]): { events: RuntimeEvent[]; requests: RuntimeRequest[]; outcome?: RunChange } {
+function sortMessages(messages: readonly RuntimeMessage[]): SortedMessages {
 	const events: RuntimeEvent[] = []
 	const requests: RuntimeRequest[] = []
 	let outcome: RunChange | undefined

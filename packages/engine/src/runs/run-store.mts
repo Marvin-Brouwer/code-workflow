@@ -38,7 +38,7 @@ export class RunStore {
 	}
 
 	/** Removes what a run left behind before it had a record, such as a half-packed source. */
-	discard(id: RunId): Promise<void> {
+	removeRun(id: RunId): Promise<void> {
 		return this.#enqueue(id, () => rm(this.directoryOf(id), { recursive: true, force: true }))
 	}
 

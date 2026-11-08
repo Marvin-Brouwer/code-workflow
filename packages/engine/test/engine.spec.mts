@@ -11,8 +11,15 @@ import { runtimeScript, workflowRepository } from './support/workflow-repository
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(5_000), close: AbortSignal.timeout(10_000) })
 
-/** An engine on the host backend, closed when the test ends. `wrap` changes what the backend does. */
-async function openEngine(home?: string, wrap: (backend: SandboxBackend) => SandboxBackend = (backend) => backend) {
+interface OpenEngineOptions {
+	/** An engine home to open again. Default: a new one. */
+	readonly home?: string
+	/** Changes what the backend does. */
+	readonly wrap?: (backend: SandboxBackend) => SandboxBackend
+}
+
+/** An engine on the host backend, closed when the test ends. */
+async function openEngine({ home, wrap = (backend) => backend }: OpenEngineOptions = {}) {
 	const directory = home ?? (await temporaryDirectory())
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
@@ -125,10 +132,9 @@ mailbox.send({ type: 'succeeded' })
 	test('keeps how a run ended when removing its sandbox fails', async () => {
 		// Arrange
 		const directory = await workflowRepository({ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
-		const { engine, log } = await openEngine(undefined, (backend) => ({
-			...backend,
-			remove: () => Promise.reject(new Error('device busy')),
-		}))
+		const { engine, log } = await openEngine({
+			wrap: (backend) => ({ ...backend, remove: () => Promise.reject(new Error('device busy')) }),
+		})
 
 		// Act
 		const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
@@ -136,7 +142,9 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect(finished.sandbox).toBeUndefined()
-		expect(log).toHaveBeenCalledWith(expect.stringContaining('device busy'))
+		await vi.waitFor(() => {
+			expect(log).toHaveBeenCalledWith(expect.stringContaining('device busy'))
+		})
 	})
 
 	test('does not let a wake of a failed attempt answer the restarted one', async () => {
@@ -279,7 +287,7 @@ if (!restarted) {
 		const { id } = await first.engine.startRun({ directory, workflow: 'ask', signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
-		const second = await openEngine(first.home)
+		const second = await openEngine({ home: first.home })
 
 		// Act
 		const resumes = await Promise.allSettled([second.engine.resume(id, signal), second.engine.resume(id, signal)])
@@ -296,7 +304,7 @@ if (!restarted) {
 		const { id } = await first.engine.startRun({ directory, workflow: 'ask', signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
-		const second = await openEngine(first.home)
+		const second = await openEngine({ home: first.home })
 
 		// Act
 		const resumed = await second.engine.resume(id, signal)

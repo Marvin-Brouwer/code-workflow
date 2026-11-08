@@ -95,10 +95,14 @@ for (const held of await backend.list(signal)) {
 }
 ```
 
-`abortable` bounds work that takes no signal, or may ignore it, by a signal of yours. The work keeps going, but the caller moves on when the signal aborts:
+`abortable` bounds work that takes no signal, or may ignore it, by a signal of yours. The work keeps going, but the caller moves on when the signal aborts. Pass `discard` to clean up a value that arrives after the abort, such as a sandbox created too late:
 
 ```ts
-await abortable(sandbox.pause(deadline), deadline)
+import { abortable } from '@mesh-flow/sandbox'
+
+const deadline = AbortSignal.timeout(30_000)
+const paused = await abortable(sandbox.pause(deadline), deadline)
+const late = await abortable(createWithoutSignal(spec), deadline, (sandbox) => sandbox.destroy(AbortSignal.timeout(30_000)))
 ```
 
 ## Setting up E2B

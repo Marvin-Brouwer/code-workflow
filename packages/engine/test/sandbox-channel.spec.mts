@@ -1,7 +1,7 @@
 import { appendFile, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { RuntimeMailbox } from '@mesh-flow/protocol'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { SandboxChannel } from '../src/mailbox/sandbox-channel.mts'
 import { hostBackend, isAlive } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -15,6 +15,8 @@ async function channelOnHost() {
 	const sandbox = await hostBackend(root).create({ image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }, signal)
 	const channel = new SandboxChannel(sandbox, '/sandbox/mailbox')
 	await channel.prepare(signal)
+	// An aborted poll can leave its loop running in the "sandbox", writing next to the files being removed.
+	onTestFinished(() => channel.stopPolls(signal))
 	return { channel, mailbox: path.join(root, sandbox.id, 'files', 'mailbox') }
 }
 
