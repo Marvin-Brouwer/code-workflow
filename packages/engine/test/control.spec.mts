@@ -53,6 +53,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 			400,
 		],
 		['resuming a run that is not paused', (client: ControlClient) => client.resume('run-000000000000', signal), 404],
+		['an answer without a value', (client: ControlClient) => client.answer('run-000000000000', 'story', undefined, signal), 400],
 	])('refuses %s with the right status', async (_name, call, status) => {
 		// Arrange
 		const { client } = await serve()

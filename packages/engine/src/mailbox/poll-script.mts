@@ -45,12 +45,19 @@ tail -n "+$((after + 1))" "$outbox"
 /**
  * Ends every {@link pollScript} still running in the sandbox. Aborting a poll ends the call on the
  * host, not always the loop inside the sandbox, and gVisor can't restore a checkpoint that holds a
- * process an exec started. It then waits out a last sleep of a loop it ended, two intervals to be safe.
+ * process an exec started. It then waits out a last sleep of a loop it ended, two intervals to be
+ * safe.
+ *
+ * A pid is only ended while its command line still names this mailbox's polls: a poll that was
+ * killed outright leaves its pid file behind, and by now the pid may belong to something else.
  */
 export const stopPollsScript = `
 for file in "$1"/*; do
 	[ -f "$file" ] || continue
-	kill "$(cat "$file")" 2>/dev/null
+	pid=$(cat "$file")
+	case "$(cat "/proc/$pid/cmdline" 2>/dev/null)" in
+	*"$1"*) kill "$pid" 2>/dev/null ;;
+	esac
 	rm -f "$file"
 done
 sleep ${String(pollIntervalSeconds * 2)}

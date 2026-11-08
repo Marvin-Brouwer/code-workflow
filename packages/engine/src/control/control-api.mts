@@ -9,7 +9,7 @@ import { WorkflowName } from '../workflow/workflow-name.mts'
 export const StartRunBody = z.object({ directory: z.string().min(1), workflow: WorkflowName })
 
 /** The body of `POST /runs/:run/answers/:request`. */
-export const AnswerBody = z.object({ value: z.unknown() })
+export const AnswerBody = z.object({ value: z.unknown() }).refine((body) => 'value' in body, { message: 'An answer needs a value.' })
 
 const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 404, conflict: 409, invalid: 400 }
 

@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { answerFile, mailboxLayout } from '../src/mailbox-layout.mts'
 import { RuntimeMailbox } from '../src/runtime-mailbox.mts'
@@ -35,6 +36,26 @@ describe('RuntimeMailbox', () => {
 
 		// Assert
 		expect(sendingAgain).toThrow('poll-ci was sent already')
+	})
+
+	test('lets a request whose send failed be sent again under the same id', async () => {
+		// Arrange
+		const directory = path.join(await temporaryDirectory(), 'not-made-yet')
+		const mailbox = new RuntimeMailbox(directory)
+		const request = { type: 'request', request: { kind: 'wake', id: 'later', at: '2026-11-08T08:00:00.000Z' } } as const
+		try {
+			mailbox.send(request)
+		} catch {
+			// Fails: the mailbox's directory isn't there yet.
+		}
+		await mkdir(directory)
+
+		// Act
+		mailbox.send(request)
+
+		// Assert
+		const lines = (await readFile(mailboxLayout(directory).outbox, 'utf8')).split('\n').filter(Boolean)
+		expect(lines).toEqual([JSON.stringify(request)])
 	})
 
 	test('picks up an answer once the engine has written it', async () => {

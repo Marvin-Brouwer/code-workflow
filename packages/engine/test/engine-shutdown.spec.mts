@@ -5,6 +5,7 @@ import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import { pollScript } from '../src/mailbox/poll-script.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
+import { deferred } from './support/deferred.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
@@ -66,6 +67,22 @@ describe('Engine.close', () => {
 		expect(Date.now() - started).toBeLessThan(2_000)
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
 		expect(close).toHaveBeenCalledOnce()
+	})
+
+	test('does not let a sandbox that arrives after the shutdown gave up on it change the run', async () => {
+		// Arrange
+		const created = deferred<Sandbox>()
+		const { backend } = stubBackend({ create: () => created.promise })
+		const { engine, id } = await startRun(backend)
+		await engine.close(shortDeadlines())
+
+		// Act
+		created.resolve(await stubBackend({}).backend.create({ image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }, signal))
+		await delay(100)
+
+		// Assert
+		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
+		expect(engine.get(id).sandbox).toBeUndefined()
 	})
 
 	test('finishes within its deadlines when the poll and the pause never settle', async () => {

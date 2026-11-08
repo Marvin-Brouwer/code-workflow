@@ -37,14 +37,16 @@ export class RuntimeMailbox {
 	 * under the same id would get the old answer. Sending it twice throws.
 	 */
 	send(message: RuntimeMessage): void {
-		if (message.type === 'request') this.#claim(message.request.id)
+		const requestId = message.type === 'request' ? message.request.id : undefined
+		if (requestId !== undefined) this.#assertUnused(requestId)
 		appendFileSync(this.#layout.outbox, `${JSON.stringify(message)}\n`)
+		// Claimed once it's sent, so a send that failed can be tried again with the same id.
+		if (requestId !== undefined) this.#requested.add(requestId)
 	}
 
-	/** Remembers a request id, because a reused id would get the old answer. */
-	#claim(requestId: string): void {
+	/** Refuses a request id that was sent already, because it would get the old answer. */
+	#assertUnused(requestId: string): void {
 		if (this.#requested.has(requestId)) throw new Error(`Request ${requestId} was sent already. Use a new id for every request.`)
-		this.#requested.add(requestId)
 	}
 
 	/** Waits until the engine has answered the request with this id. */

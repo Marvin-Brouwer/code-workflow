@@ -61,6 +61,9 @@ interface ActiveRun {
 	work: Promise<void>
 }
 
+/** Which sandbox a run record points at. */
+type SandboxRef = NonNullable<RunRecord['sandbox']>
+
 /** How long cleaning up after a run, such as removing its sandbox, may take. */
 const cleanupTimeoutMs = 60_000
 
@@ -86,6 +89,8 @@ export class Engine {
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
+	/** Input requests an answer is on its way to, as `<run>/<request>`, so a second answer is refused. */
+	readonly #answering = new Set<string>()
 	#closing: Promise<void> | undefined
 
 	private constructor(options: EngineOptions) {
@@ -148,6 +153,10 @@ export class Engine {
 			if (signal.aborted) throw error
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
 		})
+		if (this.#lifetime.signal.aborted) {
+			await this.#store.removeRun(id).catch(() => undefined)
+			this.#assertOpen()
+		}
 		const createdAt = this.#now().toISOString()
 		const record: RunRecord = {
 			id,
@@ -161,8 +170,14 @@ export class Engine {
 			updatedAt: createdAt,
 		}
 		this.#records.set(id, record)
-		await this.#store.save(record)
-		this.#drive(id, (active, runSignal) => this.#start(id, file, active, runSignal))
+		const saving = this.#store.save(record)
+		// Driven before anything is awaited, so a stop sees the run as taken.
+		this.#drive(id, async (active, runSignal) => {
+			await saving
+			runSignal.throwIfAborted()
+			await this.#start(id, file, active, runSignal)
+		})
+		await saving
 		return record
 	}
 
@@ -172,7 +187,14 @@ export class Engine {
 		const request = record.pending.find((pending) => pending.id === requestId)
 		if (request?.kind !== 'input') throw new EngineError('not-found', `Run ${id} doesn't wait for input ${requestId}.`)
 		if (record.status !== 'running') throw new EngineError('conflict', `Run ${id} is ${record.status}; resume it first.`)
-		await this.#deliver(record.id, requestId, { value }, this.#withLifetime(signal))
+		const key = `${record.id}/${requestId}`
+		if (this.#answering.has(key)) throw new EngineError('conflict', `Input ${requestId} of run ${id} is being answered already.`)
+		this.#answering.add(key)
+		try {
+			await this.#deliver(record.id, requestId, { value }, this.#withLifetime(signal))
+		} finally {
+			this.#answering.delete(key)
+		}
 		return this.get(id)
 	}
 
@@ -223,8 +245,9 @@ export class Engine {
 		const record = this.#requireStatus(id, ['restartable', 'failed', 'stopped'])
 		const leftOver = record.sandbox
 		const file = workflowFile(record.config, record.workflow)
-		// The status changes before anything is awaited, so a second restart is refused.
-		const restarted = await this.#update(record.id, {
+		// The status changes and the drive starts before anything is awaited, so a second restart
+		// is refused and a stop sees the run as taken.
+		const saving = this.#update(record.id, {
 			status: 'starting',
 			sandbox: undefined,
 			paused: undefined,
@@ -233,11 +256,13 @@ export class Engine {
 			error: undefined,
 		})
 		this.#drive(record.id, async (active, runSignal) => {
-			if (leftOver) await this.#discard(record.id, leftOver.id)
+			await saving
+			runSignal.throwIfAborted()
+			if (leftOver) await this.#discard(record.id, leftOver)
 			await this.#store.appendEvents(record.id, [restartEvent(this.#now())])
 			await this.#start(record.id, file, active, runSignal)
 		})
-		return restarted
+		return saving
 	}
 
 	/**
@@ -252,7 +277,7 @@ export class Engine {
 	}
 
 	async #close({ pause, backend }: CloseDeadlines): Promise<void> {
-		this.#lifetime.abort(new Error('The engine is shutting down.'))
+		this.#lifetime.abort(new EngineError('conflict', 'The engine is shutting down.'))
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
@@ -287,7 +312,7 @@ export class Engine {
 		runSignal: AbortSignal,
 	): Promise<SandboxChannel> {
 		const channel = this.#attach(active, await this.#backend.resume(paused, AbortSignal.any([signal, runSignal])))
-		await this.#update(id, { status: 'running', paused: undefined })
+		await this.#update(id, { status: 'running', paused: undefined }, ['paused'])
 		runSignal.throwIfAborted()
 		return channel
 	}
@@ -305,7 +330,7 @@ export class Engine {
 		const { config } = this.get(id)
 		const sandbox = await this.#backend.create(config.sandbox, signal)
 		const channel = this.#attach(active, sandbox)
-		await this.#update(id, { sandbox: { backend: this.#backend.name, id: sandbox.id } })
+		await this.#update(id, { sandbox: { backend: this.#backend.name, id: sandbox.id } }, ['starting'])
 		await channel.prepare(signal)
 		await uploadWorkflowSource(sandbox, this.#store.sourceOf(id), this.#layout.workflow, signal)
 		for (const command of config.setup) {
@@ -313,7 +338,7 @@ export class Engine {
 			if (result.exitCode !== 0) throw setupFailure(command, result)
 		}
 		await channel.startRuntime([...config.start, file], { signal, cwd: this.#layout.workflow, env: { [runIdEnvironmentVariable]: id } })
-		await this.#update(id, { status: 'running' })
+		await this.#update(id, { status: 'running' }, ['starting'])
 		await this.#pump(id, channel, signal)
 	}
 
@@ -330,14 +355,18 @@ export class Engine {
 			if (outcome) {
 				// Saved with the cursor, so an outcome that was read can't be lost. The sandbox goes after.
 				const { sandbox } = this.get(id)
-				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [] })
-				if (sandbox) await this.#discard(id, sandbox.id)
+				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [] }, ['running'])
+				if (sandbox) await this.#discard(id, sandbox)
 				return
 			}
-			await this.#update(id, (record) => ({
-				cursor: delivery.cursor,
-				pending: [...record.pending, ...requests.filter((request) => !record.pending.some((known) => known.id === request.id))],
-			}))
+			await this.#update(
+				id,
+				(record) => ({
+					cursor: delivery.cursor,
+					pending: [...record.pending, ...requests.filter((request) => !record.pending.some((known) => known.id === request.id))],
+				}),
+				['running'],
+			)
 			for (const request of requests) this.#schedule(id, channel, request, signal)
 		}
 	}
@@ -373,7 +402,7 @@ export class Engine {
 		if (finishedStatuses.has(current.status)) return current
 		const { sandbox } = current
 		const stopped = await this.#update(id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [] })
-		if (sandbox) await this.#discard(id, sandbox.id)
+		if (sandbox) await this.#discard(id, sandbox)
 		return stopped
 	}
 
@@ -402,13 +431,20 @@ export class Engine {
 	async #fail(id: RunId, error: unknown): Promise<void> {
 		const { sandbox } = this.get(id)
 		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [] })
-		if (sandbox) await this.#discard(id, sandbox.id)
+		if (sandbox) await this.#discard(id, sandbox)
 	}
 
-	/** Removes a sandbox no run needs any more. A failure is only logged: the next start's reconcile removes it. */
-	async #discard(id: RunId, sandboxId: string): Promise<void> {
-		await this.#backend.remove(sandboxId, this.#cleanupSignal()).catch((error: unknown) => {
-			this.#log(`Removing sandbox ${sandboxId} of run ${id} failed: ${messageOf(error)}`)
+	/**
+	 * Removes a sandbox no run needs any more. A failure is only logged, and a sandbox on another
+	 * backend is left alone: the next start's reconcile on its backend removes it.
+	 */
+	async #discard(id: RunId, sandbox: SandboxRef): Promise<void> {
+		if (sandbox.backend !== this.#backend.name) {
+			this.#log(`Left sandbox ${sandbox.id} of run ${id} to ${sandbox.backend}; this engine runs ${this.#backend.name}.`)
+			return
+		}
+		await this.#backend.remove(sandbox.id, this.#cleanupSignal()).catch((error: unknown) => {
+			this.#log(`Removing sandbox ${sandbox.id} of run ${id} failed: ${messageOf(error)}`)
 		})
 	}
 
@@ -442,9 +478,14 @@ export class Engine {
 		if (this.#lifetime.signal.aborted) throw new EngineError('conflict', 'The engine is shutting down.')
 	}
 
-	/** Applies a change to the record as it is now, so concurrent changes don't overwrite each other. */
-	async #update(id: RunId, change: RunChange | ((record: RunRecord) => RunChange)): Promise<RunRecord> {
+	/**
+	 * Applies a change to the record as it is now, so concurrent changes don't overwrite each other.
+	 * With `from`, only while the run is in one of those statuses: work that finishes after a stop
+	 * or a shutdown gave up on it can't undo what they wrote.
+	 */
+	async #update(id: RunId, change: RunChange | ((record: RunRecord) => RunChange), from?: readonly RunStatus[]): Promise<RunRecord> {
 		const current = this.get(id)
+		if (from && !from.includes(current.status)) throw new EngineError('conflict', `Run ${id} is ${current.status} by now.`)
 		const next = applyRunChange(current, typeof change === 'function' ? change(current) : change, this.#now())
 		this.#records.set(id, next)
 		await this.#store.save(next)

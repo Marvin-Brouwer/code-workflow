@@ -1,10 +1,12 @@
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
-import { openRunStore } from '../src/runs/run-store.mts'
+import { openRunStore, type RunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
+import { deferred } from './support/deferred.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
@@ -16,14 +18,16 @@ interface OpenEngineOptions {
 	readonly home?: string
 	/** Changes what the backend does. */
 	readonly wrap?: (backend: SandboxBackend) => SandboxBackend
+	/** Changes what the store does. */
+	readonly wrapStore?: (store: RunStore) => RunStore
 }
 
 /** An engine on the host backend, closed when the test ends. */
-async function openEngine({ home, wrap = (backend) => backend }: OpenEngineOptions = {}) {
+async function openEngine({ home, wrap = (backend) => backend, wrapStore = (store) => store }: OpenEngineOptions = {}) {
 	const directory = home ?? (await temporaryDirectory())
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
-	const store = openRunStore(path.join(directory, 'runs'))
+	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))
@@ -95,6 +99,21 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Assert
 		const events = await engine.events(id)
 		expect(events).toEqual([expect.objectContaining({ type: 'input-answered', value: { key: 'ABC-1' } })])
+	})
+
+	test('refuses a second answer to a request while the first is on its way', async () => {
+		// Arrange
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+
+		// Act
+		const answers = await Promise.allSettled([engine.answer(id, 'story', 'first', signal), engine.answer(id, 'story', 'second', signal)])
+
+		// Assert
+		expect(answers.map((answer) => answer.status)).toEqual(['fulfilled', 'rejected'])
+		expect(answers[1]).toMatchObject({ reason: { code: 'conflict' } })
 	})
 
 	test('refuses an answer to a request the run does not wait for', async () => {
@@ -284,6 +303,40 @@ if (!restarted) {
 		await vi.waitFor(async () => {
 			expect(await backend.list(signal)).toEqual([])
 		})
+	})
+
+	test('keeps a run stopped that was stopped while its restart was being saved', async () => {
+		// Arrange
+		const held = deferred<undefined>()
+		let holding = false
+		const directory = await workflowRepository({ ask: askAndEcho })
+		const { engine, backend } = await openEngine({
+			wrapStore: (store) => ({
+				...store,
+				save: async (record) => {
+					if (holding && record.status === 'starting') await held.promise
+					return store.save(record)
+				},
+			}),
+		})
+		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		await untilPending(engine, id, 'story')
+		await engine.stop(id, signal)
+
+		holding = true
+
+		// Act
+		const restarting = engine.restart(id, signal)
+		const stopping = engine.stop(id, signal)
+		held.resolve(undefined)
+		await restarting
+		const stopped = await stopping
+
+		// Assert
+		expect(stopped.status).toBe('stopped')
+		await delay(500)
+		expect(engine.get(id).status).toBe('stopped')
+		expect(await backend.list(signal)).toEqual([])
 	})
 
 	test('refuses a second resume while the first is under way', async () => {

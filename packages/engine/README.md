@@ -58,7 +58,7 @@ mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge re
 
 `run <name>` uploads the repository's git files, as they are on disk (tracked files, plus untracked ones that aren't ignored), into the sandbox at `/workflow`. It runs `setup` there one command at a time, then starts `start` with the workflow's file added, here `node workflows/develop.mts`. The run record pins the commit, and says when there were uncommitted changes. The upload is kept, so `restart` runs the same code.
 
-The image needs what the engine uses in it: `sh`, `cat`, `kill`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+The image needs what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
 
 ### Embed the engine
 
@@ -118,11 +118,11 @@ Every start reconciles first, because a process can also die without warning (`S
 - Nothing resumes by itself.
 - A sandbox that can't be removed doesn't block the start. It's logged, and the next start tries again.
 
-The control socket comes first and is the lock: a second engine on the same home refuses to start, so it can't reconcile away the first one's sandboxes.
+The home's lock comes first: a second engine on the same home refuses to start, so it can't reconcile away the first one's sandboxes. The lock is `engine.lock`, which the engine refreshes every second. A lock left by an engine that died goes stale after five seconds, and the next start takes it over.
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. Only the user who owns the directory can reach it. `controlApi(engine)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, and `POST /runs/:run/stop`, `/resume` and `/restart`. `controlClient(socketPath)` returns the functions that call it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, and `POST /runs/:run/stop`, `/resume` and `/restart`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 
@@ -143,6 +143,7 @@ CI runs it on gVisor and microsandbox on Linux, and microsandbox on Windows ([`e
 
 ## Known gaps
 
+- **The named pipe on Windows** has the default security of a pipe, and its name comes from the home path. Another user on the same machine could reach it, or take the name first. Unix sockets are limited to the home directory's owner.
 - **E2B** needs an API key from the credential store, which comes with the gateway. `serve` refuses it until then. `Engine` itself takes any backend.
 - **Pausing on wait** is roadmap step 3. A waiting run keeps its sandbox running until the engine shuts down.
 - **External events** (webhooks, merge request activity) and their durable wait aren't here yet. They fit the same shape as `wake`: a request the engine answers.

@@ -80,8 +80,10 @@ export function openRunStore(root: string): RunStore {
 				if (hasErrorCode(error, 'ENOENT')) return ''
 				throw error
 			})
+			// The last piece is empty, or a line still being appended: it's read next time.
 			return text
 				.split('\n')
+				.slice(0, -1)
 				.filter((line) => line.length > 0)
 				.map((line) => RuntimeEvent.parse(JSON.parse(line)))
 		},

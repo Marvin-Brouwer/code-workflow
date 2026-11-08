@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { RunRecord } from '../src/runs/run-record.mts'
@@ -38,6 +38,20 @@ describe('openRunStore', () => {
 		// Assert
 		expect(records).toEqual([older, newer])
 		expect(problems).toEqual([])
+	})
+
+	test('leaves an event that is still being appended for the next read', async () => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = openRunStore(root)
+		await store.appendEvents('run-00000000000a', [{ id: '1', type: 'started', at: '2026-11-07T12:00:00.000Z' }])
+		await appendFile(path.join(runDirectory(root, 'run-00000000000a'), 'events.jsonl'), '{"id":"2","ty')
+
+		// Act
+		const events = await store.events('run-00000000000a')
+
+		// Assert
+		expect(events.map((event) => event.id)).toEqual(['1'])
 	})
 
 	test('keeps the last of several saves of one run', async () => {

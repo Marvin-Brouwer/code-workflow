@@ -8,6 +8,7 @@ import { controlSocketPath, listenOnControlSocket } from '../control/control-soc
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { openRunStore } from '../runs/run-store.mts'
+import { lockHome } from './home-lock.mts'
 
 /** What to serve an engine on. */
 export interface ServeEngineOptions {
@@ -27,13 +28,13 @@ export interface ServeEngineOptions {
 export interface ServedEngine {
 	readonly engine: Engine
 	readonly socketPath: string
-	/** Stops serving, then closes the engine. */
+	/** Stops serving, closes the engine and releases the home's lock. Calling it again waits for the same close. */
 	close(deadlines: CloseDeadlines): Promise<void>
 }
 
 /**
  * Starts an engine on a home directory and serves its control API on the home's socket. The
- * socket comes first: it's what keeps a second engine from reconciling away the first one's
+ * home's lock comes first: it's what keeps a second engine from reconciling away the first one's
  * sandboxes.
  */
 export async function serveEngine(options: ServeEngineOptions): Promise<ServedEngine> {
@@ -43,7 +44,11 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		listener(request, response)
 	})
 	const socketPath = controlSocketPath(options.home)
-	await listenOnControlSocket(server, socketPath)
+	const unlock = await lockHome(options.home, options.log ?? (() => undefined))
+	await listenOnControlSocket(server, socketPath).catch(async (error: unknown) => {
+		await unlock()
+		throw error
+	})
 
 	let engine: Engine
 	try {
@@ -58,6 +63,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		)
 	} catch (error) {
 		await closeServer(server)
+		await unlock()
 		throw error
 	}
 	const api = getRequestListener(controlApi(engine).fetch)
@@ -65,12 +71,18 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		void api(request, response)
 	}
 
+	let closing: Promise<void> | undefined
+	const close = async (deadlines: CloseDeadlines) => {
+		await closeServer(server)
+		await engine.close(deadlines)
+		await unlock()
+	}
 	return {
 		engine,
 		socketPath,
-		async close(deadlines) {
-			await closeServer(server)
-			await engine.close(deadlines)
+		close(deadlines) {
+			closing ??= close(deadlines)
+			return closing
 		},
 	}
 }

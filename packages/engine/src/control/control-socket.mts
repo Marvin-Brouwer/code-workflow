@@ -6,7 +6,8 @@ import { hasErrorCode } from '../errors.mts'
 
 /**
  * Where the engine for a home directory listens: a Unix socket in it, or a named pipe on Windows.
- * Only the user who owns the directory can reach the socket.
+ * Only the user who owns the directory can reach the socket. The pipe has Windows' default
+ * security, so it isn't limited to one user yet.
  */
 export function controlSocketPath(home: string): string {
 	if (process.platform === 'win32') {
@@ -17,9 +18,9 @@ export function controlSocketPath(home: string): string {
 }
 
 /**
- * Listens on the control socket, and so makes sure only one engine runs per home directory. A
- * socket left behind by an engine that died is replaced; one an engine still answers on is an
- * error.
+ * Listens on the control socket. A socket left behind by an engine that died is replaced; one an
+ * engine still answers on is an error. The home's lock, taken before, is what keeps two engines
+ * from racing for it.
  */
 export async function listenOnControlSocket(server: Server, socketPath: string): Promise<void> {
 	try {
