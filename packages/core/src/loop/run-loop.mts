@@ -77,7 +77,8 @@ export async function runLoop(
 		}
 		const result = await driveLoop({ agent, template, system, key, storeKey, scope: loopScope, harness })
 		const stored = toStored(result, template)
-		if (stored === undefined) emitEvent(loopScope, 'loop-not-kept', { reason: "The result isn't JSON, so a rerun runs the loop again." })
+		if (stored === undefined)
+			emitEvent(loopScope, 'loop-not-kept', { reason: "JSON wouldn't give the result back unchanged, so a rerun runs the loop again." })
 		else await harness.keepResult(storeKey, stored, loopScope.run.signal)
 		return result
 	})
@@ -277,8 +278,8 @@ async function endRun(
 
 /**
  * A loop's result as the store keeps it, or `undefined` when it can't be kept. Exit results come
- * from the agent's JSON arguments; a schema can still transform them into something that isn't
- * JSON, such as a `bigint` or a `Date`.
+ * from the agent's JSON arguments; a schema can still transform them into something JSON wouldn't
+ * give back unchanged, such as a `bigint` or a `Date`.
  */
 function toStored(result: unknown, template: LoopTemplate): StoredResult | undefined {
 	const folder = folderOf(template)
