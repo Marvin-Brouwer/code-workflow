@@ -79,6 +79,9 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		const events = await second.events(id)
 		expect(events.map((event) => event['value'])).toEqual([1, 2])
 		expect(events[0]?.['pid']).toBe(events[1]?.['pid'])
-		expect(await backend.list(signal)).toEqual([])
+		// The sandbox goes after the outcome is saved.
+		await vi.waitFor(async () => {
+			expect(await backend.list(signal)).toEqual([])
+		}, 60_000)
 	})
 })

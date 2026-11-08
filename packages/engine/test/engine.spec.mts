@@ -75,7 +75,10 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		expect(finished.source.dirty).toBe(false)
 		expect((await engine.events(started.id)).map((event) => event.type)).toEqual(['workflow-started', 'log'])
 		expect(finished.sandbox).toBeUndefined()
-		expect(await backend.list(signal)).toEqual([])
+		// The sandbox goes after the outcome is saved.
+		await vi.waitFor(async () => {
+			expect(await backend.list(signal)).toEqual([])
+		})
 	})
 
 	test('relays an input request and its answer', async () => {
@@ -195,7 +198,10 @@ if (!restarted) {
 
 		// Assert
 		expect(failed.error).toBe('The plan was rejected.')
-		expect(await backend.list(signal)).toEqual([])
+		// The sandbox goes after the outcome is saved.
+		await vi.waitFor(async () => {
+			expect(await backend.list(signal)).toEqual([])
+		})
 	})
 
 	test('fails a run whose runtime exits without an outcome, with the end of its log', async () => {
