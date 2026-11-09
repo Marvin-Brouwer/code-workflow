@@ -11,7 +11,7 @@ export interface WorkflowEntry {
 }
 
 /**
- * The entry file's default export, `workflows/main.mts`: everything that can start a run, in one
+ * The entry file's default export, `main.mts` in the repository's root: everything that can start a run, in one
  * place.
  *
  * ```ts
@@ -25,7 +25,7 @@ export interface WorkflowEntry {
  * Only the workflows listed here can be started by the UI, a webhook or a schedule. The CLI and
  * tests can still start any workflow the entry file's modules define.
  *
- * When the engine runs the entry file (`node workflows/main.mts` in the sandbox), it starts by
+ * When the engine runs the entry file (`node main.mts` in the sandbox), it starts by
  * itself once the file is loaded, and does what the engine asked: describe what it declares, or
  * run one workflow. Anywhere else, such as in a test that imports the entry file, it only returns
  * the triggers.

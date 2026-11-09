@@ -27,7 +27,7 @@ describe('packWorkflowSource', () => {
 		// Assert
 		expect(source.commit).toBe(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, encoding: 'utf8' }).trim())
 		expect(source.dirty).toBe(false)
-		expect(await entriesOf(tarball)).toEqual(new Set(['mesh-flow.config.json', 'workflows/develop.mts', 'workflows/main.mts']))
+		expect(await entriesOf(tarball)).toEqual(new Set(['main.mts', 'mesh-flow.config.json', 'workflows/develop.mts']))
 	})
 
 	test('packs uncommitted and untracked files too, but not ignored ones, and says it is dirty', async () => {
@@ -45,7 +45,7 @@ describe('packWorkflowSource', () => {
 		// Assert
 		expect(source.dirty).toBe(true)
 		expect(await entriesOf(tarball)).toEqual(
-			new Set(['.gitignore', 'mesh-flow.config.json', 'workflows/develop.mts', 'workflows/main.mts', 'workflows/new.mts']),
+			new Set(['.gitignore', 'main.mts', 'mesh-flow.config.json', 'workflows/develop.mts', 'workflows/new.mts']),
 		)
 	})
 })

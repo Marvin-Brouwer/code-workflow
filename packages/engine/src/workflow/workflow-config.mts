@@ -31,8 +31,8 @@ export const WorkflowConfig = z.object({
 	setup: z.array(CommandLine).default([]),
 	/** Starts the workflow runtime. The engine adds the entry file, relative to the repository. */
 	start: CommandLine,
-	/** Where the workflows are, relative to the repository, with the entry file `<workflows>/main.mts`. */
-	workflows: z.string().min(1).default('workflows'),
+	/** The entry file, relative to the repository, which lists the workflows with `defineWorkflows`. */
+	entry: z.string().min(1).default('main.mts'),
 })
 export type WorkflowConfig = z.infer<typeof WorkflowConfig>
 
@@ -56,12 +56,9 @@ export async function loadWorkflowConfig(directory: string): Promise<WorkflowCon
 	return parsed.data
 }
 
-/** The entry file's name in the workflows folder. */
-export const entryFileName = 'main.mts'
-
 /** The entry file relative to the repository, with POSIX separators for the sandbox. */
 export function entryFile(config: WorkflowConfig): string {
-	return path.posix.join(config.workflows.replaceAll('\\', '/'), entryFileName)
+	return path.posix.normalize(config.entry.replaceAll('\\', '/'))
 }
 
 /** A repository's config and its entry file. Throws when either is missing. */

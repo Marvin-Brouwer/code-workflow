@@ -14,7 +14,7 @@ function record(id: string, createdAt: string): RunRecord {
 			sandbox: { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } },
 			setup: [],
 			start: ['node'],
-			workflows: 'workflows',
+			entry: 'main.mts',
 		},
 		status: 'running',
 		cursor: 3,

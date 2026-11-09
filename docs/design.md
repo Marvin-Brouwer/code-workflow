@@ -239,7 +239,7 @@ status or identical comment).
 ### Triggers
 
 A workflow says what it does and what it starts with, never how it is started. One entry file in
-the workflow repository, `workflows/main.mts`, lists everything that can start a run, so there is
+the workflow repository, `main.mts` in its root, lists everything that can start a run, so there is
 one place to see what is live:
 
 ```ts
@@ -249,7 +249,7 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 	// ...
 })
 
-// workflows/main.mts
+// main.mts
 export default defineWorkflows(
 	userTrigger(fixIssue),
 	webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
@@ -553,7 +553,7 @@ Out of scope for now: token and cost budgets.
 - **Loop token**: the single-use, rotating token for a loop's tool endpoint (section 7); held by
   the runtime, never by the agent. Workflow code has a run-level one.
 - **Trigger**: what can start a run of a workflow (`userTrigger`, `webhook`, `schedule`), listed in
-  the workflow repository's entry file, `workflows/main.mts`.
+  the workflow repository's entry file, `main.mts` in its root.
 - **Exit tool**: `succeed`, `propose`, `verify` or `fail`, interpolated in a prompt; the only way
   an agent finishes.
 - **Check**: a lazy verification used by `verify`.

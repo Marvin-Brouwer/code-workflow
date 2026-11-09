@@ -116,7 +116,7 @@ credentials stay as they are.
   `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
   and starting one named workflow from the entry file.
 - **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
-  workflow from `workflows/main.mts`; generic webhook ingress (the built-in signature schemes,
+  workflow from `main.mts` in the repository root; generic webhook ingress (the built-in signature schemes,
   JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
   lists what the entry file declares. Webhook secrets come from the local credential store; until
   the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the engine's
@@ -163,10 +163,10 @@ review, no dependency order. Pick up the issue, fix it, open a pull request, han
 until it's merged. It starts from a button or from labelling an issue `ai-fix`:
 
 ```ts
-// workflows/main.mts
+// main.mts
 import { defineWorkflows, userTrigger } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
-import { fixIssue } from './fix-issue.mts'
+import { fixIssue } from './workflows/fix-issue.mts'
 
 export default defineWorkflows(
 	userTrigger(fixIssue),

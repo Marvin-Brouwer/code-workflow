@@ -22,7 +22,7 @@ function fakeEngine(status: RunStatus = 'running') {
 				sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
 				setup: [],
 				start: ['node'],
-				workflows: 'workflows',
+				entry: 'main.mts',
 			},
 			status,
 			cursor: 0,

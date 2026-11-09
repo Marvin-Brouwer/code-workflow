@@ -93,6 +93,16 @@ describe('defineWorkflows', () => {
 		})
 	})
 
+	test('turns a schedule shorthand into its cron expression, and names the schedule by what was written', () => {
+		// Act
+		const daily = schedule(report, 'daily')
+		const weekly = schedule(report, ' weekly ')
+
+		// Assert
+		expect([daily.id, daily.cron]).toEqual(['report daily', '0 0 * * *'])
+		expect([weekly.id, weekly.cron]).toEqual(['report weekly', '0 0 * * 1'])
+	})
+
 	test('fills in the default signature and keeps header names in lowercase', () => {
 		// Act
 		const plain = webhook(report, z.object({}))

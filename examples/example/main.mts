@@ -6,7 +6,9 @@
  * development) goes here as `webhook(develop, ...)`, next to the button.
  */
 import { defineWorkflows, userTrigger } from '@mesh-flow/core'
-import { develop } from './develop.mts'
+import { develop } from './workflows/develop.mts'
 
-// A button in the UI, with the story's key as its form.
-export default defineWorkflows(userTrigger(develop))
+export default defineWorkflows(
+	// A button in the UI, with the story's key as its form.
+	userTrigger(develop),
+)

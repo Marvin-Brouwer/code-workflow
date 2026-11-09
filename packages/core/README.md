@@ -175,12 +175,12 @@ export const weeklyReport = workflow('weekly-report', async ({ abortSignal }) =>
 
 ### Triggers
 
-A workflow never says how it is started. The entry file, `workflows/main.mts`, lists everything that can start a run, so there is one place to see what is live:
+A workflow never says how it is started. The entry file, `main.mts` in the repository's root next to `mesh-flow.config.json`, lists everything that can start a run, so there is one place to see what is live:
 
 ```ts
 import { defineWorkflows, schedule, userTrigger, webhook } from '@mesh-flow/core'
 import { z } from 'zod'
-import { develop, weeklyReport } from './develop.mts'
+import { develop, weeklyReport } from './workflows/develop.mts'
 
 const StoryLabeled = z.object({
 	action: z.literal('labeled'),
@@ -189,20 +189,22 @@ const StoryLabeled = z.object({
 })
 
 export default defineWorkflows(
+	// A button in the UI, with the story's key as its form.
 	userTrigger(develop),
 	// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
 	webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), { deliveryHeader: 'x-delivery-id' }),
-	schedule(weeklyReport, '0 7 * * 1'),
+	// Every Monday at midnight.
+	schedule(weeklyReport, 'weekly'),
 )
 ```
 
 - `userTrigger(workflow)` is a button in the UI. The workflow's parameters are its form.
 - `webhook(workflow, schema, options?)` starts a run for each delivery that fits the schema. The schema's output has to be the workflow's parameters, so the mapping is a `.transform`. The engine checks the signature and the schema's structure (as JSON Schema) on the host, before it makes a sandbox; `.refine` and `.transform` run in the sandbox, and a delivery they turn down ends the run as skipped. Put filters in the structure where they can go, as literals and enums. The signature is a secret header (`x-webhook-secret` by default) or `hmac-sha256` of the body, such as `{ scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' }` for GitHub. The delivery header names a delivery, so a redelivery reuses its run. A second webhook of the same workflow needs a `name`, which goes into its URL.
-- `schedule(workflow, cron, parameters?)` starts a run on the engine's clock. The parameters are fixed, and only optional when the workflow needs none.
+- `schedule(workflow, when, parameters?)` starts a run on the engine's clock. `when` is `hourly`, `daily`, `weekly` or `monthly` (at midnight, a week starting on Monday), or a cron expression. The parameters are fixed, and only optional when the workflow needs none.
 
 TypeScript checks every trigger against its workflow: a webhook schema that doesn't give the parameters, or a schedule without them, doesn't compile. Secrets, and turning a trigger on or off, are settings of the engine, never code.
 
-Under the engine, the entry file starts itself: `node workflows/main.mts` reads what the engine asked for from the mailbox, and either describes what it declares (its workflows, their parameters as JSON Schema, its triggers) or runs one workflow by name, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. It can run any workflow its modules define, also one no trigger lists, which is how the CLI's `mesh-flow run <name>` works. `describeEntry(entry)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
+Under the engine, the entry file starts itself: `node main.mts` reads what the engine asked for from the mailbox, and either describes what it declares (its workflows, their parameters as JSON Schema, its triggers) or runs one workflow by name, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. It can run any workflow its modules define, also one no trigger lists, which is how the CLI's `mesh-flow run <name>` works. `describeEntry(entry)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
 
 ### Running a workflow yourself
 

@@ -53,7 +53,7 @@ Full sketches of all three exist; option C was chosen.
 - **`.view()` hooks or UI code in workflows.** The UI derives views from the event tree.
 - **Triggers on the workflow definition** (`workflow('fix-issue', { triggers: [...] }, body)`).
   A workflow says what it does, not how it gets started, and there should be one place that shows
-  what is live. Replaced by the entry file, `workflows/main.mts`.
+  what is live. Replaced by the entry file, `main.mts` in the repository root.
 - **Every workflow file gets a start button.** Was the behaviour before triggers. There's no way to
   have a workflow that only runs from another workflow, a webhook or the CLI, and nowhere to see
   what is live. Replaced by listing `userTrigger(workflow)` in the entry file.

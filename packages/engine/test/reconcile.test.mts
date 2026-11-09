@@ -26,7 +26,7 @@ function run(id: string, status: RunStatus, sandbox?: string, backend: BackendNa
 		id,
 		workflow: 'develop',
 		source: { directory: '/repository', commit: 'abc', dirty: false },
-		config: { sandbox: spec, setup: [], start: ['node'], workflows: 'workflows' },
+		config: { sandbox: spec, setup: [], start: ['node'], entry: 'main.mts' },
 		status,
 		cursor: 0,
 		pending: [],

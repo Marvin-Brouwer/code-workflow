@@ -23,7 +23,7 @@ Ctrl+C shuts it down without leaving anything running. It pauses every running s
 The other commands talk to the running engine. From a workflow repository:
 
 ```bash
-mesh-flow run develop -p '{"key":"ABC-123"}'  # runs develop through workflows/main.mts
+mesh-flow run develop -p '{"key":"ABC-123"}'  # runs develop through main.mts
 mesh-flow list                                # run-3f2a9c0d1e7b  develop  running  needs input: story
 mesh-flow show run-3f2a9c0d1e7b               # the question, the fields, and how to answer
 mesh-flow answer run-3f2a9c0d1e7b story '{"key":"ABC-123"}'
@@ -40,7 +40,7 @@ mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge re
 
 ### Triggers
 
-A repository's entry file, `workflows/main.mts`, lists what can start its workflows: buttons, webhooks and schedules (see [`@mesh-flow/core`](../core/README.md#triggers)). The engine never runs it on the host. It runs it once per version of the source in a sandbox, in describe mode, and keeps what it declares in its home, by a hash of the repository's git files as they are on disk. An entry file that fails to describe itself fails once per version of the source too, not on every ask; a sandbox or setup step that failed is tried again on the next ask.
+A repository's entry file, `main.mts` next to `mesh-flow.config.json`, lists what can start its workflows: buttons, webhooks and schedules (see [`@mesh-flow/core`](../core/README.md#triggers)). The engine never runs it on the host. It runs it once per version of the source in a sandbox, in describe mode, and keeps what it declares in its home, by a hash of the repository's git files as they are on disk. An entry file that fails to describe itself fails once per version of the source too, not on every ask; a sandbox or setup step that failed is tried again on the next ask.
 
 `serve` describes every registered repository in the background: when it starts, when a repository is added, and every minute after (`repositoryRefreshMs` in `serveEngine`). Webhooks and schedules go by the last description, so after a change to the entry file they may follow the old one for up to a minute. A run always packs the source as it is when it starts, and fails if its trigger is gone from it. A repository that can't be described keeps its last description, and the problem is logged once.
 
@@ -93,11 +93,11 @@ The engine reads the schedules of every registered repository again every minute
 	},
 	"setup": [["npm", "ci"]],
 	"start": ["node"],
-	"workflows": "workflows"
+	"entry": "main.mts"
 }
 ```
 
-`run <name>` uploads the repository's git files, as they are on disk (tracked files, plus untracked ones that aren't ignored), into the sandbox at `/workflow`. It runs `setup` there one command at a time, then starts `start` with the entry file added, here `node workflows/main.mts`, with the workflow's name and its parameters in the mailbox's `start.json`. The run record pins the commit, and says when there were uncommitted changes. The upload and the start file are kept, so `restart` runs the same code with the same parameters.
+`run <name>` uploads the repository's git files, as they are on disk (tracked files, plus untracked ones that aren't ignored), into the sandbox at `/workflow`. It runs `setup` there one command at a time, then starts `start` with the entry file added, here `node main.mts`, with the workflow's name and its parameters in the mailbox's `start.json`. The run record pins the commit, and says when there were uncommitted changes. The upload and the start file are kept, so `restart` runs the same code with the same parameters.
 
 The image needs what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
 

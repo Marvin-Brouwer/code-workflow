@@ -311,7 +311,7 @@ if (!restarted) {
 	test('refuses a repository that has no entry file', async () => {
 		// Arrange
 		const directory = await workflowRepository({})
-		await rm(path.join(directory, 'workflows', 'main.mts'))
+		await rm(path.join(directory, 'main.mts'))
 		const { engine } = await openEngine()
 
 		// Act

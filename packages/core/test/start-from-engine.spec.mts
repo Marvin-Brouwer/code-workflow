@@ -23,8 +23,7 @@ async function startLikeTheEngine(source: string, start: unknown) {
 	const layout = mailboxLayout(mailbox)
 	await mkdir(layout.inbox, { recursive: true })
 	await writeFile(layout.startFile, JSON.stringify(start))
-	const file = path.join(directory, 'workflows', 'main.mts')
-	await mkdir(path.dirname(file), { recursive: true })
+	const file = path.join(directory, 'main.mts')
 	await writeFile(file, source)
 	const child = spawn(process.execPath, ['--import', loader, file], {
 		cwd: directory,

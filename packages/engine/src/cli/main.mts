@@ -83,7 +83,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 
 	program
 		.command('run')
-		.description("Starts a run of a workflow through the repository's entry file, workflows/main.mts.")
+		.description("Starts a run of a workflow through the repository's entry file, main.mts.")
 		.argument('<workflow>', 'the workflow, by the name workflow() gives it')
 		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
 		.option('-p, --parameters <json>', "the workflow's parameters, as JSON", parseJson)

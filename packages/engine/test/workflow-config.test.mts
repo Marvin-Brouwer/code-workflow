@@ -16,7 +16,7 @@ describe('loadWorkflowConfig', () => {
 		const config = await loadWorkflowConfig(directory)
 
 		// Assert
-		expect(config).toEqual({ sandbox, setup: [], start: ['node'], workflows: 'workflows' })
+		expect(config).toEqual({ sandbox, setup: [], start: ['node'], entry: 'main.mts' })
 	})
 
 	test('says what is wrong with a bad config', async () => {
@@ -49,15 +49,15 @@ describe('loadWorkflowConfig', () => {
 })
 
 describe('entryFile', () => {
-	test('is main.mts in the workflows folder, with POSIX separators', () => {
+	test('is the configured file, with POSIX separators', () => {
 		// Arrange
-		const config = { sandbox, setup: [], start: ['node'] as [string], workflows: 'flows\\team' }
+		const config = { sandbox, setup: [], start: ['node'] as [string], entry: 'flows\\team.mts' }
 
 		// Act
 		const file = entryFile(config)
 
 		// Assert
-		expect(file).toBe('flows/team/main.mts')
+		expect(file).toBe('flows/team.mts')
 	})
 })
 
@@ -71,6 +71,6 @@ describe('findEntry', () => {
 		const finding = findEntry(directory)
 
 		// Assert
-		await expect(finding).rejects.toThrow('workflows/main.mts')
+		await expect(finding).rejects.toThrow('main.mts')
 	})
 })
