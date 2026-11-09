@@ -77,7 +77,7 @@ one word.
 **Other things the sketches need before they're real packages**, found while wiring them up:
 
 - The sketches import connectors as namespaces (`import { jira } from
-  '@mesh-flow/connector-atlassian'`) while each module exported its members directly. Since
+  '@mesh-flow/atlassian'`) while each module exported its members directly. Since
   then each package's `index.mts` exports its namespace (`export * as jira from './jira'`).
 - The sketches use extensionless relative imports, so they type-check under `bundler` resolution,
   not under the repo's `NodeNext`.

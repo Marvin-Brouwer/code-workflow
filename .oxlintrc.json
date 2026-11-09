@@ -13,8 +13,8 @@
 		"**/node_modules/",
 		"**/dist/",
 		"examples/",
-		"packages/connector-atlassian/",
-		"packages/connector-gitlab/",
+		"packages/atlassian/",
+		"packages/gitlab/",
 		"packages/preset-development/",
 		"packages/toolchain-dotnet/"
 	],
