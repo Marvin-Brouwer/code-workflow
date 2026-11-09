@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url'
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
 import { temporaryDirectory } from './temporary-directory.mts'
 
-const protocol = pathToFileURL(path.join(import.meta.dirname, '../../../protocol/src/_module/protocol.mts')).href
+/** Imports `@mesh-flow/protocol` from its sources, for entry files the tests write. */
+export const protocolModule = pathToFileURL(path.join(import.meta.dirname, '../../../protocol/src/_module/protocol.mts')).href
 
 /** What an app repository holds: its files, and the packages in its `node_modules`. */
 export interface AppRepositoryOptions {
@@ -22,7 +23,7 @@ export interface AppRepositoryOptions {
  * sees them bundled.
  */
 export function describingEntry(description: WorkflowsDescription): string {
-	return `import { RuntimeMailbox } from '${protocol}'
+	return `import { RuntimeMailbox } from '${protocolModule}'
 import { punctuation } from 'greeting'
 import { greeting } from './greeting.mts'
 

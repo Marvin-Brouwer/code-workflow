@@ -4,6 +4,8 @@ import { describe, expect, test } from 'vitest'
 import { nativePackages } from '../src/native-packages.mts'
 import { appRepository } from './support/app-repository.mts'
 
+const abortSignal = new AbortController().signal
+
 describe('nativePackages', () => {
 	test('finds packages with an addon, prebuilt binaries or platform packages, also when not direct, and nothing else', async () => {
 		// Arrange
@@ -19,7 +21,7 @@ describe('nativePackages', () => {
 		})
 
 		// Act
-		const found = await nativePackages(directory, AbortSignal.timeout(10_000))
+		const found = await nativePackages(directory, abortSignal)
 
 		// Assert
 		expect(found.toSorted((left, right) => left.name.localeCompare(right.name))).toEqual([
@@ -41,7 +43,7 @@ describe('nativePackages', () => {
 		await symlink(path.join(store, 'wrapper'), path.join(directory, 'node_modules', 'wrapper'), 'junction')
 
 		// Act
-		const found = await nativePackages(directory, AbortSignal.timeout(10_000))
+		const found = await nativePackages(directory, abortSignal)
 
 		// Assert
 		expect(found).toEqual([{ name: 'inner', version: '1.0.0', buildsFromSource: false }])

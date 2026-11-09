@@ -5,7 +5,7 @@ import { appManifestFile, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { buildApp } from '../src/build-app.mts'
 import { describeBuiltApp } from '../src/describe-built-app.mts'
-import { appRepository, describingEntry } from './support/app-repository.mts'
+import { appRepository, describingEntry, protocolModule } from './support/app-repository.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
@@ -120,9 +120,15 @@ describe('buildApp', () => {
 describe('describeBuiltApp', () => {
 	test("loads native dependencies from the repository, not the sandbox's next to the bundle", async () => {
 		// Arrange
-		const entry = `import { native } from 'native'\n${describingEntry(description).replace("import { punctuation } from 'greeting'\n", '')}`
+		const entry = `import { RuntimeMailbox } from '${protocolModule}'
+import { native } from 'native'
+
+const mailbox = RuntimeMailbox.fromEnvironment()
+await mailbox.readStart(new AbortController().signal)
+if (native === 'host') mailbox.send({ type: 'described', description: ${JSON.stringify(description)} })
+`
 		const directory = await appRepository({
-			files: { 'main.mjs': entry.replace("import { greeting } from './greeting.mts'\n", 'const greeting = native\n') },
+			files: { 'main.mjs': entry },
 			packages: { native: { files: { 'index.js': `export const native = 'host'\n` } } },
 		})
 		const out = await temporaryDirectory()

@@ -4,6 +4,9 @@ import path from 'node:path'
 import type { AppPlatform } from '@mesh-flow/protocol'
 import type { NativePackage } from './native-packages.mts'
 
+/** The C library the sandbox images use. */
+const sandboxLibc = 'glibc'
+
 /**
  * Throws when `packages` can't be installed for `platform` on this machine: a package that compiles
  * its native code can only be built on the sandbox's own platform.
@@ -30,12 +33,19 @@ export async function installForPlatform(
 	platform: AppPlatform,
 	abortSignal: AbortSignal,
 ): Promise<void> {
+	// Again here for a caller that didn't check first: npm would try to compile for the wrong platform.
 	assertInstallable(packages, platform)
 	const dependencies = Object.fromEntries(packages.map((native) => [native.name, native.version]))
 	await writeFile(path.join(out, 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies }, null, '\t'))
 	if (packages.length === 0) return
-	const args = ['install', '--omit=dev', '--no-audit', '--no-fund', `--os=${platform.os}`, `--cpu=${platform.cpu}`, '--libc=glibc']
-	await run('npm', args, out, { npm_config_platform: platform.os, npm_config_arch: platform.cpu, npm_config_libc: 'glibc' }, abortSignal)
+	const args = ['install', '--omit=dev', '--no-audit', '--no-fund', `--os=${platform.os}`, `--cpu=${platform.cpu}`, `--libc=${sandboxLibc}`]
+	await run(
+		'npm',
+		args,
+		out,
+		{ npm_config_platform: platform.os, npm_config_arch: platform.cpu, npm_config_libc: sandboxLibc },
+		abortSignal,
+	)
 }
 
 function run(command: string, args: readonly string[], cwd: string, env: Record<string, string>, abortSignal: AbortSignal): Promise<void> {

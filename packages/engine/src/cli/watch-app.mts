@@ -9,6 +9,20 @@ const ignored = new Set(['node_modules', '.git', '.mesh-flow'])
 /** How long changes are gathered before one rebuild. */
 const settleMs = 300
 
+/** What `watchApp` takes. */
+export interface WatchAppOptions {
+	/** The app's repository. */
+	readonly directory: string
+	/** Rebuilds the app; called once a burst of changes has settled. */
+	readonly changed: () => Promise<void>
+	/** Where a failed call, or a failed watch, is reported. */
+	readonly log: (message: string) => void
+	/** Called once when the watch itself fails and watching has stopped. */
+	readonly stopped: () => void
+	/** Stops watching. */
+	readonly abortSignal: AbortSignal
+}
+
 /**
  * Calls `changed` once a burst of file changes in `directory` has settled, until `abortSignal`
  * aborts. Changes while a call is going lead to one more call after it, however many there were;
@@ -16,13 +30,7 @@ const settleMs = 300
  * at all, so a large dependency tree costs no watches. What fails goes to `log`; when the watch
  * itself fails, watching stops and `stopped` is called.
  */
-export async function watchApp(options: {
-	readonly directory: string
-	readonly changed: () => Promise<void>
-	readonly log: (message: string) => void
-	readonly stopped: () => void
-	readonly abortSignal: AbortSignal
-}): Promise<void> {
+export async function watchApp(options: WatchAppOptions): Promise<void> {
 	const { directory, changed, log, abortSignal } = options
 	const watchers = new Map<string, FSWatcher>()
 	let timer: NodeJS.Timeout | undefined

@@ -14,7 +14,7 @@ const describeFolder = '.mesh-flow'
 export interface DescribeBuiltAppOptions {
 	/** The bundle `buildApp` wrote. */
 	readonly bundle: string
-	/** The app's repository, whose `node_modules` the bundle's native dependencies come from here. */
+	/** The app's repository: the bundle's native dependencies load from its `node_modules`. */
 	readonly directory: string
 	readonly abortSignal: AbortSignal
 }
@@ -30,9 +30,11 @@ export interface DescribeBuiltAppOptions {
 export async function describeBuiltApp(options: DescribeBuiltAppOptions): Promise<WorkflowsDescription> {
 	const { abortSignal } = options
 	await mkdir(path.join(options.directory, describeFolder), { recursive: true })
-	const copy = await mkdtemp(path.join(options.directory, describeFolder, 'describe-'))
-	const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-describe-'))
+	let copy: string | undefined
+	let scratch: string | undefined
 	try {
+		copy = await mkdtemp(path.join(options.directory, describeFolder, 'describe-'))
+		scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-describe-'))
 		const entry = path.join(copy, path.basename(options.bundle))
 		await copyFile(options.bundle, entry)
 		const layout = mailboxLayout(scratch)
@@ -48,8 +50,8 @@ export async function describeBuiltApp(options: DescribeBuiltAppOptions): Promis
 		}
 		throw new Error(`The app exited without describing itself. Does its entry file export defineMeshFlow?${shown(output)}`)
 	} finally {
-		await rm(scratch, { recursive: true, force: true })
-		await rm(copy, { recursive: true, force: true })
+		if (scratch !== undefined) await rm(scratch, { recursive: true, force: true })
+		if (copy !== undefined) await rm(copy, { recursive: true, force: true })
 	}
 }
 

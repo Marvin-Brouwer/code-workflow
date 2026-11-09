@@ -131,14 +131,15 @@ describe('openRunStore', () => {
 		// Arrange
 		const root = await temporaryDirectory()
 		const store = openRunStore(root)
+		const id = 'run-00000000000a'
 		const tarball = path.join(await temporaryDirectory(), 'app.tgz')
 		await writeFile(tarball, 'a built app')
 
 		// Act
-		const saving = store.saveApp('run-00000000000a', tarball, AbortSignal.abort(new Error('Ctrl+C')))
+		const saving = store.saveApp(id, tarball, AbortSignal.abort(new Error('Ctrl+C')))
 
 		// Assert
 		await expect(saving).rejects.toMatchObject({ name: 'AbortError' })
-		expect(await readdir(runDirectory(root, 'run-00000000000a'))).toEqual([])
+		expect(await readdir(runDirectory(root, id))).toEqual([])
 	})
 })

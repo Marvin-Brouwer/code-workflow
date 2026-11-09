@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { watchApp } from '../src/cli/watch-app.mts'
 import { deferred } from './support/deferred.mts'
@@ -7,6 +8,12 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 
 /** Longer than watchApp gathers changes for. */
 const settledMs = 1_000
+
+/** How long a test waits for a call. */
+const waitForCallMs = settledMs * 3
+
+/** The resource Node holds for each `fs.watch`. */
+const watchResource = 'FSEventWrap'
 
 /** An app folder with a source folder and dependencies, watched until the test ends. */
 async function watchedApp(changed: () => Promise<void> = () => Promise.resolve()) {
@@ -38,7 +45,7 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, settledMs * 3)
+		}, waitForCallMs)
 	})
 
 	test('calls once more for changes while a call is going, and goes on after one fails', async () => {
@@ -55,19 +62,19 @@ describe('watchApp', () => {
 		await writeFile(path.join(directory, 'main.mts'), '1')
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, settledMs * 3)
+		}, waitForCallMs)
 
 		// Act
 		await writeFile(path.join(directory, 'main.mts'), '2')
-		await new Promise((resolve) => setTimeout(resolve, settledMs))
+		await delay(settledMs)
 		await writeFile(path.join(directory, 'main.mts'), '3')
-		await new Promise((resolve) => setTimeout(resolve, settledMs))
+		await delay(settledMs)
 		first.resolve(undefined)
 
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledTimes(2)
-		}, settledMs * 3)
+		}, waitForCallMs)
 		expect(log).toHaveBeenCalledWith('Rebuilding failed: broken build')
 	})
 
@@ -75,10 +82,10 @@ describe('watchApp', () => {
 		// Arrange
 		const { directory, calls } = await watchedApp()
 		await mkdir(path.join(directory, 'agents'))
-		await new Promise((resolve) => setTimeout(resolve, settledMs))
+		await delay(settledMs)
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, settledMs * 3)
+		}, waitForCallMs)
 
 		// Act
 		await writeFile(path.join(directory, 'agents', 'planner.mts'), '')
@@ -86,7 +93,7 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledTimes(2)
-		}, settledMs * 3)
+		}, waitForCallMs)
 	})
 
 	test('stops calling, and holds no timer or watch, once aborted', async () => {
@@ -96,10 +103,10 @@ describe('watchApp', () => {
 
 		// Act
 		controller.abort()
-		await new Promise((resolve) => setTimeout(resolve, settledMs))
+		await delay(settledMs)
 
 		// Assert
 		expect(calls).not.toHaveBeenCalled()
-		expect(process.getActiveResourcesInfo().filter((resource) => resource === 'FSEventWrap')).toEqual([])
+		expect(process.getActiveResourcesInfo().filter((resource) => resource === watchResource)).toEqual([])
 	})
 })

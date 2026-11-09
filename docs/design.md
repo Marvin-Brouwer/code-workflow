@@ -285,7 +285,8 @@ export default defineMeshFlow({
   redelivery reuses the run it already started.
 - **`schedule(workflow, when, parameters?)`** starts a run on the engine's wall clock, at a cron
   expression or `hourly`, `daily`, `weekly` or `monthly` (timed waits are engine-side, section 5).
-  The parameters are fixed values, checked against the workflow's shape at compile time. A tick is skipped while the previous run of that schedule is still going.
+  The parameters are fixed values, checked against the workflow's shape at compile time. A tick
+  is skipped while the previous run of that schedule is still going.
 - **Every run starts through a trigger the deployed version lists**, also from the CLI:
   `mesh-flow trigger <kind> <id> -p <parameters>` does what the button, a delivery (without the
   signature check) or the schedule (with the given parameters) would. Tests (`runWorkflow`) can
