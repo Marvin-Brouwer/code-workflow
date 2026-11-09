@@ -31,7 +31,7 @@ packages that don't depend on the open decisions first.
 | 3 | `@mesh-flow/core` | the authoring vocabulary as a runtime: `workflow`, `loop`, exits, `limit`, `input`, events | Pi Durable |
 | 4 | triggers | workflow parameters, the entry file (`defineWorkflows`, `userTrigger`, `webhook`, `schedule`), describe mode; webhook ingress and the scheduler in the engine | 2 and 3 |
 | 5 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 4 |
-| 6 | `@mesh-flow/connector-github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
+| 6 | `@mesh-flow/github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
 | 7 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
 
 ### 1. `@mesh-flow/sandbox`
@@ -136,7 +136,7 @@ providers, usage per run. Providers and credentials come from a local credential
 `.env`. The triggers' webhook secrets move into the same store. AWS, git and CodeArtifact are
 roadmap step 5.
 
-### 6. `@mesh-flow/connector-github` and `examples/github-issue`
+### 6. `@mesh-flow/github` and `examples/github-issue`
 
 A GitHub connector with the same shape as the GitLab one: functions for code, tools for agents,
 checks for `verify`.
@@ -150,9 +150,10 @@ checks for `verify`.
   while it waits.
 - **Credentials** never in the sandbox: API calls and pushes are host-side tools; how fetching
   gets its credential is decided here (see [gateway-tool-calls.md](gateway-tool-calls.md)).
-- **Webhook shortcuts:** `github.issueLabeled(label)` and the review events as schemas with
-  GitHub's signature scheme filled in, for `webhook` triggers and for review watching, and
-  `github.onIssueLabeled(workflow, label)` as a ready-made trigger. `connector-gitlab` gets the
+- **Webhooks** in their own entry point, `@mesh-flow/github/hooks`, as part of the same package:
+  `github.issueLabeled(label)` and the review events as schemas with GitHub's signature scheme
+  filled in, for `webhook` triggers and for review watching, and
+  `github.onIssueLabeled(workflow, label)` as a ready-made trigger. The GitLab connector gets the
   same for merge requests in step 7.
 
 `examples/github-issue` is deliberately tiny: one issue, one repository, no separate QA or code
@@ -161,6 +162,10 @@ until it's merged. It starts from a button or from labelling an issue `ai-fix`:
 
 ```ts
 // workflows/main.mts
+import { defineWorkflows, userTrigger } from '@mesh-flow/core'
+import { github } from '@mesh-flow/github/hooks'
+import { fixIssue } from './fix-issue.mts'
+
 export default defineWorkflows(
 	userTrigger(fixIssue),
 	github.onIssueLabeled(fixIssue, 'ai-fix'),
