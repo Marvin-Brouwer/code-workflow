@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// Workspace packages resolve to their sources, so nothing has to be built first.
+		"customConditions": ["source"],
+		"lib": ["ES2024"]
+	},
+	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]
+}

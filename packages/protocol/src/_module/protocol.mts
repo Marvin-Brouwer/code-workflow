@@ -4,6 +4,7 @@
  *
  * @module
  */
+export { AppManifest, appManifestFile, AppPlatform } from '../app-manifest.mts'
 export {
 	answerFile,
 	defaultMailboxDirectory,

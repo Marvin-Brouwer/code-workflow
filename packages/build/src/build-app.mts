@@ -1,0 +1,69 @@
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { builtinModules } from 'node:module'
+import path from 'node:path'
+import { appManifestFile, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
+import { build } from 'rolldown'
+import { describeBuiltApp } from './describe-built-app.mts'
+import { installForPlatform } from './install-for-platform.mts'
+import { nativePackages, type NativePackage } from './native-packages.mts'
+import { packageEntry } from './package-entry.mts'
+
+/** What `buildApp` takes. */
+export interface BuildAppOptions {
+	/** The app's repository, with its `package.json` and installed dependencies. */
+	readonly directory: string
+	/** Where the built app goes. It's emptied first. */
+	readonly out: string
+	/** The sandbox's platform, which native dependencies are installed for. Default: linux-x64. */
+	readonly platform?: AppPlatform
+	readonly abortSignal: AbortSignal
+}
+
+/** The built file the sandbox starts with `node`. */
+const builtEntry = 'main.mjs'
+
+const defaultPlatform: AppPlatform = { os: 'linux', cpu: 'x64' }
+
+/**
+ * Builds the app in `directory` into `out`, ready to deploy: its entry file (`main` in
+ * `package.json`) and everything it imports bundled into one file, the dependencies that ship
+ * native code installed next to it for the sandbox's platform, and `mesh-flow.json`, which says
+ * what the app declares. The sandbox then only runs `node main.mjs`: no setup, no install.
+ *
+ * Describing runs the built app on this machine, the way the engine would start it.
+ */
+export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
+	const { directory, out, abortSignal } = options
+	const platform = options.platform ?? defaultPlatform
+	const entry = await packageEntry(directory)
+	const natives = await nativePackages(directory)
+	await rm(out, { recursive: true, force: true })
+	await mkdir(out, { recursive: true })
+	abortSignal.throwIfAborted()
+	await build({
+		input: entry,
+		cwd: directory,
+		platform: 'node',
+		external: (id) => isBuiltin(id) || isNative(id, natives),
+		logLevel: 'warn',
+		onLog(level, log, report) {
+			// Left out, the import would only fail in the sandbox.
+			if (log.code === 'UNRESOLVED_IMPORT') throw new Error(`${log.message} Is it installed?`)
+			report(level, log)
+		},
+		output: { file: path.join(out, builtEntry), format: 'esm', codeSplitting: false },
+	})
+	await installForPlatform(out, natives, platform, abortSignal)
+	const description = await describeBuiltApp(path.join(out, builtEntry), abortSignal)
+	const manifest: AppManifest = { entry: builtEntry, platform, description, builtAt: new Date().toISOString() }
+	await writeFile(path.join(out, appManifestFile), JSON.stringify(manifest, null, '\t'))
+	return manifest
+}
+
+function isBuiltin(id: string): boolean {
+	return id.startsWith('node:') || builtinModules.includes(id)
+}
+
+function isNative(id: string, natives: readonly NativePackage[]): boolean {
+	return natives.some((native) => id === native.name || id.startsWith(`${native.name}/`))
+}
