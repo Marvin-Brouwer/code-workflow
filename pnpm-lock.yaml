@@ -21,6 +21,16 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
+  examples/example:
+    dependencies:
+      '@mesh-flow/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      '@mesh-flow/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+
   packages/build:
     dependencies:
       '@mesh-flow/protocol':

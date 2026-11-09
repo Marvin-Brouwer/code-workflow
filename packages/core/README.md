@@ -173,12 +173,16 @@ export const weeklyReport = workflow('weekly-report', async ({ abortSignal }) =>
 
 `inDependencyOrder` starts each node once the nodes it depends on have returned, so independent nodes run concurrently. A failed node blocks only the nodes that depend on it; the others go on, and the call rejects with `DependencyOrderFailed`, which holds every result, failure and blocked node.
 
-### Triggers
+### Apps
 
-A workflow never says how it is started. The entry file, `main.mts` in the repository's root next to `mesh-flow.config.json`, lists everything that can start a run, so there is one place to see what is live:
+An app is a package whose `main` in `package.json` is its entry file. The entry file exports `defineMeshFlow`: the sandbox the app's runs get, and everything that can start a run, so there is one place to see what is live and where it runs:
+
+```json
+{ "name": "example", "type": "module", "main": "main.mts" }
+```
 
 ```ts
-import { defineWorkflows, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { defineMeshFlow, image, schedule, userTrigger, webhook } from '@mesh-flow/core'
 import { z } from 'zod'
 import { develop, weeklyReport } from './workflows/develop.mts'
 
@@ -188,15 +192,38 @@ const StoryLabeled = z.object({
 	story: z.object({ key: z.string() }),
 })
 
-export default defineWorkflows(
-	// A button in the UI, with the story's key as its form.
-	userTrigger(develop),
-	// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
-	webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), { deliveryHeader: 'x-delivery-id' }),
-	// Every Monday at midnight.
-	schedule(weeklyReport, 'weekly'),
+export default defineMeshFlow({
+	sandbox: image({ name: 'node:22-slim', memoryMb: 4096, egress: ['api.example.com'] }),
+	workflows: [
+		// A button in the UI, with the story's key as its form.
+		userTrigger(develop),
+		// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
+		webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), { deliveryHeader: 'x-delivery-id' }),
+		// Every Monday at midnight.
+		schedule(weeklyReport, 'weekly'),
+	],
+})
+```
+
+`image({ name, cpus?, memoryMb?, egress? })` is the sandbox: an image with `node` in it, 2 CPUs and 2048 MB unless you say otherwise, and the hosts it may reach. `mesh-flow build` bundles the entry file with its dependencies and writes down what it declares, so the sandbox has nothing to install and only runs `node` (see [`@mesh-flow/build`](../build/README.md)).
+
+`defineWorkflows(...triggers)` bundles triggers, for a package or a module that brings several at once. A bundle goes in `workflows` like a trigger does:
+
+```ts
+import { defineWorkflows, userTrigger, webhook } from '@mesh-flow/core'
+import { fixIssue, IssueLabeled } from './workflows/fix-issue.mts'
+
+export const issueTriggers = defineWorkflows(
+	userTrigger(fixIssue),
+	webhook(fixIssue, IssueLabeled.transform((event) => ({ issue: event.issue.number }))),
 )
 ```
+
+A trigger listed twice, in the app or across its bundles, is an error.
+
+### Triggers
+
+A workflow never says how it is started; the app's `workflows` does.
 
 - `userTrigger(workflow)` is a button in the UI. The workflow's parameters are its form.
 - `webhook(workflow, schema, options?)` starts a run for each delivery that fits the schema. The schema's output has to be the workflow's parameters, so the mapping is a `.transform`. The engine checks the signature and the schema's structure (as JSON Schema) on the host, before it makes a sandbox; `.refine` and `.transform` run in the sandbox, and a delivery they turn down ends the run as skipped. Put filters in the structure where they can go, as literals and enums. The signature is a secret header (`x-webhook-secret` by default) or `hmac-sha256` of the body, such as `{ scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' }` for GitHub. The delivery header names a delivery, so a redelivery reuses its run. A second webhook of the same workflow needs a `name`, which goes into its URL.
@@ -204,7 +231,7 @@ export default defineWorkflows(
 
 TypeScript checks every trigger against its workflow: a webhook schema that doesn't give the parameters, or a schedule without them, doesn't compile. Secrets, and turning a trigger on or off, are settings of the engine, never code.
 
-Under the engine, the entry file starts itself: `node main.mts` reads what the engine asked for from the mailbox, and either describes what it declares (its workflows, their parameters as JSON Schema, its triggers) or runs one workflow by name, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. It can run any workflow its modules define, also one no trigger lists, which is how the CLI's `mesh-flow run <name>` works. `describeEntry(entry)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
+Under the engine, the built entry file starts itself: `node main.mjs` reads what the engine asked for from the mailbox and runs one workflow through one of its triggers, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. A schedule fired by hand (`mesh-flow trigger schedule`) runs with the parameters it was given instead of its own. `mesh-flow build` starts it the same way to have it describe what it declares: its sandbox, its workflows with their parameters as JSON Schema, and its triggers. `describeApp(app)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
 
 ### Running a workflow yourself
 

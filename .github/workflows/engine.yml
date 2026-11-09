@@ -1,6 +1,6 @@
 name: engine
 
-# The engine's, the protocol's and core's own checks, then one run end to end on each real backend this OS has. Lint and
+# The engine's, the build's, the protocol's and core's own checks, then one run end to end on each real backend this OS has. Lint and
 # format run repo-wide in the sandbox workflow.
 on:
   pull_request:
@@ -32,9 +32,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/engine --filter @mesh-flow/core typecheck
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/engine --filter @mesh-flow/core typecheck
       - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/core... build
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/engine --filter @mesh-flow/core test
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/engine --filter @mesh-flow/core test
 
   real-backend:
     name: real backend (${{ matrix.os }}, ${{ matrix.backend }})
