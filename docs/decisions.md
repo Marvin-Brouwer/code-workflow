@@ -119,6 +119,14 @@ November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context]
 - **Replay-based execution (Azure Durable Functions, Temporal style).** Code appears to wait but is
   re-executed with awaits answered from a journal. Hard to debug, and it imposes a determinism rule
   on all workflow code.
+- **Building on Inngest** (durable functions, AgentKit, Sandboxes; checked November 2026). The same
+  problem, solved with replay: each `step.run` result is saved and the handler runs again from the
+  top, so code outside a step re-executes ("Code outside a step can run again each time the handler
+  replays"). The agent loop runs in the app, not the sandbox, and Sandboxes (cloud-only beta) only
+  promise that the filesystem survives a pause. Tool credentials are the app's environment
+  variables and webhook signatures are left to the function, so nothing like the gateway. The
+  server is SSPL. Ideas taken from it are issues #14 (waiting for an external event), #15 (flow
+  control), #16 (one run per key) and #17 (an MCP endpoint on the dev server).
 - **No durability (sandbox lives until the workflow ends).** Waits on approvals and reviews last
   days; a crash would redo all agent work.
 - **Checkpoints at step boundaries only.** Superseded by sandbox snapshots plus Pi Durable.
