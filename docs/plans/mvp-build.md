@@ -29,10 +29,10 @@ packages that don't depend on the open decisions first.
 | 1 | `@mesh-flow/sandbox` | the backend interface, E2B, microsandbox and gVisor, backend selection, conformance tests | nothing |
 | 2 | `@mesh-flow/engine` | runs, sandbox lifecycle, shutdown and reconciliation, input requests, the CLI | 1 |
 | 3 | `@mesh-flow/core` | the authoring vocabulary as a runtime: `workflow`, `loop`, exits, `limit`, `input`, events | Pi Durable |
-| 4 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 3 |
-| 5 | `@mesh-flow/connector-github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks; the smallest workflow that runs end to end | 1 to 4 |
-| 6 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 4, and 5 for the shared review-watching shape |
-| 7 | triggers | `defineWorkflows`, `userTrigger`, `webhook`, `schedule`; workflow parameters; describe mode; webhook ingress and the scheduler in the engine | 2, 3, and 5 for GitHub's webhook schemas |
+| 4 | triggers | workflow parameters, the entry file (`defineWorkflows`, `userTrigger`, `webhook`, `schedule`), describe mode; webhook ingress and the scheduler in the engine | 2 and 3 |
+| 5 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 4 |
+| 6 | `@mesh-flow/connector-github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
+| 7 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
 
 ### 1. `@mesh-flow/sandbox`
 
@@ -102,16 +102,41 @@ sandbox.
   too.
 - Pi Durable sessions keyed by call site and name.
 
-### 4. `@mesh-flow/gateway`
+### 4. Triggers
+
+[Design section 4, Triggers](../design.md#triggers). Built before the gateway because it changes
+`workflow` and how the engine starts a run, both just built, and so the GitHub example starts in
+its final shape. It doesn't change what the gateway builds on: tools, per-loop endpoints and
+credentials stay as they are.
+
+- **Core:** `workflow(name, parameters, body)` with the body getting `{ parameters, abortSignal }`
+  (also for workflows without parameters); `defineWorkflows`, `userTrigger`, `webhook`,
+  `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
+  and starting one named workflow from the entry file.
+- **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
+  workflow from `workflows/main.mts`; webhook ingress (signature, JSON Schema check, 4xx, delivery
+  id as run key); the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
+  lists what the entry file declares. Webhook secrets come from the local credential store; until
+  the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the engine's
+  home directory, never in the workflow repository.
+- **Docs:** the core README (the file no longer starts itself) and the engine README (`run <name>`
+  goes through the entry file), and `examples/example` gets an entry file.
+- **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
+  sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
+  schedule tick is skipped; shutdown completes while a webhook request or a describe run never
+  settles.
+
+### 5. `@mesh-flow/gateway`
 
 The host side of tool calls ([gateway-tool-calls.md](gateway-tool-calls.md)): per-loop and
 run-level endpoints with tokens over the host↔sandbox channel, host-side input validation,
 revocation when a loop settles. Model providers on their native API
 ([design section 7](../design.md#model-providers)), model-first resolution over the user's ordered
 providers, usage per run. Providers and credentials come from a local credential store, never from
-`.env`. AWS, git and CodeArtifact are roadmap step 5.
+`.env`. The triggers' webhook secrets move into the same store. AWS, git and CodeArtifact are
+roadmap step 5.
 
-### 5. `@mesh-flow/connector-github` and `examples/github-issue`
+### 6. `@mesh-flow/connector-github` and `examples/github-issue`
 
 A GitHub connector with the same shape as the GitLab one: functions for code, tools for agents,
 checks for `verify`.
@@ -125,16 +150,23 @@ checks for `verify`.
   while it waits.
 - **Credentials** never in the sandbox: API calls and pushes are host-side tools; how fetching
   gets its credential is decided here (see [gateway-tool-calls.md](gateway-tool-calls.md)).
+- **Webhooks:** `github.issueLabeled(label)` and the review events as schemas, and GitHub's
+  signature check, for `webhook` triggers and for review watching.
 
 `examples/github-issue` is deliberately tiny: one issue, one repository, no separate QA or code
 review, no dependency order. Pick up the issue, fix it, open a pull request, handle review comments
-until it's merged. It starts by asking for the issue with `input()`, since workflow parameters and
-the entry file come with step 7, which converts it:
+until it's merged. It starts from a button or from labelling an issue `ai-fix`:
 
 ```ts
-export default workflow('fix-issue', async () => {
-    const { issue: number } = await input('Which issue should be fixed?', { issue: github.issueNumber });
-    const issue = await github.collect(number);
+// workflows/main.mts
+export default defineWorkflows(
+	userTrigger(fixIssue),
+	webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
+)
+
+// workflows/fix-issue.mts
+export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, async ({ parameters }) => {
+    const issue = await github.collect(parameters.issue);
     const repository = await github.checkout(issue.repository, { branch: `fix/${issue.number}` });
 
     await developer.loop`
@@ -161,34 +193,10 @@ export default workflow('fix-issue', async () => {
 It runs before `develop` because it needs only one connector and no toolchain package, so it is
 the first proof that the sandbox, engine, core and gateway work together.
 
-### 6. The other connectors and `example`
+### 7. The other connectors and `example`
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
 against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
-
-### 7. Triggers
-
-[Design section 4, Triggers](../design.md#triggers). It doesn't change the gateway: tools,
-per-loop endpoints and credentials stay as they are. It can be built next to step 6.
-
-- **Core:** `workflow(name, parameters, body)` with the body getting `{ parameters, abortSignal }`
-  (also for workflows without parameters); `defineWorkflows`, `userTrigger`, `webhook`,
-  `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
-  and starting one named workflow from the entry file.
-- **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
-  workflow from `workflows/main.mts`; webhook ingress (signature, JSON Schema check, 4xx, delivery
-  id as run key); the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
-  lists what the entry file declares. Webhook secrets come from the local credential store.
-- **GitHub connector:** `github.issueLabeled(label)` and the review events as schemas, and GitHub's
-  signature check.
-- **Docs:** the core README (the file no longer starts itself) and the engine README (`run <name>`
-  goes through the entry file) describe what is built until then, so they change here.
-- **`examples/github-issue`** gets an entry file with a `userTrigger` and a webhook on a label, and
-  `fix-issue` takes `{ issue }` as a parameter instead of asking for it with `input()`.
-- **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
-  sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
-  schedule tick is skipped; shutdown completes while a webhook request or a describe run never
-  settles.
 
 ## Rules for every package
 
