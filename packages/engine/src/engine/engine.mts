@@ -215,6 +215,10 @@ export class Engine {
 				`Version ${deployed.version} of ${options.app} asks for a sandbox this engine can't make: deploy it again.`,
 			)
 		}
+		const unavailable = await this.#gateway?.unavailableModels(deployed.manifest.description.models, waitSignal)
+		if (unavailable !== undefined && unavailable.length > 0) {
+			throw new EngineError('unavailable', `${options.app} can't run now, so no run was started:\n${unavailable.join('\n')}`)
+		}
 		const app: RunApp = {
 			name: deployed.name,
 			version: deployed.version,

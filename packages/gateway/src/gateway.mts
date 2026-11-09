@@ -68,6 +68,11 @@ export interface Gateway {
 	readonly interrupted: (runId: string, abortSignal: AbortSignal) => Promise<InterruptedCall[]>
 	/** What the run used of each model so far. */
 	readonly usage: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
+	/**
+	 * Why each of `models` can't run now: no provider offers it, or the one that does has no key.
+	 * Empty when all can. A trigger checks the app's models with it before it makes a sandbox.
+	 */
+	readonly unavailableModels: (models: readonly string[], abortSignal: AbortSignal) => Promise<string[]>
 	/** Closes every endpoint of the run and forgets it. Resolves to what the run used. */
 	readonly closeRun: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
 }
@@ -132,6 +137,22 @@ export function openGateway(options: GatewayOptions): Gateway {
 			},
 			abortSignal,
 		)
+
+	const unavailableModels = async (models: readonly string[], abortSignal: AbortSignal) => {
+		const providers = await options.providers.list(abortSignal)
+		const keys = new Set(await options.credentials.names(abortSignal))
+		return [...new Set(models)].flatMap((modelId) => {
+			try {
+				const { provider } = resolveModel(providers, modelId)
+				if (keys.has(providerCredential(provider.name))) return []
+				return [
+					`Provider ${provider.name} serves model ${modelId} but has no API key. Set it with \`mesh-flow provider key ${provider.name}\`.`,
+				]
+			} catch (error) {
+				return [messageOf(error)]
+			}
+		})
+	}
 
 	const callModel = async (runId: string, request: Extract<GatewayCall, { type: 'model' }>['request'], abortSignal: AbortSignal) => {
 		const choice = chosenModel(await options.providers.list(abortSignal), request.provider, request.model)
@@ -230,6 +251,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 			}))
 		},
 		usage: async (runId, abortSignal) => (await states.load(runId, abortSignal))?.usage ?? {},
+		unavailableModels,
 		closeRun: (runId, abortSignal) => states.update(runId, (state) => ({ state: undefined, value: state?.usage ?? {} }), abortSignal),
 	})
 }

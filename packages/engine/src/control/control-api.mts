@@ -28,7 +28,7 @@ function shownApp({ name, version, manifest }: AppVersion) {
 /** The body of `POST /runs/:run/answers/:request`. */
 export const AnswerBody = z.object({ value: z.unknown() }).refine((body) => 'value' in body, { message: 'An answer needs a value.' })
 
-const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 404, conflict: 409, invalid: 400 }
+const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 404, conflict: 409, invalid: 400, unavailable: 503 }
 
 /**
  * The engine's control API, which the CLI talks to over the engine's local socket:

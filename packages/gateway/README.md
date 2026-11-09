@@ -25,6 +25,8 @@ Every read opens the file again, so a secret set with the CLI counts at once in 
 
 A provider is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name of the user's, with an optional base URL of its own and its API key in the credential store as `provider/<name>`. The order matters: an agent names a model id, and the gateway resolves it **model first**, to the first provider that offers it.
 
+`gateway.unavailableModels(models, abortSignal)` says why each of a list of models can't run now, which a trigger uses to refuse a run before it starts.
+
 The provider's SDK runs in the sandbox, as pi-ai always runs it, and makes the provider's own request. The gateway only checks it and adds the key:
 
 - the path has to be the model API's request path (`/v1/messages`, `/chat/completions`, `/responses`), and the body has to be for the model the call names, so the key does nothing but model calls;

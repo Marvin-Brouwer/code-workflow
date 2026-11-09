@@ -1,4 +1,5 @@
 import type { TriggerDescription, WorkflowsDescription } from '@mesh-flow/protocol'
+import { definedModels } from '../agent/agent.mts'
 import { definedHostTools } from '../gateway/host-tool-stub.mts'
 import { jsonSchemaOf } from '../tool/json-schema.mts'
 import type { Trigger } from '../triggers/trigger.mts'
@@ -21,6 +22,7 @@ export function describeApp(app: MeshFlowApp, workflows: readonly AnyWorkflow[] 
 		workflows: workflows.map((definition) => ({ name: definition.name, parameters: jsonSchemaOf(definition.parameters) })),
 		triggers: app.triggers.map(describeTrigger),
 		tools: definedHostTools(),
+		models: definedModels(),
 	}
 }
 

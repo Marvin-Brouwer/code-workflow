@@ -15,6 +15,7 @@ const description: WorkflowsDescription = {
 	workflows: [{ name: 'greet', parameters: { type: 'object' } }],
 	triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }],
 	tools: [],
+	models: [],
 }
 
 const greetingPackage = { files: { 'index.js': `export const punctuation = '!'\n` } }

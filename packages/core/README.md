@@ -315,7 +315,8 @@ Every tool gets an `AbortSignal`. When the run is stopped, waits end at once wit
 ## Known gaps
 
 - Tools without a credential run in the workflow process, and so does the agent's shell: it isn't a separate unprivileged user yet, so it could read the runtime's gateway tokens. Rotation catches a stolen token; the separate user would prevent it.
-- A model's response comes back whole, not streamed, and an agent's model isn't checked against the providers before its first loop.
+- A model's response comes back whole, not streamed.
+- The models a trigger checks are those of every agent the app's modules make, not only the started workflow's: one model nobody serves holds up every workflow of the app.
 
 ## Development
 

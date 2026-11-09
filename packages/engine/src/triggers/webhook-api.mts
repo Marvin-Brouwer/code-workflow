@@ -105,6 +105,10 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 
 	api.onError((error, c) => {
 		if (error instanceof EngineError && error.code === 'conflict') return c.json({ error: 'The engine is shutting down.' }, 503)
+		if (error instanceof EngineError && error.code === 'unavailable') {
+			log(`A delivery to ${c.req.path} wasn't started: ${error.message}`)
+			return c.json({ error: "The engine can't run this app's models now." }, 503)
+		}
 		// Removed, or deployed again without the webhook, since the checks above.
 		if (error instanceof EngineError && error.code === 'not-found') return c.json({ error: notFound }, 404)
 		log(`A delivery to ${c.req.path} failed: ${messageOf(error)}`)

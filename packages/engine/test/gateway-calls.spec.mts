@@ -207,4 +207,26 @@ mailbox.send({ type: 'succeeded' })
 		expect(done).toMatchObject({ first: { ok: false }, second: { ok: true, result: 'echo: after' } })
 		expect(JSON.stringify(done)).toContain('engine stopped')
 	})
+
+	test("refuses a run before its sandbox when no provider serves the app's models, and starts it once one does", async () => {
+		// Arrange
+		const { engine, apps, gatewayHome } = await openEngine()
+		await deployTestApp(apps, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { models: ['claude-opus-5-5'] })
+
+		// Act
+		const refused = engine.startRun({ ...userRun('calls'), abortSignal: signal })
+		await expect(refused).rejects.toMatchObject({ code: 'unavailable' })
+		const providers = openProviderSettings(path.join(gatewayHome, 'providers.json'))
+		await providers.put({ name: 'work', kind: 'anthropic' }, signal)
+		const noKey = engine.startRun({ ...userRun('calls'), abortSignal: signal })
+		await expect(noKey).rejects.toThrow('mesh-flow provider key work')
+		const credentials = openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key')))
+		await credentials.set('provider/work', 'sk-test', signal)
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal: signal })
+
+		// Assert
+		await expect(refused).rejects.toThrow('No model providers are set up')
+		expect(engine.list().map((record) => record.id)).toEqual([run.id])
+		await untilStatus(engine, run.id, 'succeeded')
+	})
 })

@@ -108,6 +108,8 @@ mesh-flow credential set github/token < token.txt          # for connectors' hos
 
 These work on the home's files, so they work without a running engine, and a running one sees a change at once. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
 
+The build lists the models of the app's agents. Every trigger checks them before it makes a sandbox: when no provider offers one, or the one that does has no key, the run isn't started and the error says what to set up. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
+
 ### Embed the engine
 
 ```ts

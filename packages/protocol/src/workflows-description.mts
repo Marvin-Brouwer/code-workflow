@@ -71,5 +71,7 @@ export const WorkflowsDescription = z.object({
 	triggers: z.array(TriggerDescription),
 	/** Apps built before the gateway list none. */
 	tools: z.array(z.string().min(1)).default([]),
+	/** The model ids of the app's agents, which a trigger checks against the providers before it starts a run. */
+	models: z.array(z.string().min(1)).default([]),
 })
 export type WorkflowsDescription = z.infer<typeof WorkflowsDescription>

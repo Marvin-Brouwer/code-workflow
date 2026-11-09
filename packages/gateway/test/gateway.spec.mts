@@ -306,4 +306,21 @@ describe('model calls', () => {
 		// Assert
 		expect(errorOf(answer)).toContain('mesh-flow provider key anthropic')
 	})
+
+	test("says why each model can't run: offered by no provider, or by one without a key", async () => {
+		// Arrange
+		const { gateway, providers, credentials } = await testGateway()
+		await providers.put({ name: 'work', kind: 'anthropic' }, abortSignal)
+		await providers.put({ name: 'spare', kind: 'openai' }, abortSignal)
+		await credentials.set('provider/work', 'sk-real', abortSignal)
+
+		// Act
+		const unavailable = await gateway.unavailableModels(['claude-opus-5-5', 'gpt-4o', 'no-such-model', 'claude-opus-5-5'], abortSignal)
+
+		// Assert
+		expect(unavailable).toEqual([
+			expect.stringContaining('mesh-flow provider key spare'),
+			'None of the providers (work, spare) offers model no-such-model.',
+		])
+	})
 })

@@ -152,6 +152,7 @@ describe('defineMeshFlow', () => {
 				{ kind: 'schedule', id: 'report 0 7 * * 1', workflow: 'report', cron: '0 7 * * 1', parameters: {} },
 			],
 			tools: [],
+			models: [],
 		})
 	})
 })
