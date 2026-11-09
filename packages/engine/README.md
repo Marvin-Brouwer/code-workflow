@@ -28,7 +28,7 @@ mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the a
 mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
-`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine comes with the gateway.
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
 The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
 
@@ -211,7 +211,7 @@ CI runs it on gVisor and microsandbox on Linux, and microsandbox on Windows ([`e
 - **Pausing on wait** is roadmap step 3. A waiting run keeps its sandbox running until the engine shuts down.
 - **External events** that wake a waiting run (merge request activity) and their durable wait aren't here yet. They will come through the same ingress and signature check as webhook triggers, and fit the same shape as `wake`: a request the engine answers.
 - **Turning a trigger on or off** is deploying a version without it, or removing the app, until there is a UI. Webhook secrets an engine kept in `secrets/webhooks.json` before the gateway move into its credential store on the next start.
-- **Deploying is local.** `deploy` and `dev` go over the engine's socket on the same machine. Deploying from CI to an engine elsewhere needs authentication, which comes with the gateway.
+- **Deploying is local.** `deploy` and `dev` go over the engine's socket on the same machine. Deploying from CI to an engine elsewhere needs authentication, which is still to come.
 - **Old versions stay** in the engine's home until their app is removed. There is no clean-up of versions no run uses yet.
 - **Webhook payload schemas** are compiled with [Ajv](https://ajv.js.org). A pattern in a schema runs on the host, so a slow regular expression slows the ingress down.
 - **Gateway calls go through the mailbox**, so each one waits on a poll on both sides, up to a quarter of a second each way, and a model response comes back whole instead of streamed. That is little next to a model call. A channel of their own, low latency and both ways ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)), can replace it behind the same `call` messages.
