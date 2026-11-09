@@ -1,4 +1,12 @@
-import { answerFile, mailboxEnvironmentVariable, mailboxLayout, RuntimeMessage, type Answer, type MailboxLayout } from '@mesh-flow/protocol'
+import {
+	answerFile,
+	mailboxEnvironmentVariable,
+	mailboxLayout,
+	RuntimeMessage,
+	type Answer,
+	type MailboxLayout,
+	type RunStart,
+} from '@mesh-flow/protocol'
 import type { Command, Sandbox } from '@mesh-flow/sandbox'
 import { pollIntervalSeconds, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
@@ -38,6 +46,11 @@ export class SandboxChannel {
 	async prepare(signal: AbortSignal): Promise<void> {
 		await this.#run(['mkdir', '-p', this.#layout.inbox], signal)
 		await this.#run(['chmod', '700', this.#layout.directory], signal)
+	}
+
+	/** Tells the runtime what to do. Written before it starts, and never again. */
+	async writeStart(start: RunStart, abortSignal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(this.#layout.startFile, JSON.stringify(start), abortSignal)
 	}
 
 	/** Starts the runtime in the background. Its pid goes to the mailbox, so a poll sees it die. */

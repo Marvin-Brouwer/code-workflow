@@ -1,4 +1,4 @@
-import { RuntimeRequest } from '@mesh-flow/protocol'
+import { RuntimeRequest, TriggerRef } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { WorkflowConfig } from '../workflow/workflow-config.mts'
@@ -32,10 +32,18 @@ export const RunSource = z.object({
 })
 export type RunSource = z.infer<typeof RunSource>
 
+/** The trigger that started a run, and the repository it was registered as. */
+export const RunTrigger = TriggerRef.extend({ repository: z.string().min(1).optional() })
+export type RunTrigger = z.infer<typeof RunTrigger>
+
 /** Everything the engine knows about one run. Stored as JSON, so it survives a restart. */
 export const RunRecord = z.object({
 	id: RunId,
 	workflow: z.string().min(1),
+	/** What started the run, when a trigger did. A run from the CLI has none. */
+	trigger: RunTrigger.optional(),
+	/** Names what the run was started for, such as a webhook delivery: a second start with it reuses this run. */
+	key: z.string().min(1).optional(),
 	source: RunSource,
 	/** The repository's `mesh-flow.config.json` when the run started; a restart uses it again. */
 	config: WorkflowConfig,

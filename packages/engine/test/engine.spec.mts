@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
@@ -254,9 +255,10 @@ if (!restarted) {
 		expect(failed.error).toContain('no lockfile')
 	})
 
-	test('refuses a workflow that has no file', async () => {
+	test('refuses a repository that has no entry file', async () => {
 		// Arrange
 		const directory = await workflowRepository({})
+		await rm(path.join(directory, 'workflows', 'main.mts'))
 		const { engine } = await openEngine()
 
 		// Act

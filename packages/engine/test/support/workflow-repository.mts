@@ -36,7 +36,19 @@ export interface WorkflowRepositoryOptions {
 	readonly copyMailbox?: boolean
 }
 
-/** A workflow repository in git, with a config that runs each workflow file with `node`. */
+/**
+ * The entry file {@link workflowRepository} writes when the test gives none: it runs the workflow's
+ * own file, `workflows/<name>.mts`, so each test workflow is a runtime script of its own.
+ */
+const dispatchingEntry = `import { readFileSync } from 'node:fs'
+const start = JSON.parse(readFileSync(process.env.MESH_FLOW_MAILBOX + '/start.json', 'utf8'))
+await import('./' + start.workflow + '.mts')
+`
+
+/**
+ * A workflow repository in git, with a config that runs the entry file with `node`. Each workflow
+ * is a file of its own, which the entry file runs; a workflow called `main` is the entry file.
+ */
 export async function workflowRepository(workflows: Record<string, string>, options: WorkflowRepositoryOptions = {}): Promise<string> {
 	const directory = await temporaryDirectory()
 	const config = {
@@ -46,7 +58,7 @@ export async function workflowRepository(workflows: Record<string, string>, opti
 	}
 	await writeFile(path.join(directory, 'mesh-flow.config.json'), JSON.stringify(config, null, '\t'))
 	await mkdir(path.join(directory, 'workflows'))
-	for (const [name, script] of Object.entries(workflows)) {
+	for (const [name, script] of Object.entries({ main: dispatchingEntry, ...workflows })) {
 		await writeFile(path.join(directory, 'workflows', `${name}.mts`), script)
 	}
 	if (options.copyMailbox) {

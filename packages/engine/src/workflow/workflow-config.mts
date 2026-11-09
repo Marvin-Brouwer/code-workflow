@@ -4,7 +4,6 @@ import path from 'node:path'
 import { SandboxSpec } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
-import { WorkflowName } from './workflow-name.mts'
 
 /** A command as its program and arguments, run without a shell. */
 const CommandLine = z.tuple([z.string().min(1)], z.string())
@@ -30,9 +29,9 @@ export const WorkflowConfig = z.object({
 	sandbox: SandboxSpec,
 	/** Commands that run one after another in the uploaded repository before the workflow starts. */
 	setup: z.array(CommandLine).default([]),
-	/** Starts the workflow runtime. The engine adds the workflow's file, relative to the repository. */
+	/** Starts the workflow runtime. The engine adds the entry file, relative to the repository. */
 	start: CommandLine,
-	/** Where the workflows are, relative to the repository: `<workflows>/<name>.mts`. */
+	/** Where the workflows are, relative to the repository, with the entry file `<workflows>/main.mts`. */
 	workflows: z.string().min(1).default('workflows'),
 })
 export type WorkflowConfig = z.infer<typeof WorkflowConfig>
@@ -57,16 +56,20 @@ export async function loadWorkflowConfig(directory: string): Promise<WorkflowCon
 	return parsed.data
 }
 
-/** The workflow's file relative to the repository, with POSIX separators for the sandbox. */
-export function workflowFile(config: WorkflowConfig, workflow: string): string {
-	if (!WorkflowName.safeParse(workflow).success) throw new Error(`'${workflow}' isn't a workflow name.`)
-	return path.posix.join(config.workflows.replaceAll('\\', '/'), `${workflow}.mts`)
+/** The entry file's name in the workflows folder. */
+export const entryFileName = 'main.mts'
+
+/** The entry file relative to the repository, with POSIX separators for the sandbox. */
+export function entryFile(config: WorkflowConfig): string {
+	return path.posix.join(config.workflows.replaceAll('\\', '/'), entryFileName)
 }
 
-/** A repository's config and the file of one of its workflows. Throws when either is missing. */
-export async function findWorkflow(directory: string, workflow: string): Promise<{ config: WorkflowConfig; file: string }> {
+/** A repository's config and its entry file. Throws when either is missing. */
+export async function findEntry(directory: string): Promise<{ config: WorkflowConfig; file: string }> {
 	const config = await loadWorkflowConfig(directory)
-	const file = workflowFile(config, workflow)
-	if (!existsSync(path.join(directory, file))) throw new Error(`There is no workflow '${workflow}': ${file} doesn't exist in ${directory}.`)
+	const file = entryFile(config)
+	if (!existsSync(path.join(directory, file))) {
+		throw new Error(`There is no entry file in ${directory}: ${file} doesn't exist. It lists the workflows with defineWorkflows.`)
+	}
 	return { config, file }
 }

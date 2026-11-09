@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { findWorkflow, loadWorkflowConfig, workflowConfigFile, workflowFile } from '../src/workflow/workflow-config.mts'
+import { entryFile, findEntry, loadWorkflowConfig, workflowConfigFile } from '../src/workflow/workflow-config.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const sandbox = { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['registry.npmjs.org'] } }
@@ -48,34 +48,29 @@ describe('loadWorkflowConfig', () => {
 	})
 })
 
-describe('workflowFile', () => {
-	const config = { sandbox, setup: [], start: ['node'] as [string], workflows: 'workflows' }
+describe('entryFile', () => {
+	test('is main.mts in the workflows folder, with POSIX separators', () => {
+		// Arrange
+		const config = { sandbox, setup: [], start: ['node'] as [string], workflows: 'flows\\team' }
 
-	test('finds a workflow in the workflows folder, also in a subfolder', () => {
 		// Act
-		const files = [workflowFile(config, 'develop'), workflowFile(config, 'review/handle-comments')]
+		const file = entryFile(config)
 
 		// Assert
-		expect(files).toEqual(['workflows/develop.mts', 'workflows/review/handle-comments.mts'])
+		expect(file).toBe('flows/team/main.mts')
 	})
+})
 
-	test.each(['../secrets', '/etc/passwd', 'develop.mts', ''])('refuses %j as a workflow name', (name) => {
-		// Act
-		const find = () => workflowFile(config, name)
-
-		// Assert
-		expect(find).toThrow("isn't a workflow name")
-	})
-
-	test('refuses a workflow whose file is missing', async () => {
+describe('findEntry', () => {
+	test('says so when the repository has no entry file', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await writeFile(path.join(directory, workflowConfigFile), JSON.stringify({ sandbox, start: ['node'] }))
 
 		// Act
-		const finding = findWorkflow(directory, 'develop')
+		const finding = findEntry(directory)
 
 		// Assert
-		await expect(finding).rejects.toThrow("There is no workflow 'develop'")
+		await expect(finding).rejects.toThrow('workflows/main.mts')
 	})
 })

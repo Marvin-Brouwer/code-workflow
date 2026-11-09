@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { RuntimeEvent } from '@mesh-flow/protocol'
+import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { RunId } from './run-id.mts'
@@ -17,13 +17,18 @@ export interface LoadedRuns {
  *
  * - `run.json`: the record, replaced atomically on every save;
  * - `events.jsonl`: the run's event tree, one event per line, appended;
- * - `source.tgz`: the workflow code the run started with, so a restart runs the same code.
+ * - `source.tgz`: the workflow code the run started with, so a restart runs the same code;
+ * - `start.json`: what the entry file is to run, with the run's parameters or a webhook's payload.
  *
  * Writes to one run happen one after another; `flush` waits for all of them.
  */
 export interface RunStore {
 	/** Where the run's packed workflow source goes. */
 	sourceOf(id: RunId): string
+	/** Keeps what the entry file is to run, once, before the run's record is saved. */
+	saveStart(id: RunId, start: RunStart): Promise<void>
+	/** What the entry file is to run. Runs from before start files run their workflow without parameters. */
+	start(record: RunRecord): Promise<RunStart>
 	/** Saves a copy of the record as it is now. */
 	save(record: RunRecord): Promise<void>
 	/** Appends events to the run's event tree. */
@@ -44,6 +49,7 @@ export interface RunStore {
 const recordFile = 'run.json'
 const eventsFile = 'events.jsonl'
 const sourceFile = 'source.tgz'
+const startFile = 'start.json'
 
 /** The directory of one run under `root`. Throws for anything that isn't a run id, such as `../etc`. */
 export function runDirectory(root: string, id: string): string {
@@ -57,6 +63,20 @@ export function openRunStore(root: string): RunStore {
 
 	return Object.freeze({
 		sourceOf: (id) => file(id, sourceFile),
+
+		saveStart: (id, start) =>
+			queues.write(id, async () => {
+				await mkdir(runDirectory(root, id), { recursive: true })
+				await writeFileAtomic(file(id, startFile), JSON.stringify(start))
+			}),
+
+		start: async (record) => {
+			const text = await readFile(file(record.id, startFile), 'utf8').catch((error: unknown) => {
+				if (hasErrorCode(error, 'ENOENT')) return undefined
+				throw error
+			})
+			return text === undefined ? { mode: 'run', workflow: record.workflow } : RunStart.parse(JSON.parse(text))
+		},
 
 		save: (record) => {
 			const text = `${JSON.stringify(record, null, '\t')}\n`
