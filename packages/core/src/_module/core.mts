@@ -7,6 +7,9 @@
 export { agent, type Agent, type AgentOptions, type AsToolOptions } from '../agent/agent.mts'
 export { prompt, type Prompt } from '../agent/prompt.mts'
 export { requestUserInput } from '../agent/request-user-input.mts'
+export { defineMeshFlow, type MeshFlowApp, type MeshFlowOptions } from '../app/define-mesh-flow.mts'
+export { describeApp } from '../app/describe-app.mts'
+export { image, type ImageOptions } from '../app/image.mts'
 export { check, type Check, type Finding } from '../check/check.mts'
 export type { Exit, Gate } from '../exits/exit.mts'
 export type { ResultOf } from '../exits/result-of.mts'
@@ -19,10 +22,22 @@ export { AgentGaveUp, ChecksFailed, ExitNotCalled, LoopFailed, LoopLimitExceeded
 export { toPrompt, type RendersInPrompt } from '../render/to-prompt.mts'
 export type { RunChannel } from '../run/run-channel.mts'
 export { tool, ToolInputError, type Tool, type ToolContext } from '../tool/tool.mts'
+export { defineWorkflows, type WorkflowBundle } from '../triggers/define-workflows.mts'
+export { schedule, scheduleShorthands, type ScheduleShorthand, type ScheduleWhen } from '../triggers/schedule.mts'
+export type { ScheduleTrigger, Trigger, UserTrigger, WebhookTrigger } from '../triggers/trigger.mts'
+export { userTrigger } from '../triggers/user-trigger.mts'
+export { webhook, type WebhookOptions, type WebhookSignature } from '../triggers/webhook.mts'
 export { DependencyOrderFailed, inDependencyOrder, type DependencyNode } from '../workflow/in-dependency-order.mts'
 export { input } from '../workflow/input.mts'
 export { runWorkflow, type RunOptions, type RunOutcome } from '../workflow/run-workflow.mts'
-export { workflow, type Workflow } from '../workflow/workflow.mts'
+export {
+	workflow,
+	type AnyWorkflow,
+	type NoParameters,
+	type ParametersOf,
+	type Workflow,
+	type WorkflowContext,
+} from '../workflow/workflow.mts'
 export { workspace } from '../workspace/workspace.mts'
 export type { WorkspaceFile } from '../workspace/workspace-file.mts'
 export type { WorkspaceFolder, WorkspaceFolderOptions } from '../workspace/workspace-folder.mts'

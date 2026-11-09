@@ -53,7 +53,7 @@ Full sketches of all three exist; option C was chosen.
 - **`.view()` hooks or UI code in workflows.** The UI derives views from the event tree.
 - **Triggers on the workflow definition** (`workflow('fix-issue', { triggers: [...] }, body)`).
   A workflow says what it does, not how it gets started, and there should be one place that shows
-  what is live. Replaced by the entry file, `workflows/main.mts`.
+  what is live. Replaced by the entry file, `main.mts` in the repository root.
 - **Every workflow file gets a start button.** Was the behaviour before triggers. There's no way to
   have a workflow that only runs from another workflow, a webhook or the CLI, and nowhere to see
   what is live. Replaced by listing `userTrigger(workflow)` in the entry file.
@@ -68,8 +68,27 @@ Full sketches of all three exist; option C was chosen.
 - **Parameters and context as two arguments** (`async (parameters, { abortSignal })`). A workflow
   without parameters would read `async (_, { abortSignal })`. One context object instead, with
   `parameters` in it; not `input`, which is the name of the `input()` primitive the body uses.
-- **Running the entry file on the host to read the triggers.** The engine never runs workflow code
-  (design section 3). It runs the entry file in a sandbox in describe mode and caches the result.
+- **The engine running the entry file on its host to read the triggers.** The engine never runs
+  workflow code (design section 3). `mesh-flow build` runs it, on the machine that builds the app
+  (CI, or the developer's), which runs the app's code anyway, and writes the description into the
+  built app.
+- **`mesh-flow.config.json` next to the entry file, with setup commands** (`npm ci`) run in each
+  run's sandbox (superseded November 2026, PR #13). Every run paid for an install, the sandbox
+  needed registry egress for it, and the sandbox spec lived apart from the triggers. Replaced by a
+  build: CI bundles the app with its dependencies and deploys it, the sandbox only runs `node`, and
+  the sandbox is `image(...)` in `defineMeshFlow`.
+- **Describing the entry file in a sandbox, cached by a hash of the repository's files**
+  (superseded with the config file). It cost a sandbox per change, made the webhook ingress answer
+  503 until a repository was described, and needed a background watch of registered repositories.
+  The build's manifest says the same thing without running anything.
+- **A `meshFlow` field in `package.json` for the entry file.** `main` already names a package's
+  entry file, and the entry file is the app's.
+- **Registering repositories with the engine** (`mesh-flow repository add`). The engine took source
+  off disk, so a run's code was whatever the working tree held. Replaced by deploying immutable
+  built versions; a run pins its version.
+- **`mesh-flow run <workflow>` for any workflow the modules define.** A second way in that no
+  trigger lists. Replaced by `mesh-flow trigger <kind> <id> -p <parameters>`, which goes through
+  the triggers the deployed version lists, with the parameters always given.
 
 ## Agent loops
 

@@ -7,9 +7,6 @@ export function formatRunLine(record: RunRecord): string {
 	return `${record.id}  ${record.workflow}  ${record.status}${needs}`
 }
 
-/** How much of a commit `show` prints. */
-const shortCommitLength = 12
-
 /** Every label of `show` is padded to this width, and continuation lines are indented by it. */
 const labelWidth = 11
 
@@ -22,10 +19,8 @@ function field(label: string, value: string): string {
 export function formatRun(record: RunRecord): string {
 	const lines = [
 		`${record.id}: ${record.workflow}, ${record.status}`,
-		field(
-			'source',
-			`${record.source.directory} at ${record.source.commit.slice(0, shortCommitLength)}${record.source.dirty ? ' with uncommitted changes' : ''}`,
-		),
+		field('app', `${record.app.name} ${record.app.version}`),
+		field('trigger', `${record.trigger.kind} ${record.trigger.id}`),
 		field('started', record.createdAt),
 		field('updated', record.updatedAt),
 	]

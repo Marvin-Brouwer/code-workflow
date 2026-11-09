@@ -6,7 +6,7 @@ import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
 import { exitOf, startEngineProcess } from './support/engine-process.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+import { deployThroughApi, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
@@ -19,16 +19,21 @@ mailbox.send({ type: 'succeeded' })
 
 /** Serves an engine on the host backend in this process, closed when the test ends. */
 async function serveHere(home: string) {
-	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	const served = await serveEngine({
+		home,
+		backend: hostBackend(path.join(home, 'sandboxes')),
+		layout: hostSandboxLayout,
+		abortSignal: signal,
+	})
 	onTestFinished(() => served.close(deadlines()))
 	return served
 }
 
 /** Starts a run in an engine process and waits until it asks for input. Returns the runtime's pid. */
 async function startWaitingRun(home: string) {
-	const directory = await workflowRepository({ ask })
 	const client = controlClient(controlSocketPath(home))
-	const { id } = await client.startRun({ directory, workflow: 'ask', signal })
+	await deployThroughApi(client, { ask })
+	const { id } = await client.startRun({ ...userRun('ask'), abortSignal: signal })
 	const record = await vi.waitFor(
 		async () => {
 			const current = await client.get(id, signal)
@@ -91,7 +96,7 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		await startEngineProcess(home)
 
 		// Act
-		const second = serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), signal })
+		const second = serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), abortSignal: signal })
 
 		// Assert
 		await expect(second).rejects.toThrow('already running')

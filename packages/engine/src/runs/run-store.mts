@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { RuntimeEvent } from '@mesh-flow/protocol'
+import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
+import { copyTarball } from '../apps/copy-tarball.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { RunId } from './run-id.mts'
 import { RunRecord } from './run-record.mts'
@@ -10,6 +12,8 @@ import { RunRecord } from './run-record.mts'
 export interface LoadedRuns {
 	readonly records: RunRecord[]
 	readonly problems: string[]
+	/** Run directories without a record: a start that died before its record was saved. */
+	readonly orphans: RunId[]
 }
 
 /**
@@ -17,13 +21,20 @@ export interface LoadedRuns {
  *
  * - `run.json`: the record, replaced atomically on every save;
  * - `events.jsonl`: the run's event tree, one event per line, appended;
- * - `source.tgz`: the workflow code the run started with, so a restart runs the same code.
+ * - `app.tgz`: the built app the run started with, so a restart runs the same code;
+ * - `start.json`: what the app is to run, with the run's parameters or a webhook's payload.
  *
  * Writes to one run happen one after another; `flush` waits for all of them.
  */
 export interface RunStore {
-	/** Where the run's packed workflow source goes. */
-	sourceOf(id: RunId): string
+	/** The run's own copy of the built app, packed. */
+	appOf(id: RunId): string
+	/** Keeps a copy of the built app the run starts on, once, before the run's record is saved. */
+	saveApp(id: RunId, tarball: string, abortSignal: AbortSignal): Promise<void>
+	/** Keeps what the app is to run, once, before the run's record is saved. */
+	saveStart(id: RunId, start: RunStart): Promise<void>
+	/** What the app is to run. Runs from before start files run their workflow without parameters. */
+	loadStart(record: RunRecord): Promise<RunStart>
 	/** Saves a copy of the record as it is now. */
 	save(record: RunRecord): Promise<void>
 	/** Appends events to the run's event tree. */
@@ -35,7 +46,7 @@ export interface RunStore {
 	 * doesn't keep the engine from starting.
 	 */
 	loadAll(): Promise<LoadedRuns>
-	/** Removes what a run left behind before it had a record, such as a half-packed source. */
+	/** Removes what a run left behind before it had a record, such as a half-copied app. */
 	removeRun(id: RunId): Promise<void>
 	/** Waits for every write that has started. */
 	flush(): Promise<void>
@@ -43,7 +54,8 @@ export interface RunStore {
 
 const recordFile = 'run.json'
 const eventsFile = 'events.jsonl'
-const sourceFile = 'source.tgz'
+const appFile = 'app.tgz'
+const startFile = 'start.json'
 
 /** The directory of one run under `root`. Throws for anything that isn't a run id, such as `../etc`. */
 export function runDirectory(root: string, id: string): string {
@@ -56,7 +68,27 @@ export function openRunStore(root: string): RunStore {
 	const file = (id: RunId, name: string) => path.join(runDirectory(root, id), name)
 
 	return Object.freeze({
-		sourceOf: (id) => file(id, sourceFile),
+		appOf: (id) => file(id, appFile),
+
+		saveApp: (id, tarball, abortSignal) =>
+			queues.write(id, async () => {
+				await mkdir(runDirectory(root, id), { recursive: true })
+				await copyTarball(tarball, file(id, appFile), abortSignal)
+			}),
+
+		saveStart: (id, start) =>
+			queues.write(id, async () => {
+				await mkdir(runDirectory(root, id), { recursive: true })
+				await writeFileAtomic(file(id, startFile), JSON.stringify(start))
+			}),
+
+		loadStart: async (record) => {
+			const text = await readFile(file(record.id, startFile), 'utf8').catch((error: unknown) => {
+				if (hasErrorCode(error, 'ENOENT')) return undefined
+				throw error
+			})
+			return text === undefined ? { mode: 'run', workflow: record.workflow } : RunStart.parse(JSON.parse(text))
+		},
 
 		save: (record) => {
 			const text = `${JSON.stringify(record, null, '\t')}\n`
@@ -103,9 +135,14 @@ async function loadAll(root: string): Promise<LoadedRuns> {
 	})
 	const records: RunRecord[] = []
 	const problems: string[] = []
+	const orphans: RunId[] = []
 	for (const entry of entries) {
 		if (!entry.isDirectory() || !RunId.safeParse(entry.name).success) continue
 		const file = path.join(root, entry.name, recordFile)
+		if (!existsSync(file)) {
+			orphans.push(entry.name)
+			continue
+		}
 		try {
 			records.push(RunRecord.parse(JSON.parse(await readFile(file, 'utf8'))))
 		} catch (error) {
@@ -113,7 +150,7 @@ async function loadAll(root: string): Promise<LoadedRuns> {
 		}
 	}
 	records.sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-	return { records, problems }
+	return { records, problems, orphans }
 }
 
 /** Runs writes to the same key one after another, and can wait for all of them. */

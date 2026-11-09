@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { RunRecord } from '../src/runs/run-record.mts'
@@ -9,12 +9,12 @@ function record(id: string, createdAt: string): RunRecord {
 	return {
 		id,
 		workflow: 'develop',
-		source: { directory: '/repository', commit: 'abc', dirty: false },
-		config: {
+		trigger: { kind: 'user', id: 'develop' },
+		app: {
+			name: 'team',
+			version: '0123456789ab',
+			entry: 'main.mjs',
 			sandbox: { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } },
-			setup: [],
-			start: ['node'],
-			workflows: 'workflows',
 		},
 		status: 'running',
 		cursor: 3,
@@ -85,6 +85,21 @@ describe('openRunStore', () => {
 		expect(problems).toEqual([expect.stringContaining('run-00000000000b')])
 	})
 
+	test('lists a run directory without a record as an orphan', async () => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = openRunStore(root)
+		await store.save(record('run-00000000000a', '2026-11-06T12:00:00.000Z'))
+		await mkdir(runDirectory(root, 'run-00000000000b'))
+
+		// Act
+		const { records, orphans } = await store.loadAll()
+
+		// Assert
+		expect(records.map((loaded) => loaded.id)).toEqual(['run-00000000000a'])
+		expect(orphans).toEqual(['run-00000000000b'])
+	})
+
 	test('appends events and reads them back in order', async () => {
 		// Arrange
 		const store = openRunStore(await temporaryDirectory())
@@ -110,5 +125,21 @@ describe('openRunStore', () => {
 
 		// Assert
 		expect(resolve).toThrow()
+	})
+
+	test('copies nothing, and leaves nothing behind, when copying the app is aborted', async () => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = openRunStore(root)
+		const id = 'run-00000000000a'
+		const tarball = path.join(await temporaryDirectory(), 'app.tgz')
+		await writeFile(tarball, 'a built app')
+
+		// Act
+		const saving = store.saveApp(id, tarball, AbortSignal.abort(new Error('Ctrl+C')))
+
+		// Assert
+		await expect(saving).rejects.toMatchObject({ name: 'AbortError' })
+		expect(await readdir(runDirectory(root, id))).toEqual([])
 	})
 })

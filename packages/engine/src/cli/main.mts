@@ -1,20 +1,46 @@
+import { randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { text } from 'node:stream/consumers'
+import { buildApp } from '@mesh-flow/build'
+import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
-import { Command, InvalidArgumentError } from 'commander'
+import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
-import { controlClient } from '../control/control-client.mts'
+import { AppName, WebhookName } from '../apps/names.mts'
+import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
-import { serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
+import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
+import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
+import { appNameOf } from './app-name.mts'
+import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
+import { withPackedApp } from './with-packed-app.mts'
+import { watchApp } from './watch-app.mts'
 
 /** How long a CLI command waits for the engine. */
 const requestTimeoutMs = 5 * 60_000
 
+/** How long a build may take, installing native dependencies included. */
+const buildTimeoutMs = 10 * 60_000
+
+/** Where `build` puts the built app, and where `deploy` takes it from, relative to the app. */
+const defaultOut = path.join('.mesh-flow', 'app')
+
+/** The sandbox's CPU when `--cpu` doesn't say. */
+const defaultCpu: AppPlatform['cpu'] = 'x64'
+
 /** How long closing the backend may take when the engine fails to start. */
 const closeTimeoutMs = 60_000
+
+/** The highest TCP port number. */
+const maxPort = 65_535
+
+/** How many random bytes a generated webhook secret has. */
+const generatedSecretBytes = 32
 
 /** What `stop`, `resume` and `restart` do. */
 const actionDescriptions = {
@@ -29,6 +55,21 @@ function log(message: string): void {
 
 function requestSignal(): AbortSignal {
 	return AbortSignal.timeout(requestTimeoutMs)
+}
+
+/** The sandbox's platform: always Linux, on `cpu`. */
+function sandboxPlatform(cpu: AppPlatform['cpu']): AppPlatform {
+	return { os: 'linux', cpu }
+}
+
+/** `-C, --directory`: the app's repository, which every app command works from. */
+function directoryOption(): Option {
+	return new Option('-C, --directory <directory>', "the app's repository").default(process.cwd())
+}
+
+/** `--app`: another name than the one in the app's package.json. */
+function appOption(): Option {
+	return new Option('--app <name>', "the app's name (default: the name in package.json)")
 }
 
 /** The `mesh-flow` command line. */
@@ -46,9 +87,12 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Runs the engine in the foreground. Ctrl+C pauses running sandboxes and stops it.')
 		.option('--backend <name>', 'the sandbox backend: microsandbox or gvisor (default: what this machine supports)', parseBackend)
 		.option('--runsc <command>', "how to call runsc for gVisor, such as 'sudo /usr/bin/runsc'", (value) => value.split(' ').filter(Boolean))
-		.action(async (options: { backend?: BackendName; runsc?: string[] }) => {
+		.option('--webhook-port <port>', 'takes webhook deliveries on this port (default: no webhooks)', parsePort)
+		.option('--webhook-host <host>', 'the address the webhook port listens on', defaultWebhookHost)
+		.action(async (options: { backend?: BackendName; runsc?: string[]; webhookPort?: number; webhookHost: string }) => {
 			const startup = new AbortController()
-			const backend = await openBackend({ home: home(), log, ...options })
+			const { webhookPort, webhookHost, ...backendOptions } = options
+			const backend = await openBackend({ home: home(), log, ...backendOptions })
 			let served: ServedEngine | undefined
 			handleShutdown({
 				log,
@@ -57,21 +101,149 @@ export async function main(argv: readonly string[]): Promise<void> {
 					await (served ? served.close(deadlines) : backend.close(deadlines.backend))
 				},
 			})
-			served = await serveEngine({ home: home(), backend, log, signal: startup.signal }).catch(async (error: unknown) => {
+			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
+			served = await serveEngine({ home: home(), backend, log, abortSignal: startup.signal, ...webhooks }).catch(async (error: unknown) => {
 				await backend.close(AbortSignal.timeout(closeTimeoutMs))
 				throw error
 			})
 			log(`Engine ready on ${served.socketPath}.`)
+			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<app>/<webhook>.`)
 		})
 
 	program
-		.command('run')
-		.description('Starts a run of a workflow from a workflow repository.')
-		.argument('<workflow>', 'the workflow, as its file name in the workflows folder without .mts')
-		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
-		.action(async (workflow: string, options: { directory: string }) => {
-			const record = await client().startRun({ directory: path.resolve(options.directory), workflow, signal: requestSignal() })
+		.command('build')
+		.description(
+			'Builds the app whose package.json is here into one file, with its native dependencies for the sandbox, and describes it. CI runs this.',
+		)
+		.addOption(directoryOption())
+		.option('-o, --out <folder>', 'where the built app goes', defaultOut)
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, defaultCpu)
+		.action(async (options: { directory: string; out: string; cpu: AppPlatform['cpu'] }) => {
+			const directory = path.resolve(options.directory)
+			const out = path.resolve(directory, options.out)
+			const manifest = await buildApp({
+				directory,
+				out,
+				platform: sandboxPlatform(options.cpu),
+				abortSignal: AbortSignal.timeout(buildTimeoutMs),
+			})
+			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
+		})
+
+	program
+		.command('deploy')
+		.description('Hands a built app to the engine on this machine as the new current version. Its webhooks and schedules follow it.')
+		.argument('[folder]', 'the built app', defaultOut)
+		.addOption(directoryOption())
+		.addOption(appOption())
+		.action(async (folder: string, options: { directory: string; app?: string }) => {
+			const directory = path.resolve(options.directory)
+			const name = await appNameOf(directory, options.app)
+			const deployed = await withPackedApp(
+				path.resolve(directory, folder),
+				(tarball) => client().deploy(name, tarball, requestSignal()),
+				requestSignal(),
+			)
+			console.log(`${deployed.name}  ${deployed.version}`)
+		})
+
+	program
+		.command('dev')
+		.description(
+			'Builds and deploys the app here to the engine on this machine, again on every change, so its triggers are live while you work.',
+		)
+		.addOption(directoryOption())
+		.addOption(appOption())
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, defaultCpu)
+		.action(async (options: { directory: string; app?: string; cpu: AppPlatform['cpu'] }) => {
+			const directory = path.resolve(options.directory)
+			const name = await appNameOf(directory, options.app)
+			const out = path.join(directory, defaultOut)
+			const stopping = new AbortController()
+			process.once('SIGINT', () => {
+				stopping.abort(new Error('Stopped.'))
+			})
+			const buildAndDeploy = async () => {
+				try {
+					const abortSignal = AbortSignal.any([stopping.signal, AbortSignal.timeout(buildTimeoutMs)])
+					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
+					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, abortSignal), abortSignal)
+					log(`Deployed ${deployed.name} ${deployed.version}.`)
+				} catch (error) {
+					if (!stopping.signal.aborted) log(`Not deployed: ${messageOf(error)}`)
+				}
+			}
+			await buildAndDeploy()
+			log('Watching for changes. Ctrl+C stops.')
+			await watchApp({
+				directory,
+				changed: buildAndDeploy,
+				log,
+				stopped: () => {
+					process.exitCode = 1
+					stopping.abort(new Error('Stopped watching.'))
+				},
+				abortSignal: stopping.signal,
+			})
+		})
+
+	program
+		.command('trigger')
+		.description(
+			"Starts a run through one of the app's triggers, as the button, a delivery or the schedule would. The signature check is skipped.",
+		)
+		.argument('<kind>', 'user, webhook or schedule', parseTriggerKind)
+		.argument('<trigger>', "its id: the workflow for a user trigger, the webhook's name, or a schedule as `mesh-flow triggers` lists it")
+		.requiredOption('-p, --parameters <json>', "the workflow's parameters, or a webhook's payload: JSON, or @file")
+		.addOption(directoryOption())
+		.addOption(appOption())
+		.action(async (kind: TriggerKind, id: string, options: { parameters: string; directory: string; app?: string }) => {
+			const input = await readJsonOrFile(options.parameters)
+			const app = await appNameOf(path.resolve(options.directory), options.app)
+			const record = await client().startRun({ app, trigger: { kind, id }, input, abortSignal: requestSignal() })
 			console.log(formatRunLine(record))
+		})
+
+	program
+		.command('triggers')
+		.description("Lists the workflows and triggers of the app's current version.")
+		.addOption(directoryOption())
+		.addOption(appOption())
+		.action(async (options: { directory: string; app?: string }) => {
+			const name = await appNameOf(path.resolve(options.directory), options.app)
+			const deployed = await deployedApp(client(), name)
+			console.log(formatDescription(deployed.manifest.description, deployed.name))
+		})
+
+	const appCommand = program.command('app').description('The apps deployed to the engine.')
+	appCommand
+		.command('list')
+		.description('Lists the deployed apps and their current versions.')
+		.action(async () => {
+			for (const { name, version, manifest } of await client().apps(requestSignal()))
+				console.log(`${name}  ${version}  built ${manifest.builtAt}`)
+		})
+	appCommand
+		.command('remove')
+		.description('Removes an app. Its runs stay; its webhooks and schedules stop.')
+		.argument('<name>')
+		.action(async (name: string) => {
+			await client().removeApp(AppName.parse(name), requestSignal())
+		})
+
+	program
+		.command('webhook')
+		.description('Webhook settings.')
+		.command('secret')
+		.description("Sets the secret an app's webhook is signed with, read from stdin. It's kept in the engine's home only.")
+		.argument('<app>')
+		.argument('<webhook>')
+		.option('--generate', 'makes a random secret and prints it, to paste into the sender')
+		.action(async (appName: string, webhook: string, options: { generate?: boolean }) => {
+			const secret = options.generate ? randomBytes(generatedSecretBytes).toString('hex') : (await text(process.stdin)).trim()
+			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in, or use --generate.')
+			await openWebhookSecrets(webhookSecretsFile(home())).set(AppName.parse(appName), WebhookName.parse(webhook), secret)
+			if (options.generate) console.log(secret)
 		})
 
 	program
@@ -135,10 +307,40 @@ function parseBackend(value: string): BackendName {
 	return parsed.data
 }
 
+function parsePort(value: string): number {
+	const port = Number(value)
+	if (!Number.isInteger(port) || port < 0 || port > maxPort) throw new InvalidArgumentError('Use a port number.')
+	return port
+}
+
 function parseJson(value: string): unknown {
 	try {
 		return JSON.parse(value)
 	} catch {
 		throw new InvalidArgumentError('This is not JSON. Quote strings: \'"text"\'.')
 	}
+}
+
+function parseCpu(value: string): AppPlatform['cpu'] {
+	const parsed = AppPlatform.shape.cpu.safeParse(value)
+	if (!parsed.success) throw new InvalidArgumentError('Use x64 or arm64.')
+	return parsed.data
+}
+
+function parseTriggerKind(value: string): TriggerKind {
+	const parsed = TriggerKind.safeParse(value)
+	if (!parsed.success) throw new InvalidArgumentError(`Use one of ${TriggerKind.options.join(', ')}.`)
+	return parsed.data
+}
+
+/** JSON, or the JSON in a file after `@`. */
+async function readJsonOrFile(value: string): Promise<unknown> {
+	return parseJson(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value)
+}
+
+/** The current version of the deployed app called `name`. */
+async function deployedApp(client: ControlClient, name: string): Promise<DeployedApp> {
+	const found = (await client.apps(requestSignal())).find((app) => app.name === name)
+	if (found === undefined) throw new Error(`There is no app ${name}. Deploy it with \`mesh-flow deploy\`, or run \`mesh-flow dev\`.`)
+	return found
 }

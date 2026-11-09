@@ -3,7 +3,9 @@
 Status: in progress. Package 1, [`@mesh-flow/sandbox`](../../packages/sandbox/README.md), is built
 and its conformance suite runs on real backends in CI. Package 2,
 [`@mesh-flow/engine`](../../packages/engine/README.md), is built. Package 3,
-[`@mesh-flow/core`](../../packages/core/README.md), is built. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+[`@mesh-flow/core`](../../packages/core/README.md), is built. Step 4, triggers, is built in core
+([Triggers](../../packages/core/README.md#triggers)) and the engine
+([Triggers](../../packages/engine/README.md#triggers)). Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
@@ -29,7 +31,7 @@ packages that don't depend on the open decisions first.
 | 1 | `@mesh-flow/sandbox` | the backend interface, E2B, microsandbox and gVisor, backend selection, conformance tests | nothing |
 | 2 | `@mesh-flow/engine` | runs, sandbox lifecycle, shutdown and reconciliation, input requests, the CLI | 1 |
 | 3 | `@mesh-flow/core` | the authoring vocabulary as a runtime: `workflow`, `loop`, exits, `limit`, `input`, events | Pi Durable |
-| 4 | triggers | workflow parameters, the entry file (`defineWorkflows`, `userTrigger`, `webhook`, `schedule`), describe mode; webhook ingress and the scheduler in the engine | 2 and 3 |
+| 4 | triggers and `@mesh-flow/build` | workflow parameters, the entry file (`defineMeshFlow`, `image`, `userTrigger`, `webhook`, `schedule`); building and deploying apps; webhook ingress and the scheduler in the engine | 2 and 3 |
 | 5 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 4 |
 | 6 | `@mesh-flow/github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
 | 7 | the other connectors and `example` | `@mesh-flow/atlassian`, `@mesh-flow/gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
@@ -110,21 +112,26 @@ its final shape. It doesn't change what the gateway builds on: tools, per-loop e
 credentials stay as they are.
 
 - **Core:** `workflow(name, parameters, body)` with the body getting `{ parameters, abortSignal }`
-  (also for workflows without parameters); `defineWorkflows`, `userTrigger`, `webhook`,
-  `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
-  and starting one named workflow from the entry file.
-- **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
-  workflow from `workflows/main.mts`; generic webhook ingress (the built-in signature schemes,
-  JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
-  lists what the entry file declares. Webhook secrets come from the local credential store; until
-  the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the engine's
-  home directory, never in the workflow repository.
-- **Docs:** the core README (the file no longer starts itself) and the engine README (`run <name>`
-  goes through the entry file), and `examples/example` gets an entry file.
+  (also for workflows without parameters); `defineMeshFlow({ sandbox: image(...), workflows })` as
+  the entry file, which `main` in `package.json` names; `userTrigger`, `webhook`, `schedule`, and
+  `defineWorkflows` as a bundle of triggers, with the type checks between a trigger and its
+  workflow as type tests; describe mode, and starting one workflow through a trigger.
+- **Build:** `@mesh-flow/build` bundles the entry file with its dependencies, installs packages
+  with native code for the sandbox's platform, and writes the description into `mesh-flow.json`.
+- **Engine:** immutable deployed app versions with a current one per app; a run pins its version
+  and the sandbox only runs `node`; `mesh-flow build`, `deploy` (local socket only until the
+  gateway), `dev` and `trigger <kind> <id> -p`; generic webhook ingress (the built-in signature
+  schemes, JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no
+  connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers` lists
+  what the current version declares. Webhook secrets come from the local credential store; until
+  the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the
+  engine's home directory, never in the app.
+- **Docs:** the core, build and engine READMEs, and `examples/example` gets a `package.json` and an
+  entry file.
 - **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
   sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
-  schedule tick is skipped; shutdown completes while a webhook request or a describe run never
-  settles.
+  schedule tick is skipped; a restart runs the version the run first ran; shutdown completes while a
+  delivery's sandbox or unpacking the app never settles.
 
 ### 5. `@mesh-flow/gateway`
 
@@ -161,15 +168,18 @@ review, no dependency order. Pick up the issue, fix it, open a pull request, han
 until it's merged. It starts from a button or from labelling an issue `ai-fix`:
 
 ```ts
-// workflows/main.mts
-import { defineWorkflows, userTrigger } from '@mesh-flow/core'
+// main.mts, the package's `main`
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
-import { fixIssue } from './fix-issue.mts'
+import { fixIssue } from './workflows/fix-issue.mts'
 
-export default defineWorkflows(
-	userTrigger(fixIssue),
-	github.onIssueLabeled(fixIssue, 'ai-fix'),
-)
+export default defineMeshFlow({
+	sandbox: image({ name: 'node:22-slim' }),
+	workflows: [
+		userTrigger(fixIssue),
+		github.onIssueLabeled(fixIssue, 'ai-fix'),
+	],
+})
 
 // workflows/fix-issue.mts
 export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, async ({ parameters }) => {

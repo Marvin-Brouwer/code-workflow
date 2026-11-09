@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { Models } from '@earendil-works/pi-ai'
+import { z } from 'zod'
 import { openAgentHarness, type AgentHarness } from '../loop/agent-harness.mts'
 import { describeError } from '../run/describe-error.mts'
 import type { RunChannel } from '../run/run-channel.mts'
@@ -9,9 +10,14 @@ import { emitEvent, inEventOf } from '../run/run-events.mts'
 import type { RunContext, Scope } from '../run/run-scope.mts'
 import { settledWithin } from '../run/settled-within.mts'
 import { untilAborted } from '../run/until-aborted.mts'
-import type { Workflow } from './workflow.mts'
+import type { AnyWorkflow, Workflow } from './workflow.mts'
 
-export interface RunOptions {
+export interface RunOptions<Parameters = unknown> {
+	/**
+	 * The run's parameters: the input side of the workflow's, checked against them before the body
+	 * starts. A run whose parameters don't fit fails. Default `{}`.
+	 */
+	readonly parameters?: Parameters
 	/** Where events and requests go and answers come from. Under the engine: the sandbox's mailbox. */
 	readonly channel: RunChannel
 	/** Stops the run. Everything in it gets this signal; the run settles promptly once it aborts. */
@@ -36,10 +42,22 @@ const closeMs = 2_000
  * Runs a workflow: its body in a run scope, as the root of the event tree, then `succeeded` or
  * `failed` to the channel. Never throws; the outcome says how it went.
  *
- * Under the engine, `workflow()` starts this by itself. Call it directly to run a workflow
- * somewhere else, such as in a test with a channel of your own.
+ * Under the engine, the entry file (`defineMeshFlow`) starts this with the workflow the engine
+ * asked for. Call it directly to run a workflow somewhere else, such as in a test with a channel
+ * of your own.
  */
-export async function runWorkflow(definition: Workflow, options: RunOptions): Promise<RunOutcome> {
+export function runWorkflow<Shape extends z.ZodRawShape>(
+	definition: Workflow<Shape>,
+	options: RunOptions<z.input<z.ZodObject<Shape>>>,
+): Promise<RunOutcome> {
+	return runAnyWorkflow(definition, options)
+}
+
+/**
+ * `runWorkflow` for a workflow and parameters whose types aren't known, such as those the engine's
+ * start file names. The parameters are checked against the workflow's all the same.
+ */
+export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOptions): Promise<RunOutcome> {
 	const workspace = path.resolve(options.workspace ?? 'workspace')
 	const counts = new Map<string, number>()
 	let agents: Promise<AgentHarness> | undefined
@@ -83,7 +101,10 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
 	let outcome: RunOutcome
 	try {
 		await mkdir(workspace, { recursive: true })
-		await inEventOf(root, 'workflow', { workflow: definition.name, runId: run.runId }, () => settle(definition.body(), options.abortSignal))
+		await inEventOf(root, 'workflow', { workflow: definition.name, runId: run.runId }, async () => {
+			const parameters = await parametersOf(definition, options.parameters ?? {}, options.abortSignal)
+			await settle(definition.body({ parameters, abortSignal: options.abortSignal }), options.abortSignal)
+		})
 		outcome = { status: 'succeeded' }
 	} catch (error) {
 		outcome = { status: 'failed', error }
@@ -92,6 +113,13 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
 	if (agents !== undefined) await (await agents.catch(() => undefined))?.close(closeMs)
 	options.channel.send(outcome.status === 'succeeded' ? { type: 'succeeded' } : { type: 'failed', error: describeError(outcome.error) })
 	return outcome
+}
+
+/** The run's parameters, checked against the workflow's. Throws, naming what doesn't fit. */
+async function parametersOf(definition: AnyWorkflow, given: unknown, abortSignal: AbortSignal): Promise<Record<string, unknown>> {
+	const parsed = await untilAborted(definition.parameters.safeParseAsync(given), abortSignal)
+	if (parsed.success) return parsed.data
+	throw new Error(`The parameters don't fit workflow ${definition.name}:\n${z.prettifyError(parsed.error)}`)
 }
 
 /**

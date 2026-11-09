@@ -1,0 +1,18 @@
+{
+	"name": "example",
+	"private": true,
+	"description": "The reference mesh-flow app: one workflow that takes a story from plan to merge request",
+	"type": "module",
+	"main": "main.mts",
+	"scripts": {
+		"build": "mesh-flow build",
+		"deploy": "mesh-flow deploy",
+		"dev": "mesh-flow dev"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@mesh-flow/engine": "workspace:*"
+	}
+}

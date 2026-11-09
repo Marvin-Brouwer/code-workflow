@@ -18,17 +18,43 @@ It picks the sandbox backend for the machine ([`chooseBackend`](../sandbox/READM
 
 Ctrl+C shuts it down without leaving anything running. It pauses every running sandbox to disk, saves the run records and closes the backend. A second Ctrl+C skips the pauses that haven't finished, and those runs can be restarted later. A third exits right away.
 
-### Start a run and answer it
+### Build and deploy an app
 
-The other commands talk to the running engine. From a workflow repository:
+An app is a package whose `main` in `package.json` is its entry file, which exports `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)). The engine doesn't take the source: it takes the built app, bundled with its dependencies, so the sandbox has nothing to set up and only runs `node`.
 
 ```bash
-mesh-flow run develop           # runs workflows/develop.mts
-mesh-flow list                  # run-3f2a9c0d1e7b  develop  running  needs input: story
-mesh-flow show run-3f2a9c0d1e7b # the question, the fields, and how to answer
+mesh-flow build    # bundles the entry file into .mesh-flow/app, with mesh-flow.json saying what it declares
+mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the app's new current version
+mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
+```
+
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine comes with the gateway.
+
+The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
+
+```bash
+mesh-flow app list               # example  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
+mesh-flow triggers               # the current version's sandbox, workflows, their parameters and triggers
+mesh-flow app remove example     # its webhooks and schedules stop; its runs stay
+```
+
+The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+
+### Start a run and answer it
+
+The other commands talk to the running engine. Every run starts through one of the triggers the app's current version lists, and `trigger` always takes the parameters:
+
+```bash
+mesh-flow trigger user develop -p '{"key":"ABC-123"}'   # as the button would
+mesh-flow trigger webhook fix-issue -p @delivery.json   # as a delivery would, without the signature check
+mesh-flow trigger schedule 'report daily' -p '{}'       # the schedule now, with these parameters instead of its own
+mesh-flow list                                          # run-3f2a9c0d1e7b  develop  running  needs input: story
+mesh-flow show run-3f2a9c0d1e7b                         # the question, the fields, and how to answer
 mesh-flow answer run-3f2a9c0d1e7b story '{"key":"ABC-123"}'
 mesh-flow events run-3f2a9c0d1e7b
 ```
+
+A webhook payload given to `trigger` still goes through the trigger's schema in the sandbox, so a payload it turns down ends the run as `skipped`.
 
 After a restart of the engine, a run that was paused stays paused until you resume it, and a run whose sandbox is gone can be restarted:
 
@@ -38,54 +64,63 @@ mesh-flow restart run-3f2a9c0d1e7b  # from the top, in a new sandbox, with the c
 mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge requests stay
 ```
 
-### Configure a workflow repository
+### Triggers
 
-`mesh-flow.config.json` in the repository says what sandbox its runs get, how to set it up and how to start the runtime. It lives in git, so it holds no secrets:
+An app's entry file lists what can start its workflows: buttons, webhooks and schedules (see [`@mesh-flow/core`](../core/README.md#triggers)). `mesh-flow build` writes down what it declares, so the engine never runs the entry file to learn it, and an unrelated webhook delivery never costs a sandbox.
 
-```json
-{
-	"sandbox": {
-		"image": "node:22-slim",
-		"cpus": 2,
-		"memoryMb": 4096,
-		"egress": { "allow": ["registry.npmjs.org"] }
-	},
-	"setup": [["npm", "ci"]],
-	"start": ["node"],
-	"workflows": "workflows"
-}
+#### Webhooks
+
+`serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<app>/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the engine's home holds, never the app:
+
+```bash
+mesh-flow webhook secret example fix-issue --generate   # prints a new secret to paste into the sender
+printf '%s' "$SECRET" | mesh-flow webhook secret example fix-issue
 ```
 
-`run <name>` uploads the repository's git files, as they are on disk (tracked files, plus untracked ones that aren't ignored), into the sandbox at `/workflow`. It runs `setup` there one command at a time, then starts `start` with the workflow's file added, here `node workflows/develop.mts`. The run record pins the commit, and says when there were uncommitted changes. The upload is kept, so `restart` runs the same code.
+Everything is checked on the host, before a sandbox is made:
 
-The image needs what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+| Check, in this order | Answer when it fails |
+|---|---|
+| a secret is set for the app's webhook | 404 |
+| the app is deployed, and its current version has the webhook | 404 |
+| the delivery is signed with the secret (a secret header, or an HMAC-SHA256 of the body) | 401 |
+| the body is JSON, up to 25 MB | 400, 413 |
+| the payload fits the input side of the trigger's schema, as JSON Schema | 422, with the problems |
+
+A delivery that passes gets `202` and a new run on the current version. Its delivery header (such as `x-github-delivery`), or a hash of the body without one, is the run's key: a redelivery gets `200` and the run it started before. In the sandbox, the schema's `.refine` and `.transform` turn the payload into the workflow's parameters; a delivery they turn down ends the run as `skipped`, which isn't a failure.
+
+#### Schedules
+
+The engine follows the schedules of every deployed app's current version, and starts each run on its own clock. A deploy or a removal re-arms them at once. A tick is skipped while the previous run of the same schedule is still going, also when it is paused or waits for a human. A run that is `restartable` doesn't hold its schedule up: it needs a person, and the next tick starts a new run. Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
 
 ### Embed the engine
 
 ```ts
-import { Engine, openRunStore } from '@mesh-flow/engine'
+import { Engine, openAppStore, openRunStore } from '@mesh-flow/engine'
 import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
-const signal = AbortSignal.timeout(60_000)
+const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const engine = await Engine.open({ backend: microsandboxBackend(), store, log: console.error }, signal)
+const apps = await openAppStore('/var/lib/my-app/mesh-flow/apps', abortSignal)
+await apps.deploy('example', '/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
+const engine = await Engine.open({ backend: microsandboxBackend(), store, apps, log: console.error }, abortSignal)
 
-const run = await engine.startRun({ directory: '/path/to/workflows', workflow: 'develop', signal })
+const run = await engine.startRun({ app: 'example', trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })
 // ... later, when the run waits for input:
-await engine.answer(run.id, 'story', { key: 'ABC-123' }, signal)
+await engine.answer(run.id, 'story', { key: 'ABC-123' }, abortSignal)
 
-await engine.close({ pause: AbortSignal.timeout(30_000), close: AbortSignal.timeout(60_000) })
+await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
 ```
 
-`Engine.open` reconciles before it returns. `close` is what `serve` calls on Ctrl+C. `serveEngine` and `handleShutdown` are the rest of `serve`, for a process of your own.
+`Engine.open` reconciles before it returns. `close` is what `serve` calls on Ctrl+C. `serveEngine` and `handleShutdown` are the rest of `serve`, for a process of your own: `serveEngine` also runs the scheduler and, with `webhooks: { port }`, the webhook ingress.
 
 ## How it works
 
 ### The mailbox
 
-The engine and the runtime share a mailbox directory in the sandbox, `/var/lib/mesh-flow/mailbox`. The runtime appends one JSON message per line to `outbox.jsonl`. The engine writes each answer to `inbox/<request id>.json`. The runtime's pid and log sit next to them.
+The engine and the runtime share a mailbox directory in the sandbox, `/var/lib/mesh-flow/mailbox`. Before it starts the runtime, the engine writes `start.json`: the workflow to run, the trigger that started it, and its input. (`mesh-flow build` uses the same mailbox, on the host, to have the entry file describe itself.) The runtime appends one JSON message per line to `outbox.jsonl`. The engine writes each answer to `inbox/<request id>.json`. The runtime's pid and log sit next to them.
 
-The messages are in [`@mesh-flow/protocol`](../protocol/README.md#messages): events the engine keeps, `input` and `wake` requests, and how the run ended.
+The messages are in [`@mesh-flow/protocol`](../protocol/README.md#messages): events the engine keeps, `input` and `wake` requests, what an entry file declares, and how the run ended.
 
 The engine makes every call. To read the outbox it runs a short POSIX shell loop in the sandbox (no script to copy in) that returns as soon as there are new lines, or after 20 seconds without any. To answer, it writes a file. So:
 
@@ -96,15 +131,16 @@ The engine makes every call. To read the outbox it runs a short POSIX shell loop
 
 ### Runs
 
-A run record holds the workflow, its source, its config, the sandbox, the paused state, how far the engine has read the outbox, and the open requests. Each run has its own directory under the engine's home, with `run.json` (written atomically), `events.jsonl` and `source.tgz`.
+A run record holds the workflow, the trigger that started it and its key, its app version (name, version, entry file and sandbox), the sandbox it lives in, the paused state, how far the engine has read the outbox, and the open requests. Each run has its own directory under the engine's home, with `run.json` (written atomically), `events.jsonl`, `app.tgz` and `start.json`.
 
 | Status | Meaning |
 |---|---|
-| `starting` | the sandbox is being made, the workflow uploaded and set up |
+| `starting` | the sandbox is being made and the app unpacked in it |
 | `running` | the runtime runs; it may wait on open requests |
 | `paused` | the sandbox is paused to disk with the runtime in it; `resume` picks it up |
 | `restartable` | the sandbox is gone; `restart` runs it again from the top |
 | `succeeded`, `failed`, `stopped` | done; nothing of it runs any more |
+| `skipped` | done without doing anything: the webhook delivery isn't for its workflow, as the run's `reason` says |
 
 ### Shutdown and reconciliation
 
@@ -122,7 +158,7 @@ The home's lock comes first: a second engine on the same home refuses to start, 
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, and `POST /runs/:run/stop`, `/resume` and `/restart`. `controlClient(socketPath)` returns the functions that call it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, apps)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /apps`, and `PUT` and `DELETE` on `/apps/:name`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 
@@ -130,7 +166,7 @@ The CLI talks to the engine over HTTP on a Unix socket in the home directory, or
 pnpm --filter @mesh-flow/engine test
 ```
 
-Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover a run from start to end, input and wake requests, crashes and setup failures, stop, restart, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, poll and pause never settle.
+Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover deploying apps, a run from start to end, input and wake requests, webhook deliveries (signatures, payload checks, redeliveries, skips), schedules and their overlap rule, a schedule fired by hand, crashes, stop, restart on the version a run first ran, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, unpack, poll and pause never settle. The scheduler runs on fake timers in a unit test.
 
 One run end to end on a real backend, across a shutdown and a restart of the engine, runs only when asked:
 
@@ -146,9 +182,12 @@ CI runs it on gVisor and microsandbox on Linux, and microsandbox on Windows ([`e
 - **The named pipe on Windows** has the default security of a pipe, and its name comes from the home path. Another user on the same machine could reach it, or take the name first. Unix sockets are limited to the home directory's owner.
 - **E2B** needs an API key from the credential store, which comes with the gateway. `serve` refuses it until then. `Engine` itself takes any backend.
 - **Pausing on wait** is roadmap step 3. A waiting run keeps its sandbox running until the engine shuts down.
-- **External events** (webhooks, merge request activity) and their durable wait aren't here yet. They fit the same shape as `wake`: a request the engine answers.
+- **External events** that wake a waiting run (merge request activity) and their durable wait aren't here yet. They will come through the same ingress and signature check as webhook triggers, and fit the same shape as `wake`: a request the engine answers.
+- **Webhook secrets** live in `secrets/webhooks.json` in the engine's home, readable by its owner only, until the gateway's credential store exists. Turning a trigger on or off is deploying a version without it, or removing the app, until there is a UI.
+- **Deploying is local.** `deploy` and `dev` go over the engine's socket on the same machine. Deploying from CI to an engine elsewhere needs authentication, which comes with the gateway.
+- **Old versions stay** in the engine's home until their app is removed. There is no clean-up of versions no run uses yet.
+- **Webhook payload schemas** are compiled with [Ajv](https://ajv.js.org). A pattern in a schema runs on the host, so a slow regular expression slows the ingress down.
 - **Tool calls** to the gateway need their own channel, low latency and both ways ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)). The mailbox is for the runtime's lifecycle, not for that.
 - **The agent's shell as a separate user.** The mailbox is `chmod 700` for the runtime's user. That only keeps an agent out once agent shell commands run as another user ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)).
 - **Events arrive at least once.** When the engine dies after keeping events but before saving how far it read, it reads those events again after a resume.
 - **Answers aren't checked on the host.** The runtime validates an answer against its fields and asks again when it doesn't fit.
-- **Setup output** only shows when a step fails, as the end of its stderr.

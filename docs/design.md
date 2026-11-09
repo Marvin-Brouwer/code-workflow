@@ -66,9 +66,9 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
   was paused.
 - **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, starts runs
   from triggers (buttons, webhooks, schedules; section 4), relays human input and external events
-  to running runs, and serves the UI API. What a workflow repository declares (workflows, their
-  parameters, triggers, agents and connectors) it learns by running the entry file in a sandbox in
-  describe mode ([Triggers](#triggers)). The prototype's
+  to running runs, and serves the UI API. What an app declares (its sandbox, workflows, their
+  parameters, triggers, agents and connectors) it reads from the manifest `mesh-flow build` writes
+  next to the built app ([Triggers](#triggers)). The prototype's
   `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol,
   carried by a mailbox in the sandbox: the runtime appends messages to an outbox, the engine
   long-polls it and writes answers to an inbox, all through the sandbox interface's `exec` and
@@ -238,9 +238,10 @@ status or identical comment).
 
 ### Triggers
 
-A workflow says what it does and what it starts with, never how it is started. One entry file in
-the workflow repository, `workflows/main.mts`, lists everything that can start a run, so there is
-one place to see what is live:
+A workflow says what it does and what it starts with, never how it is started. A workflow repository
+is an app: a package whose `main` in `package.json` is its entry file. The entry file exports
+`defineMeshFlow`, which says what sandbox the app's runs get and lists everything that can start a
+run, so there is one place to see what is live:
 
 ```ts
 // workflows/fix-issue.mts
@@ -249,12 +250,18 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 	// ...
 })
 
-// workflows/main.mts
-export default defineWorkflows(
-	userTrigger(fixIssue),
-	webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
-	schedule(weeklyReport, '0 7 * * 1'),
-)
+// main.mts, the package's `main`
+export default defineMeshFlow({
+	sandbox: image({
+		name: 'node:22-slim',
+		egress: ['api.github.com'],
+	}),
+	workflows: [
+		userTrigger(fixIssue),
+		webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
+		schedule(weeklyReport, '0 7 * * 1'),
+	],
+})
 ```
 
 - **Triggers take the workflow itself, not its name,** so TypeScript checks that a trigger gives
@@ -276,18 +283,28 @@ export default defineWorkflows(
   `github.onIssueLabeled(fixIssue, 'ai-fix')` starts `fixIssue` with `{ issue }`, and only compiles
   for a workflow whose parameters take that. The delivery id is the run's key: a
   redelivery reuses the run it already started.
-- **`schedule(workflow, cron, parameters?)`** starts a run on the engine's wall clock (timed waits
-  are engine-side, section 5). The parameters are fixed values, checked against the workflow's
-  shape at compile time. A tick is skipped while the previous run of that schedule is still going.
-- **Only workflows listed in the entry file can be started by the UI, a webhook or a schedule.**
-  The CLI and tests (`runWorkflow`) can still start any workflow the entry file's modules export.
+- **`schedule(workflow, when, parameters?)`** starts a run on the engine's wall clock, at a cron
+  expression or `hourly`, `daily`, `weekly` or `monthly` (timed waits are engine-side, section 5).
+  The parameters are fixed values, checked against the workflow's shape at compile time. A tick
+  is skipped while the previous run of that schedule is still going.
+- **Every run starts through a trigger the deployed version lists**, also from the CLI:
+  `mesh-flow trigger <kind> <id> -p <parameters>` does what the button, a delivery (without the
+  signature check) or the schedule (with the given parameters) would. Tests (`runWorkflow`) can
+  still run any workflow directly. `defineWorkflows(...triggers)` bundles triggers, so a package can
+  bring several at once.
 - **Nothing in the entry file is a setting.** Webhook secrets, enabling or pausing a trigger, and
   overrides are user settings in the UI (section 9). The entry file only says that a workflow *can*
-  be started a certain way; the schema and the button work as soon as it is committed.
-- **The engine never runs the entry file on the host.** It runs it once per commit in a sandbox in
-  describe mode: `defineWorkflows` sends the workflows, their parameters as JSON Schema and their
-  triggers over the mailbox and exits. The engine caches that per commit. A run then starts the
-  entry file with the name of the workflow to run.
+  be started a certain way; the schema and the button work as soon as it is deployed.
+- **The engine runs built apps, not source.** `mesh-flow build` bundles the entry file with its
+  dependencies into one file (rolldown); packages with native code are installed for the sandbox's
+  platform next to it. It then starts the bundle once, on the host, to have it describe itself, and
+  writes `mesh-flow.json`: the entry file, the platform, the sandbox, the workflows with their
+  parameters as JSON Schema, and the triggers. CI builds the app and deploys it to the engine. The
+  sandbox has nothing to set up and only runs `node`, and the engine never runs app code to learn
+  what it declares.
+- **Deployed versions are immutable.** The engine keeps each version it was given, named by the
+  hash of its tarball, and one current version per app. Webhooks and schedules follow the current
+  version; a run copies its version, so a restart runs the code it first ran.
 - **A webhook trigger starts a run; an external event wakes one.** Events a running run waits for
   (review comments in `github.review`) arrive through the same ingress and signature check, but
   go to the run that waits for them, not to a trigger.
@@ -379,7 +396,7 @@ No credential ever enters the sandbox. Full rules in
 
 - Agents name a **model id**. The gateway resolves it model-first: the first provider in the
   user's ordered list that offers it.
-- Agents are module-level, so the describe run ([Triggers](#triggers)) tells the engine a
+- Agents are module-level, so the build's description ([Triggers](#triggers)) tells the engine a
   workflow's models before a run starts, and it checks them against the user's providers up front.
 - In the sandbox, pi-ai sends each provider's native request over the channel and the gateway
   forwards it with the credential, which keeps provider-specific features (thinking, caching, headers) intact.
@@ -427,7 +444,7 @@ export const aws = connector({
   can call it itself.
 - A connector's credentialed tools have their implementation in the gateway half and a stub in
   the sandbox half (section 7).
-- Workflows import the connectors they use, so the describe run tells the engine each workflow's
+- Workflows import the connectors they use, so the build's description tells the engine each workflow's
   requirements.
 - Connectors with webhooks may export a zod schema per event with its signature scheme filled in
   (`github.issueLabeled(label)`) and ready-made triggers built on them
@@ -527,7 +544,7 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
 14. **Missed schedule ticks.** When the engine was down over a tick: run it once on start, or skip
     it. Leaning towards once, so a daily job isn't lost to a reboot.
 15. **An MCP trigger.** Expose a workflow as an MCP tool, with its parameters as the tool's input
-    schema ("a tool is also a function", pointed outward). Later; it fits `defineWorkflows` as one
+    schema ("a tool is also a function", pointed outward). Later; it fits `defineMeshFlow` as one
     more trigger.
 
 Out of scope for now: token and cost budgets.
@@ -552,7 +569,9 @@ Out of scope for now: token and cost budgets.
 - **Loop token**: the single-use, rotating token for a loop's tool endpoint (section 7); held by
   the runtime, never by the agent. Workflow code has a run-level one.
 - **Trigger**: what can start a run of a workflow (`userTrigger`, `webhook`, `schedule`), listed in
-  the workflow repository's entry file, `workflows/main.mts`.
+  the app's entry file, the `main` of its `package.json`.
+- **App**: a workflow repository as the engine runs it: built by `mesh-flow build`, deployed as an
+  immutable version.
 - **Exit tool**: `succeed`, `propose`, `verify` or `fail`, interpolated in a prompt; the only way
   an agent finishes.
 - **Check**: a lazy verification used by `verify`.

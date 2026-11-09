@@ -2,10 +2,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
+import { openAppStore } from '../src/apps/app-store.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { copiedMailbox, runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+import { copiedMailbox, deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 /**
  * One run end to end in a real sandbox, across a shutdown and a restart of the engine. Opt in, as
@@ -43,10 +44,11 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		// Arrange
 		const home = await temporaryDirectory()
 		const store = () => openRunStore(path.join(home, 'runs'))
-		const directory = await workflowRepository({ ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
-		const first = await Engine.open({ backend: await openBackend(), store: store() }, signal)
+		const apps = await openAppStore(path.join(home, 'apps'), signal)
+		await deployTestApp(apps, { ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
+		const first = await Engine.open({ backend: await openBackend(), store: store(), apps }, signal)
 		onTestFinished(() => first.close(deadlines()))
-		const { id } = await first.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await first.startRun({ ...userRun('ask'), abortSignal: signal })
 		await vi.waitFor(
 			() => {
 				expect(first.get(id).pending).toHaveLength(1)
@@ -64,7 +66,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 
 		// Act
 		const backend = await openBackend()
-		const second = await Engine.open({ backend, store: store() }, signal)
+		const second = await Engine.open({ backend, store: store(), apps }, signal)
 		onTestFinished(() => second.close(deadlines()))
 		await second.resume(id, signal)
 		await second.answer(id, 'second', 2, signal)

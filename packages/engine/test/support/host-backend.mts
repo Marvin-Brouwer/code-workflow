@@ -27,7 +27,7 @@ type HostSandboxState = z.infer<typeof HostSandboxState>
 export const hostSandboxRoot = '/sandbox/'
 
 /** The layout to give an engine that runs on {@link hostBackend}. */
-export const hostSandboxLayout = { mailbox: '/sandbox/mailbox', workflow: '/sandbox/workflow' }
+export const hostSandboxLayout = { mailbox: '/sandbox/mailbox', app: '/sandbox/app' }
 
 /**
  * A stand-in backend for tests: a "sandbox" is a directory on this machine, its commands run on
@@ -91,8 +91,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 			},
 			readFile: (file, signal) => readFile(map(file), { encoding: 'utf8', signal }),
 			async writeFile(file, content, signal) {
+				// Like the real backends: the parent folder has to be there.
 				const target = map(file)
-				await mkdir(path.dirname(target), { recursive: true })
 				await writeFile(`${target}.tmp`, content, { signal })
 				await rename(`${target}.tmp`, target)
 			},

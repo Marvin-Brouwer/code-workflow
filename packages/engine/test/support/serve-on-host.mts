@@ -10,6 +10,6 @@ import { hostBackend, hostSandboxLayout } from './host-backend.mts'
 const home = process.argv[2]
 if (!home) throw new Error('Pass the home directory.')
 const backend = hostBackend(path.join(home, 'sandboxes'))
-const served = await serveEngine({ home, backend, layout: hostSandboxLayout, signal: AbortSignal.timeout(30_000) })
+const served = await serveEngine({ home, backend, layout: hostSandboxLayout, abortSignal: AbortSignal.timeout(30_000) })
 handleShutdown({ shutdown: (deadlines) => served.close(deadlines), pauseTimeoutMs: 5_000, closeTimeoutMs: 5_000 })
 console.log('ready')

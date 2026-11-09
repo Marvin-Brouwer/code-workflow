@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { RuntimeRequest } from './runtime-request.mts'
+import { WorkflowsDescription } from './workflows-description.mts'
 
 /**
  * One node of a run's event tree. The engine checks only these fields and keeps the rest as it
@@ -19,6 +20,10 @@ export const RuntimeMessage = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('request'), request: RuntimeRequest }),
 	z.object({ type: z.literal('succeeded') }),
 	z.object({ type: z.literal('failed'), error: z.string() }),
+	/** The run is over without doing anything: the delivery that started it isn't for its workflow. */
+	z.object({ type: z.literal('skipped'), reason: z.string() }),
+	/** The answer to a `describe` start: what the entry file declares. */
+	z.object({ type: z.literal('described'), description: WorkflowsDescription }),
 ])
 export type RuntimeMessage = z.infer<typeof RuntimeMessage>
 
