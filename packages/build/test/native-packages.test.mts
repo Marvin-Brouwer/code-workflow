@@ -17,7 +17,7 @@ describe('nativePackages', () => {
 		})
 
 		// Act
-		const found = await nativePackages(directory)
+		const found = await nativePackages(directory, AbortSignal.timeout(10_000))
 
 		// Assert
 		expect(found.toSorted((left, right) => left.name.localeCompare(right.name))).toEqual([

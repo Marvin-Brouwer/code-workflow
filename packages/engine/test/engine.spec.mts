@@ -31,7 +31,7 @@ async function openEngine({ home, wrap = (backend) => backend, wrapStore = (stor
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
 	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
-	const apps = await openAppStore(path.join(directory, 'apps'))
+	const apps = await openAppStore(path.join(directory, 'apps'), signal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, apps, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))

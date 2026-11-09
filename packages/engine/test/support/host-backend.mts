@@ -27,7 +27,7 @@ type HostSandboxState = z.infer<typeof HostSandboxState>
 export const hostSandboxRoot = '/sandbox/'
 
 /** The layout to give an engine that runs on {@link hostBackend}. */
-export const hostSandboxLayout = { mailbox: '/sandbox/mailbox', workflow: '/sandbox/workflow' }
+export const hostSandboxLayout = { mailbox: '/sandbox/mailbox', app: '/sandbox/app' }
 
 /**
  * A stand-in backend for tests: a "sandbox" is a directory on this machine, its commands run on

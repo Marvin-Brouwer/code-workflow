@@ -4,9 +4,9 @@ import type { SandboxDescription } from '@mesh-flow/protocol'
 export interface ImageOptions {
 	/** An OCI image reference with Node.js 22.18 or newer, such as `node:22-slim`. */
 	readonly name: string
-	/** Default: 2. */
+	/** The CPUs the sandbox gets. Default: 2. */
 	readonly cpus?: number
-	/** Default: 2048. */
+	/** The sandbox's memory, in MB. Default: 2048. */
 	readonly memoryMb?: number
 	/** The only hosts a run may reach over HTTPS, as lowercase host names. Default: none. */
 	readonly egress?: readonly string[]

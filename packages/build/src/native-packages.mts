@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { AppPackageJson } from './app-package-json.mts'
 
 /** The parts of a dependency's `package.json` that say whether it ships native code. */
 const DependencyPackage = z.object({
@@ -25,11 +26,12 @@ export interface NativePackage {
  * built with node-gyp, prebuilt binaries, or platform-specific optional packages (as esbuild has).
  * The bundle leaves these out, and the build installs them for the sandbox's platform instead.
  */
-export async function nativePackages(directory: string): Promise<NativePackage[]> {
+export async function nativePackages(directory: string, abortSignal: AbortSignal): Promise<NativePackage[]> {
 	const found = new Map<string, NativePackage>()
 	const visited = new Set<string>()
 	const visit = async (from: string, names: readonly string[]) => {
 		for (const name of names) {
+			abortSignal.throwIfAborted()
 			const folder = packageFolder(name, from)
 			if (folder === undefined || visited.has(folder)) continue
 			visited.add(folder)
@@ -43,8 +45,7 @@ export async function nativePackages(directory: string): Promise<NativePackage[]
 			await visit(folder, Object.keys(json.dependencies ?? {}))
 		}
 	}
-	const root = z.object({ dependencies: z.record(z.string(), z.string()).optional() })
-	const { dependencies } = root.parse(JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8')))
+	const { dependencies } = AppPackageJson.parse(JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8')))
 	await visit(directory, Object.keys(dependencies ?? {}))
 	return [...found.values()]
 }

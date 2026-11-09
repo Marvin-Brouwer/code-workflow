@@ -1,5 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { builtinModules } from 'node:module'
+import { isBuiltin } from 'node:module'
 import path from 'node:path'
 import { appManifestFile, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
 import { build } from 'rolldown'
@@ -35,8 +35,9 @@ const defaultPlatform: AppPlatform = { os: 'linux', cpu: 'x64' }
 export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	const { directory, out, abortSignal } = options
 	const platform = options.platform ?? defaultPlatform
+	abortSignal.throwIfAborted()
 	const entry = await packageEntry(directory)
-	const natives = await nativePackages(directory)
+	const natives = await nativePackages(directory, abortSignal)
 	await rm(out, { recursive: true, force: true })
 	await mkdir(out, { recursive: true })
 	abortSignal.throwIfAborted()
@@ -58,10 +59,6 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	const manifest: AppManifest = { entry: builtEntry, platform, description, builtAt: new Date().toISOString() }
 	await writeFile(path.join(out, appManifestFile), JSON.stringify(manifest, null, '\t'))
 	return manifest
-}
-
-function isBuiltin(id: string): boolean {
-	return id.startsWith('node:') || builtinModules.includes(id)
 }
 
 function isNative(id: string, natives: readonly NativePackage[]): boolean {

@@ -76,7 +76,8 @@ export function controlApi(engine: Engine, apps?: ControlApps): Hono {
 		})
 		api.delete('/apps/:name', async (c) => {
 			const name = c.req.param('name')
-			if (!(await store.remove(name))) throw new EngineError('not-found', `There is no app ${name}.`)
+			if (!AppName.safeParse(name).success) throw new EngineError('invalid', `${name} isn't an app name.`)
+			if (!(await store.remove(name, c.req.raw.signal))) throw new EngineError('not-found', `There is no app ${name}.`)
 			changed()
 			return c.json({ removed: name })
 		})

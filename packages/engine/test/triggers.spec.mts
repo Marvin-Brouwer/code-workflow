@@ -54,6 +54,9 @@ const everySecond = {
 	parameters: { issue: 1 },
 }
 
+/** Long enough for an every-second schedule to tick twice. */
+const moreThanTwoTicksMs = 2_500
+
 /** What the ingress answers for a delivery it took. */
 const Accepted = z.object({ run: z.string(), status: z.string() })
 
@@ -304,7 +307,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		// Act
 		await client.removeApp(testAppName, signal)
 		const afterRemoving = (await client.list(signal)).length
-		await new Promise((resolve) => setTimeout(resolve, 2_500))
+		await new Promise((resolve) => setTimeout(resolve, moreThanTwoTicksMs))
 
 		// Assert
 		expect((await client.list(signal)).length).toBe(afterRemoving)

@@ -29,7 +29,7 @@ export async function setUpRuntime(
 ): Promise<void> {
 	const { layout } = setup
 	await channel.prepare(abortSignal)
-	await uploadApp(sandbox, setup.tarball, layout.workflow, abortSignal)
+	await uploadApp(sandbox, setup.tarball, layout.app, abortSignal)
 	await channel.writeStart(setup.start, abortSignal)
-	await channel.startRuntime(['node', setup.entry], { signal: abortSignal, cwd: layout.workflow, env: setup.env })
+	await channel.startRuntime(['node', setup.entry], { signal: abortSignal, cwd: layout.app, env: setup.env })
 }

@@ -3,7 +3,8 @@ import type { NoParameters, Workflow } from '../workflow/workflow.mts'
 import type { ScheduleTrigger } from './trigger.mts'
 
 /**
- * Shorthands for common schedules, at midnight in the engine's time zone. A week starts on Monday.
+ * Shorthands for common schedules: at the start of the hour, day, week (Monday) or month, in the
+ * engine's time zone.
  */
 export const scheduleShorthands = Object.freeze({
 	hourly: '0 * * * *',
@@ -41,7 +42,7 @@ export function schedule<Shape extends z.ZodRawShape>(
 	...[parameters]: ScheduleParameters<z.input<z.ZodObject<Shape>>>
 ): ScheduleTrigger {
 	const written = when.trim()
-	if (written.length === 0) throw new Error(`The schedule of ${workflow.name} has no cron expression.`)
+	if (written.length === 0) throw new Error(`The schedule of ${workflow.name} has no \`when\`: give a shorthand or a cron expression.`)
 	const cron = isShorthand(written) ? scheduleShorthands[written] : written
 	return Object.freeze({ kind: 'schedule', id: `${workflow.name} ${written}`, workflow, cron, parameters: parameters ?? {} })
 }

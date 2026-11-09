@@ -20,7 +20,7 @@ Ctrl+C shuts it down without leaving anything running. It pauses every running s
 
 ### Build and deploy an app
 
-An app is a package whose `main` in `package.json` is its entry file, which exports `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)). The engine doesn't take the source: it takes the app built, with its dependencies, so the sandbox has nothing to set up and only runs `node`.
+An app is a package whose `main` in `package.json` is its entry file, which exports `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)). The engine doesn't take the source: it takes the built app, bundled with its dependencies, so the sandbox has nothing to set up and only runs `node`.
 
 ```bash
 mesh-flow build    # bundles the entry file into .mesh-flow/app, with mesh-flow.json saying what it declares
@@ -101,7 +101,7 @@ import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const apps = await openAppStore('/var/lib/my-app/mesh-flow/apps')
+const apps = await openAppStore('/var/lib/my-app/mesh-flow/apps', abortSignal)
 await apps.deploy('example', '/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
 const engine = await Engine.open({ backend: microsandboxBackend(), store, apps, log: console.error }, abortSignal)
 

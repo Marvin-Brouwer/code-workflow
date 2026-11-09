@@ -77,7 +77,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let engine: Engine
 	let apps: AppStore
 	try {
-		apps = await openAppStore(path.join(options.home, 'apps'))
+		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
@@ -94,11 +94,11 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		throw error
 	}
 	const scheduler = createScheduler({ engine, log })
-	const changed = () => {
+	const armSchedules = () => {
 		scheduler.update(apps.list())
 	}
-	changed()
-	const api = getRequestListener(controlApi(engine, { store: apps, changed }).fetch)
+	armSchedules()
+	const api = getRequestListener(controlApi(engine, { store: apps, changed: armSchedules }).fetch)
 	listener = (request, response) => {
 		void api(request, response)
 	}

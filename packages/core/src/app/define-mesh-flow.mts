@@ -2,7 +2,8 @@ import { realpathSync } from 'node:fs'
 import path from 'node:path'
 import { mailboxEnvironmentVariable, type SandboxDescription } from '@mesh-flow/protocol'
 import { callSite } from '../run/call-site.mts'
-import { assertUnique, type WorkflowBundle } from '../triggers/define-workflows.mts'
+import { assertUniqueTriggers } from '../triggers/assert-unique-triggers.mts'
+import type { WorkflowBundle } from '../triggers/define-workflows.mts'
 import type { Trigger } from '../triggers/trigger.mts'
 import { startFromEngine } from '../workflow/start-from-engine.mts'
 
@@ -39,14 +40,14 @@ export interface MeshFlowApp {
  * Only the workflows listed here can be started by the UI, a webhook or a schedule. The CLI and
  * tests can still start any workflow the app's modules define.
  *
- * When the engine runs the built app (`node main.js` in the sandbox, or `mesh-flow build` on your
+ * When the engine runs the built app (`node main.mjs` in the sandbox, or `mesh-flow build` on your
  * machine), it starts by itself once the file is loaded, and does what it was asked: describe the
  * app, or run one workflow. Anywhere else, such as in a test that imports the entry file, it only
  * returns the app.
  */
 export function defineMeshFlow(options: MeshFlowOptions): MeshFlowApp {
 	const triggers = options.workflows.flatMap((listed) => ('kind' in listed ? [listed] : listed.triggers))
-	assertUnique(triggers)
+	assertUniqueTriggers(triggers)
 	const app: MeshFlowApp = Object.freeze({ sandbox: options.sandbox, triggers: Object.freeze(triggers) })
 	if (isEntryOfEngineRun(callSite(1)?.file)) {
 		// After the whole module has loaded, so everything the file defines is there.

@@ -1,9 +1,16 @@
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { type AppManifest, appManifestFile, type TriggerDescription, type WorkflowDescription } from '@mesh-flow/protocol'
+import {
+	type AppManifest,
+	appManifestFile,
+	mailboxEnvironmentVariable,
+	mailboxLayout,
+	type TriggerDescription,
+	type WorkflowDescription,
+} from '@mesh-flow/protocol'
 import type { AppStore, AppVersion } from '../../src/apps/app-store.mts'
-import { withPackedApp } from '../../src/cli/pack-app.mts'
+import { withPackedApp } from '../../src/cli/with-packed-app.mts'
 import type { ControlClient, DeployedApp } from '../../src/control/control-client.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 
@@ -17,6 +24,13 @@ export const hostMailbox = pathToFileURL(path.join(sources, 'runtime-mailbox.mts
 
 /** Imports the mailbox from the copy {@link builtApp} makes for a real sandbox. */
 export const copiedMailbox = '../mesh-flow/runtime-mailbox.mts'
+
+/** How long a test gives a deploy. */
+const deployTimeoutMs = 10_000
+
+function deploySignal(): AbortSignal {
+	return AbortSignal.timeout(deployTimeoutMs)
+}
 
 /** The app tests deploy, unless they name another. */
 export const testAppName = 'team'
@@ -34,6 +48,7 @@ ${body}
 `
 }
 
+/** How {@link builtApp} lays out a test app. */
 export interface TestAppOptions {
 	/** The sandbox image. Default `host`, for the host backend. */
 	readonly image?: string
@@ -50,7 +65,8 @@ export interface TestAppOptions {
  * `workflows/<name>.mts`, so each test workflow is a runtime script of its own.
  */
 const dispatchingEntry = `import { readFileSync } from 'node:fs'
-const start = JSON.parse(readFileSync(process.env.MESH_FLOW_MAILBOX + '/start.json', 'utf8'))
+const startFile = process.env[${JSON.stringify(mailboxEnvironmentVariable)}] + '/${path.posix.basename(mailboxLayout('/').startFile)}'
+const start = JSON.parse(readFileSync(startFile, 'utf8'))
 await import('./workflows/' + start.workflow + '.mts')
 `
 
@@ -93,7 +109,7 @@ export async function deployTestApp(
 	options: TestAppOptions & { readonly name?: string } = {},
 ): Promise<AppVersion> {
 	const folder = await builtApp(workflows, options)
-	return withPackedApp(folder, (tarball) => apps.deploy(options.name ?? testAppName, tarball, AbortSignal.timeout(10_000)))
+	return withPackedApp(folder, (tarball) => apps.deploy(options.name ?? testAppName, tarball, deploySignal()), deploySignal())
 }
 
 /** Starts `workflow` of the test app through its user trigger. */
@@ -108,5 +124,5 @@ export async function deployThroughApi(
 	options: TestAppOptions = {},
 ): Promise<DeployedApp> {
 	const folder = await builtApp(workflows, options)
-	return withPackedApp(folder, (tarball) => client.deploy(testAppName, tarball, AbortSignal.timeout(10_000)))
+	return withPackedApp(folder, (tarball) => client.deploy(testAppName, tarball, deploySignal()), deploySignal())
 }

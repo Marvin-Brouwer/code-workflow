@@ -1,3 +1,4 @@
+import { assertUniqueTriggers } from './assert-unique-triggers.mts'
 import type { Trigger } from './trigger.mts'
 
 /** Triggers that go together, such as the ones a package ships, for the `workflows` of `defineMeshFlow`. */
@@ -15,22 +16,6 @@ export interface WorkflowBundle {
  * ```
  */
 export function defineWorkflows(...triggers: Trigger[]): WorkflowBundle {
-	assertUnique(triggers)
+	assertUniqueTriggers(triggers)
 	return Object.freeze({ triggers: Object.freeze([...triggers]) })
-}
-
-/** Throws when two triggers of the same kind have the same id. */
-export function assertUnique(triggers: readonly Trigger[]): void {
-	const seen = new Set<string>()
-	for (const trigger of triggers) {
-		const key = `${trigger.kind} ${trigger.id}`
-		if (seen.has(key)) throw new Error(`The ${trigger.kind} trigger ${trigger.id} is listed twice.${hintFor(trigger)}`)
-		seen.add(key)
-	}
-}
-
-function hintFor(trigger: Trigger): string {
-	if (trigger.kind === 'webhook') return ' Give the second one a name of its own: webhook(workflow, schema, { name }).'
-	if (trigger.kind === 'schedule') return ' A workflow has one schedule per cron expression.'
-	return ''
 }

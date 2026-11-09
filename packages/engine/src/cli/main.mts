@@ -5,10 +5,10 @@ import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
 import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
-import { Command, InvalidArgumentError } from 'commander'
+import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
 import { AppName, WebhookName } from '../apps/names.mts'
-import { controlClient, type ControlClient } from '../control/control-client.mts'
+import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
@@ -18,7 +18,7 @@ import { appNameOf } from './app-name.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
-import { withPackedApp } from './pack-app.mts'
+import { withPackedApp } from './with-packed-app.mts'
 import { watchApp } from './watch-app.mts'
 
 /** How long a CLI command waits for the engine. */
@@ -29,6 +29,9 @@ const buildTimeoutMs = 10 * 60_000
 
 /** Where `build` puts the built app, and where `deploy` takes it from, relative to the app. */
 const defaultOut = path.join('.mesh-flow', 'app')
+
+/** The sandbox's CPU when `--cpu` doesn't say. */
+const defaultCpu: AppPlatform['cpu'] = 'x64'
 
 /** How long closing the backend may take when the engine fails to start. */
 const closeTimeoutMs = 60_000
@@ -52,6 +55,21 @@ function log(message: string): void {
 
 function requestSignal(): AbortSignal {
 	return AbortSignal.timeout(requestTimeoutMs)
+}
+
+/** The sandbox's platform: always Linux, on `cpu`. */
+function sandboxPlatform(cpu: AppPlatform['cpu']): AppPlatform {
+	return { os: 'linux', cpu }
+}
+
+/** `-C, --directory`: the app's repository, which every app command works from. */
+function directoryOption(): Option {
+	return new Option('-C, --directory <directory>', "the app's repository").default(process.cwd())
+}
+
+/** `--app`: another name than the one in the app's package.json. */
+function appOption(): Option {
+	return new Option('--app <name>', "the app's name (default: the name in package.json)")
 }
 
 /** The `mesh-flow` command line. */
@@ -97,16 +115,16 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description(
 			'Builds the app whose package.json is here into one file, with its native dependencies for the sandbox, and describes it. CI runs this.',
 		)
-		.option('-C, --directory <directory>', "the app's repository", process.cwd())
+		.addOption(directoryOption())
 		.option('-o, --out <folder>', 'where the built app goes', defaultOut)
-		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, 'x64')
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, defaultCpu)
 		.action(async (options: { directory: string; out: string; cpu: AppPlatform['cpu'] }) => {
 			const directory = path.resolve(options.directory)
 			const out = path.resolve(directory, options.out)
 			const manifest = await buildApp({
 				directory,
 				out,
-				platform: { os: 'linux', cpu: options.cpu },
+				platform: sandboxPlatform(options.cpu),
 				abortSignal: AbortSignal.timeout(buildTimeoutMs),
 			})
 			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
@@ -116,12 +134,16 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.command('deploy')
 		.description('Hands a built app to the engine on this machine as the new current version. Its webhooks and schedules follow it.')
 		.argument('[folder]', 'the built app', defaultOut)
-		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
-		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.addOption(directoryOption())
+		.addOption(appOption())
 		.action(async (folder: string, options: { directory: string; app?: string }) => {
 			const directory = path.resolve(options.directory)
 			const name = await appNameOf(directory, options.app)
-			const deployed = await withPackedApp(path.resolve(directory, folder), (tarball) => client().deploy(name, tarball, requestSignal()))
+			const deployed = await withPackedApp(
+				path.resolve(directory, folder),
+				(tarball) => client().deploy(name, tarball, requestSignal()),
+				requestSignal(),
+			)
 			console.log(`${deployed.name}  ${deployed.version}`)
 		})
 
@@ -130,9 +152,9 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description(
 			'Builds and deploys the app here to the engine on this machine, again on every change, so its triggers are live while you work.',
 		)
-		.option('-C, --directory <directory>', "the app's repository", process.cwd())
-		.option('--app <name>', "the app's name (default: the name in package.json)")
-		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, 'x64')
+		.addOption(directoryOption())
+		.addOption(appOption())
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, defaultCpu)
 		.action(async (options: { directory: string; app?: string; cpu: AppPlatform['cpu'] }) => {
 			const directory = path.resolve(options.directory)
 			const name = await appNameOf(directory, options.app)
@@ -143,9 +165,9 @@ export async function main(argv: readonly string[]): Promise<void> {
 			})
 			const buildAndDeploy = async () => {
 				try {
-					const signal = AbortSignal.any([stopping.signal, AbortSignal.timeout(buildTimeoutMs)])
-					await buildApp({ directory, out, platform: { os: 'linux', cpu: options.cpu }, abortSignal: signal })
-					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, signal))
+					const abortSignal = AbortSignal.any([stopping.signal, AbortSignal.timeout(buildTimeoutMs)])
+					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
+					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.name} ${deployed.version}.`)
 				} catch (error) {
 					if (!stopping.signal.aborted) log(`Not deployed: ${messageOf(error)}`)
@@ -153,7 +175,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			}
 			await buildAndDeploy()
 			log('Watching for changes. Ctrl+C stops.')
-			watchApp(directory, buildAndDeploy, stopping.signal)
+			watchApp(directory, buildAndDeploy, log, stopping.signal)
 		})
 
 	program
@@ -164,8 +186,8 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.argument('<kind>', 'user, webhook or schedule', parseTriggerKind)
 		.argument('<trigger>', "its id: the workflow for a user trigger, the webhook's name, or a schedule as `mesh-flow triggers` lists it")
 		.requiredOption('-p, --parameters <json>', "the workflow's parameters, or a webhook's payload: JSON, or @file")
-		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
-		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.addOption(directoryOption())
+		.addOption(appOption())
 		.action(async (kind: TriggerKind, id: string, options: { parameters: string; directory: string; app?: string }) => {
 			const input = await readJsonOrFile(options.parameters)
 			const app = await appNameOf(path.resolve(options.directory), options.app)
@@ -176,8 +198,8 @@ export async function main(argv: readonly string[]): Promise<void> {
 	program
 		.command('triggers')
 		.description("Lists the workflows and triggers of the app's current version.")
-		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
-		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.addOption(directoryOption())
+		.addOption(appOption())
 		.action(async (options: { directory: string; app?: string }) => {
 			const name = await appNameOf(path.resolve(options.directory), options.app)
 			const deployed = await deployedApp(client(), name)
@@ -308,7 +330,7 @@ async function readJsonOrFile(value: string): Promise<unknown> {
 }
 
 /** The current version of the deployed app called `name`. */
-async function deployedApp(client: ControlClient, name: string) {
+async function deployedApp(client: ControlClient, name: string): Promise<DeployedApp> {
 	const found = (await client.apps(requestSignal())).find((app) => app.name === name)
 	if (found === undefined) throw new Error(`There is no app ${name}. Deploy it with \`mesh-flow deploy\`, or run \`mesh-flow dev\`.`)
 	return found

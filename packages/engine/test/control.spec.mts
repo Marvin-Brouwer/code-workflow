@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { main } from '../src/cli/main.mts'
-import { withPackedApp } from '../src/cli/pack-app.mts'
+import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { controlClient, type ControlClient } from '../src/control/control-client.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
@@ -54,14 +54,14 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 	test('deploys an app, as the same version when the tarball is the same, lists it and removes it', async () => {
 		// Arrange
 		const { client } = await serve()
-
 		const folder = await builtApp({ ask })
 
 		// Act
-		const [deployed, again] = await withPackedApp(folder, async (tarball) => [
-			await client.deploy(testAppName, tarball, signal),
-			await client.deploy(testAppName, tarball, signal),
-		])
+		const [deployed, again] = await withPackedApp(
+			folder,
+			async (tarball) => [await client.deploy(testAppName, tarball, signal), await client.deploy(testAppName, tarball, signal)],
+			signal,
+		)
 		const listed = await client.apps(signal)
 		await client.removeApp(testAppName, signal)
 
@@ -75,8 +75,9 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 	test.each([
 		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
 		['an app that is not deployed', (client: ControlClient) => client.startRun({ ...userRun('develop'), abortSignal: signal }), 404],
-		['an app name that is not one', (client: ControlClient) => client.removeApp('Not An App', signal), 404],
-		['a tarball that is not a built app', (client: ControlClient) => client.deploy(testAppName, '/nowhere/app.tgz', signal), 500],
+		['removing an app that was never deployed', (client: ControlClient) => client.removeApp(testAppName, signal), 404],
+		['removing an app name that is not one', (client: ControlClient) => client.removeApp('Not An App', signal), 400],
+		['deploying a tarball that is not there', (client: ControlClient) => client.deploy(testAppName, '/nowhere/app.tgz', signal), 400],
 		['resuming a run that is not paused', (client: ControlClient) => client.resume('run-000000000000', signal), 404],
 		['an answer without a value', (client: ControlClient) => client.answer('run-000000000000', 'story', undefined, signal), 400],
 	])('refuses %s with the right status', async (_name, call, status) => {
@@ -101,6 +102,7 @@ describe.skipIf(process.platform !== 'linux')('the mesh-flow command with an eng
 		onTestFinished(() => {
 			printed.mockRestore()
 			errors.mockRestore()
+			process.exitCode = undefined
 		})
 		const command = (...args: string[]) => main(['node', 'mesh-flow', '--home', home, ...args])
 
@@ -111,7 +113,6 @@ describe.skipIf(process.platform !== 'linux')('the mesh-flow command with an eng
 
 		// Assert
 		expect(process.exitCode).toBe(1)
-		process.exitCode = 0
 		expect(errors).toHaveBeenCalledWith(expect.stringContaining('has no user trigger unlisted'))
 		expect(await client.apps(signal)).toEqual([expect.objectContaining({ name: testAppName })])
 		expect(await client.list(signal)).toEqual([expect.objectContaining({ workflow: 'ask', trigger: { kind: 'user', id: 'ask' } })])
@@ -123,6 +124,10 @@ describe('the mesh-flow command', () => {
 		// Arrange
 		const home = await temporaryDirectory()
 		const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+		onTestFinished(() => {
+			errors.mockRestore()
+			process.exitCode = undefined
+		})
 
 		// Act
 		await main(['node', 'mesh-flow', '--home', home, 'list'])
@@ -130,7 +135,5 @@ describe('the mesh-flow command', () => {
 		// Assert
 		expect(errors).toHaveBeenCalledWith(expect.stringContaining('No engine is running'))
 		expect(process.exitCode).toBe(1)
-		process.exitCode = 0
-		errors.mockRestore()
 	})
 })

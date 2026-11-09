@@ -4,12 +4,12 @@ import { defaultMailboxDirectory } from '@mesh-flow/protocol'
 export interface SandboxLayout {
 	/** The mailbox between the engine and the runtime. */
 	readonly mailbox: string
-	/** The uploaded workflow repository, where setup and the runtime run. */
-	readonly workflow: string
+	/** The unpacked built app, where the runtime runs. */
+	readonly app: string
 }
 
-/** The mailbox at the protocol's default place, and the workflow at `/workflow`. */
+/** The mailbox at the protocol's default place, and the app at `/app`. */
 export const defaultSandboxLayout: SandboxLayout = {
 	mailbox: defaultMailboxDirectory,
-	workflow: '/workflow',
+	app: '/app',
 }

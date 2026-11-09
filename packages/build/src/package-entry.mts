@@ -1,12 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { z } from 'zod'
-
-/** The parts of an app's `package.json` the build reads. */
-const PackageJson = z.object({
-	main: z.string().min(1).optional(),
-	dependencies: z.record(z.string(), z.string()).optional(),
-})
+import { AppPackageJson } from './app-package-json.mts'
 
 /** The app's entry file, from `main` in its `package.json`, as an absolute path. Throws when there is none. */
 export async function packageEntry(directory: string): Promise<string> {
@@ -17,7 +11,7 @@ export async function packageEntry(directory: string): Promise<string> {
 	} catch (error) {
 		throw new Error(`There is no readable package.json in ${directory}.`, { cause: error })
 	}
-	const { main } = PackageJson.parse(json)
+	const { main } = AppPackageJson.parse(json)
 	if (main === undefined) throw new Error(`${file} has no "main": point it at the entry file, the one that exports defineMeshFlow.`)
 	return path.resolve(directory, main)
 }

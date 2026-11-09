@@ -44,7 +44,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		// Arrange
 		const home = await temporaryDirectory()
 		const store = () => openRunStore(path.join(home, 'runs'))
-		const apps = await openAppStore(path.join(home, 'apps'))
+		const apps = await openAppStore(path.join(home, 'apps'), signal)
 		await deployTestApp(apps, { ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
 		const first = await Engine.open({ backend: await openBackend(), store: store(), apps }, signal)
 		onTestFinished(() => first.close(deadlines()))

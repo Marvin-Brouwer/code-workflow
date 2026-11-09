@@ -20,8 +20,8 @@ export { InputRequest, RuntimeRequest, WakeRequest } from '../runtime-request.mt
 export { RunStart, TriggerRef } from '../run-start.mts'
 export {
 	JsonSchema,
-	SignatureScheme,
 	SandboxDescription,
+	SignatureScheme,
 	TriggerDescription,
 	TriggerKind,
 	WorkflowDescription,

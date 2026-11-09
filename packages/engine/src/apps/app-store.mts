@@ -31,7 +31,7 @@ export interface AppStore {
 	/** Every app's current version. */
 	readonly list: () => AppVersion[]
 	/** Forgets an app. Runs that started on it keep their own copy. Whether there was one. */
-	readonly remove: (name: string) => Promise<boolean>
+	readonly remove: (name: string, abortSignal: AbortSignal) => Promise<boolean>
 }
 
 /** How many hex characters of the tarball's hash name a version. */
@@ -41,13 +41,21 @@ const tarballFile = 'app.tgz'
 const currentFile = 'current'
 
 /**
- * The apps in `root`, one folder per app, one folder per version in it, and a `current` file that
- * names the version that runs. Loads what's there; writes go one after another.
+ * What a removed app's folder is renamed to start with before it's deleted. `AppName` never starts
+ * with a dot, so `openAppStore` never takes such a folder for an app.
  */
-export async function openAppStore(root: string): Promise<AppStore> {
+const removedPrefix = '.removed-'
+
+/**
+ * The apps in `root`, one folder per app, one folder per version in it, and a `current` file that
+ * names the version that runs. Loads what's there, as long as `openSignal` allows; writes go one
+ * after another.
+ */
+export async function openAppStore(root: string, openSignal: AbortSignal): Promise<AppStore> {
 	await mkdir(root, { recursive: true })
 	const current = new Map<string, AppVersion>()
 	for (const entry of await readdir(root, { withFileTypes: true })) {
+		openSignal.throwIfAborted()
 		if (!entry.isDirectory() || !AppName.safeParse(entry.name).success) continue
 		const loaded = await loadCurrent(root, entry.name)
 		if (loaded !== undefined) current.set(entry.name, loaded)
@@ -61,13 +69,16 @@ export async function openAppStore(root: string): Promise<AppStore> {
 	return Object.freeze({
 		deploy: (name, tarball, abortSignal) =>
 			queued(async () => {
-				const parsedName = AppName.safeParse(name)
-				if (!parsedName.success) throw new EngineError('invalid', `${name} isn't an app name: use lowercase letters, digits and dashes.`)
+				abortSignal.throwIfAborted()
+				if (!AppName.safeParse(name).success)
+					throw new EngineError('invalid', `${name} isn't an app name: use lowercase letters, digits and dashes.`)
 				const version = (await sha256Of(tarball, abortSignal)).slice(0, versionLength)
 				const folder = path.join(root, name, version)
 				const manifest = await manifestIn(tarball)
+				abortSignal.throwIfAborted()
 				await mkdir(folder, { recursive: true })
 				await copyFile(tarball, path.join(folder, tarballFile))
+				abortSignal.throwIfAborted()
 				await writeFileAtomic(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'))
 				await writeFileAtomic(path.join(root, name, currentFile), version)
 				const deployed: AppVersion = { name, version, manifest, tarball: path.join(folder, tarballFile) }
@@ -76,11 +87,12 @@ export async function openAppStore(root: string): Promise<AppStore> {
 			}),
 		current: (name) => current.get(name),
 		list: () => [...current.values()],
-		remove: (name) =>
+		remove: (name, abortSignal) =>
 			queued(async () => {
+				abortSignal.throwIfAborted()
 				if (!current.delete(name)) return false
 				// Moved aside first, so a crash halfway leaves no half app behind.
-				const gone = path.join(root, `.removed-${name}-${Date.now().toString(36)}`)
+				const gone = path.join(root, `${removedPrefix}${name}-${Date.now().toString(36)}`)
 				await rename(path.join(root, name), gone)
 				await rm(gone, { recursive: true, force: true })
 				return true
@@ -116,7 +128,7 @@ async function manifestIn(tarball: string): Promise<AppManifest> {
 		},
 	})
 	if (text === undefined) throw new EngineError('invalid', `The app has no ${appManifestFile}: deploy what mesh-flow build wrote.`)
-	const parsed = AppManifest.safeParse(parseJson(text))
+	const parsed = AppManifest.safeParse(parseJsonOrUndefined(text))
 	if (!parsed.success) throw new EngineError('invalid', `The app's ${appManifestFile} isn't valid:\n${z.prettifyError(parsed.error)}`)
 	const sandbox = SandboxSpec.safeParse(parsed.data.description.sandbox)
 	if (!sandbox.success)
@@ -124,7 +136,8 @@ async function manifestIn(tarball: string): Promise<AppManifest> {
 	return parsed.data
 }
 
-function parseJson(text: string): unknown {
+/** The value `text` holds as JSON, or nothing when it isn't JSON. */
+function parseJsonOrUndefined(text: string): unknown {
 	try {
 		return JSON.parse(text)
 	} catch {
@@ -132,8 +145,14 @@ function parseJson(text: string): unknown {
 	}
 }
 
+/** The SHA-256 of a tarball, in hex. A tarball that isn't there is the caller's mistake. */
 async function sha256Of(file: string, abortSignal: AbortSignal): Promise<string> {
 	const hash = createHash('sha256')
-	await pipeline(createReadStream(file), hash, { signal: abortSignal })
+	try {
+		await pipeline(createReadStream(file), hash, { signal: abortSignal })
+	} catch (error) {
+		if (hasErrorCode(error, 'ENOENT')) throw new EngineError('invalid', `There is no tarball at ${file}.`)
+		throw error
+	}
 	return hash.digest('hex')
 }

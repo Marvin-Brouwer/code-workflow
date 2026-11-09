@@ -89,8 +89,10 @@ export const startRunTimeoutMs = 60_000
  *
  * @example
  * ```ts
- * const engine = await Engine.open({ backend, store: openRunStore(runs), apps: await openAppStore(apps) }, signal)
- * const run = await engine.startRun({ app: 'team', trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal: signal })
+ * const store = openRunStore(path.join(home, 'runs'))
+ * const apps = await openAppStore(path.join(home, 'apps'), abortSignal)
+ * const engine = await Engine.open({ backend, store, apps }, abortSignal)
+ * const run = await engine.startRun({ app: 'team', trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
  * ```
@@ -167,8 +169,9 @@ export class Engine {
 
 	/**
 	 * Starts a run through one of an app's triggers, on the app's current version. Returns once the
-	 * record is saved; the sandbox is made and set up in the background, so follow the run's status. With a
-	 * `key`, a run that has it already is returned instead, also while it's being started.
+	 * record is saved; the sandbox is made and the app unpacked in the background, so follow the
+	 * run's status. With a `key`, a run that has it already is returned instead, also while it's
+	 * being started.
 	 */
 	async startRun(options: StartRunOptions): Promise<RunRecord> {
 		this.#assertOpen()
@@ -206,6 +209,7 @@ export class Engine {
 			throw error
 		})
 		waitSignal.throwIfAborted()
+		// Only the kind and the id, whatever else the caller's object holds: this goes into the record.
 		const trigger: TriggerRef = { kind, id: triggerId }
 		const start: RunStart = {
 			mode: 'run',
@@ -393,11 +397,11 @@ export class Engine {
 	}
 
 	/** Makes the sandbox, uploads the app, starts the runtime and follows it. */
-	async #start(id: RunId, active: ActiveRun, signal: AbortSignal): Promise<void> {
+	async #start(id: RunId, active: ActiveRun, abortSignal: AbortSignal): Promise<void> {
 		const record = this.get(id)
 		const { app } = record
 		const start = await this.#store.loadStart(record)
-		const sandbox = await this.#backend.create(app.sandbox, signal)
+		const sandbox = await this.#backend.create(app.sandbox, abortSignal)
 		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { sandbox: ref }, ['starting']).catch(async (error: unknown) => {
@@ -406,9 +410,9 @@ export class Engine {
 			throw error
 		})
 		const setup = { tarball: this.#store.appOf(id), entry: app.entry, layout: this.#layout, start, env: { [runIdEnvironmentVariable]: id } }
-		await setUpRuntime(sandbox, channel, setup, signal)
+		await setUpRuntime(sandbox, channel, setup, abortSignal)
 		await this.#update(id, { status: 'running' }, ['starting'])
-		await this.#pump(id, channel, signal)
+		await this.#pump(id, channel, abortSignal)
 	}
 
 	/** Follows the runtime's outbox until the run succeeds or fails. */

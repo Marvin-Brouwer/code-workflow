@@ -52,27 +52,27 @@ export function webhookPath(app: string, webhook: string): string {
  */
 export function webhookApi(options: WebhookApiOptions): Hono {
 	const { engine, current, secrets, log } = options
-	const app = new Hono()
+	const api = new Hono()
 	const refuse = (c: Context, status: 401 | 404, error: string, detail: string) => {
 		log(`Refused a delivery to ${c.req.path}: ${detail}`)
 		return c.json({ error }, status)
 	}
 	const notFound = 'There is no such webhook.'
 
-	app.post(
+	api.post(
 		'/webhooks/:app/:webhook',
 		bodyLimit({ maxSize: maxBodyBytes, onError: (c) => c.json({ error: 'The delivery is too large.' }, 413) }),
 		async (c) => {
-			const name = c.req.param('app')
+			const appName = c.req.param('app')
 			const id = c.req.param('webhook')
 			// Undeployed and unset look the same from outside, so names can't be probed.
-			const secret = await secrets.get(name, id)
+			const secret = await secrets.get(appName, id)
 			if (secret === undefined)
-				return refuse(c, 404, notFound, `no secret is set; set one with \`mesh-flow webhook secret ${name} ${id}\`.`)
-			const deployed = current(name)
-			if (deployed === undefined) return refuse(c, 404, notFound, `there is no app ${name}; deploy it with \`mesh-flow deploy\`.`)
+				return refuse(c, 404, notFound, `no secret is set; set one with \`mesh-flow webhook secret ${appName} ${id}\`.`)
+			const deployed = current(appName)
+			if (deployed === undefined) return refuse(c, 404, notFound, `there is no app ${appName}; deploy it with \`mesh-flow deploy\`.`)
 			const trigger = deployed.manifest.description.triggers.find((candidate) => candidate.kind === 'webhook' && candidate.id === id)
-			if (trigger?.kind !== 'webhook') return refuse(c, 404, notFound, `version ${deployed.version} of ${name} has no webhook ${id}.`)
+			if (trigger?.kind !== 'webhook') return refuse(c, 404, notFound, `version ${deployed.version} of ${appName} has no webhook ${id}.`)
 			const body = new Uint8Array(await c.req.arrayBuffer())
 			if (!signatureFits(trigger.signature, secret, c.req.raw.headers, body)) {
 				const { scheme, header } = trigger.signature
@@ -88,12 +88,12 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 			const problems = payloadProblems(trigger.payload, payload)
 			if (problems.length > 0) return c.json({ error: `The delivery is not for webhook ${id}.`, problems }, 422)
 
-			const key = `webhook ${name}/${id}/${deliveryName(trigger.deliveryHeader, c.req.raw.headers, body)}`
+			const key = `webhook ${appName}/${id}/${deliveryName(trigger.deliveryHeader, c.req.raw.headers, body)}`
 			const known = engine.runWithKey(key)
 			if (known !== undefined) return c.json({ run: known.id, status: known.status }, 200)
 			// Not the request's signal: a sender that hangs up after this point doesn't undo the delivery.
 			const record = await engine.startRun({
-				app: name,
+				app: appName,
 				input: payload,
 				trigger: { kind: 'webhook', id },
 				key,
@@ -103,12 +103,12 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 		},
 	)
 
-	app.onError((error, c) => {
+	api.onError((error, c) => {
 		if (error instanceof EngineError && error.code === 'conflict') return c.json({ error: 'The engine is shutting down.' }, 503)
 		log(`A delivery to ${c.req.path} failed: ${messageOf(error)}`)
 		return c.json({ error: 'The delivery could not be handled.' }, 500)
 	})
-	return app
+	return api
 }
 
 /** What names a delivery: the delivery header's value, or a hash of the body when there is none. */

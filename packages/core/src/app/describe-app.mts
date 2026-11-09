@@ -1,7 +1,7 @@
 import type { TriggerDescription, WorkflowsDescription } from '@mesh-flow/protocol'
 import { jsonSchemaOf } from '../tool/json-schema.mts'
-import type { AnyWorkflow } from '../workflow/workflow.mts'
 import type { Trigger } from '../triggers/trigger.mts'
+import type { AnyWorkflow } from '../workflow/workflow.mts'
 import { definedWorkflows } from '../workflow/workflow-registry.mts'
 import type { MeshFlowApp } from './define-mesh-flow.mts'
 

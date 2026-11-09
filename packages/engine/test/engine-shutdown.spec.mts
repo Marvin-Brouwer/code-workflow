@@ -60,7 +60,7 @@ const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortS
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
-	const apps = await openAppStore(path.join(home, 'apps'))
+	const apps = await openAppStore(path.join(home, 'apps'), signal)
 	await deployTestApp(apps, { hello: runtimeScript('') })
 	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), apps }, signal)
 	onTestFinished(() => engine.close(shortDeadlines()))

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { mailboxEnvironmentVariable, mailboxLayout, RuntimeMessage, type WorkflowsDescription } from '@mesh-flow/protocol'
+import { mailboxEnvironmentVariable, mailboxLayout, RuntimeMessage, type RunStart, type WorkflowsDescription } from '@mesh-flow/protocol'
 
 /** How much of the app's output a failure shows. */
 const shownOutputLength = 4_000
@@ -17,7 +17,7 @@ export async function describeBuiltApp(entry: string, abortSignal: AbortSignal):
 	try {
 		const layout = mailboxLayout(scratch)
 		await mkdir(layout.inbox, { recursive: true })
-		await writeFile(layout.startFile, JSON.stringify({ mode: 'describe' }))
+		await writeFile(layout.startFile, JSON.stringify({ mode: 'describe' } satisfies RunStart))
 		const output = await runToEnd(entry, { ...process.env, [mailboxEnvironmentVariable]: scratch }, abortSignal)
 		const lines = await readFile(layout.outbox, 'utf8').catch(() => '')
 		for (const line of lines.split('\n')) {

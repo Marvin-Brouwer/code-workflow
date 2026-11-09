@@ -4,26 +4,27 @@ import path from 'node:path'
 import { AppManifest } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
-import { withPackedApp } from '../src/cli/pack-app.mts'
+import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { builtApp, runtimeScript, testAppName } from './support/test-app.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
-const signal = new AbortController().signal
+const abortSignal = new AbortController().signal
 const hello = { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }
 
 describe('openAppStore', () => {
 	test('deploys the same tarball as the same version, and finds it again when opened anew', async () => {
 		// Arrange
 		const root = await temporaryDirectory()
-		const store = await openAppStore(root)
+		const store = await openAppStore(root, abortSignal)
 		const folder = await builtApp(hello)
 
 		// Act
-		const [first, again] = await withPackedApp(folder, async (tarball) => [
-			await store.deploy(testAppName, tarball, signal),
-			await store.deploy(testAppName, tarball, signal),
-		])
-		const reopened = await openAppStore(root)
+		const [first, again] = await withPackedApp(
+			folder,
+			async (tarball) => [await store.deploy(testAppName, tarball, abortSignal), await store.deploy(testAppName, tarball, abortSignal)],
+			abortSignal,
+		)
+		const reopened = await openAppStore(root, abortSignal)
 
 		// Assert
 		expect(again.version).toBe(first.version)
@@ -34,9 +35,9 @@ describe('openAppStore', () => {
 
 	test('makes the last deploy the current version and keeps the earlier one for its runs', async () => {
 		// Arrange
-		const store = await openAppStore(await temporaryDirectory())
+		const store = await openAppStore(await temporaryDirectory(), abortSignal)
 		const deploy = async (workflows: Record<string, string>) =>
-			withPackedApp(await builtApp(workflows), (tarball) => store.deploy(testAppName, tarball, signal))
+			withPackedApp(await builtApp(workflows), (tarball) => store.deploy(testAppName, tarball, abortSignal), abortSignal)
 		const first = await deploy(hello)
 
 		// Act
@@ -49,35 +50,45 @@ describe('openAppStore', () => {
 		expect(existsSync(first.tarball)).toBe(true)
 	})
 
-	test('refuses a tarball without a manifest, and a name that is not one', async () => {
+	test('refuses a tarball without a manifest', async () => {
 		// Arrange
-		const store = await openAppStore(await temporaryDirectory())
+		const store = await openAppStore(await temporaryDirectory(), abortSignal)
 		const folder = await temporaryDirectory()
 		await writeFile(path.join(folder, 'main.mjs'), '')
+
+		// Act
+		const deploying = withPackedApp(folder, (tarball) => store.deploy(testAppName, tarball, abortSignal), abortSignal)
+
+		// Assert
+		await expect(deploying).rejects.toMatchObject({ code: 'invalid' })
+		await expect(deploying).rejects.toThrow('has no mesh-flow.json')
+		expect(store.list()).toEqual([])
+	})
+
+	test('refuses a name that is not an app name', async () => {
+		// Arrange
+		const store = await openAppStore(await temporaryDirectory(), abortSignal)
 		const app = await builtApp(hello)
 
 		// Act
-		const withoutManifest = withPackedApp(folder, (tarball) => store.deploy(testAppName, tarball, signal))
-		const badName = withPackedApp(app, (tarball) => store.deploy('Not An App', tarball, signal))
+		const deploying = withPackedApp(app, (tarball) => store.deploy('Not An App', tarball, abortSignal), abortSignal)
 
 		// Assert
-		await expect(withoutManifest).rejects.toMatchObject({ code: 'invalid' })
-		await expect(withoutManifest).rejects.toThrow('has no mesh-flow.json')
-		await expect(badName).rejects.toMatchObject({ code: 'invalid' })
+		await expect(deploying).rejects.toMatchObject({ code: 'invalid' })
 		expect(store.list()).toEqual([])
 	})
 
 	test('refuses a manifest with a sandbox the engine cannot make', async () => {
 		// Arrange
-		const store = await openAppStore(await temporaryDirectory())
+		const store = await openAppStore(await temporaryDirectory(), abortSignal)
 		const folder = await builtApp(hello)
 		const manifestFile = path.join(folder, 'mesh-flow.json')
 		const manifest = AppManifest.parse(JSON.parse(await readFile(manifestFile, 'utf8')))
-		const withoutCpus = { ...manifest, description: { ...manifest.description, sandbox: { ...manifest.description.sandbox, cpus: 0 } } }
-		await writeFile(manifestFile, JSON.stringify(withoutCpus))
+		const withZeroCpus = { ...manifest, description: { ...manifest.description, sandbox: { ...manifest.description.sandbox, cpus: 0 } } }
+		await writeFile(manifestFile, JSON.stringify(withZeroCpus))
 
 		// Act
-		const deploying = withPackedApp(folder, (tarball) => store.deploy(testAppName, tarball, signal))
+		const deploying = withPackedApp(folder, (tarball) => store.deploy(testAppName, tarball, abortSignal), abortSignal)
 
 		// Assert
 		await expect(deploying).rejects.toMatchObject({ code: 'invalid' })
@@ -86,16 +97,16 @@ describe('openAppStore', () => {
 	test('forgets a removed app, also when opened anew', async () => {
 		// Arrange
 		const root = await temporaryDirectory()
-		const store = await openAppStore(root)
-		await withPackedApp(await builtApp(hello), (tarball) => store.deploy(testAppName, tarball, signal))
+		const store = await openAppStore(root, abortSignal)
+		await withPackedApp(await builtApp(hello), (tarball) => store.deploy(testAppName, tarball, abortSignal), abortSignal)
 
 		// Act
-		const removed = await store.remove(testAppName)
-		const again = await store.remove(testAppName)
+		const removed = await store.remove(testAppName, abortSignal)
+		const again = await store.remove(testAppName, abortSignal)
 
 		// Assert
 		expect([removed, again]).toEqual([true, false])
 		expect(store.current(testAppName)).toBeUndefined()
-		expect((await openAppStore(root)).list()).toEqual([])
+		expect((await openAppStore(root, abortSignal)).list()).toEqual([])
 	})
 })

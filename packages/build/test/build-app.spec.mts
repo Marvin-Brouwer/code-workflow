@@ -7,7 +7,7 @@ import { buildApp } from '../src/build-app.mts'
 import { appRepository, describingEntry } from './support/app-repository.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
-const signal = new AbortController().signal
+const abortSignal = new AbortController().signal
 
 const description: WorkflowsDescription = {
 	sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: [] } },
@@ -27,7 +27,7 @@ describe('buildApp', () => {
 		const out = path.join(await temporaryDirectory(), 'app')
 
 		// Act
-		const manifest = await buildApp({ directory, out, abortSignal: signal })
+		const manifest = await buildApp({ directory, out, abortSignal })
 
 		// Assert
 		expect(manifest).toMatchObject({ entry: 'main.mjs', platform: { os: 'linux', cpu: 'x64' }, description })
@@ -43,7 +43,7 @@ describe('buildApp', () => {
 		const directory = await appRepository({ main: null })
 
 		// Act
-		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal: signal })
+		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal })
 
 		// Assert
 		await expect(building).rejects.toThrow('has no "main"')
@@ -54,7 +54,7 @@ describe('buildApp', () => {
 		const directory = await appRepository({ files: { 'main.mts': `console.error('no defineMeshFlow here')\n` } })
 
 		// Act
-		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal: signal })
+		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal })
 
 		// Assert
 		await expect(building).rejects.toThrow(/exited without describing itself[\s\S]*no defineMeshFlow here/)
@@ -65,7 +65,7 @@ describe('buildApp', () => {
 		const directory = await appRepository({ files: { 'main.mts': `import 'not-installed'\n` } })
 
 		// Act
-		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal: signal })
+		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal })
 
 		// Assert
 		await expect(building).rejects.toThrow(/not-installed[\s\S]*Is it installed\?/)
@@ -80,7 +80,7 @@ describe('buildApp', () => {
 		const other = process.arch === 'arm64' ? 'x64' : 'arm64'
 
 		// Act
-		const building = buildApp({ directory, out: path.join(directory, 'out'), platform: { os: 'linux', cpu: other }, abortSignal: signal })
+		const building = buildApp({ directory, out: path.join(directory, 'out'), platform: { os: 'linux', cpu: other }, abortSignal })
 
 		// Assert
 		await expect(building).rejects.toThrow(`compiled compile native code when installed, so the app has to be built on linux-${other}`)
