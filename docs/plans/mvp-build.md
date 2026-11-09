@@ -5,7 +5,8 @@ and its conformance suite runs on real backends in CI. Package 2,
 [`@mesh-flow/engine`](../../packages/engine/README.md), is built. Package 3,
 [`@mesh-flow/core`](../../packages/core/README.md), is built. Step 4, triggers, is built in core
 ([Triggers](../../packages/core/README.md#triggers)) and the engine
-([Triggers](../../packages/engine/README.md#triggers)). Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+([Triggers](../../packages/engine/README.md#triggers)). Step 5,
+[`@mesh-flow/gateway`](../../packages/gateway/README.md), is built, with its engine and core sides. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
@@ -123,9 +124,8 @@ credentials stay as they are.
   gateway), `dev` and `trigger <kind> <id> -p`; generic webhook ingress (the built-in signature
   schemes, JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no
   connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers` lists
-  what the current version declares. Webhook secrets come from the local credential store; until
-  the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the
-  engine's home directory, never in the app.
+  what the current version declares. Webhook secrets come from the gateway's credential store
+  (step 5), set with the CLI, never in the app.
 - **Docs:** the core, build and engine READMEs, and `examples/example` gets a `package.json` and an
   entry file.
 - **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no

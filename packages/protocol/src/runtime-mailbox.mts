@@ -1,5 +1,5 @@
 import { appendFileSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Answer, RuntimeMessage } from './runtime-message.mts'
 import { answerFile, mailboxEnvironmentVariable, mailboxLayout, type MailboxLayout } from './mailbox-layout.mts'
@@ -37,7 +37,7 @@ export class RuntimeMailbox {
 	 * under the same id would get the old answer. Sending it twice throws.
 	 */
 	send(message: RuntimeMessage): void {
-		const requestId = message.type === 'request' ? message.request.id : undefined
+		const requestId = requestIdOf(message)
 		if (requestId !== undefined) this.#assertUnused(requestId)
 		appendFileSync(this.#layout.outbox, `${JSON.stringify(message)}\n`)
 		// Claimed once it's sent, so a send that failed can be tried again with the same id.
@@ -53,6 +53,32 @@ export class RuntimeMailbox {
 	async readStart(abortSignal: AbortSignal): Promise<unknown> {
 		const parsed: unknown = JSON.parse(await readFile(this.#layout.startFile, { encoding: 'utf8', signal: abortSignal }))
 		return parsed
+	}
+
+	/**
+	 * The run's gateway endpoint and its tokens, as JSON: check it with `EndpointGrant`. Removed once
+	 * it's read, so the tokens are only in the runtime's memory. `undefined` when the engine wrote
+	 * none, because it has no gateway.
+	 */
+	async takeGrant(abortSignal: AbortSignal): Promise<unknown> {
+		const text = await readFile(this.#layout.grantFile, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
+			if (isMissing(error)) return undefined
+			throw error
+		})
+		if (text === undefined) return undefined
+		await rm(this.#layout.grantFile, { force: true })
+		const parsed: unknown = JSON.parse(text)
+		return parsed
+	}
+
+	/**
+	 * Waits for the answer to a call, then removes it from the inbox: it holds the endpoint's next
+	 * token, which belongs in the runtime's memory only.
+	 */
+	async take(requestId: string, abortSignal: AbortSignal): Promise<Answer> {
+		const answer = await this.answer(requestId, abortSignal)
+		await rm(answerFile(this.#layout, requestId), { force: true })
+		return answer
 	}
 
 	/** Waits until the engine has answered the request with this id. */
@@ -71,6 +97,13 @@ export class RuntimeMailbox {
 			})
 		}
 	}
+}
+
+/** The id a message waits for an answer under: a request's or a call's. */
+function requestIdOf(message: RuntimeMessage): string | undefined {
+	if (message.type === 'request') return message.request.id
+	if (message.type === 'call') return message.id
+	return undefined
 }
 
 /** The engine writes `{ value }`, or `{}` for a wake. */

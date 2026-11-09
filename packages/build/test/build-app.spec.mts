@@ -14,6 +14,8 @@ const description: WorkflowsDescription = {
 	sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: [] } },
 	workflows: [{ name: 'greet', parameters: { type: 'object' } }],
 	triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }],
+	tools: [],
+	models: [],
 }
 
 const greetingPackage = { files: { 'index.js': `export const punctuation = '!'\n` } }

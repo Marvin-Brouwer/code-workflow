@@ -26,7 +26,7 @@ function run(id: string, status: RunStatus, sandbox?: string, backend: BackendNa
 		id,
 		workflow: 'develop',
 		trigger: { kind: 'user', id: 'develop' },
-		app: { name: 'team', version: '0123456789ab', entry: 'main.mjs', sandbox: spec },
+		app: { name: 'team', version: '0123456789ab', entry: 'main.mjs', sandbox: spec, tools: [] },
 		status,
 		cursor: 0,
 		pending: [],

@@ -20,6 +20,8 @@ export interface ToolSpec {
 	 * failing action.
 	 */
 	readonly prepare: (input: unknown) => (context: ToolContext) => Promise<unknown>
+	/** Set for a stub of a host tool: it runs on the host, through the gateway, and a loop that has it opens an endpoint for it. */
+	readonly runsOnHost?: true
 }
 
 /** A tool's input didn't fit its schema. From code that fails the call; from an agent it goes back to the agent. */
@@ -76,17 +78,28 @@ export function tool<Input extends z.ZodType, Output>(
 		readonly action: (input: z.output<Input>, context: ToolContext) => Promise<Output>
 	},
 ): Tool<z.input<Input>, Output> {
-	if (!toolNamePattern.test(name))
-		throw new Error(`Tool name ${name} doesn't work for every model provider: use letters, digits, _ and -, up to 64.`)
+	assertToolName(name)
 	const prepare = (input: unknown) => {
 		const parsed = definition.input.safeParse(input)
 		if (!parsed.success) throw new ToolInputError(`The input of ${name} doesn't fit:\n${z.prettifyError(parsed.error)}`)
 		return (context: ToolContext): Promise<Output> => definition.action(parsed.data, context)
 	}
-	const spec: ToolSpec = { name, description: definition.description, input: definition.input, prepare }
-	const call = (input: z.input<Input>, context?: ToolContext): Promise<Output> => callFromCode(spec.name, prepare, input, context)
-	Object.defineProperty(call, 'name', { value: name })
-	return Object.assign(call, { description: definition.description, [toolSpec]: spec })
+	return toolOf<z.input<Input>, Output>({ name, description: definition.description, input: definition.input, prepare })
+}
+
+/** The tool for a spec: a function that checks its input and runs, and the spec behind it. */
+export function toolOf<Input, Output>(spec: ToolSpec): Tool<Input, Output> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the spec's action returns what the tool's definition says
+	const prepare = spec.prepare as (input: unknown) => (context: ToolContext) => Promise<Output>
+	const call = (input: Input, context?: ToolContext): Promise<Output> => callFromCode(spec.name, prepare, input, context)
+	Object.defineProperty(call, 'name', { value: spec.name })
+	return Object.assign(call, { description: spec.description, [toolSpec]: spec })
+}
+
+/** Throws when `name` isn't a tool name every model provider accepts. */
+export function assertToolName(name: string): void {
+	if (!toolNamePattern.test(name))
+		throw new Error(`Tool name ${name} doesn't work for every model provider: use letters, digits, _ and -, up to 64.`)
 }
 
 /** Whether a value is a tool made by {@link tool}. */

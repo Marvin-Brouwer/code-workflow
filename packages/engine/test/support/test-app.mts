@@ -58,6 +58,10 @@ export interface TestAppOptions {
 	readonly workflows?: readonly WorkflowDescription[]
 	/** The triggers the app lists. Default: a user trigger for each workflow file. */
 	readonly triggers?: readonly TriggerDescription[]
+	/** The host tools the app calls through the gateway. Default: none. */
+	readonly tools?: readonly string[]
+	/** The models the app's agents use. Default: none. */
+	readonly models?: readonly string[]
 }
 
 /**
@@ -87,6 +91,8 @@ export async function builtApp(workflows: Record<string, string>, options: TestA
 			sandbox: { image: options.image ?? 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
 			workflows: options.workflows ? [...options.workflows] : names.map((name) => ({ name, parameters: { type: 'object' } })),
 			triggers: options.triggers ? [...options.triggers] : names.map((name) => ({ kind: 'user', id: name, workflow: name })),
+			tools: [...(options.tools ?? [])],
+			models: [...(options.models ?? [])],
 		},
 		builtAt: new Date().toISOString(),
 	}

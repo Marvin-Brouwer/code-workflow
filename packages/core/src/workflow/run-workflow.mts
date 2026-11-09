@@ -3,7 +3,10 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { Models } from '@earendil-works/pi-ai'
 import { z } from 'zod'
+import type { GatewayClient } from '../gateway/gateway-client.mts'
+import { gatewayModels } from '../gateway/gateway-models.mts'
 import { openAgentHarness, type AgentHarness } from '../loop/agent-harness.mts'
+import { givenModels, type ModelSource } from '../loop/model-source.mts'
 import { describeError } from '../run/describe-error.mts'
 import type { RunChannel } from '../run/run-channel.mts'
 import { emitEvent, inEventOf } from '../run/run-events.mts'
@@ -22,8 +25,13 @@ export interface RunOptions<Parameters = unknown> {
 	readonly channel: RunChannel
 	/** Stops the run. Everything in it gets this signal; the run settles promptly once it aborts. */
 	readonly abortSignal: AbortSignal
-	/** The model providers the run's agents use. Without them, the first loop fails. */
+	/**
+	 * The model providers the run's agents use, given directly, as in a test. Without them, the
+	 * agents' models come through the gateway; without either, the first loop fails.
+	 */
 	readonly models?: Models
+	/** The run's side of the gateway, for host tools and model calls. Under the engine, the entry file makes it. */
+	readonly gateway?: GatewayClient
 	/** The run's workspace directory, made when missing. Default `./workspace`. */
 	readonly workspace?: string
 	/** A SQLite file for the agents' conversations. Default: in memory. */
@@ -61,6 +69,7 @@ export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOption
 	const workspace = path.resolve(options.workspace ?? 'workspace')
 	const counts = new Map<string, number>()
 	let agents: Promise<AgentHarness> | undefined
+	const models = modelSourceOf(options)
 	const run: RunContext = {
 		runId: options.runId ?? randomUUID(),
 		attempt: randomUUID().slice(0, 8),
@@ -73,8 +82,8 @@ export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOption
 			counts.set(name, next)
 			return next
 		},
+		gateway: options.gateway,
 		agents: () => {
-			const { models } = options
 			if (models === undefined) {
 				return Promise.reject(
 					new Error(
@@ -113,6 +122,13 @@ export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOption
 	if (agents !== undefined) await (await agents.catch(() => undefined))?.close(closeMs)
 	options.channel.send(outcome.status === 'succeeded' ? { type: 'succeeded' } : { type: 'failed', error: describeError(outcome.error) })
 	return outcome
+}
+
+/** Where the run's agents get their models: given ones first, otherwise the gateway's. */
+function modelSourceOf(options: RunOptions): ModelSource | undefined {
+	if (options.models !== undefined) return givenModels(options.models)
+	if (options.gateway !== undefined) return gatewayModels(options.gateway)
+	return undefined
 }
 
 /** The run's parameters, checked against the workflow's. Throws, naming what doesn't fit. */

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ToolName } from './gateway-call.mts'
 
 /** A JSON Schema, as a plain object. */
 export const JsonSchema = z.record(z.string(), z.unknown())
@@ -61,10 +62,17 @@ export const SandboxDescription = z.object({
 })
 export type SandboxDescription = z.infer<typeof SandboxDescription>
 
-/** What an entry file declares: its sandbox, every workflow its modules define, and what can start them. */
+/**
+ * What an entry file declares: its sandbox, every workflow its modules define, what can start them,
+ * and the host tools its modules call through the gateway. A run's gateway takes only those.
+ */
 export const WorkflowsDescription = z.object({
 	sandbox: SandboxDescription,
 	workflows: z.array(WorkflowDescription),
 	triggers: z.array(TriggerDescription),
+	/** Apps built before the gateway list none. */
+	tools: z.array(ToolName).default([]),
+	/** The model ids of the app's agents, which a trigger checks against the providers before it starts a run. */
+	models: z.array(z.string().min(1)).default([]),
 })
 export type WorkflowsDescription = z.infer<typeof WorkflowsDescription>

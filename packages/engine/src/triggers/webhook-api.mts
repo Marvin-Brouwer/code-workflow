@@ -43,7 +43,7 @@ export function webhookPath(app: string, webhook: string): string {
  * | the body is JSON, up to 25 MB | 400, 413 |
  * | the payload fits the input side of the trigger's schema, as JSON Schema | 422 |
  *
- * Nothing before the signature check reads more than the secrets file and what the app's build
+ * Nothing before the signature check reads more than the credential store and what the app's build
  * declared, so an unsigned request never costs a sandbox.
  *
  * A delivery that passes gets 202 and a new run, named by its delivery id; a redelivery gets 200
@@ -66,7 +66,7 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 			const appName = c.req.param('app')
 			const id = c.req.param('webhook')
 			// Undeployed and unset look the same from outside, so names can't be probed.
-			const secret = await secrets.get(appName, id)
+			const secret = await secrets.get(appName, id, c.req.raw.signal)
 			if (secret === undefined)
 				return refuse(c, 404, notFound, `no secret is set; set one with \`mesh-flow webhook secret ${appName} ${id}\`.`)
 			const deployed = current(appName)
@@ -105,6 +105,10 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 
 	api.onError((error, c) => {
 		if (error instanceof EngineError && error.code === 'conflict') return c.json({ error: 'The engine is shutting down.' }, 503)
+		if (error instanceof EngineError && error.code === 'unavailable') {
+			log(`A delivery to ${c.req.path} wasn't started: ${error.message}`)
+			return c.json({ error: "The engine can't run this app's models now." }, 503)
+		}
 		// Removed, or deployed again without the webhook, since the checks above.
 		if (error instanceof EngineError && error.code === 'not-found') return c.json({ error: notFound }, 404)
 		log(`A delivery to ${c.req.path} failed: ${messageOf(error)}`)

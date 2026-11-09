@@ -151,6 +151,8 @@ describe('defineMeshFlow', () => {
 				{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },
 				{ kind: 'schedule', id: 'report 0 7 * * 1', workflow: 'report', cron: '0 7 * * 1', parameters: {} },
 			],
+			tools: [],
+			models: [],
 		})
 	})
 })

@@ -6,7 +6,7 @@ import { RuntimeMailbox } from '../src/runtime-mailbox.mts'
 import { RuntimeMessage } from '../src/runtime-message.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
-const signal = new AbortController().signal
+const abortSignal = new AbortController().signal
 /** Past the mailbox's first look for an answer and well before its next one (it looks every 250 ms). */
 const pastFirstLookMs = 50
 
@@ -33,7 +33,7 @@ describe('RuntimeMailbox', () => {
 		const mailbox = new RuntimeMailbox(directory)
 
 		// Act
-		const start = await mailbox.readStart(signal)
+		const start = await mailbox.readStart(abortSignal)
 
 		// Assert
 		expect(start).toEqual({ mode: 'describe' })
@@ -77,7 +77,7 @@ describe('RuntimeMailbox', () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await mkdir(mailboxLayout(directory).inbox)
-		const waiting = new RuntimeMailbox(directory).answer('story', signal)
+		const waiting = new RuntimeMailbox(directory).answer('story', abortSignal)
 
 		// Act
 		await writeFile(answerFile(mailboxLayout(directory), 'story'), JSON.stringify({ value: { key: 'ABC-1' } }))
@@ -100,7 +100,7 @@ describe('RuntimeMailbox', () => {
 		await expect(waiting).rejects.toThrow()
 	})
 
-	test('rejects with the reason the signal aborted with, also between two looks', async () => {
+	test('rejects with the reason the abortSignal aborted with, also between two looks', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await mkdir(mailboxLayout(directory).inbox)
@@ -113,6 +113,59 @@ describe('RuntimeMailbox', () => {
 
 		// Assert
 		await expect(waiting).rejects.toThrow('The run was stopped (SIGTERM).')
+	})
+
+	test('takes the gateway grant once, and removes the file', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const grant = { endpoint: 'run', tokens: ['a'.repeat(32)] }
+		await writeFile(mailboxLayout(directory).grantFile, JSON.stringify(grant))
+		const mailbox = new RuntimeMailbox(directory)
+
+		// Act
+		const taken = await mailbox.takeGrant(abortSignal)
+
+		// Assert
+		expect(taken).toEqual(grant)
+		expect(await mailbox.takeGrant(abortSignal)).toBeUndefined()
+	})
+
+	test("takes a call's answer and removes it from the inbox", async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const layout = mailboxLayout(directory)
+		await mkdir(layout.inbox)
+		const mailbox = new RuntimeMailbox(directory)
+		mailbox.send({ type: 'call', id: 'call-1', endpoint: 'run', token: 'a'.repeat(32), call: { type: 'resolve-model', model: 'm' } })
+		await writeFile(answerFile(layout, 'call-1'), JSON.stringify({ value: { outcome: { ok: true, result: 1 } } }))
+
+		// Act
+		const answer = await mailbox.take('call-1', abortSignal)
+
+		// Assert
+		expect(answer).toEqual({ value: { outcome: { ok: true, result: 1 } } })
+		await expect(readFile(answerFile(layout, 'call-1'), 'utf8')).rejects.toThrow('ENOENT')
+	})
+
+	test('refuses a call id it sent already', async () => {
+		// Arrange
+		const mailbox = new RuntimeMailbox(await temporaryDirectory())
+		const call = {
+			type: 'call',
+			id: 'call-1',
+			endpoint: 'run',
+			token: 'a'.repeat(32),
+			call: { type: 'resolve-model', model: 'm' },
+		} as const
+		mailbox.send(call)
+
+		// Act
+		const sendingAgain = () => {
+			mailbox.send(call)
+		}
+
+		// Assert
+		expect(sendingAgain).toThrow('call-1 was sent already')
 	})
 
 	test('refuses to start outside the engine', () => {

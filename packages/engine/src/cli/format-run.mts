@@ -26,6 +26,10 @@ export function formatRun(record: RunRecord): string {
 	]
 	if (record.sandbox) lines.push(field('sandbox', `${record.sandbox.id} on ${record.sandbox.backend}`))
 	if (record.error) lines.push(field('error', record.error))
+	for (const [model, used] of Object.entries(record.usage ?? {})) {
+		const tokens = `${String(used.inputTokens)} in, ${String(used.outputTokens)} out, ${String(used.cacheReadTokens)} cached`
+		lines.push(field('usage', `${model}: ${String(used.requests)} requests, ${tokens}, ${used.costUsd.toFixed(4)} USD`))
+	}
 	for (const request of record.pending) {
 		if (request.kind === 'input') {
 			lines.push(`  input ${request.id}: ${request.question}`, `    fields: ${JSON.stringify(request.fields)}`)

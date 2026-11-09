@@ -28,7 +28,7 @@ mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the a
 mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
-`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine comes with the gateway.
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
 The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
 
@@ -70,7 +70,7 @@ An app's entry file lists what can start its workflows: buttons, webhooks and sc
 
 #### Webhooks
 
-`serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<app>/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the engine's home holds, never the app:
+`serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<app>/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the gateway's credential store holds, never the app:
 
 ```bash
 mesh-flow webhook secret example fix-issue --generate   # prints a new secret to paste into the sender
@@ -93,17 +93,37 @@ A delivery that passes gets `202` and a new run on the current version. Its deli
 
 The engine follows the schedules of every deployed app's current version, and starts each run on its own clock. A deploy or a removal re-arms them at once. A tick is skipped while the previous run of the same schedule is still going, also when it is paused or waits for a human. A run that is `restartable` doesn't hold its schedule up: it needs a person, and the next tick starts a new run. Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
 
+### Model providers and credentials
+
+Agents name a model id; the engine's gateway ([`@mesh-flow/gateway`](../gateway/README.md)) resolves it to the first provider in your list that offers it, and sends the model calls with that provider's key. Keys and secrets are sealed in the engine's home, in `gateway/credentials.json`, with a key in the OS keychain or, where there is none, `gateway/store.key`. `--no-keychain` keeps it in the file. Nothing of it is in the app, in a `.env` file or in the sandbox.
+
+```bash
+mesh-flow provider kinds                                    # the kinds of provider the gateway can call
+mesh-flow provider add anthropic --kind anthropic < anthropic-key.txt
+mesh-flow provider add router --kind openrouter < openrouter-key.txt
+mesh-flow provider order router anthropic                   # model first: router is asked first
+mesh-flow provider list
+mesh-flow credential set github/token < token.txt          # for connectors' host tools
+```
+
+These work on the home's files, so they work without a running engine, and a running one sees a change at once. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
+
+The build lists the models of the app's agents. Every trigger checks them before it makes a sandbox: when no provider offers one, or the one that does has no key, the run isn't started and the error says what to set up. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
+
 ### Embed the engine
 
 ```ts
 import { Engine, openAppStore, openRunStore } from '@mesh-flow/engine'
+import { openGateway, openGatewayHome } from '@mesh-flow/gateway'
 import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
 const apps = await openAppStore('/var/lib/my-app/mesh-flow/apps', abortSignal)
 await apps.deploy('example', '/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
-const engine = await Engine.open({ backend: microsandboxBackend(), store, apps, log: console.error }, abortSignal)
+const gatewayHome = await openGatewayHome('/var/lib/my-app/mesh-flow/gateway', abortSignal)
+const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials, providers: gatewayHome.providers })
+const engine = await Engine.open({ backend: microsandboxBackend(), store, apps, gateway, log: console.error }, abortSignal)
 
 const run = await engine.startRun({ app: 'example', trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })
 // ... later, when the run waits for input:
@@ -128,6 +148,15 @@ The engine makes every call. To read the outbox it runs a short POSIX shell loop
 - **No connection stays open across a wait.** Before it pauses a sandbox, the engine aborts its poll and ends any poll loop still running inside, because gVisor can't restore a checkpoint that holds a process an exec started. A pause breaks open connections ([design section 5](../../docs/design.md#5-durability)).
 - **Timed waits are kept by the engine.** A `wake` request is answered by the engine's own clock, because timers inside a sandbox disagree across a pause.
 - **A runtime that dies says so.** When its process is gone (or a zombie) and the outbox has nothing new, the run fails with the end of its log.
+
+### Gateway calls
+
+Calls that need a credential go through the same mailbox: the runtime appends a `call` message with its endpoint and a token, and the engine writes the answer to the inbox ([protocol: Calls](../protocol/README.md#calls)). Before the runtime starts, the engine opens the run's endpoint on the gateway, for the host tools the app's build lists, and writes its tokens to `gateway.json`, which the runtime removes once it has read it.
+
+- **A call is taken before the engine saves that it read it.** The gateway spends the token and keeps the call as in flight on disk first. A call that was taken but not answered when the engine stopped is answered as interrupted when the run is resumed, with its next token: whether it took effect is unknown, so it isn't run again.
+- **A `cancel` message stops a call.** It is still answered, so the runtime gets its next token.
+- **A token that comes again fails the run.** Someone else has the run's tokens; the gateway closes every endpoint of the run.
+- **When a run ends**, its endpoints are closed and what its model calls used goes into its record.
 
 ### Runs
 
@@ -166,7 +195,7 @@ The CLI talks to the engine over HTTP on a Unix socket in the home directory, or
 pnpm --filter @mesh-flow/engine test
 ```
 
-Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover deploying apps, a run from start to end, input and wake requests, webhook deliveries (signatures, payload checks, redeliveries, skips), schedules and their overlap rule, a schedule fired by hand, crashes, stop, restart on the version a run first ran, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, unpack, poll and pause never settle. The scheduler runs on fake timers in a unit test.
+Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover deploying apps, a run from start to end, input and wake requests, gateway calls (token rotation, a reused token, a cancel, a host tool that never settles across a shutdown and resume), webhook deliveries (signatures, payload checks, redeliveries, skips), schedules and their overlap rule, a schedule fired by hand, crashes, stop, restart on the version a run first ran, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, unpack, poll and pause never settle. The scheduler runs on fake timers in a unit test.
 
 One run end to end on a real backend, across a shutdown and a restart of the engine, runs only when asked:
 
@@ -180,14 +209,15 @@ CI runs it on gVisor and microsandbox on Linux, and microsandbox on Windows ([`e
 ## Known gaps
 
 - **The named pipe on Windows** has the default security of a pipe, and its name comes from the home path. Another user on the same machine could reach it, or take the name first. Unix sockets are limited to the home directory's owner.
-- **E2B** needs an API key from the credential store, which comes with the gateway. `serve` refuses it until then. `Engine` itself takes any backend.
+- **E2B** needs its templates in host config, which isn't there yet. `serve` refuses it until then; its API key will come from the gateway's credential store. `Engine` itself takes any backend.
 - **Pausing on wait** is roadmap step 3. A waiting run keeps its sandbox running until the engine shuts down.
 - **External events** that wake a waiting run (merge request activity) and their durable wait aren't here yet. They will come through the same ingress and signature check as webhook triggers, and fit the same shape as `wake`: a request the engine answers.
-- **Webhook secrets** live in `secrets/webhooks.json` in the engine's home, readable by its owner only, until the gateway's credential store exists. Turning a trigger on or off is deploying a version without it, or removing the app, until there is a UI.
-- **Deploying is local.** `deploy` and `dev` go over the engine's socket on the same machine. Deploying from CI to an engine elsewhere needs authentication, which comes with the gateway.
+- **Turning a trigger on or off** is deploying a version without it, or removing the app, until there is a UI. Webhook secrets an engine kept in `secrets/webhooks.json` before the gateway move into its credential store on the next start.
+- **Deploying is local.** `deploy` and `dev` go over the engine's socket on the same machine. Deploying from CI to an engine elsewhere needs authentication, which is still to come.
 - **Old versions stay** in the engine's home until their app is removed. There is no clean-up of versions no run uses yet.
 - **Webhook payload schemas** are compiled with [Ajv](https://ajv.js.org). A pattern in a schema runs on the host, so a slow regular expression slows the ingress down.
-- **Tool calls** to the gateway need their own channel, low latency and both ways ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)). The mailbox is for the runtime's lifecycle, not for that.
+- **Gateway calls go through the mailbox**, so each one waits on a poll on both sides, up to a quarter of a second each way, and a model response comes back whole instead of streamed. That is little next to a model call. A channel of their own, low latency and both ways ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)), can replace it behind the same `call` messages.
+- **Host tools of connectors** are given to `serveEngine` as `tools`; `serve` has none yet. Which connector packages an engine loads them from is decided with the first connector.
 - **The agent's shell as a separate user.** The mailbox is `chmod 700` for the runtime's user. That only keeps an agent out once agent shell commands run as another user ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)).
 - **Events arrive at least once.** When the engine dies after keeping events but before saving how far it read, it reads those events again after a resume.
 - **Answers aren't checked on the host.** The runtime validates an answer against its fields and asks again when it doesn't fit.

@@ -4,6 +4,7 @@ import {
 	mailboxLayout,
 	RuntimeMessage,
 	type Answer,
+	type EndpointGrant,
 	type MailboxLayout,
 	type RunStart,
 } from '@mesh-flow/protocol'
@@ -51,6 +52,11 @@ export class SandboxChannel {
 	/** Tells the runtime what to do. Written before it starts, and never again. */
 	async writeStart(start: RunStart, abortSignal: AbortSignal): Promise<void> {
 		await this.#sandbox.writeFile(this.#layout.startFile, JSON.stringify(start), abortSignal)
+	}
+
+	/** Hands the runtime the run's gateway endpoint. Written before it starts; the runtime removes it once read. */
+	async writeGrant(grant: EndpointGrant, abortSignal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(this.#layout.grantFile, JSON.stringify(grant), abortSignal)
 	}
 
 	/** Starts the runtime in the background. Its pid goes to the mailbox, so a poll sees it die. */

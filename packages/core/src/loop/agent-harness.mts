@@ -1,7 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { BACKGROUND_CONTEXT, withAbortSignal, type Context } from '@earendil-works/chord/context'
-import type { Models } from '@earendil-works/pi-ai'
 import {
 	createRegistry,
 	defineDoc,
@@ -19,7 +18,7 @@ import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite
 import { CodingTools } from '@earendil-works/pi-durable/tools'
 import { z } from 'zod'
 import { settledWithin } from '../run/settled-within.mts'
-import { resolveModel } from './resolve-model.mts'
+import type { ModelSource } from './model-source.mts'
 
 /**
  * The run's Pi Durable harness: one store for every agent conversation in the run, one conversation
@@ -33,7 +32,7 @@ export interface AgentHarness {
 	/** Keeps the result a loop's store key finished with, so a rerun returns it without running the loop again. */
 	keepResult(key: string, result: StoredResult, abortSignal: AbortSignal): Promise<void>
 	/** Which provider serves a model id, model first. */
-	model(modelId: string): ModelRef
+	model(modelId: string, abortSignal: AbortSignal): Promise<ModelRef>
 	/** Adds a loop's tools and hooks. Conversations select it in their `agent`. */
 	install(extension: Extension): void
 	/** Removes a loop's tools and hooks once its conversation is done with them. */
@@ -49,7 +48,7 @@ const StoredResult = z.union([z.object({ folder: z.literal(true) }), z.object({ 
 export type StoredResult = z.infer<typeof StoredResult>
 
 export interface AgentHarnessOptions {
-	readonly models: Models
+	readonly models: ModelSource
 	/** The agents' working directory: the run's workspace. */
 	readonly workspace: string
 	/** A SQLite file for the store. In memory without one. */
@@ -77,7 +76,7 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 	const harness = await Harness.open(
 		await openStorage(options.store),
 		{
-			models: options.models,
+			models: options.models.models,
 			registry,
 			settings: { extensions: [CodingTools], compaction: { enabled: false }, afterFailedRun: 'withdraw' },
 			env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? options.workspace }),
@@ -112,7 +111,7 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 				loops.results[key] = JSON.stringify(result)
 			}, context(abortSignal))
 		},
-		model: (modelId) => resolveModel(options.models, modelId),
+		model: (modelId, abortSignal) => options.models.resolve(modelId, abortSignal),
 		install: (extension) => {
 			registry.install(extension)
 		},

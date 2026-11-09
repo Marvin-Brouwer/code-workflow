@@ -1,3 +1,4 @@
+import { RunUsage } from '@mesh-flow/gateway'
 import { RuntimeRequest, TriggerRef } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox, SandboxSpec } from '@mesh-flow/sandbox'
 import { z } from 'zod'
@@ -32,6 +33,8 @@ export const RunApp = z.object({
 	/** The built entry file the sandbox starts with `node`. */
 	entry: z.string().min(1),
 	sandbox: SandboxSpec,
+	/** The host tools the app calls through the gateway. Runs from before the gateway list none. */
+	tools: z.array(z.string()).default([]),
 })
 export type RunApp = z.infer<typeof RunApp>
 
@@ -56,6 +59,8 @@ export const RunRecord = z.object({
 	error: z.string().optional(),
 	/** Why a skipped run was skipped. */
 	reason: z.string().optional(),
+	/** What the run's model calls used, counted by the gateway, once the run is over. All attempts together. */
+	usage: RunUsage.optional(),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 })

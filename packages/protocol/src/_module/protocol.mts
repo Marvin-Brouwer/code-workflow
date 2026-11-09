@@ -6,6 +6,19 @@
  */
 export { AppManifest, appManifestFile, AppPlatform } from '../app-manifest.mts'
 export {
+	CallAnswer,
+	CallMessage,
+	CancelMessage,
+	EndpointGrant,
+	EndpointId,
+	EndpointToken,
+	GatewayCall,
+	ModelRequest,
+	ModelResponse,
+	ResolvedModel,
+	ToolName,
+} from '../gateway-call.mts'
+export {
 	answerFile,
 	defaultMailboxDirectory,
 	mailboxEnvironmentVariable,

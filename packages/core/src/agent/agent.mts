@@ -54,6 +54,13 @@ export interface Agent {
 	as(name: string, options?: AsToolOptions): Tool<{ task: string }, string>
 }
 
+const defined = new Set<string>()
+
+/** The model ids of every agent made in this process: what the app's runs need a provider for. */
+export function definedModels(): string[] {
+	return [...defined].toSorted()
+}
+
 /**
  * Defines an agent. Agents belong to the workflow repository (`agents.mts`), not to packages:
  * models and conventions are team specific.
@@ -67,6 +74,7 @@ export interface Agent {
  * ```
  */
 export function agent(options: AgentOptions): Agent {
+	defined.add(options.model)
 	const loopAgent = { model: options.model, reasoning: options.reasoning, system: options.system }
 	return Object.freeze<Agent>({
 		model: options.model,

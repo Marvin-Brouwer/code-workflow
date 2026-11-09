@@ -1,7 +1,16 @@
 # Plan: credentialed tools run on the host
 
-Status: decided 2026-11-06. Replaces the credential-injecting reverse proxy in
-[design section 7](../design.md#7-credentials-and-the-gateway). Nothing is built yet.
+Status: decided 2026-11-06, built in [`@mesh-flow/gateway`](../../packages/gateway/README.md).
+Replaces the credential-injecting reverse proxy in
+[design section 7](../design.md#7-credentials-and-the-gateway). Where the build differs from this
+plan:
+
+- Calls go over the run's mailbox, the channel the engine already polls, not a socket of their
+  own: up to 250 ms each way and no streaming, so a model's response comes back whole. A dedicated
+  channel can replace it behind the same messages.
+- The agent's shell doesn't run as a separate user yet (point 5). Rotation catches a stolen
+  token; the separate user, which would prevent it, is still to come.
+- Connectors' host tools are passed to `serveEngine`; `mesh-flow serve` loads none yet.
 
 ## Idea
 

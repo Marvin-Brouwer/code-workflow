@@ -1,4 +1,6 @@
 import type { TriggerDescription, WorkflowsDescription } from '@mesh-flow/protocol'
+import { definedModels } from '../agent/agent.mts'
+import { definedHostTools } from '../gateway/host-tool-stub.mts'
 import { jsonSchemaOf } from '../tool/json-schema.mts'
 import type { Trigger } from '../triggers/trigger.mts'
 import type { AnyWorkflow } from '../workflow/workflow.mts'
@@ -7,8 +9,9 @@ import type { MeshFlowApp } from './define-mesh-flow.mts'
 
 /**
  * What an app declares, as the engine reads it: its sandbox, the workflows, with their parameters
- * as JSON Schema, and the app's triggers. Schemas are their input side: what a form, a payload or
- * the CLI has to give.
+ * as JSON Schema, the app's triggers, the host tools its modules have stubs of, which are all a
+ * run's gateway will take, and the models of its agents, which a trigger checks. Schemas are their
+ * input side: what a form, a payload or the CLI has to give.
  *
  * The workflows are every workflow defined in this process unless you pass them, because the app's
  * modules define them when its entry file imports them. In a test, pass the ones you expect.
@@ -18,6 +21,8 @@ export function describeApp(app: MeshFlowApp, workflows: readonly AnyWorkflow[] 
 		sandbox: app.sandbox,
 		workflows: workflows.map((definition) => ({ name: definition.name, parameters: jsonSchemaOf(definition.parameters) })),
 		triggers: app.triggers.map(describeTrigger),
+		tools: definedHostTools(),
+		models: definedModels(),
 	}
 }
 

@@ -100,6 +100,32 @@ const tests = check('tests', async () => [])
 await reviewer.loop`Review the change in web/. Ask ${developer.as('changeCode', { in: 'web/', verify: [tests] })} for code changes.`
 ```
 
+### Host tools
+
+A tool that needs a credential runs on the host, in the gateway, and the workflow has its stub. A connector defines it once and hands the definition to `hostTool` in `@mesh-flow/gateway` and to `hostToolStub` here. The stub is a tool like any other: called from code it runs on the run's endpoint, interpolated in a loop the agent calls it on that loop's own endpoint, which takes only the loop's host tools and closes when the loop settles.
+
+```ts
+import { agent, hostToolStub } from '@mesh-flow/core'
+import { z } from 'zod'
+
+export const commentDefinition = {
+	name: 'githubComment',
+	description: 'Comment on a GitHub issue',
+	input: z.object({ issue: z.number(), body: z.string() }),
+	output: z.object({ posted: z.boolean() }),
+}
+export const comment = hostToolStub(commentDefinition)
+
+await comment({ issue: 12, body: 'On it.' })
+await agent({ model: 'claude-opus-5-5' }).loop`Tell the reporter what you found with ${comment}.`
+```
+
+The input is checked by the stub and again on the host, and the result against `output`. When the host says no, the stub throws a `GatewayCallError`. The app's build lists every stub its modules make, and a run's gateway takes only those.
+
+### Models
+
+Under the engine an agent's model comes through the gateway: its id is resolved on the host, model first, to the first of the user's providers that offers it. pi-ai runs the provider's own request in the sandbox with a key that means nothing, and its `fetch` hands the request to the gateway, which sends it with the real key and counts the usage. Outside the engine, `runWorkflow` takes `models` directly.
+
 ### Checks
 
 A check returns findings; no findings means it passed. Checks run concurrently when the agent hands in.
@@ -246,7 +272,7 @@ import { createModels } from '@earendil-works/pi-ai/models'
 import { runWorkflow, type RunChannel } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
-// The providers the agents' models run on: under the engine they come from the gateway.
+// The providers the agents' models run on: under the engine they come through the gateway.
 const models = createModels()
 const anHourMs = 60 * 60_000
 
@@ -288,8 +314,9 @@ Every tool gets an `AbortSignal`. When the run is stopped, waits end at once wit
 
 ## Known gaps
 
-- Model providers come with the gateway. Until then a loop in an engine run fails up front with a clear error; `runWorkflow` takes `models` directly.
-- Tools run in the workflow process. Per-loop gateway endpoints, and the agent shell as a separate unprivileged user, come with the gateway.
+- Tools without a credential run in the workflow process, and so does the agent's shell: it isn't a separate unprivileged user yet, so it could read the runtime's gateway tokens. Rotation catches a stolen token; the separate user would prevent it.
+- A model's response comes back whole, not streamed.
+- The models a trigger checks are those of every agent the app's modules make, not only the started workflow's: one model nobody serves holds up every workflow of the app.
 
 ## Development
 

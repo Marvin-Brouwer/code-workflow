@@ -18,6 +18,7 @@ import { CodingTools } from '@earendil-works/pi-durable/tools'
 import { z } from 'zod'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
 import type { ExitSpec } from '../exits/exit.mts'
+import type { Endpoint } from '../gateway/gateway-client.mts'
 import { emitEvent, inEvent } from '../run/run-events.mts'
 import { currentScope, type Scope } from '../run/run-scope.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
@@ -103,7 +104,7 @@ interface DriveLoopInput {
 
 async function driveLoop({ agent, template, system, key, storeKey, scope: eventScope, harness }: DriveLoopInput): Promise<unknown> {
 	const { run } = eventScope
-	const model = harness.model(agent.model)
+	const model = await harness.model(agent.model, run.abortSignal)
 	const stopNow = new AbortController()
 	const abortSignal = AbortSignal.any([run.abortSignal, stopNow.signal])
 	const ended = loopEndSignals()
@@ -127,10 +128,13 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	}
 	run.abortSignal.addEventListener('abort', onAbort, { once: true })
 	let extension: Extension | undefined
+	let endpoint: Endpoint | undefined
 	let idle: Promise<unknown> = Promise.resolve()
 	try {
+		endpoint = await openLoopEndpoint(template, system, eventScope, abortSignal)
 		// Every loop around this one stands still too while this one waits on a human.
-		const scope: Scope = { ...eventScope, loop: { clocks: [...(eventScope.loop?.clocks ?? []), clock] } }
+		const clocks = [...(eventScope.loop?.clocks ?? []), clock]
+		const scope: Scope = { ...eventScope, loop: endpoint === undefined ? { clocks } : { clocks, endpoint } }
 		const session: LoopSession = { scope, abortSignal, finish }
 		const handIns = handInExits(template)
 		const tools = loopTools(template, system, handIns, session)
@@ -198,7 +202,33 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 				harness.uninstall(installed)
 			})
 		}
+		const opened = endpoint
+		const { gateway } = run
+		if (opened !== undefined && gateway !== undefined) {
+			// Once the conversation is done with the loop's tools: a call on a closed endpoint fails the run.
+			const close = () => gateway.closeLoop(opened, run.abortSignal)
+			void idle.then(close, close).catch(() => undefined)
+		}
 	}
+}
+
+/**
+ * Opens a gateway endpoint for the loop's host tools, its own and its system prompt's, so the agent
+ * can call those and no others. `undefined` when the loop has none.
+ */
+async function openLoopEndpoint(
+	template: LoopTemplate,
+	system: LoopTemplate | undefined,
+	scope: Scope,
+	abortSignal: AbortSignal,
+): Promise<Endpoint | undefined> {
+	const hostTools = uniqueTools([...(system?.tools ?? []), ...template.tools])
+		.filter((spec) => spec.runsOnHost === true)
+		.map((spec) => spec.name)
+	if (hostTools.length === 0) return undefined
+	const { gateway } = scope.run
+	if (gateway === undefined) throw new Error(`${hostTools.join(', ')} run on the host, through the gateway, and this run has none.`)
+	return gateway.openLoop(hostTools, abortSignal)
 }
 
 /** The agent's tools in a loop: its own and its system prompt's, the exits, and `verify` when that's the hand-in. */
