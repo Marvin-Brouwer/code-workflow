@@ -115,6 +115,59 @@ describe('RuntimeMailbox', () => {
 		await expect(waiting).rejects.toThrow('The run was stopped (SIGTERM).')
 	})
 
+	test('takes the gateway grant once, and removes the file', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const grant = { endpoint: 'run', tokens: ['a'.repeat(32)] }
+		await writeFile(mailboxLayout(directory).gatewayFile, JSON.stringify(grant))
+		const mailbox = new RuntimeMailbox(directory)
+
+		// Act
+		const taken = await mailbox.takeGateway(signal)
+
+		// Assert
+		expect(taken).toEqual(grant)
+		expect(await mailbox.takeGateway(signal)).toBeUndefined()
+	})
+
+	test("takes a call's answer and removes it from the inbox", async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const layout = mailboxLayout(directory)
+		await mkdir(layout.inbox)
+		const mailbox = new RuntimeMailbox(directory)
+		mailbox.send({ type: 'call', id: 'call-1', endpoint: 'run', token: 'a'.repeat(32), call: { type: 'resolve-model', model: 'm' } })
+		await writeFile(answerFile(layout, 'call-1'), JSON.stringify({ value: { outcome: { ok: true, result: 1 } } }))
+
+		// Act
+		const answer = await mailbox.take('call-1', signal)
+
+		// Assert
+		expect(answer).toEqual({ value: { outcome: { ok: true, result: 1 } } })
+		await expect(readFile(answerFile(layout, 'call-1'), 'utf8')).rejects.toThrow('ENOENT')
+	})
+
+	test('refuses a call id it sent already', async () => {
+		// Arrange
+		const mailbox = new RuntimeMailbox(await temporaryDirectory())
+		const call = {
+			type: 'call',
+			id: 'call-1',
+			endpoint: 'run',
+			token: 'a'.repeat(32),
+			call: { type: 'resolve-model', model: 'm' },
+		} as const
+		mailbox.send(call)
+
+		// Act
+		const sendingAgain = () => {
+			mailbox.send(call)
+		}
+
+		// Assert
+		expect(sendingAgain).toThrow('call-1 was sent already')
+	})
+
 	test('refuses to start outside the engine', () => {
 		// Arrange
 		const environment = {}

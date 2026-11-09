@@ -18,6 +18,7 @@ export function describeApp(app: MeshFlowApp, workflows: readonly AnyWorkflow[] 
 		sandbox: app.sandbox,
 		workflows: workflows.map((definition) => ({ name: definition.name, parameters: jsonSchemaOf(definition.parameters) })),
 		triggers: app.triggers.map(describeTrigger),
+		tools: [],
 	}
 }
 

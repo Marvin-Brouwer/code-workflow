@@ -21,6 +21,11 @@ export interface MailboxLayout {
 	readonly pidFile: string
 	/** The runtime's stdout and stderr. */
 	readonly logFile: string
+	/**
+	 * The run's gateway endpoint and its tokens, an `EndpointGrant`, written by the engine before it
+	 * starts the runtime. The runtime removes it once it has read it.
+	 */
+	readonly gatewayFile: string
 }
 
 /** The layout of a mailbox in `directory`. */
@@ -33,6 +38,7 @@ export function mailboxLayout(directory: string): MailboxLayout {
 		polls: path.posix.join(directory, 'polls'),
 		pidFile: path.posix.join(directory, 'runtime.pid'),
 		logFile: path.posix.join(directory, 'runtime.log'),
+		gatewayFile: path.posix.join(directory, 'gateway.json'),
 	})
 }
 

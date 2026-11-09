@@ -61,10 +61,15 @@ export const SandboxDescription = z.object({
 })
 export type SandboxDescription = z.infer<typeof SandboxDescription>
 
-/** What an entry file declares: its sandbox, every workflow its modules define, and what can start them. */
+/**
+ * What an entry file declares: its sandbox, every workflow its modules define, what can start them,
+ * and the host tools its modules call through the gateway. A run's gateway takes only those.
+ */
 export const WorkflowsDescription = z.object({
 	sandbox: SandboxDescription,
 	workflows: z.array(WorkflowDescription),
 	triggers: z.array(TriggerDescription),
+	/** Apps built before the gateway list none. */
+	tools: z.array(z.string().min(1)).default([]),
 })
 export type WorkflowsDescription = z.infer<typeof WorkflowsDescription>

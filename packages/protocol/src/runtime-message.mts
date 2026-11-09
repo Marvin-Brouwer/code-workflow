@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CallMessage, CancelMessage } from './gateway-call.mts'
 import { RuntimeRequest } from './runtime-request.mts'
 import { WorkflowsDescription } from './workflows-description.mts'
 
@@ -24,6 +25,10 @@ export const RuntimeMessage = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('skipped'), reason: z.string() }),
 	/** The answer to a `describe` start: what the entry file declares. */
 	z.object({ type: z.literal('described'), description: WorkflowsDescription }),
+	/** A call to the gateway, answered in the inbox under its id. */
+	CallMessage,
+	/** The runtime stopped waiting for a call. */
+	CancelMessage,
 ])
 export type RuntimeMessage = z.infer<typeof RuntimeMessage>
 

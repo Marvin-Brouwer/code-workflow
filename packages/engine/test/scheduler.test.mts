@@ -17,7 +17,7 @@ function teamApp(version: string, triggers: TriggerDescription[] = [everySecond]
 		manifest: {
 			entry: 'main.mjs',
 			platform: { os: 'linux', cpu: 'x64' },
-			description: { sandbox, workflows: [{ name: 'report', parameters: { type: 'object' } }], triggers },
+			description: { sandbox, workflows: [{ name: 'report', parameters: { type: 'object' } }], triggers, tools: [] },
 			builtAt: '2026-11-09T09:00:00.000Z',
 		},
 		tarball: `/apps/team/${version}/app.tgz`,
