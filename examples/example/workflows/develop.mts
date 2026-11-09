@@ -7,8 +7,8 @@
  * Design sketch: the packages don't exist yet and this hasn't been type-checked.
  */
 import { fail, input, inDependencyOrder, propose, succeed, verify, workflow } from '@mesh-flow/core'
-import { jira } from '@mesh-flow/connector-atlassian'
-import { gitlab } from '@mesh-flow/connector-gitlab'
+import { jira } from '@mesh-flow/atlassian'
+import { gitlab } from '@mesh-flow/gitlab'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { Plan, Research, codeReview, deliveryOrder, deviations } from '@mesh-flow/preset-development'
 import { developer, planner, reviewer } from '../agents.mts'

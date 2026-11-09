@@ -32,7 +32,7 @@ packages that don't depend on the open decisions first.
 | 4 | triggers | workflow parameters, the entry file (`defineWorkflows`, `userTrigger`, `webhook`, `schedule`), describe mode; webhook ingress and the scheduler in the engine | 2 and 3 |
 | 5 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 4 |
 | 6 | `@mesh-flow/github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
-| 7 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
+| 7 | the other connectors and `example` | `@mesh-flow/atlassian`, `@mesh-flow/gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
 
 ### 1. `@mesh-flow/sandbox`
 

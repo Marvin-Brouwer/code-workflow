@@ -8,25 +8,25 @@
 		"paths": {
 			"@mesh-flow/core": ["./src/core.mts"],
 			"@mesh-flow/git": ["./stubs/git.mts"],
-			"@mesh-flow/connector-atlassian": ["../../packages/connector-atlassian/src/index.mts"],
-			"@mesh-flow/connector-gitlab": ["../../packages/connector-gitlab/src/index.mts"],
+			"@mesh-flow/atlassian": ["../../packages/atlassian/src/index.mts"],
+			"@mesh-flow/gitlab": ["../../packages/gitlab/src/index.mts"],
 			"@mesh-flow/toolchain-dotnet": ["../../packages/toolchain-dotnet/src/index.mts"],
 			"@mesh-flow/preset-development": ["../../packages/preset-development/src/index.mts"],
 			"zod": ["./node_modules/zod"]
 		},
 		"rootDirs": [
-			"../../packages/connector-atlassian/src",
-			"./stubs/connector-atlassian",
-			"../../packages/connector-gitlab/src",
-			"./stubs/connector-gitlab",
+			"../../packages/atlassian/src",
+			"./stubs/atlassian",
+			"../../packages/gitlab/src",
+			"./stubs/gitlab",
 			"../../packages/toolchain-dotnet/src",
 			"./stubs/toolchain-dotnet"
 		]
 	},
 	"include": [
 		"../../examples/example/**/*.mts",
-		"../../packages/connector-atlassian/src/**/*.mts",
-		"../../packages/connector-gitlab/src/**/*.mts",
+		"../../packages/atlassian/src/**/*.mts",
+		"../../packages/gitlab/src/**/*.mts",
 		"../../packages/toolchain-dotnet/src/**/*.mts",
 		"../../packages/preset-development/src/**/*.mts",
 		"./stubs/**/*.mts"
