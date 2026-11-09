@@ -36,9 +36,9 @@ export interface GatewayClient {
 }
 
 /**
- * A client on `channel` for the run's endpoint in `grant`. `runAbortSignal` is the run's signal: a call
- * the caller stopped waiting for is cancelled on the host, and its answer, with the next token,
- * is still picked up until the run ends.
+ * A client on `channel` for the run's endpoint in `grant`. `runAbortSignal` is the run's signal: a
+ * call the caller stopped waiting for is cancelled on the host, and its answer, with the next
+ * token, is still picked up until the run ends.
  */
 export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
 	let callCount = 0

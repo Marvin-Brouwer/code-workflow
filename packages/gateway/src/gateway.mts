@@ -1,9 +1,10 @@
 import path from 'node:path'
 import type { CallAnswer, CallMessage, EndpointGrant, GatewayCall, ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
 import type { CredentialStore } from './credentials/credential-store.mts'
-import { openRunStates, ownEntry, type EndpointState, type RunState } from './endpoints/run-state.mts'
+import { openRunStates, type EndpointState, type RunState } from './endpoints/run-state.mts'
 import { newLoopEndpointId, newToken, tokenHash } from './endpoints/tokens.mts'
 import { messageOf } from './errors.mts'
+import { ownEntry } from './own-entry.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
 import { chosenModel, resolveModel } from './providers/resolve-model.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
@@ -66,10 +67,13 @@ export interface Gateway {
 	readonly settle: (runId: string, requestId: string, abortSignal: AbortSignal) => Promise<void>
 	/**
 	 * The calls taken but never answered, as when the engine stopped during them, each with an error
-	 * and its next token. Call it once when an attempt resumes, before reading the outbox again:
-	 * those calls are then answered as interrupted when they are read again, and each is listed once.
+	 * and its next token. Call it when an attempt resumes, before reading the outbox again, and
+	 * {@link settle} each once its answer is in. Until then a resume lists it again. A call read
+	 * again from where the cursor was saved gets the same answer.
 	 */
 	readonly interrupted: (runId: string, abortSignal: AbortSignal) => Promise<InterruptedCall[]>
+	/** Forgets the interrupted calls that were answered, once the outbox was read past them after a resume. */
+	readonly forgetInterrupted: (runId: string, abortSignal: AbortSignal) => Promise<void>
 	/** What the run used of each model so far. */
 	readonly usage: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
 	/**
@@ -221,7 +225,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 						state: {
 							...state,
 							endpoints: { ...state.endpoints, [message.endpoint]: rotated },
-							inFlight: { ...state.inFlight, [message.id]: { endpoint: message.endpoint, spent, next, interrupted: false } },
+							inFlight: {
+								...state.inFlight,
+								[message.id]: { endpoint: message.endpoint, spent, next, interrupted: false, answered: false },
+							},
 						},
 						value: {
 							answer: async (callSignal) => {
@@ -248,9 +255,22 @@ export function openGateway(options: GatewayOptions): Gateway {
 			states.update(
 				runId,
 				(state) => {
-					if (state === undefined) return { state, value: undefined }
+					const call = state && ownEntry(state.inFlight, requestId)
+					if (state === undefined || call === undefined) return { state, value: undefined }
 					const { [requestId]: _settled, ...rest } = state.inFlight
-					return { state: { ...state, inFlight: rest }, value: undefined }
+					// An interrupted call may still be read again, until the outbox is read past it.
+					const inFlight = call.interrupted ? { ...state.inFlight, [requestId]: { ...call, answered: true } } : rest
+					return { state: { ...state, inFlight }, value: undefined }
+				},
+				abortSignal,
+			),
+		forgetInterrupted: (runId, abortSignal) =>
+			states.update(
+				runId,
+				(state) => {
+					if (state === undefined) return { state, value: undefined }
+					const inFlight = Object.fromEntries(Object.entries(state.inFlight).filter(([, call]) => !(call.interrupted && call.answered)))
+					return { state: { ...state, inFlight }, value: undefined }
 				},
 				abortSignal,
 			),
@@ -260,7 +280,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 				(state) => {
 					if (state === undefined) return { state, value: [] }
 					const calls = Object.entries(state.inFlight)
-					const unanswered = calls.filter(([, call]) => !call.interrupted)
+					const unanswered = calls.filter(([, call]) => !call.answered)
 					const marked = Object.fromEntries(calls.map(([id, call]) => [id, { ...call, interrupted: true }]))
 					return {
 						state: { ...state, inFlight: marked },

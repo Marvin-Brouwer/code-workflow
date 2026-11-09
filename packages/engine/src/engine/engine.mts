@@ -81,6 +81,8 @@ interface ActiveRun {
 	work: Promise<void>
 	/** The gateway calls running now, by request id, so the runtime can cancel them. */
 	readonly calls: Map<string, AbortController>
+	/** Resumed with interrupted calls answered, which the gateway keeps until the outbox is read past them. */
+	interruptedAnswered?: boolean
 }
 
 /** Which sandbox a run record points at. */
@@ -412,6 +414,7 @@ export class Engine {
 		})
 		runSignal.throwIfAborted()
 		await this.#answerInterrupted(id, channel, runSignal)
+		active.interruptedAnswered = true
 		return channel
 	}
 
@@ -478,6 +481,12 @@ export class Engine {
 				}),
 				['running'],
 			)
+			const active = this.#active.get(id)
+			if (active?.interruptedAnswered === true) {
+				// Read past where the cursor was when the run resumed: those calls can't be read again.
+				active.interruptedAnswered = false
+				await this.#gateway?.forgetInterrupted(id, signal)
+			}
 			for (const request of requests) this.#schedule(id, channel, request, signal)
 			for (const taken of accepted) this.#answerCall(id, channel, taken.call, taken.accepted, signal)
 			// After the calls of this delivery are running, so a cancel read with its call still stops it.
@@ -551,11 +560,12 @@ export class Engine {
 
 	/**
 	 * Answers the calls a resumed run made before the engine stopped, as interrupted. The gateway
-	 * keeps them, so one read again from where the cursor was saved gets the same answer.
+	 * keeps them until the outbox is read past them, so one read again from where the cursor was
+	 * saved gets the same answer, and lists those not answered yet again on the next resume.
 	 */
 	async #answerInterrupted(id: RunId, channel: SandboxChannel, abortSignal: AbortSignal): Promise<void> {
 		for (const call of (await this.#gateway?.interrupted(id, abortSignal)) ?? []) {
-			await channel.answer(call.id, { value: call.answer }, abortSignal)
+			await this.#answerFromGateway(id, channel, call.id, call.answer, abortSignal)
 		}
 	}
 

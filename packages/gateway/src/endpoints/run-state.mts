@@ -25,6 +25,8 @@ const InFlightCall = z.object({
 	 * cursor was saved isn't taken for a stolen token.
 	 */
 	interrupted: z.boolean().default(false),
+	/** Its interrupted answer is in the sandbox. Until the outbox is read past it, a read of it again gets the same. */
+	answered: z.boolean().default(false),
 })
 export type InFlightCall = z.infer<typeof InFlightCall>
 
@@ -43,11 +45,6 @@ export const RunState = z.object({
 	revoked: z.string().optional(),
 })
 export type RunState = z.infer<typeof RunState>
-
-/** `record[key]` when `record` has it as its own key, so a key such as `constructor` finds nothing. */
-export function ownEntry<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
-	return Object.hasOwn(record, key) ? record[key] : undefined
-}
 
 /** A run id as a file name: the engine's ids are letters, digits and dashes. */
 const RunIdText = z.string().regex(/^[\w-]{1,64}$/)

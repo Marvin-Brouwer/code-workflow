@@ -44,6 +44,9 @@ export interface ProviderSettings {
 	readonly order: (names: readonly string[], abortSignal: AbortSignal) => Promise<void>
 }
 
+/** The provider settings' file in a gateway's home. */
+export const providerSettingsFileName = 'providers.json'
+
 /** The provider settings kept in `file`. */
 export function openProviderSettings(file: string): ProviderSettings {
 	const list = async (abortSignal: AbortSignal): Promise<ProviderSetting[]> => {

@@ -1,8 +1,9 @@
-import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { access, link, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AsyncEntry } from '@napi-rs/keyring'
 import { hasErrorCode, messageOf } from '../errors.mts'
+import { credentialsFileName } from './credential-store.mts'
 import { storeKeyBytes } from './sealed-file.mts'
 
 /** Where the key the credential store is sealed with comes from. Made on first use. */
@@ -45,21 +46,25 @@ export function keyFile(file: string): StoreKey {
 			if (known !== undefined) return toKey(known, file)
 			const made = randomBytes(storeKeyBytes)
 			await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
-			// Only when there is none yet: when two processes make one at once, both use the first.
-			const written = await writeFile(file, made, { mode: 0o600, flag: 'wx', signal: abortSignal }).then(
-				() => true,
-				(error: unknown) => {
-					if (hasErrorCode(error, 'EEXIST')) return false
-					throw error
-				},
-			)
-			return written ? made : toKey(await readFile(file, { signal: abortSignal }), file)
+			// Written whole next to it, then linked in place only when there is none yet: when two
+			// processes make one at once, both use the first, and a crash never leaves half a key.
+			const written = `${file}.${randomUUID()}.partial`
+			try {
+				await writeFile(written, made, { mode: 0o600, signal: abortSignal })
+				const linked = await link(written, file).then(
+					() => true,
+					(error: unknown) => {
+						if (hasErrorCode(error, 'EEXIST')) return false
+						throw error
+					},
+				)
+				return linked ? made : toKey(await readFile(file, { signal: abortSignal }), file)
+			} finally {
+				await rm(written, { force: true })
+			}
 		},
 	}
 }
-
-/** The sealed credentials' file in a gateway's home. */
-export const credentialsFileName = 'credentials.json'
 
 /** Where {@link defaultStoreKey} may look for a key. */
 export interface DefaultStoreKeyOptions {
@@ -77,11 +82,7 @@ export interface DefaultStoreKeyOptions {
  */
 export async function defaultStoreKey(home: string, abortSignal: AbortSignal, options: DefaultStoreKeyOptions = {}): Promise<StoreKey> {
 	const file = keyFile(path.join(home, 'store.key'))
-	const fileExists = await readFile(file.where, { signal: abortSignal }).then(
-		() => true,
-		() => false,
-	)
-	if (fileExists || options.keychain === false) return file
+	if ((await exists(file.where)) || options.keychain === false) return file
 	const keychain = (options.keychainKey ?? keychainKey)(home)
 	try {
 		await keychain.read(abortSignal)
@@ -89,11 +90,7 @@ export async function defaultStoreKey(home: string, abortSignal: AbortSignal, op
 	} catch (error) {
 		abortSignal.throwIfAborted()
 		if (error instanceof KeyLengthError) throw error
-		const sealed = await readFile(path.join(home, credentialsFileName), { signal: abortSignal }).then(
-			() => true,
-			() => false,
-		)
-		if (sealed)
+		if (await exists(path.join(home, credentialsFileName)))
 			throw new Error(`The credentials in ${home} are sealed with a key in the OS keychain, which can't be read: ${messageOf(error)}`, {
 				cause: error,
 			})
@@ -110,4 +107,12 @@ function toKey(bytes: Buffer, where: string): Buffer {
 	if (bytes.length !== storeKeyBytes)
 		throw new KeyLengthError(`The credential store's key in ${where} isn't ${String(storeKeyBytes)} bytes.`)
 	return bytes
+}
+
+/** Whether there is a file at `file`. */
+async function exists(file: string): Promise<boolean> {
+	return access(file).then(
+		() => true,
+		() => false,
+	)
 }

@@ -87,11 +87,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let apps: AppStore
 	let gatewayHome: GatewayHome
 	try {
-		gatewayHome = await openEngineGatewayHome(
-			options.home,
-			options.abortSignal,
-			options.keychain === undefined ? {} : { keychain: options.keychain },
-		)
+		gatewayHome = await openEngineGatewayHome(options.home, options.abortSignal, options)
 		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyLocation}.`)
 		const gateway = openGateway({
 			home: gatewayHome.directory,

@@ -73,8 +73,17 @@ const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
 const gateway = openGateway({ home: home.directory, credentials: home.credentials, providers: home.providers, tools: [] })
 
-// Before the runtime starts: the run's own endpoint, for the host tools its app lists.
+// Before the runtime starts: the run's own endpoint, for the host tools its app lists. The engine
+// writes the grant to the mailbox's `gateway.json`, where the runtime takes it.
 const grant = await gateway.openRun('run-1', ['githubComment'], abortSignal)
+
+// When the run resumes, before reading the outbox again: answer what the engine left unanswered.
+async function answerInterrupted(writeAnswer: (id: string, answer: CallAnswer) => Promise<void>) {
+	for (const call of await gateway.interrupted('run-1', abortSignal)) {
+		await writeAnswer(call.id, call.answer)
+		await gateway.settle('run-1', call.id, abortSignal)
+	}
+}
 
 // For every call the engine reads from the mailbox.
 async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer) => Promise<void>) {
@@ -86,7 +95,7 @@ async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer)
 }
 ```
 
-`accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way.
+`accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way. After a resume, call `forgetInterrupted` once the outbox was read past where it was.
 
 - **A run's endpoint** takes calls from workflow code, the model calls, and opening and closing loop endpoints.
 - **A loop's endpoint** takes only the tools in that loop's template. The runtime opens it when the loop starts and closes it when the loop settles.

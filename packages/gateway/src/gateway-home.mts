@@ -1,7 +1,7 @@
 import path from 'node:path'
-import { openCredentialStore, type CredentialStore } from './credentials/credential-store.mts'
-import { credentialsFileName, defaultStoreKey, type DefaultStoreKeyOptions } from './credentials/store-key.mts'
-import { openProviderSettings, type ProviderSettings } from './providers/provider-settings.mts'
+import { credentialsFileName, openCredentialStore, type CredentialStore } from './credentials/credential-store.mts'
+import { defaultStoreKey, type DefaultStoreKeyOptions } from './credentials/store-key.mts'
+import { openProviderSettings, providerSettingsFileName, type ProviderSettings } from './providers/provider-settings.mts'
 
 /** A gateway's directory on the host, and what is kept in it. */
 export interface GatewayHome {
@@ -28,7 +28,7 @@ export async function openGatewayHome(
 	return {
 		directory,
 		credentials: openCredentialStore(path.join(directory, credentialsFileName), key),
-		providers: openProviderSettings(path.join(directory, 'providers.json')),
+		providers: openProviderSettings(path.join(directory, providerSettingsFileName)),
 		keyLocation: key.where,
 	}
 }

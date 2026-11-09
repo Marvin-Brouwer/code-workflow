@@ -5,6 +5,9 @@ import { withFileLock } from '../files/with-file-lock.mts'
 import { seal, unseal } from './sealed-file.mts'
 import type { StoreKey } from './store-key.mts'
 
+/** The sealed credentials' file in a gateway's home. */
+export const credentialsFileName = 'credentials.json'
+
 /**
  * Names a credential, such as `provider/anthropic` or `webhook/team/fix-issue`: letters, digits and
  * `_ . / -`, up to 128.

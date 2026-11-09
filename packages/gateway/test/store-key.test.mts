@@ -1,8 +1,9 @@
 import { stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
+import { credentialsFileName } from '../src/credentials/credential-store.mts'
 import { storeKeyBytes } from '../src/credentials/sealed-file.mts'
-import { credentialsFileName, defaultStoreKey, keyFile, type StoreKey } from '../src/credentials/store-key.mts'
+import { defaultStoreKey, keyFile, type StoreKey } from '../src/credentials/store-key.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal

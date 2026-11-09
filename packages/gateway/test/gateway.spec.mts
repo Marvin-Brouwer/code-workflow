@@ -205,20 +205,45 @@ describe('openGateway', () => {
 		expect(resultOf(goesOn.answer)).toEqual({ echoed: 'again' })
 	})
 
-	test('lists an interrupted call once, however often the run resumes', async () => {
+	test('lists an interrupted call again on the next resume until its answer is settled', async () => {
 		// Arrange
 		const { gateway, home } = await testGateway({ tools: [echo] })
 		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
-		await gateway.accept(runId, callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } }), abortSignal)
+		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
+		await gateway.accept(runId, message, abortSignal)
 		const { gateway: restarted } = await testGateway({ tools: [echo], home })
 
 		// Act
-		const first = await restarted.interrupted(runId, abortSignal)
-		const second = await restarted.interrupted(runId, abortSignal)
+		const cutShort = await restarted.interrupted(runId, abortSignal)
+		const resumedAgain = await restarted.interrupted(runId, abortSignal)
+		await restarted.settle(runId, message.id, abortSignal)
+		const afterSettling = await restarted.interrupted(runId, abortSignal)
 
 		// Assert
-		expect(first).toHaveLength(1)
-		expect(second).toEqual([])
+		expect(cutShort.map((call) => call.id)).toEqual([message.id])
+		expect(resumedAgain).toEqual(cutShort)
+		expect(afterSettling).toEqual([])
+	})
+
+	test('answers an interrupted call read again as interrupted, until the outbox was read past it', async () => {
+		// Arrange
+		const { gateway, home } = await testGateway({ tools: [echo] })
+		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
+		await gateway.accept(runId, message, abortSignal)
+		const { gateway: restarted } = await testGateway({ tools: [echo], home })
+		await restarted.interrupted(runId, abortSignal)
+		await restarted.settle(runId, message.id, abortSignal)
+
+		// Act
+		const readAgain = await restarted.accept(runId, message, abortSignal)
+		await restarted.forgetInterrupted(runId, abortSignal)
+		const readAfterForgetting = await restarted.accept(runId, message, abortSignal)
+
+		// Assert
+		expect(readAgain.compromised).toBeUndefined()
+		expect(errorOf(await readAgain.answer(abortSignal))).toContain('engine stopped')
+		expect(readAfterForgetting.compromised).toBeDefined()
 	})
 
 	test('settles a call promptly when it is stopped, even if the tool never does', async () => {
