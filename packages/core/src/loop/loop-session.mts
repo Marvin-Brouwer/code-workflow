@@ -14,7 +14,7 @@ export interface LoopSession {
 	/** The loop's scope: events of its tool calls go under the loop's event. */
 	readonly scope: Scope
 	/** Aborted when the loop has to stop at once. Tools pass it to their actions. */
-	readonly signal: AbortSignal
+	readonly abortSignal: AbortSignal
 	/** Ends the loop. Only the first call counts. */
 	finish(outcome: LoopOutcome, stop: Stop): void
 }

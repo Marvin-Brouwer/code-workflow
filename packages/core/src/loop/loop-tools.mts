@@ -21,7 +21,8 @@ export function agentTool(spec: ToolSpec, session: LoopSession): ToolRegistratio
 		parameters,
 		execute: (args, _api, context) =>
 			inEventOf(session.scope, 'tool-call', { tool: spec.name, from: 'agent', input: args }, async (scope) => {
-				const signal = context.abortSignal === undefined ? session.signal : AbortSignal.any([session.signal, context.abortSignal])
+				const abortSignal =
+					context.abortSignal === undefined ? session.abortSignal : AbortSignal.any([session.abortSignal, context.abortSignal])
 				const bail = (error: unknown) => {
 					emitEvent(scope, 'tool-error', { error: describeError(error) })
 					session.finish({ kind: 'error', error }, 'round')
@@ -35,7 +36,7 @@ export function agentTool(spec: ToolSpec, session: LoopSession): ToolRegistratio
 					return bail(error)
 				}
 				try {
-					return textResult(await renderValue(await untilAborted(action({ signal }), signal)))
+					return textResult(await renderValue(await untilAborted(action({ abortSignal }), abortSignal)))
 				} catch (error) {
 					// Also a bad input of a tool the action calls: that's the action failing, not the agent's mistake.
 					return bail(error)

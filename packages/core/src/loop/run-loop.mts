@@ -70,7 +70,7 @@ export async function runLoop(
 	const storeKey = `${key} ${fingerprint(agent, system, template)}`
 	return inEvent('loop', { model: agent.model, key, prompt: template.text }, async (loopScope) => {
 		const harness = await loopScope.run.agents()
-		const kept = await harness.keptResult(storeKey, loopScope.run.signal)
+		const kept = await harness.keptResult(storeKey, loopScope.run.abortSignal)
 		if (kept !== undefined) {
 			emitEvent(loopScope, 'loop-kept')
 			return keptValue(kept, template)
@@ -79,7 +79,7 @@ export async function runLoop(
 		const stored = toStored(result, template)
 		if (stored === undefined)
 			emitEvent(loopScope, 'loop-not-kept', { reason: "JSON wouldn't give the result back unchanged, so a rerun runs the loop again." })
-		else await harness.keepResult(storeKey, stored, loopScope.run.signal)
+		else await harness.keepResult(storeKey, stored, loopScope.run.abortSignal)
 		return result
 	})
 }
@@ -105,7 +105,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	const { run } = eventScope
 	const model = harness.model(agent.model)
 	const stopNow = new AbortController()
-	const signal = AbortSignal.any([run.signal, stopNow.signal])
+	const abortSignal = AbortSignal.any([run.abortSignal, stopNow.signal])
 	const ended = loopEndSignals()
 	let outcome: LoopOutcome | undefined
 	let stop: Stop | undefined
@@ -123,15 +123,15 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		finish({ kind: 'error', error: new LoopLimitExceeded('minutes', minutes ?? 0) }, 'now')
 	})
 	const onAbort = () => {
-		finish({ kind: 'error', error: run.signal.reason }, 'now')
+		finish({ kind: 'error', error: run.abortSignal.reason }, 'now')
 	}
-	run.signal.addEventListener('abort', onAbort, { once: true })
+	run.abortSignal.addEventListener('abort', onAbort, { once: true })
 	let extension: Extension | undefined
 	let idle: Promise<unknown> = Promise.resolve()
 	try {
 		// Every loop around this one stands still too while this one waits on a human.
 		const scope: Scope = { ...eventScope, loop: { clocks: [...(eventScope.loop?.clocks ?? []), clock] } }
-		const session: LoopSession = { scope, signal, finish }
+		const session: LoopSession = { scope, abortSignal, finish }
 		const handIns = handInExits(template)
 		const tools = loopTools(template, system, handIns, session)
 		let turns = 0
@@ -146,7 +146,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		})
 		harness.install(extension)
 
-		const context = harness.context(signal)
+		const context = harness.context(abortSignal)
 		const conversation = await harness.conversation(
 			storeKey,
 			{
@@ -157,7 +157,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 				cwd: run.workspace,
 				maxTurns: null,
 			},
-			signal,
+			abortSignal,
 		)
 		let content = template.text
 		for (let reminder = 0; ; reminder++) {
@@ -191,7 +191,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		}
 	} finally {
 		clock.stop()
-		run.signal.removeEventListener('abort', onAbort)
+		run.abortSignal.removeEventListener('abort', onAbort)
 		const installed = extension
 		if (installed !== undefined) {
 			void idle.finally(() => {

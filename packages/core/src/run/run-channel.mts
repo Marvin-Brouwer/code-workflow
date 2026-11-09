@@ -8,5 +8,5 @@ export interface RunChannel {
 	/** Sends one message. A request id is used once per run attempt. */
 	send(message: RuntimeMessage): void
 	/** Waits until the engine has answered the request with this id. */
-	answer(requestId: string, signal: AbortSignal): Promise<Answer>
+	answer(requestId: string, abortSignal: AbortSignal): Promise<Answer>
 }

@@ -1,6 +1,8 @@
+import type { PromptValues } from '../render/prompt-values.mts'
+
 export const promptParts: unique symbol = Symbol.for('mesh-flow.prompt')
 
-/** A template with interpolated values, for an agent's system prompt. */
+/** A template with interpolated values, for an agent's system prompt. The values are checked like a loop's. */
 export interface Prompt {
 	readonly [promptParts]: { readonly strings: readonly string[]; readonly values: readonly unknown[] }
 }
@@ -16,7 +18,7 @@ export interface Prompt {
  * })
  * ```
  */
-export function prompt(strings: TemplateStringsArray, ...values: readonly unknown[]): Prompt {
+export function prompt<Values extends readonly unknown[]>(strings: TemplateStringsArray, ...values: Values & PromptValues<Values>): Prompt {
 	return Object.freeze({ [promptParts]: { strings: [...strings], values } })
 }
 

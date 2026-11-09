@@ -21,8 +21,8 @@ export interface Check {
  *
  * ```ts
  * export function tests(repository: Repository): Check {
- * 	return check('tests', async ({ signal }) => {
- * 		const result = await runTests(repository, signal)
+ * 	return check('tests', async ({ abortSignal }) => {
+ * 		const result = await runTests(repository, abortSignal)
  * 		return result.failures.map((failure) => ({ source: 'tests', message: failure }))
  * 	})
  * }

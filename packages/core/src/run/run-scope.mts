@@ -11,7 +11,7 @@ export interface RunContext {
 	readonly workflow: string
 	readonly channel: RunChannel
 	/** Aborted when the run is stopped. Primitives pass it on to everything they wait for. */
-	readonly signal: AbortSignal
+	readonly abortSignal: AbortSignal
 	/** The run's workspace directory, absolute. */
 	readonly workspace: string
 	/** Counts per name within the run attempt: 1, 2, 3, ... */

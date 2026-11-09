@@ -3,16 +3,16 @@
  * promise goes on; this only stops waiting for it, so work that ignores its signal can't hold up a
  * stop.
  */
-export async function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-	signal.throwIfAborted()
+export async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
+	abortSignal.throwIfAborted()
 	const { promise: aborted, reject } = Promise.withResolvers<never>()
 	const onAbort = () => {
-		reject(signal.reason)
+		reject(abortSignal.reason)
 	}
-	signal.addEventListener('abort', onAbort, { once: true })
+	abortSignal.addEventListener('abort', onAbort, { once: true })
 	try {
 		return await Promise.race([promise, aborted])
 	} finally {
-		signal.removeEventListener('abort', onAbort)
+		abortSignal.removeEventListener('abort', onAbort)
 	}
 }

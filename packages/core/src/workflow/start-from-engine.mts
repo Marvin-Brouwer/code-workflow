@@ -22,7 +22,7 @@ export async function startFromEngine(workflow: Workflow, environment: NodeJS.Pr
 	const runId = environment[runIdEnvironmentVariable]
 	const outcome = await runWorkflow(workflow, {
 		channel,
-		signal: controller.signal,
+		abortSignal: controller.signal,
 		workspace: path.join(homedir(), 'workspace'),
 		agentStore: path.join(homedir(), '.mesh-flow', 'agents.sqlite'),
 		...(runId === undefined ? {} : { runId }),

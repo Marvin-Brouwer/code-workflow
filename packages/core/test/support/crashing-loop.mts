@@ -23,5 +23,5 @@ await runWorkflow(
 	workflow('store', async () => {
 		await helper.loop`First task. ${succeed()}`
 	}),
-	{ channel: memoryChannel(), signal: new AbortController().signal, workspace, agentStore, models: model.models },
+	{ channel: memoryChannel(), abortSignal: new AbortController().signal, workspace, agentStore, models: model.models },
 )

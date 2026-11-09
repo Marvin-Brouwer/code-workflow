@@ -2,15 +2,15 @@ import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { tool, ToolInputError } from '../src/tool/tool.mts'
 
-const signal = new AbortController().signal
+const abortSignal = new AbortController().signal
 
 describe('tool', () => {
-	test('is a function code can call, outside a run with a signal', async () => {
+	test('is a function code can call, outside a run with an abort signal', async () => {
 		// Arrange
 		const search = tool('search', { input: z.object({ query: z.string() }), action: async ({ query }) => [query] })
 
 		// Act
-		const result = await search({ query: 'login' }, { signal })
+		const result = await search({ query: 'login' }, { abortSignal })
 
 		// Assert
 		expect(result).toEqual(['login'])
@@ -23,13 +23,13 @@ describe('tool', () => {
 
 		// Act
 		// @ts-expect-error -- the wrong input type is the point
-		const calling = search({ query: 1 }, { signal })
+		const calling = search({ query: 1 }, { abortSignal })
 
 		// Assert
 		await expect(calling).rejects.toThrow(ToolInputError)
 	})
 
-	test('refuses a call outside a run without a signal', async () => {
+	test('refuses a call outside a run without an abort signal', async () => {
 		// Arrange
 		const search = tool('search', { input: z.object({}), action: async () => [] })
 
@@ -37,7 +37,7 @@ describe('tool', () => {
 		const calling = search({})
 
 		// Assert
-		await expect(calling).rejects.toThrow('pass { signal }')
+		await expect(calling).rejects.toThrow('pass { abortSignal }')
 	})
 
 	test('refuses a name a model provider would not take', () => {

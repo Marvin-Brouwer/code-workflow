@@ -6,7 +6,7 @@ import { untilAborted } from '../run/until-aborted.mts'
 /** What a tool's action gets besides its input. */
 export interface ToolContext {
 	/** Aborted when the call should stop: the run or the loop it runs in was stopped. */
-	readonly signal: AbortSignal
+	readonly abortSignal: AbortSignal
 }
 
 /** What a tool is made of, for code that runs tools: the loop, and tools of other packages. */
@@ -45,6 +45,11 @@ export interface Tool<Input = never, Output = unknown> {
 	readonly [toolSpec]: ToolSpec
 }
 
+/** Any tool, whatever its input and output: what the type checks of templates look for. */
+export interface AnyTool {
+	readonly [toolSpec]: ToolSpec
+}
+
 /** Names that every model provider accepts for a tool. */
 const toolNamePattern = /^[A-Za-z][\w-]{0,63}$/
 
@@ -55,7 +60,7 @@ const toolNamePattern = /^[A-Za-z][\w-]{0,63}$/
  * export const search = tool('jiraSearch', {
  * 	description: 'Search Jira issues with JQL',
  * 	input: z.object({ jql: z.string() }),
- * 	action: ({ jql }, { signal }) => searchIssues(jql, signal),
+ * 	action: ({ jql }, { abortSignal }) => searchIssues(jql, abortSignal),
  * })
  * ```
  *
@@ -101,9 +106,9 @@ async function callFromCode<Output>(
 	context: ToolContext | undefined,
 ): Promise<Output> {
 	const scope = findScope()
-	const signal = context?.signal ?? scope?.run.signal
-	if (signal === undefined) throw new Error(`Tool ${name} was called outside a workflow run: pass { signal }.`)
-	const call = async () => untilAborted(prepare(input)({ signal }), signal)
+	const abortSignal = context?.abortSignal ?? scope?.run.abortSignal
+	if (abortSignal === undefined) throw new Error(`Tool ${name} was called outside a workflow run: pass { abortSignal }.`)
+	const call = async () => untilAborted(prepare(input)({ abortSignal }), abortSignal)
 	if (scope === undefined) return call()
 	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, call)
 }

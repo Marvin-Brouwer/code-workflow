@@ -70,7 +70,7 @@ A tool, a check or an exit that throws ends the loop with that error, after the 
 
 ### Tools
 
-A tool is also a function. Interpolated into a template, the agent can call it. Called from code inside a run, it gets the run's signal; outside a run, pass `{ signal }`.
+A tool is also a function. Interpolated into a template, the agent can call it. Called from code inside a run, it gets the run's signal; outside a run, pass `{ abortSignal }`.
 
 ```ts
 import { tool } from '@mesh-flow/core'
@@ -108,8 +108,8 @@ A check returns findings; no findings means it passed. Checks run concurrently w
 import { readFile } from 'node:fs/promises'
 import { check } from '@mesh-flow/core'
 
-export const noTodos = check('no TODOs', async ({ signal }) => {
-	const source = await readFile('web/src/app.ts', { encoding: 'utf8', signal })
+export const noTodos = check('no TODOs', async ({ abortSignal }) => {
+	const source = await readFile('web/src/app.ts', { encoding: 'utf8', signal: abortSignal })
 	return source.includes('TODO') ? [{ source: 'web/src/app.ts', message: 'Resolve the TODO before handing in.' }] : []
 })
 ```
@@ -131,14 +131,21 @@ const findings = await research.files()
 
 ### Humans
 
-`input` asks the person running the workflow and waits. The wait is engine-side, so the sandbox can pause meanwhile. An answer that doesn't fit the fields is asked again.
+`input` asks the person running the workflow and waits. The wait is engine-side, so the sandbox can pause meanwhile. The fields are a form: any zod schema, or one of the common kinds, `input.text()`, `input.yesNo()`, `input.choice(options)` and `input.choices(options)`. An answer that doesn't fit the fields is asked again.
 
 ```ts
 import { input } from '@mesh-flow/core'
 import { z } from 'zod'
 
-const { key } = await input('Which story?', { key: z.string() })
+const { key } = await input('Which story?', { key: z.string().regex(/^[A-Z]+-\d+$/) })
+const release = await input('How should the release go?', {
+	tagged: input.yesNo('Is the release tagged yet?'),
+	channel: input.choice(['stable', 'beta']),
+	platforms: input.choices(['web', 'ios', 'android']),
+})
 ```
+
+An agent asks with `requestUserInput`: one question with a text answer, or a form with the same kinds of field.
 
 ### Workflows
 
@@ -181,7 +188,7 @@ const channel: RunChannel = {
 	answer: async () => ({ value: { approved: true } }),
 }
 
-const outcome = await runWorkflow(develop, { channel, models, signal: AbortSignal.timeout(anHourMs), workspace: 'workspace' })
+const outcome = await runWorkflow(develop, { channel, models, abortSignal: AbortSignal.timeout(anHourMs), workspace: 'workspace' })
 ```
 
 Under the engine the workspace is `~/workspace` and the agents' store is `~/.mesh-flow/agents.sqlite`.

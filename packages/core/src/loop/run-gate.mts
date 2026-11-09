@@ -16,7 +16,7 @@ export function runGateOf(spec: GateSpec | undefined, session: LoopSession): Run
 	let rejections = 0
 	return () =>
 		inEventOf(session.scope, 'checks', { checks: spec.checks.map((check) => check.name) }, async (scope) => {
-			const results = await Promise.all(spec.checks.map((check) => runCheck(check, { signal: session.signal })))
+			const results = await Promise.all(spec.checks.map((check) => runCheck(check, { abortSignal: session.abortSignal })))
 			const findings = results.flat()
 			if (findings.length === 0) return { passed: true }
 			rejections++

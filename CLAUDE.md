@@ -7,6 +7,7 @@ TypeScript in git, not something clicked together in a UI.
 ## Read first
 
 - `docs/design.md`: the design, the decisions behind it, and what is still open.
+- `code-style.md`: how code is written here, beyond what the formatter and linter enforce.
 - `docs/decisions.md`: alternatives that were considered and rejected or superseded, and why.
   Don't propose these again unless something new changes the trade-off; if it does, say what
   changed.

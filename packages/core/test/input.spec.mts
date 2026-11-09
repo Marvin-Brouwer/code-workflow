@@ -32,4 +32,29 @@ describe('input', () => {
 		expect(second.id).toBe('input-2')
 		expect(second.question).toContain("The last answer didn't fit")
 	})
+
+	test('asks a form of text, yes or no, a choice and several choices', async () => {
+		// Arrange
+		const run = await runBody(() =>
+			input('How should the release go?', {
+				notes: input.text('What changed'),
+				tagged: input.yesNo(),
+				channel: input.choice(['stable', 'beta']),
+				platforms: input.choices(['web', 'ios', 'android']),
+			}),
+		)
+
+		// Act
+		const asked = await run.channel.nextInput()
+		run.channel.reply(asked.id, { notes: 'Faster login', tagged: true, channel: 'beta', platforms: ['web', 'ios'] })
+
+		// Assert
+		expect(await run.result).toEqual({ notes: 'Faster login', tagged: true, channel: 'beta', platforms: ['web', 'ios'] })
+		expect(asked.fields).toMatchObject({
+			notes: { type: 'string', description: 'What changed' },
+			tagged: { type: 'boolean' },
+			channel: { enum: ['stable', 'beta'] },
+			platforms: { type: 'array', items: { enum: ['web', 'ios', 'android'] } },
+		})
+	})
 })

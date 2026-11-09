@@ -27,19 +27,19 @@ import { resolveModel } from './resolve-model.mts'
  */
 export interface AgentHarness {
 	/** The conversation for a loop's store key (its key and fingerprint), made on first use, then configured with `agent`. */
-	conversation(key: string, agent: AgentChange, signal: AbortSignal): Promise<Conversation>
+	conversation(key: string, agent: AgentChange, abortSignal: AbortSignal): Promise<Conversation>
 	/** The result a loop's store key finished with in an earlier attempt of the run, if it finished. */
-	keptResult(key: string, signal: AbortSignal): Promise<StoredResult | undefined>
+	keptResult(key: string, abortSignal: AbortSignal): Promise<StoredResult | undefined>
 	/** Keeps the result a loop's store key finished with, so a rerun returns it without running the loop again. */
-	keepResult(key: string, result: StoredResult, signal: AbortSignal): Promise<void>
+	keepResult(key: string, result: StoredResult, abortSignal: AbortSignal): Promise<void>
 	/** Which provider serves a model id, model first. */
 	model(modelId: string): ModelRef
 	/** Adds a loop's tools and hooks. Conversations select it in their `agent`. */
 	install(extension: Extension): void
 	/** Removes a loop's tools and hooks once its conversation is done with them. */
 	uninstall(extension: Extension): void
-	/** A Pi context that stops waiting when `signal` aborts. */
-	context(signal: AbortSignal): Context
+	/** A Pi context that stops waiting when `abortSignal` aborts. */
+	context(abortSignal: AbortSignal): Context
 	/** Closes the store. Gives up after `timeoutMs` when running work doesn't stop. */
 	close(timeoutMs: number): Promise<void>
 }
@@ -88,7 +88,7 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 	await stopLeftoverWork(harness, runSignal)
 
 	return {
-		async conversation(key, agent, signal) {
+		async conversation(key, agent, abortSignal) {
 			const id = await harness.commit(async (tx) => {
 				const loops = await tx.doc(LoopRecords)
 				const known = loops.byKey[key]
@@ -96,21 +96,21 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 				const created = await tx.createConversation({ ownership: { kind: 'ownerless' } })
 				loops.byKey[key] = created.id
 				return created.id
-			}, context(signal))
-			const conversation = await harness.conversation(id, context(signal))
+			}, context(abortSignal))
+			const conversation = await harness.conversation(id, context(abortSignal))
 			if (conversation === undefined) throw new Error(`The conversation of loop ${key} is gone from the agent store.`)
-			await conversation.configure(agent, context(signal))
+			await conversation.configure(agent, context(abortSignal))
 			return conversation
 		},
-		async keptResult(key, signal) {
-			const text = await harness.commit(async (tx) => (await tx.doc(LoopRecords)).results[key], context(signal))
+		async keptResult(key, abortSignal) {
+			const text = await harness.commit(async (tx) => (await tx.doc(LoopRecords)).results[key], context(abortSignal))
 			return text === undefined ? undefined : StoredResult.parse(JSON.parse(text))
 		},
-		async keepResult(key, result, signal) {
+		async keepResult(key, result, abortSignal) {
 			await harness.commit(async (tx) => {
 				const loops = await tx.doc(LoopRecords)
 				loops.results[key] = JSON.stringify(result)
-			}, context(signal))
+			}, context(abortSignal))
 		},
 		model: (modelId) => resolveModel(options.models, modelId),
 		install: (extension) => {
@@ -131,18 +131,18 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
  * off by a crash. It belongs to a loop that isn't running, so it would run without that loop's
  * tools, limits and events. The transcripts stay, so a loop that runs again goes on from them.
  */
-async function stopLeftoverWork(harness: Harness, signal: AbortSignal): Promise<void> {
+async function stopLeftoverWork(harness: Harness, abortSignal: AbortSignal): Promise<void> {
 	// Copied inside the commit: the document is only readable there. A loop that finished can still have
 	// left work running, when the run crashed before ending the agent's run reached the store.
-	const ids = await harness.commit(async (tx) => Object.values((await tx.doc(LoopRecords)).byKey), context(signal))
+	const ids = await harness.commit(async (tx) => Object.values((await tx.doc(LoopRecords)).byKey), context(abortSignal))
 	for (const id of ids) {
-		await (await harness.conversation(id, context(signal)))?.abort(context(signal))
+		await (await harness.conversation(id, context(abortSignal)))?.abort(context(abortSignal))
 	}
 }
 
-/** A Pi context that stops waiting when `signal` aborts. Pi's waits stop; the work behind them doesn't. */
-function context(signal: AbortSignal): Context {
-	return withAbortSignal(signal, BACKGROUND_CONTEXT)
+/** A Pi context that stops waiting when `abortSignal` aborts. Pi's waits stop; the work behind them doesn't. */
+function context(abortSignal: AbortSignal): Context {
+	return withAbortSignal(abortSignal, BACKGROUND_CONTEXT)
 }
 
 async function openStorage(file: string | undefined) {

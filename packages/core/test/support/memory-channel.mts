@@ -40,12 +40,12 @@ export function memoryChannel(): MemoryChannel {
 			if (next === undefined) unanswered.push(message.request)
 			else next(message.request)
 		},
-		async answer(requestId, signal) {
+		async answer(requestId, abortSignal) {
 			const { promise } = slot(requestId)
-			signal.throwIfAborted()
+			abortSignal.throwIfAborted()
 			return new Promise((resolve, reject) => {
-				signal.addEventListener('abort', () => {
-					reject(signal.reason)
+				abortSignal.addEventListener('abort', () => {
+					reject(abortSignal.reason)
 				})
 				promise.then(resolve, reject)
 			})

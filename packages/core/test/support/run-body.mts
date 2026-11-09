@@ -44,7 +44,7 @@ export async function runBody(body: () => Promise<unknown>, options: BodyRunOpti
 	})
 	const outcome = runWorkflow(definition, {
 		channel,
-		signal: controller.signal,
+		abortSignal: controller.signal,
 		workspace,
 		...(options.models === undefined ? {} : { models: options.models }),
 		...(options.agentStore === undefined ? {} : { agentStore: options.agentStore }),

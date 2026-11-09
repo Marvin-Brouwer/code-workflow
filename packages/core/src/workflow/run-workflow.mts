@@ -15,7 +15,7 @@ export interface RunOptions {
 	/** Where events and requests go and answers come from. Under the engine: the sandbox's mailbox. */
 	readonly channel: RunChannel
 	/** Stops the run. Everything in it gets this signal; the run settles promptly once it aborts. */
-	readonly signal: AbortSignal
+	readonly abortSignal: AbortSignal
 	/** The model providers the run's agents use. Without them, the first loop fails. */
 	readonly models?: Models
 	/** The run's workspace directory, made when missing. Default `./workspace`. */
@@ -48,7 +48,7 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
 		attempt: randomUUID().slice(0, 8),
 		workflow: definition.name,
 		channel: options.channel,
-		signal: options.signal,
+		abortSignal: options.abortSignal,
 		workspace,
 		count: (name) => {
 			const next = (counts.get(name) ?? 0) + 1
@@ -73,7 +73,7 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
 						emitEvent(root, 'agent-report', { kind: report.kind, error: describeError(report.error) })
 					},
 				},
-				options.signal,
+				options.abortSignal,
 			)
 			return agents
 		},
@@ -83,7 +83,7 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
 	let outcome: RunOutcome
 	try {
 		await mkdir(workspace, { recursive: true })
-		await inEventOf(root, 'workflow', { workflow: definition.name, runId: run.runId }, () => settle(definition.body(), options.signal))
+		await inEventOf(root, 'workflow', { workflow: definition.name, runId: run.runId }, () => settle(definition.body(), options.abortSignal))
 		outcome = { status: 'succeeded' }
 	} catch (error) {
 		outcome = { status: 'failed', error }
@@ -98,9 +98,9 @@ export async function runWorkflow(definition: Workflow, options: RunOptions): Pr
  * Waits for the body, or stops waiting when the run is stopped. A stopped body gets a moment to
  * settle, so the events of the work it was doing land before the workflow's own.
  */
-async function settle(body: Promise<void>, signal: AbortSignal): Promise<void> {
+async function settle(body: Promise<void>, abortSignal: AbortSignal): Promise<void> {
 	try {
-		await untilAborted(body, signal)
+		await untilAborted(body, abortSignal)
 	} catch (error) {
 		await settledWithin(body, closeMs)
 		throw error

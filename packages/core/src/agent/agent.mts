@@ -3,6 +3,7 @@ import type { Check } from '../check/check.mts'
 import type { ResultOf } from '../exits/result-of.mts'
 import { verify } from '../exits/verify.mts'
 import { runLoop } from '../loop/run-loop.mts'
+import type { PromptValues } from '../render/prompt-values.mts'
 import { callSite, callSiteText } from '../run/call-site.mts'
 import { tool, type Tool } from '../tool/tool.mts'
 import type { Prompt } from './prompt.mts'
@@ -38,7 +39,10 @@ export interface Agent {
 	 * The loop rejects when the agent calls `fail`, a tool throws, a `limit` runs out, `verify`
 	 * rejects too often, the model fails or hits its context limit, or the run is stopped.
 	 */
-	loop<Values extends readonly unknown[]>(template: TemplateStringsArray, ...values: Values): Promise<ResultOf<Values>>
+	loop<Values extends readonly unknown[]>(
+		template: TemplateStringsArray,
+		...values: Values & PromptValues<Values>
+	): Promise<ResultOf<Values>>
 	/**
 	 * This agent as a tool for another agent: the other agent describes a task, this one does it in
 	 * a loop of its own. With `verify`, the work has to pass those checks before the tool returns.
@@ -66,10 +70,10 @@ export function agent(options: AgentOptions): Agent {
 	const loopAgent = { model: options.model, reasoning: options.reasoning, system: options.system }
 	return Object.freeze<Agent>({
 		model: options.model,
-		loop(template, ...values) {
+		loop(template: TemplateStringsArray, ...values: readonly unknown[]) {
 			const site = callSiteText(callSite(1))
 			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the result type comes from the exits, which only the compiler sees
-			return runLoop(loopAgent, { strings: [...template], values }, site) as Promise<ResultOf<typeof values>>
+			return runLoop(loopAgent, { strings: [...template], values }, site) as Promise<never>
 		},
 		as(name, { in: target, verify: checks = [] } = {}) {
 			const site = `${callSiteText(callSite(1))} ${name}`

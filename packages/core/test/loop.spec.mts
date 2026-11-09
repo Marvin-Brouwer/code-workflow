@@ -251,6 +251,26 @@ describe('loop', () => {
 		expect(textOf(model.requests[1])).toContain('web')
 	})
 
+	test('lets the agent ask the user with a form, with the same kinds of field as input', async () => {
+		// Arrange
+		const form = {
+			question: 'Which release?',
+			fields: { channel: { kind: 'choice', options: ['stable', 'beta'] }, tagged: { kind: 'yesNo' } },
+		}
+		const model = scriptedModel([callsTool('requestUserInput', form), says('ok')])
+		const helper = agent({ model: model.id, system: prompt`Ask with ${requestUserInput}.` })
+
+		// Act
+		const run = await runBody(() => helper.loop`Release it.`, model)
+		const asked = await run.channel.nextInput()
+		run.channel.reply(asked.id, { channel: 'beta', tagged: false })
+		await run.result
+
+		// Assert
+		expect(asked.fields).toMatchObject({ channel: { enum: ['stable', 'beta'] }, tagged: { type: 'boolean' } })
+		expect(textOf(model.requests[1])).toContain('\\"channel\\": \\"beta\\"')
+	})
+
 	test('finishes with a folder once it holds enough files', async () => {
 		// Arrange
 		const Research = workspace.folder('research', { minFiles: 1 })
@@ -430,7 +450,7 @@ describe('stopping a run', () => {
 		expect(Date.now() - started).toBeLessThan(promptlyMs)
 	})
 
-	test('settles promptly while a tool never settles and ignores its signal', async () => {
+	test('settles promptly while a tool never settles and ignores its abort signal', async () => {
 		// Arrange
 		const stuck = tool('stuck', { input: z.object({}), action: () => new Promise<never>(() => {}) })
 		const model = scriptedModel([callsTool('stuck')])
