@@ -44,3 +44,10 @@ TypeScript in git, not something clicked together in a UI.
   comment or status), so a rerun is cheap and safe.
 - **No customer or employer names anywhere** (code, docs, examples, test data, commit messages,
   URLs). The reference workflow is called `example`. This repo is public.
+
+## Git
+
+- **Never force push** (no `--force`, `--force-with-lease`, amend or rebase of pushed commits). Fix
+  a mistake with a new commit.
+- **Commit often, and commit working code:** small commits that each pass `pnpm lint`,
+  `pnpm format:check` and the tests they touch.
