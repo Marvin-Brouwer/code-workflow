@@ -155,6 +155,8 @@ await planner.loop`Research ${story}. Write your findings to ${research} and fin
 const findings = await research.files()
 ```
 
+A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git.
+
 ### Humans
 
 `input` asks the person running the workflow and waits. The wait is engine-side, so the sandbox can pause meanwhile. The fields are a form: any zod schema, or one of the common kinds, `input.text()`, `input.yesNo()`, `input.choice(options)` and `input.choices(options)`. An answer that doesn't fit the fields is asked again.

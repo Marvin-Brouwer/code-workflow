@@ -8,6 +8,8 @@ export interface WorkspaceFile {
 	readonly kind: 'file'
 	/** Relative to the workspace, POSIX. */
 	readonly path: string
+	/** Where it is on disk, in the current run's workspace. Throws outside a run. */
+	location(): string
 	read(): Promise<string>
 	/** Writes the file, making its folder when needed. */
 	write(text: string): Promise<void>
@@ -26,6 +28,7 @@ export function workspaceFile(relative: string): WorkspaceFile {
 	return Object.freeze({
 		kind: 'file' as const,
 		path: filePath,
+		location: () => located('Locating'),
 		read: () => readFile(located('Reading'), 'utf8'),
 		write: async (text: string) => {
 			const file = located('Writing')
