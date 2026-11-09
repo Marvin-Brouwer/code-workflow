@@ -77,7 +77,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let engine: Engine
 	let apps: AppStore
 	try {
-		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal)
+		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal, log)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
@@ -115,6 +115,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		} catch (error) {
 			scheduler.close()
 			await closeServer(server)
+			await apps.close()
 			await engine.close({ pause: AbortSignal.timeout(closeStepMs), backend: AbortSignal.timeout(closeStepMs) })
 			await unlock()
 			throw error
@@ -126,6 +127,8 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		try {
 			await Promise.all([closeServer(server), webhooks ? closeServer(webhooks.server) : undefined])
 			scheduler.close()
+			// A deploy that was under way when the servers closed finishes before the home is let go.
+			await apps.close()
 			await engine.close(deadlines)
 		} finally {
 			// Reported, not thrown: an error closing the engine is the one to see.

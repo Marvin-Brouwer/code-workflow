@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { AppPackageJson } from './app-package-json.mts'
@@ -27,19 +27,22 @@ export interface NativePackage {
  * The bundle leaves these out, and the build installs them for the sandbox's platform instead.
  */
 export async function nativePackages(directory: string, abortSignal: AbortSignal): Promise<NativePackage[]> {
-	const found = new Map<string, NativePackage>()
+	const natives = new Map<string, NativePackage>()
 	const visited = new Set<string>()
 	const visit = async (from: string, names: readonly string[]) => {
 		for (const name of names) {
 			abortSignal.throwIfAborted()
-			const folder = packageFolder(name, from)
-			if (folder === undefined || visited.has(folder)) continue
+			const found = packageFolder(name, from)
+			if (found === undefined) continue
+			// Where Node resolves the package's own dependencies from: under pnpm, next to its real folder.
+			const folder = await realpath(found)
+			if (visited.has(folder)) continue
 			visited.add(folder)
 			const json = DependencyPackage.parse(JSON.parse(await readFile(path.join(folder, 'package.json'), 'utf8')))
 			const buildsFromSource = json.gypfile === true || existsSync(path.join(folder, 'binding.gyp'))
 			const prebuilt = existsSync(path.join(folder, 'prebuilds')) || Object.keys(json.optionalDependencies ?? {}).length > 0
 			if (buildsFromSource || prebuilt) {
-				found.set(json.name, { name: json.name, version: json.version, buildsFromSource: buildsFromSource && !prebuilt })
+				natives.set(json.name, { name: json.name, version: json.version, buildsFromSource: buildsFromSource && !prebuilt })
 				continue
 			}
 			await visit(folder, Object.keys(json.dependencies ?? {}))
@@ -47,7 +50,7 @@ export async function nativePackages(directory: string, abortSignal: AbortSignal
 	}
 	const { dependencies } = AppPackageJson.parse(JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8')))
 	await visit(directory, Object.keys(dependencies ?? {}))
-	return [...found.values()]
+	return [...natives.values()]
 }
 
 /** Where `name` resolves from `from`, as Node finds it: the nearest `node_modules/<name>` up the tree. */

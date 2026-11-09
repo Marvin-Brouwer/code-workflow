@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs'
-import { appendFile, copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
+import { copyTarball } from '../apps/copy-tarball.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { RunId } from './run-id.mts'
 import { RunRecord } from './run-record.mts'
@@ -29,7 +30,7 @@ export interface RunStore {
 	/** The run's own copy of the built app, packed. */
 	appOf(id: RunId): string
 	/** Keeps a copy of the built app the run starts on, once, before the run's record is saved. */
-	saveApp(id: RunId, tarball: string): Promise<void>
+	saveApp(id: RunId, tarball: string, abortSignal: AbortSignal): Promise<void>
 	/** Keeps what the app is to run, once, before the run's record is saved. */
 	saveStart(id: RunId, start: RunStart): Promise<void>
 	/** What the app is to run. Runs from before start files run their workflow without parameters. */
@@ -69,10 +70,10 @@ export function openRunStore(root: string): RunStore {
 	return Object.freeze({
 		appOf: (id) => file(id, appFile),
 
-		saveApp: (id, tarball) =>
+		saveApp: (id, tarball, abortSignal) =>
 			queues.write(id, async () => {
 				await mkdir(runDirectory(root, id), { recursive: true })
-				await copyFile(tarball, file(id, appFile))
+				await copyTarball(tarball, file(id, appFile), abortSignal)
 			}),
 
 		saveStart: (id, start) =>

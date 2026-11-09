@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { appManifestFile, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { buildApp } from '../src/build-app.mts'
+import { describeBuiltApp } from '../src/describe-built-app.mts'
 import { appRepository, describingEntry } from './support/app-repository.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -98,5 +99,47 @@ describe('buildApp', () => {
 
 		// Assert
 		await expect(building).rejects.toThrow()
+	})
+
+	test.each([
+		['the repository', '.'],
+		['a folder that holds it', '..'],
+	])('refuses to empty %s as the output', async (_name, relative) => {
+		// Arrange
+		const directory = await appRepository({ files: { 'main.mts': describingEntry(description) } })
+
+		// Act
+		const building = buildApp({ directory, out: path.join(directory, relative), abortSignal })
+
+		// Assert
+		await expect(building).rejects.toThrow('holds the app')
+		expect(existsSync(path.join(directory, 'package.json'))).toBe(true)
+	})
+})
+
+describe('describeBuiltApp', () => {
+	test("loads native dependencies from the repository, not the sandbox's next to the bundle", async () => {
+		// Arrange
+		const entry = `import { native } from 'native'\n${describingEntry(description).replace("import { punctuation } from 'greeting'\n", '')}`
+		const directory = await appRepository({
+			files: { 'main.mjs': entry.replace("import { greeting } from './greeting.mts'\n", 'const greeting = native\n') },
+			packages: { native: { files: { 'index.js': `export const native = 'host'\n` } } },
+		})
+		const out = await temporaryDirectory()
+		await copyFile(path.join(directory, 'main.mjs'), path.join(out, 'main.mjs'))
+		// Built for the sandbox: it can't load here.
+		await mkdir(path.join(out, 'node_modules', 'native'), { recursive: true })
+		await writeFile(
+			path.join(out, 'node_modules', 'native', 'package.json'),
+			JSON.stringify({ name: 'native', type: 'module', main: 'index.js' }),
+		)
+		await writeFile(path.join(out, 'node_modules', 'native', 'index.js'), `throw new Error('wrong platform')\n`)
+
+		// Act
+		const described = await describeBuiltApp({ bundle: path.join(out, 'main.mjs'), directory, abortSignal })
+
+		// Assert
+		expect(described).toEqual(description)
+		expect(await readdir(path.join(directory, '.mesh-flow'))).toEqual([])
 	})
 })

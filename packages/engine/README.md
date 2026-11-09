@@ -25,7 +25,7 @@ An app is a package whose `main` in `package.json` is its entry file, which expo
 ```bash
 mesh-flow build    # bundles the entry file into .mesh-flow/app, with mesh-flow.json saying what it declares
 mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the app's new current version
-mesh-flow dev      # builds and deploys again on every change, so the triggers are live while you work
+mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
 `build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine comes with the gateway.

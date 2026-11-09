@@ -4,7 +4,7 @@ import path from 'node:path'
 import { appManifestFile, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
 import { build } from 'rolldown'
 import { describeBuiltApp } from './describe-built-app.mts'
-import { installForPlatform } from './install-for-platform.mts'
+import { assertInstallable, installForPlatform } from './install-for-platform.mts'
 import { nativePackages, type NativePackage } from './native-packages.mts'
 import { packageEntry } from './package-entry.mts'
 
@@ -12,7 +12,7 @@ import { packageEntry } from './package-entry.mts'
 export interface BuildAppOptions {
 	/** The app's repository, with its `package.json` and installed dependencies. */
 	readonly directory: string
-	/** Where the built app goes. It's emptied first. */
+	/** Where the built app goes. It's emptied first, so it can't be the repository or hold it. */
 	readonly out: string
 	/** The sandbox's platform, which native dependencies are installed for. Default: linux-x64. */
 	readonly platform?: AppPlatform
@@ -36,8 +36,10 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	const { directory, out, abortSignal } = options
 	const platform = options.platform ?? defaultPlatform
 	abortSignal.throwIfAborted()
+	assertSafeOut(path.resolve(directory), path.resolve(out))
 	const entry = await packageEntry(directory)
 	const natives = await nativePackages(directory, abortSignal)
+	assertInstallable(natives, platform)
 	await rm(out, { recursive: true, force: true })
 	await mkdir(out, { recursive: true })
 	abortSignal.throwIfAborted()
@@ -54,11 +56,23 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 		},
 		output: { file: path.join(out, builtEntry), format: 'esm', codeSplitting: false },
 	})
+	// Described before the sandbox's binaries are installed next to it: this machine may not run them.
+	const description = await describeBuiltApp({ bundle: path.join(out, builtEntry), directory, abortSignal })
 	await installForPlatform(out, natives, platform, abortSignal)
-	const description = await describeBuiltApp(path.join(out, builtEntry), abortSignal)
 	const manifest: AppManifest = { entry: builtEntry, platform, description, builtAt: new Date().toISOString() }
 	await writeFile(path.join(out, appManifestFile), JSON.stringify(manifest, null, '\t'))
 	return manifest
+}
+
+/** Throws when emptying `out` would delete the repository, or everything. */
+function assertSafeOut(directory: string, out: string): void {
+	const outward = path.relative(out, directory)
+	const holdsDirectory = outward === '' || (!outward.startsWith('..') && !path.isAbsolute(outward))
+	if (holdsDirectory || path.dirname(out) === out) {
+		throw new Error(
+			`${out} is emptied before a build, and it holds the app's repository: give a folder of its own, such as .mesh-flow/app.`,
+		)
+	}
 }
 
 function isNative(id: string, natives: readonly NativePackage[]): boolean {

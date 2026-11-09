@@ -130,4 +130,20 @@ describe('createScheduler', () => {
 		expect(startRun).not.toHaveBeenCalled()
 		expect(vi.getTimerCount()).toBe(0)
 	})
+
+	test('arms nothing when it is given apps after it closed', async () => {
+		// Arrange
+		useClockAt(tenAm)
+		const { engine, startRun } = fakeEngine('succeeded')
+		const { scheduler } = openScheduler(engine)
+		scheduler.close()
+
+		// Act
+		scheduler.update([teamApp('v1')])
+		await vi.advanceTimersByTimeAsync(3_000)
+
+		// Assert
+		expect(vi.getTimerCount()).toBe(0)
+		expect(startRun).not.toHaveBeenCalled()
+	})
 })

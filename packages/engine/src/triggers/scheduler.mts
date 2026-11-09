@@ -20,7 +20,7 @@ export interface SchedulerOptions {
 export interface Scheduler {
 	/** Follows these apps' schedules from now on: new ones are armed, changed or gone ones disarmed. */
 	update(apps: readonly AppVersion[]): void
-	/** Stops every timer. Runs that were started go on. */
+	/** Stops every timer, and arms none from then on. Runs that were started go on. */
 	close(): void
 }
 
@@ -50,6 +50,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	const { engine, log } = options
 	const now = options.now ?? (() => new Date())
 	const armed = new Map<string, Armed>()
+	let closed = false
 	/** Schedules whose run is being started, so a tick meanwhile is skipped too. */
 	const starting = new Set<string>()
 	/** Schedules whose cron expression was reported as broken, so it's reported once. */
@@ -113,6 +114,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 
 	return Object.freeze({
 		update(apps) {
+			if (closed) return
 			const wanted = new Map<string, { app: AppVersion; schedule: ScheduleDescription }>()
 			for (const app of apps) {
 				for (const trigger of app.manifest.description.triggers) {
@@ -133,6 +135,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 			}
 		},
 		close() {
+			closed = true
 			for (const { controller } of armed.values()) controller.abort()
 			armed.clear()
 		},

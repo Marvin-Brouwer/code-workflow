@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { RunRecord } from '../src/runs/run-record.mts'
@@ -125,5 +125,20 @@ describe('openRunStore', () => {
 
 		// Assert
 		expect(resolve).toThrow()
+	})
+
+	test('copies nothing, and leaves nothing behind, when copying the app is aborted', async () => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = openRunStore(root)
+		const tarball = path.join(await temporaryDirectory(), 'app.tgz')
+		await writeFile(tarball, 'a built app')
+
+		// Act
+		const saving = store.saveApp('run-00000000000a', tarball, AbortSignal.abort(new Error('Ctrl+C')))
+
+		// Assert
+		await expect(saving).rejects.toMatchObject({ name: 'AbortError' })
+		expect(await readdir(runDirectory(root, 'run-00000000000a'))).toEqual([])
 	})
 })

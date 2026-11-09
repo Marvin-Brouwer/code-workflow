@@ -175,7 +175,16 @@ export async function main(argv: readonly string[]): Promise<void> {
 			}
 			await buildAndDeploy()
 			log('Watching for changes. Ctrl+C stops.')
-			watchApp(directory, buildAndDeploy, log, stopping.signal)
+			await watchApp({
+				directory,
+				changed: buildAndDeploy,
+				log,
+				stopped: () => {
+					process.exitCode = 1
+					stopping.abort(new Error('Stopped watching.'))
+				},
+				abortSignal: stopping.signal,
+			})
 		})
 
 	program

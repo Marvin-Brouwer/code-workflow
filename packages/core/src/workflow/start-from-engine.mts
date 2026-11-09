@@ -18,7 +18,7 @@ type Begun = { readonly workflow: AnyWorkflow; readonly parameters: unknown } | 
  * Does what the engine started the entry file to do, as its mailbox's start file says: describe
  * what the entry file declares, or run one workflow on the mailbox, with the run id the engine gave
  * it, the workspace and agent store in the home directory, stopped by `SIGTERM` or `SIGINT`. Sets
- * the exit code from the outcome, and exits right away once stopped.
+ * the exit code from the outcome, and exits right away once stopped or once it has described itself.
  *
  * Model providers come with the gateway; until then a loop in an engine run fails up front.
  */
@@ -30,8 +30,11 @@ export async function startFromEngine(app: MeshFlowApp, environment: NodeJS.Proc
 	}
 	process.once('SIGTERM', stop)
 	process.once('SIGINT', stop)
+	let describing = false
 	try {
-		process.exitCode = await dispatch(app, channel, environment, controller.signal)
+		const request = RunStart.parse(await channel.readStart(controller.signal))
+		describing = request.mode === 'describe'
+		process.exitCode = await dispatch(app, request, channel, environment, controller.signal)
 	} catch (error) {
 		channel.send({ type: 'failed', error: describeError(error) })
 		process.exitCode = 1
@@ -40,18 +43,19 @@ export async function startFromEngine(app: MeshFlowApp, environment: NodeJS.Proc
 		process.off('SIGINT', stop)
 	}
 	// Once stopped, what the workflow left behind (a schema that never settles, a timer) must not
-	// keep the sandbox running: the outcome is already in the outbox.
-	if (controller.signal.aborted) process.exit()
+	// keep the sandbox running: the outcome is already in the outbox. A module that opens a handle
+	// when it's imported mustn't keep a build waiting on a description it already has either.
+	if (controller.signal.aborted || describing) process.exit()
 }
 
 /** Does what the start file asks for and returns the exit code. */
 async function dispatch(
 	app: MeshFlowApp,
+	request: RunStart,
 	channel: RuntimeMailbox,
 	environment: NodeJS.ProcessEnv,
 	abortSignal: AbortSignal,
 ): Promise<number> {
-	const request = RunStart.parse(await channel.readStart(abortSignal))
 	if (request.mode === 'describe') {
 		channel.send({ type: 'described', description: describeApp(app) })
 		return 0

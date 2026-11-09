@@ -6,6 +6,9 @@
  * `mesh-flow build` bundles this file with its dependencies and writes down what it declares, so
  * the engine only runs `node` in the sandbox.
  *
+ * The connector packages its workflows import aren't built yet (MVP step 7), so `mesh-flow build`
+ * can't build it until they are.
+ *
  * Once the atlassian connector ships its event schemas, a Jira webhook (a story labelled for
  * development) goes here as `webhook(develop, ...)`, next to the button.
  */

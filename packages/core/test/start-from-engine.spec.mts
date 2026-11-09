@@ -115,6 +115,18 @@ describe('an entry file started by the engine', () => {
 		])
 	})
 
+	test('exits once it has described itself, also when a module keeps a handle open', async () => {
+		// Arrange
+		const keepsAHandle = `${entry}\nsetInterval(() => undefined, 60_000)\n`
+
+		// Act
+		const run = await startLikeTheEngine(keepsAHandle, { mode: 'describe' })
+
+		// Assert
+		expect(await run.exited, run.stderr()).toBe(0)
+		expect((await run.messages()).map((message) => message.type)).toEqual(['described'])
+	})
+
 	test('runs the workflow it was asked for with its parameters, and exits once it succeeded', async () => {
 		// Arrange
 		const run = await startLikeTheEngine(entry, { ...greet, input: { greeting: 'Hi' } })

@@ -10,7 +10,7 @@ import {
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpec, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
 import type { AppStore } from '../apps/app-store.mts'
-import { messageOf } from '../errors.mts'
+import { hasErrorCode, messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
@@ -196,16 +196,20 @@ export class Engine {
 		if (listed === undefined) {
 			throw new EngineError('not-found', `Version ${deployed.version} of ${options.app} has no ${kind} trigger ${triggerId}.`)
 		}
-		const app: RunApp = {
-			name: deployed.name,
-			version: deployed.version,
-			entry: deployed.manifest.entry,
-			sandbox: SandboxSpec.parse(deployed.manifest.description.sandbox),
+		const sandbox = SandboxSpec.safeParse(deployed.manifest.description.sandbox)
+		if (!sandbox.success) {
+			throw new EngineError(
+				'invalid',
+				`Version ${deployed.version} of ${options.app} asks for a sandbox this engine can't make: deploy it again.`,
+			)
 		}
+		const app: RunApp = { name: deployed.name, version: deployed.version, entry: deployed.manifest.entry, sandbox: sandbox.data }
 		const id = newRunId()
 		// A copy of its own, so the run keeps its code when the app is deployed again or removed.
-		await this.#store.saveApp(id, deployed.tarball).catch(async (error: unknown) => {
+		await this.#store.saveApp(id, deployed.tarball, waitSignal).catch(async (error: unknown) => {
 			await this.#store.removeRun(id).catch(() => undefined)
+			// Removed between finding it and copying it.
+			if (hasErrorCode(error, 'ENOENT')) throw new EngineError('not-found', `The app ${options.app} was removed.`)
 			throw error
 		})
 		waitSignal.throwIfAborted()

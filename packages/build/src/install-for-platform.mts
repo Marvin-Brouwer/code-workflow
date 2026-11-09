@@ -5,16 +5,10 @@ import type { AppPlatform } from '@mesh-flow/protocol'
 import type { NativePackage } from './native-packages.mts'
 
 /**
- * Installs `packages` into the built app in `out` for `platform`, with npm, so npm picks the
- * prebuilt binaries the sandbox needs whatever machine builds. A package that compiles its native
- * code can only be built on the sandbox's own platform.
+ * Throws when `packages` can't be installed for `platform` on this machine: a package that compiles
+ * its native code can only be built on the sandbox's own platform.
  */
-export async function installForPlatform(
-	out: string,
-	packages: readonly NativePackage[],
-	platform: AppPlatform,
-	abortSignal: AbortSignal,
-): Promise<void> {
+export function assertInstallable(packages: readonly NativePackage[], platform: AppPlatform): void {
 	const here = { os: process.platform, cpu: process.arch }
 	const compiled = packages.filter((native) => native.buildsFromSource)
 	if (compiled.length > 0 && (here.os !== platform.os || here.cpu !== platform.cpu)) {
@@ -23,11 +17,25 @@ export async function installForPlatform(
 			`${names} compile native code when installed, so the app has to be built on ${platform.os}-${platform.cpu}, the sandbox's platform, not on ${here.os}-${here.cpu}.`,
 		)
 	}
+}
+
+/**
+ * Installs `packages` into the built app in `out` for `platform`, with npm, so npm picks the
+ * prebuilt binaries the sandbox needs whatever machine builds: for glibc, as the sandbox images
+ * are, also on a musl build machine. See {@link assertInstallable}.
+ */
+export async function installForPlatform(
+	out: string,
+	packages: readonly NativePackage[],
+	platform: AppPlatform,
+	abortSignal: AbortSignal,
+): Promise<void> {
+	assertInstallable(packages, platform)
 	const dependencies = Object.fromEntries(packages.map((native) => [native.name, native.version]))
 	await writeFile(path.join(out, 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies }, null, '\t'))
 	if (packages.length === 0) return
-	const args = ['install', '--omit=dev', '--no-audit', '--no-fund', `--os=${platform.os}`, `--cpu=${platform.cpu}`]
-	await run('npm', args, out, { npm_config_platform: platform.os, npm_config_arch: platform.cpu }, abortSignal)
+	const args = ['install', '--omit=dev', '--no-audit', '--no-fund', `--os=${platform.os}`, `--cpu=${platform.cpu}`, '--libc=glibc']
+	await run('npm', args, out, { npm_config_platform: platform.os, npm_config_arch: platform.cpu, npm_config_libc: 'glibc' }, abortSignal)
 }
 
 function run(command: string, args: readonly string[], cwd: string, env: Record<string, string>, abortSignal: AbortSignal): Promise<void> {
