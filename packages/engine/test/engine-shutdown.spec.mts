@@ -11,11 +11,14 @@ import { runtimeScript, workflowRepository } from './support/workflow-repository
 
 const signal = new AbortController().signal
 const never = () => new Promise<never>(() => undefined)
+const spec = { image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }
+const sandboxId = 'mesh-flow-000000000001'
+const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, spec })
 
 /** A backend that answers what the engine needs to start a run, with the parts given here. */
 function stubBackend(parts: { create?: SandboxBackend['create']; poll?: () => Promise<never>; pause?: Sandbox['pause'] }) {
 	const sandbox: Sandbox = {
-		id: 'mesh-flow-000000000001',
+		id: sandboxId,
 		async exec(command) {
 			if (command[2] !== pollScript) return { exitCode: 0, stdout: '', stderr: '' }
 			if (parts.poll) return parts.poll()
@@ -40,8 +43,12 @@ function stubBackend(parts: { create?: SandboxBackend['create']; poll?: () => Pr
 	return { backend, close }
 }
 
-/** Deadlines short enough that a hang shows as a slow test. */
-const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(400) })
+/**
+ * Deadlines short enough that a hang shows as a slow test. Both start together, so a pause that
+ * never settles leaves flushing and closing the backend only the gap between them: that gap has
+ * to hold up on a busy CI runner.
+ */
+const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(1_000) })
 
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
@@ -77,7 +84,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Act
-		created.resolve(await stubBackend({}).backend.create({ image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }, signal))
+		created.resolve(await stubBackend({}).backend.create(spec, signal))
 		await delay(100)
 
 		// Assert
@@ -105,8 +112,8 @@ describe('Engine.close', () => {
 	})
 
 	test('refuses new runs once it has started', async () => {
-		// Arrange
-		const { engine } = await startRun(stubBackend({}).backend)
+		// Arrange: a pause that settles, so the shutdown doesn't wait out any deadline.
+		const { engine } = await startRun(stubBackend({ pause: pausesAtOnce }).backend)
 		await engine.close(shortDeadlines())
 
 		// Act
