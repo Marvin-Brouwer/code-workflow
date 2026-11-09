@@ -18,7 +18,9 @@ export interface WebhookTrigger {
 	readonly workflow: AnyWorkflow
 	/** Turns a delivery's payload into the workflow's parameters. */
 	readonly schema: z.ZodType
+	/** How deliveries are signed, with header names in lowercase. */
 	readonly signature: SignatureScheme
+	/** The lowercase header whose value names a delivery, so a redelivery reuses its run. */
 	readonly deliveryHeader?: string
 }
 

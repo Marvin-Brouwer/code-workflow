@@ -50,9 +50,9 @@ export class RuntimeMailbox {
 	}
 
 	/** What the engine started the runtime to do, as JSON: check it with `RunStart`. */
-	async start(abortSignal: AbortSignal): Promise<unknown> {
-		const start: unknown = JSON.parse(await readFile(this.#layout.startFile, { encoding: 'utf8', signal: abortSignal }))
-		return start
+	async readStart(abortSignal: AbortSignal): Promise<unknown> {
+		const parsed: unknown = JSON.parse(await readFile(this.#layout.startFile, { encoding: 'utf8', signal: abortSignal }))
+		return parsed
 	}
 
 	/** Waits until the engine has answered the request with this id. */

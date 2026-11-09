@@ -6,6 +6,7 @@ import type { AnyWorkflow } from './workflow.mts'
  */
 const defined: AnyWorkflow[] = []
 
+/** Called by `workflow()` for every definition. */
 export function registerWorkflow(definition: AnyWorkflow): void {
 	defined.push(definition)
 }

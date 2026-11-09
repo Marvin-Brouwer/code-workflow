@@ -85,6 +85,21 @@ describe('openRunStore', () => {
 		expect(problems).toEqual([expect.stringContaining('run-00000000000b')])
 	})
 
+	test('lists a run directory without a record as an orphan', async () => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = openRunStore(root)
+		await store.save(record('run-00000000000a', '2026-11-06T12:00:00.000Z'))
+		await mkdir(runDirectory(root, 'run-00000000000b'))
+
+		// Act
+		const { records, orphans } = await store.loadAll()
+
+		// Assert
+		expect(records.map((loaded) => loaded.id)).toEqual(['run-00000000000a'])
+		expect(orphans).toEqual(['run-00000000000b'])
+	})
+
 	test('appends events and reads them back in order', async () => {
 		// Arrange
 		const store = openRunStore(await temporaryDirectory())

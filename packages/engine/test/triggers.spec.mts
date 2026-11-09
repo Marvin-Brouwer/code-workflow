@@ -13,7 +13,7 @@ import { deferred } from './support/deferred.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { triggerEntry } from './support/trigger-entry.mts'
-import { workflowRepository } from './support/workflow-repository.mts'
+import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
 const signal = new AbortController().signal
 const secret = 'correct horse battery staple'
@@ -63,10 +63,25 @@ interface ServeOptions {
 	readonly entry?: string
 	/** Changes what the backend does. */
 	readonly wrap?: (backend: SandboxBackend) => SandboxBackend
+	/** How often the engine describes the repository again. Default: 200 ms. */
+	readonly refreshMs?: number
+	/** Whether to wait until the engine has described the repository. Default: yes. */
+	readonly untilDescribed?: boolean
 }
 
+/** How often the tests let the engine describe its repositories again. */
+const fastRefreshMs = 200
+
+/** Long enough that the engine doesn't describe again during a test. */
+const noRefreshMs = 10 * 60_000
+
 /** An engine that serves webhooks for one registered repository, `team`, closed when the test ends. */
-async function serve({ entry = triggerEntry(description), wrap = (backend) => backend }: ServeOptions = {}) {
+async function serve({
+	entry = triggerEntry(description),
+	wrap = (backend) => backend,
+	refreshMs = fastRefreshMs,
+	untilDescribed = true,
+}: ServeOptions = {}) {
 	const home = await temporaryDirectory()
 	const host = hostBackend(path.join(home, 'sandboxes'))
 	const created = vi.fn()
@@ -78,7 +93,15 @@ async function serve({ entry = triggerEntry(description), wrap = (backend) => ba
 		},
 	})
 	const log = vi.fn<(message: string) => void>()
-	const served = await serveEngine({ home, backend, layout: hostSandboxLayout, webhooks: { port: 0 }, scheduleRefreshMs: 200, log, signal })
+	const served = await serveEngine({
+		home,
+		backend,
+		layout: hostSandboxLayout,
+		webhooks: { port: 0 },
+		repositoryRefreshMs: refreshMs,
+		log,
+		signal,
+	})
 	const close = (pauseMs = 5_000) => served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(pauseMs * 2) })
 	onTestFinished(() => close())
 	const directory = await workflowRepository({ main: entry })
@@ -92,6 +115,8 @@ async function serve({ entry = triggerEntry(description), wrap = (backend) => ba
 			body,
 			headers: { 'content-type': 'application/json', ...headers },
 		})
+	// An unsigned delivery is turned down with a 503 until the repository is described, and with a 401 or 404 after.
+	if (untilDescribed) await expect.poll(async () => (await deliver('fix-issue', '{}', {})).status, { timeout: 20_000 }).not.toBe(503)
 	return { served, client, directory, created, log, deliver, close, home }
 }
 
@@ -218,10 +243,11 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(record.error).toBeUndefined()
 	})
 
-	test('let the engine shut down while a delivery waits on a describe that never settles', async () => {
+	test('answer 503 until the repository is described, and shut down while describing never settles', async () => {
 		// Arrange
 		const creating = deferred<undefined>()
 		const { deliver, close } = await serve({
+			untilDescribed: false,
 			wrap: (backend) => ({
 				...backend,
 				create: () => {
@@ -230,19 +256,30 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 				},
 			}),
 		})
-		const delivery = deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret }).then(
-			(response) => response.status,
-			() => 'cut off',
-		)
 		await creating.promise
-		const started = Date.now()
 
 		// Act
+		const delivery = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
+		const started = Date.now()
 		await close(200)
 
 		// Assert
+		expect(delivery.status).toBe(503)
 		expect(Date.now() - started).toBeLessThan(2_000)
-		expect([503, 500, 'cut off']).toContain(await delivery)
+	})
+
+	test('make no sandbox for an unsigned delivery, also when the source changed', async () => {
+		// Arrange
+		const { deliver, created, directory } = await serve({ refreshMs: noRefreshMs })
+		await writeFile(path.join(directory, 'workflows', 'extra.mts'), '// changed\n')
+		created.mockClear()
+
+		// Act
+		const response = await deliver('fix-issue', JSON.stringify(payload), {})
+
+		// Assert
+		expect(response.status).toBe(401)
+		expect(created).not.toHaveBeenCalled()
 	})
 })
 
@@ -296,7 +333,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 describe.skipIf(process.platform !== 'linux')('describing an entry file', () => {
 	test('happens once per version of the source, in a sandbox that is removed afterwards', async () => {
 		// Arrange
-		const { client, directory, created, served } = await serve()
+		const { client, directory, created, served } = await serve({ refreshMs: noRefreshMs })
 		await client.describe(directory, signal)
 		created.mockClear()
 
@@ -309,5 +346,20 @@ describe.skipIf(process.platform !== 'linux')('describing an entry file', () => 
 		expect(again).toEqual(description)
 		expect(created).toHaveBeenCalledOnce()
 		expect(served.engine.list()).toEqual([])
+	})
+
+	test('fails once per version of the source when the entry file cannot be described', async () => {
+		// Arrange
+		const broken = runtimeScript(`throw new Error('broken entry file')`)
+		const { client, directory, created } = await serve({ entry: broken, refreshMs: noRefreshMs, untilDescribed: false })
+
+		// Act
+		const first = client.describe(directory, signal)
+		await expect(first).rejects.toThrow()
+		const again = client.describe(directory, signal)
+
+		// Assert
+		await expect(again).rejects.toThrow()
+		expect(created).toHaveBeenCalledOnce()
 	})
 })

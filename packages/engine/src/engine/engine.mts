@@ -20,7 +20,7 @@ import { finishedStatuses, type RunRecord, type RunStatus, type RunTrigger } fro
 import type { RunStore } from '../runs/run-store.mts'
 import { describeInSandbox } from '../triggers/describe-in-sandbox.mts'
 import { memoryDescriptionCache, type DescriptionCache } from '../triggers/description-cache.mts'
-import { entryFile, findEntry } from '../workflow/workflow-config.mts'
+import { entryFile, findEntry, type WorkflowConfig } from '../workflow/workflow-config.mts'
 import { packWorkflowSource, sourceKey } from '../workflow/workflow-source.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
@@ -60,7 +60,8 @@ export interface StartRunOptions {
 	readonly trigger?: RunTrigger
 	/** Names what the run is for, such as a webhook delivery. A run with this key already is returned instead. */
 	readonly key?: string
-	readonly signal: AbortSignal
+	/** Bounds packing the source and saving the record. The run itself goes on in the background. */
+	readonly abortSignal: AbortSignal
 }
 
 /** How long each step of a shutdown may take. */
@@ -96,7 +97,7 @@ const describeTimeoutMs = 10 * 60_000
  * @example
  * ```ts
  * const engine = await Engine.open({ backend, store: openRunStore(directory) }, signal)
- * const run = await engine.startRun({ directory: process.cwd(), workflow: 'develop', signal })
+ * const run = await engine.startRun({ directory: process.cwd(), workflow: 'develop', abortSignal: signal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
  * ```
@@ -117,6 +118,8 @@ export class Engine {
 	readonly #descriptions: DescriptionCache
 	/** Describes going on, by source key, so callers who ask at once share one sandbox. */
 	readonly #describing = new Map<string, Promise<WorkflowsDescription>>()
+	/** Why describing a source failed, by source key, so a broken entry file costs one sandbox per version, not one per ask. */
+	readonly #describeFailures = new Map<string, EngineError>()
 	#closing: Promise<void> | undefined
 
 	private constructor(options: EngineOptions) {
@@ -131,8 +134,14 @@ export class Engine {
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
 	static async open(options: EngineOptions, signal: AbortSignal): Promise<Engine> {
 		const engine = new Engine(options)
-		const { records, problems } = await options.store.loadAll()
+		const { records, problems, orphans } = await options.store.loadAll()
 		for (const problem of problems) engine.#log(problem)
+		for (const id of orphans) {
+			// Left by a start that died before its record was saved, with its source and maybe a webhook's payload.
+			await options.store.removeRun(id).catch((error: unknown) => {
+				engine.#log(`Removing ${id}, which has no run record, failed: ${messageOf(error)}`)
+			})
+		}
 		for (const record of records) engine.#records.set(record.id, record)
 
 		const { removed, problems: leftOver, changes } = await reconcile(records, options.backend, signal)
@@ -187,7 +196,7 @@ export class Engine {
 	}
 
 	async #create(options: StartRunOptions): Promise<RunRecord> {
-		const signal = this.#withLifetime(options.signal)
+		const signal = this.#withLifetime(options.abortSignal)
 		const { config, file } = await findEntry(options.directory).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
@@ -241,11 +250,13 @@ export class Engine {
 	 * What a repository's entry file declares: its workflows, their parameters and its triggers.
 	 * The entry file runs in describe mode in a sandbox, never on the host. Descriptions are kept by
 	 * source key, so the same code is described once, and callers who ask at the same time share
-	 * one sandbox. Aborting `signal` stops the waiting; the describe goes on for the others.
+	 * one sandbox. A source whose entry file can't be described fails with `invalid`, and keeps
+	 * failing without another sandbox until the source changes. Aborting `abortSignal` stops the
+	 * waiting; the describe goes on for the others.
 	 */
-	async describe(directory: string, signal: AbortSignal): Promise<WorkflowsDescription> {
+	async describe(directory: string, abortSignal: AbortSignal): Promise<WorkflowsDescription> {
 		this.#assertOpen()
-		const waitSignal = this.#withLifetime(signal)
+		const waitSignal = this.#withLifetime(abortSignal)
 		const { config, file } = await findEntry(directory).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
@@ -255,6 +266,8 @@ export class Engine {
 		})
 		const cached = await this.#descriptions.get(key)
 		if (cached !== undefined) return cached
+		const failure = this.#describeFailures.get(key)
+		if (failure !== undefined) throw failure
 		let describing = this.#describing.get(key)
 		if (describing === undefined) {
 			describing = this.#describeAt(key, directory, config, file).finally(() => {
@@ -267,15 +280,24 @@ export class Engine {
 		return abortable(describing, waitSignal)
 	}
 
-	async #describeAt(key: string, directory: string, config: RunRecord['config'], file: string): Promise<WorkflowsDescription> {
-		const signal = AbortSignal.any([this.#lifetime.signal, AbortSignal.timeout(describeTimeoutMs)])
+	async #describeAt(key: string, directory: string, config: WorkflowConfig, file: string): Promise<WorkflowsDescription> {
+		const abortSignal = AbortSignal.any([this.#lifetime.signal, AbortSignal.timeout(describeTimeoutMs)])
 		const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-describe-'))
 		try {
 			const tarball = path.join(scratch, 'source.tgz')
-			await packWorkflowSource(directory, tarball, signal)
+			await packWorkflowSource(directory, tarball, abortSignal)
+			// A file that changed after the key was made is in the tarball: then the result is for another source.
+			const packedKey = await sourceKey(directory, abortSignal)
 			const options = { backend: this.#backend, layout: this.#layout, config, file, tarball, log: this.#log }
-			const description = await describeInSandbox({ ...options, cleanupSignal: () => this.#cleanupSignal() }, signal)
-			await this.#descriptions.set(key, description)
+			const description = await describeInSandbox({ ...options, cleanupSignal: () => this.#cleanupSignal() }, abortSignal).catch(
+				(error: unknown) => {
+					if (abortSignal.aborted) throw error
+					const failure = new EngineError('invalid', messageOf(error))
+					if (packedKey === key) this.#describeFailures.set(key, failure)
+					throw failure
+				},
+			)
+			if (packedKey === key) await this.#descriptions.set(key, description)
 			return description
 		} finally {
 			await rm(scratch, { recursive: true, force: true })
@@ -437,7 +459,7 @@ export class Engine {
 	async #start(id: RunId, file: string, active: ActiveRun, signal: AbortSignal): Promise<void> {
 		const record = this.get(id)
 		const { config } = record
-		const start = await this.#store.start(record)
+		const start = await this.#store.loadStart(record)
 		const sandbox = await this.#backend.create(config.sandbox, signal)
 		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)

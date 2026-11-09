@@ -1,9 +1,9 @@
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
-import { messageOf } from '../errors.mts'
-import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { setUpRuntime } from '../engine/set-up-runtime.mts'
+import { messageOf } from '../errors.mts'
+import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import type { WorkflowConfig } from '../workflow/workflow-config.mts'
 
 /** What describing an entry file needs. */

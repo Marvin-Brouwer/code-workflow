@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { list } from 'tar'
 import { describe, expect, test } from 'vitest'
-import { packWorkflowSource } from '../src/workflow/workflow-source.mts'
+import { packWorkflowSource, sourceKey } from '../src/workflow/workflow-source.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { workflowRepository } from './support/workflow-repository.mts'
 
@@ -47,5 +47,40 @@ describe('packWorkflowSource', () => {
 		expect(await entriesOf(tarball)).toEqual(
 			new Set(['.gitignore', 'mesh-flow.config.json', 'workflows/develop.mts', 'workflows/main.mts', 'workflows/new.mts']),
 		)
+	})
+})
+
+describe.skipIf(process.platform === 'win32')('sourceKey', () => {
+	test('counts a symbolic link by its target, not by what it points at', async () => {
+		// Arrange
+		const directory = await workflowRepository({ develop: '' })
+		const outside = path.join(await temporaryDirectory(), 'outside.txt')
+		await writeFile(outside, 'one')
+		const link = path.join(directory, 'workflows', 'link.mts')
+		await symlink(outside, link)
+		const before = await sourceKey(directory, signal)
+
+		// Act
+		await writeFile(outside, 'two')
+		const contentChanged = await sourceKey(directory, signal)
+		await unlink(link)
+		await symlink(`${outside}.other`, link)
+		const targetChanged = await sourceKey(directory, signal)
+
+		// Assert
+		expect(contentChanged).toBe(before)
+		expect(targetChanged).not.toBe(before)
+	})
+
+	test('takes a symbolic link to a directory', async () => {
+		// Arrange
+		const directory = await workflowRepository({ develop: '' })
+		await symlink(await temporaryDirectory(), path.join(directory, 'workflows', 'shared'))
+
+		// Act
+		const key = sourceKey(directory, signal)
+
+		// Assert
+		await expect(key).resolves.toMatch(/^[0-9a-f]{64}$/)
 	})
 })

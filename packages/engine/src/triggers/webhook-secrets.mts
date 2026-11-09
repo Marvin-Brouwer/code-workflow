@@ -27,6 +27,7 @@ function keyOf(repository: string, webhook: string): string {
 	return `${repository}/${webhook}`
 }
 
+/** The webhook secrets kept in `file`. The file is read again on every `get`, so the CLI's changes count at once. */
 export function openWebhookSecrets(file: string): WebhookSecrets {
 	const read = async () => {
 		const text = await readFile(file, 'utf8').catch((error: unknown) => {

@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import writeFileAtomic from 'write-file-atomic'
 import { hasErrorCode } from '../errors.mts'
+import { kebabNamePattern } from '../workflow/workflow-name.mts'
 
 /** A repository's name: it goes into webhook URLs and run keys. */
-export const RepositoryName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'A repository name is lowercase letters, digits and dashes.')
+export const RepositoryName = z.string().regex(kebabNamePattern, 'A repository name is lowercase letters, digits and dashes.')
 
 /**
  * A workflow repository the engine serves triggers for: its webhooks get a URL, its schedules run.

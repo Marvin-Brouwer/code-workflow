@@ -14,6 +14,9 @@ export const StartRunBody = z.object({ directory: z.string().min(1), workflow: W
 /** The body of `POST /describe`. */
 export const DescribeBody = z.object({ directory: z.string().min(1) })
 
+/** The body of `PUT /repositories/:name`: where the repository is on the host. */
+export const RepositoryBody = z.object({ directory: z.string().min(1) })
+
 /** The repositories the engine serves triggers for, and what to do when they change. */
 export interface ControlRepositories {
 	readonly store: RepositoryStore
@@ -50,7 +53,7 @@ export function controlApi(engine: Engine, repositories?: ControlRepositories): 
 	app.get('/runs', (c) => c.json(engine.list()))
 	app.post('/runs', async (c) => {
 		const { directory, workflow, parameters } = StartRunBody.parse(await c.req.json())
-		return c.json(await engine.startRun({ directory, workflow, input: parameters, signal: c.req.raw.signal }), 201)
+		return c.json(await engine.startRun({ directory, workflow, input: parameters, abortSignal: c.req.raw.signal }), 201)
 	})
 	app.get('/runs/:run', (c) => c.json(engine.get(c.req.param('run'))))
 	app.get('/runs/:run/events', async (c) => c.json(await engine.events(c.req.param('run'))))
@@ -71,7 +74,7 @@ export function controlApi(engine: Engine, repositories?: ControlRepositories): 
 		const { store, changed } = repositories
 		app.get('/repositories', async (c) => c.json(await store.list()))
 		app.put('/repositories/:name', async (c) => {
-			const repository = Repository.parse({ ...z.object({ directory: z.string() }).parse(await c.req.json()), name: c.req.param('name') })
+			const repository = Repository.parse({ ...RepositoryBody.parse(await c.req.json()), name: c.req.param('name') })
 			await findEntry(repository.directory).catch((error: unknown) => {
 				throw new EngineError('invalid', messageOf(error))
 			})

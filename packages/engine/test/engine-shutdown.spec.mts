@@ -56,7 +56,7 @@ async function startRun(backend: SandboxBackend) {
 	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')) }, signal)
 	onTestFinished(() => engine.close(shortDeadlines()))
 	const directory = await workflowRepository({ hello: runtimeScript('') })
-	const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
+	const { id } = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
 	return { engine, id }
 }
 
@@ -142,7 +142,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Act
-		const starting = engine.startRun({ directory: '.', workflow: 'hello', signal })
+		const starting = engine.startRun({ directory: '.', workflow: 'hello', abortSignal: signal })
 
 		// Assert
 		await expect(starting).rejects.toThrow('shutting down')

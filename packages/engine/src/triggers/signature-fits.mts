@@ -1,9 +1,9 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { SignatureScheme } from '@mesh-flow/protocol'
 
 /**
- * Whether a delivery is signed with `secret` the way `scheme` says. Compares in constant time, so
- * the time an answer takes says nothing about the secret.
+ * Whether a delivery is signed with `secret` the way `scheme` says. Compares digests of both sides
+ * in constant time, so the time an answer takes says nothing about the secret, not even its length.
  */
 export function signatureFits(scheme: SignatureScheme, secret: string, headers: Headers, body: Uint8Array): boolean {
 	const given = headers.get(scheme.header)
@@ -15,7 +15,9 @@ export function signatureFits(scheme: SignatureScheme, secret: string, headers: 
 }
 
 function equalInConstantTime(given: string, expected: string): boolean {
-	const left = Buffer.from(given)
-	const right = Buffer.from(expected)
-	return left.length === right.length && timingSafeEqual(left, right)
+	return timingSafeEqual(digest(given), digest(expected))
+}
+
+function digest(text: string): Buffer {
+	return createHash('sha256').update(text).digest()
 }

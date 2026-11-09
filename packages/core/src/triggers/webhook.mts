@@ -15,6 +15,7 @@ export type WebhookSignature =
 	| { readonly scheme: 'secret-header'; readonly header?: string }
 	| { readonly scheme: 'hmac-sha256'; readonly header: string; readonly prefix?: string }
 
+/** Options of `webhook`. */
 export interface WebhookOptions {
 	/** The webhook's name in its URL. Default: the workflow's name. Two webhooks of one workflow need one. */
 	readonly name?: string

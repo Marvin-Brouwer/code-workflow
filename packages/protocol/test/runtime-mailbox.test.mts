@@ -33,7 +33,7 @@ describe('RuntimeMailbox', () => {
 		const mailbox = new RuntimeMailbox(directory)
 
 		// Act
-		const start = await mailbox.start(signal)
+		const start = await mailbox.readStart(signal)
 
 		// Assert
 		expect(start).toEqual({ mode: 'describe' })

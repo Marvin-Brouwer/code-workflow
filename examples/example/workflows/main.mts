@@ -2,8 +2,8 @@
  * The entry file: everything that can start a run of the `example` workflows. A workflow says what
  * it does and what it starts with; this file says how it gets started.
  *
- * A Jira webhook (a story labelled for development) comes with the atlassian connector's event
- * schemas, as `webhook(develop, ...)` next to the button.
+ * Once the atlassian connector ships its event schemas, a Jira webhook (a story labelled for
+ * development) goes here as `webhook(develop, ...)`, next to the button.
  */
 import { defineWorkflows, userTrigger } from '@mesh-flow/core'
 import { develop } from './develop.mts'

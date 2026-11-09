@@ -46,7 +46,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		const directory = await workflowRepository({ ask: twoQuestions }, { image: 'node:22-slim', copyMailbox: true })
 		const first = await Engine.open({ backend: await openBackend(), store: store() }, signal)
 		onTestFinished(() => first.close(deadlines()))
-		const { id } = await first.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await first.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await vi.waitFor(
 			() => {
 				expect(first.get(id).pending).toHaveLength(1)

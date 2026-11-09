@@ -2,10 +2,12 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
 import { z } from 'zod'
+import { describeError } from '../run/describe-error.mts'
+import { untilAborted } from '../run/until-aborted.mts'
 import type { WorkflowEntry } from '../triggers/define-workflows.mts'
 import { describeEntry } from '../triggers/describe-entry.mts'
-import { describeError } from '../run/describe-error.mts'
-import { runUnchecked } from './run-workflow.mts'
+import type { ScheduleTrigger, WebhookTrigger } from '../triggers/trigger.mts'
+import { runAnyWorkflow } from './run-workflow.mts'
 import type { AnyWorkflow } from './workflow.mts'
 import { definedWorkflows } from './workflow-registry.mts'
 
@@ -16,7 +18,7 @@ type Begun = { readonly workflow: AnyWorkflow; readonly parameters: unknown } | 
  * Does what the engine started the entry file to do, as its mailbox's start file says: describe
  * what the entry file declares, or run one workflow on the mailbox, with the run id the engine gave
  * it, the workspace and agent store in the home directory, stopped by `SIGTERM` or `SIGINT`. Sets
- * the exit code from the outcome.
+ * the exit code from the outcome, and exits right away once stopped.
  *
  * Model providers come with the gateway; until then a loop in an engine run fails up front.
  */
@@ -29,7 +31,7 @@ export async function startFromEngine(entry: WorkflowEntry, environment: NodeJS.
 	process.once('SIGTERM', stop)
 	process.once('SIGINT', stop)
 	try {
-		process.exitCode = await start(entry, channel, environment, controller.signal)
+		process.exitCode = await dispatch(entry, channel, environment, controller.signal)
 	} catch (error) {
 		channel.send({ type: 'failed', error: describeError(error) })
 		process.exitCode = 1
@@ -37,16 +39,19 @@ export async function startFromEngine(entry: WorkflowEntry, environment: NodeJS.
 		process.off('SIGTERM', stop)
 		process.off('SIGINT', stop)
 	}
+	// Once stopped, what the workflow left behind (a schema that never settles, a timer) must not
+	// keep the sandbox running: the outcome is already in the outbox.
+	if (controller.signal.aborted) process.exit()
 }
 
-/** Runs what the start file asks for and returns the exit code. */
-async function start(
+/** Does what the start file asks for and returns the exit code. */
+async function dispatch(
 	entry: WorkflowEntry,
 	channel: RuntimeMailbox,
 	environment: NodeJS.ProcessEnv,
 	abortSignal: AbortSignal,
 ): Promise<number> {
-	const request = RunStart.parse(await channel.start(abortSignal))
+	const request = RunStart.parse(await channel.readStart(abortSignal))
 	if (request.mode === 'describe') {
 		channel.send({ type: 'described', description: describeEntry(entry) })
 		return 0
@@ -57,7 +62,7 @@ async function start(
 		return 0
 	}
 	const runId = environment[runIdEnvironmentVariable]
-	const outcome = await runUnchecked(begun.workflow, {
+	const outcome = await runAnyWorkflow(begun.workflow, {
 		parameters: begun.parameters,
 		channel,
 		abortSignal,
@@ -75,14 +80,15 @@ async function start(
 async function begin(entry: WorkflowEntry, request: Extract<RunStart, { mode: 'run' }>, abortSignal: AbortSignal): Promise<Begun> {
 	const { trigger: ref } = request
 	if (ref === undefined || ref.kind === 'user') return { workflow: workflowNamed(request.workflow), parameters: request.input }
-	const trigger = entry.triggers.find((candidate) => candidate.kind === ref.kind && candidate.id === ref.id)
+	const trigger = entry.triggers.find(
+		(candidate): candidate is ScheduleTrigger | WebhookTrigger => candidate.kind === ref.kind && candidate.id === ref.id,
+	)
 	if (trigger === undefined) throw new Error(`The entry file has no ${ref.kind} trigger ${ref.id} any more.`)
 	if (trigger.workflow.name !== request.workflow)
 		throw new Error(`The ${ref.kind} trigger ${ref.id} starts ${trigger.workflow.name}, not ${request.workflow}.`)
 	if (trigger.kind === 'schedule') return { workflow: trigger.workflow, parameters: trigger.parameters }
-	if (trigger.kind === 'user') return { workflow: trigger.workflow, parameters: request.input }
-	abortSignal.throwIfAborted()
-	const parsed = await trigger.schema.safeParseAsync(request.input)
+	// A `.refine` or `.transform` can wait on anything; a stop doesn't wait for it.
+	const parsed = await untilAborted(trigger.schema.safeParseAsync(request.input), abortSignal)
 	if (!parsed.success) return { skipped: `The delivery isn't for ${trigger.workflow.name}:\n${z.prettifyError(parsed.error)}` }
 	return { workflow: trigger.workflow, parameters: parsed.data }
 }

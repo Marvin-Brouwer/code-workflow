@@ -10,6 +10,9 @@ const core = pathToFileURL(path.join(import.meta.dirname, '../src/_module/core.m
 const zod = import.meta.resolve('zod')
 /** How long a started workflow may take to ask for its input: node starting and loading the sources. */
 const requestTimeoutMs = 10_000
+
+/** What the entry file's never-settling webhook schema writes to stderr once it's reached. */
+const schemaReached = 'schema reached'
 // A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
 const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
 
@@ -64,10 +67,18 @@ workflow('unlisted', async () => {})
 const IssueLabeled = z.object({ label: z.string(), issue: z.object({ number: z.number() }) })
 const onlyAiFix = IssueLabeled.refine((event) => event.label === 'ai-fix', 'Only ai-fix')
 
+/** Says it was reached, then keeps the process alive without ever settling. */
+function neverSettles(): Promise<boolean> {
+	console.error(${JSON.stringify(schemaReached)})
+	setInterval(() => undefined, 60_000)
+	return new Promise(() => undefined)
+}
+
 export default defineWorkflows(
 	userTrigger(greet),
 	webhook(echo, onlyAiFix.transform((event) => ({ issue: event.issue.number }))),
 	schedule(echo, '0 7 * * 1', { issue: 7 }),
+	webhook(echo, IssueLabeled.refine(neverSettles).transform((event) => ({ issue: event.issue.number })), { name: 'stuck' }),
 )
 `
 
@@ -94,6 +105,7 @@ describe('an entry file started by the engine', () => {
 						{ kind: 'user', id: 'greet', workflow: 'greet' },
 						{ kind: 'webhook', id: 'echo', payload: { required: ['label', 'issue'] }, signature: { scheme: 'secret-header' } },
 						{ kind: 'schedule', id: 'echo 0 7 * * 1', cron: '0 7 * * 1', parameters: { issue: 7 } },
+						{ kind: 'webhook', id: 'stuck' },
 					],
 				},
 			},
@@ -203,5 +215,24 @@ describe('an entry file started by the engine', () => {
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(1)
 		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'issue 7' })
+	})
+
+	// Windows has no SIGTERM: `kill` ends the process outright. The engine runs workflows in a Linux sandbox.
+	test.skipIf(process.platform === 'win32')('stops on SIGTERM while a webhook schema never settles', async () => {
+		// Arrange
+		const run = await startLikeTheEngine(entry, {
+			mode: 'run',
+			workflow: 'echo',
+			trigger: { kind: 'webhook', id: 'stuck' },
+			input: { label: 'ai-fix', issue: { number: 12 } },
+		})
+		await expect.poll(() => run.stderr().includes(schemaReached), { timeout: 10_000 }).toBe(true)
+
+		// Act
+		run.child.kill('SIGTERM')
+
+		// Assert
+		expect(await run.exited, run.stderr()).toBe(1)
+		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'The run was stopped (SIGTERM).' })
 	})
 })

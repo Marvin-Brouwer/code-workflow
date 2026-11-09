@@ -50,11 +50,14 @@ export function runWorkflow<Shape extends z.ZodRawShape>(
 	definition: Workflow<Shape>,
 	options: RunOptions<z.input<z.ZodObject<Shape>>>,
 ): Promise<RunOutcome> {
-	return runUnchecked(definition, options)
+	return runAnyWorkflow(definition, options)
 }
 
-/** `runWorkflow` for parameters that come from outside, such as the engine's start file. */
-export async function runUnchecked(definition: AnyWorkflow, options: RunOptions): Promise<RunOutcome> {
+/**
+ * `runWorkflow` for a workflow and parameters whose types aren't known, such as those the engine's
+ * start file names. The parameters are checked against the workflow's all the same.
+ */
+export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOptions): Promise<RunOutcome> {
 	const workspace = path.resolve(options.workspace ?? 'workspace')
 	const counts = new Map<string, number>()
 	let agents: Promise<AgentHarness> | undefined

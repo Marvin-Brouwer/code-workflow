@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
@@ -10,6 +11,8 @@ import { RunRecord } from './run-record.mts'
 export interface LoadedRuns {
 	readonly records: RunRecord[]
 	readonly problems: string[]
+	/** Run directories without a record: a start that died before its record was saved. */
+	readonly orphans: RunId[]
 }
 
 /**
@@ -28,7 +31,7 @@ export interface RunStore {
 	/** Keeps what the entry file is to run, once, before the run's record is saved. */
 	saveStart(id: RunId, start: RunStart): Promise<void>
 	/** What the entry file is to run. Runs from before start files run their workflow without parameters. */
-	start(record: RunRecord): Promise<RunStart>
+	loadStart(record: RunRecord): Promise<RunStart>
 	/** Saves a copy of the record as it is now. */
 	save(record: RunRecord): Promise<void>
 	/** Appends events to the run's event tree. */
@@ -70,7 +73,7 @@ export function openRunStore(root: string): RunStore {
 				await writeFileAtomic(file(id, startFile), JSON.stringify(start))
 			}),
 
-		start: async (record) => {
+		loadStart: async (record) => {
 			const text = await readFile(file(record.id, startFile), 'utf8').catch((error: unknown) => {
 				if (hasErrorCode(error, 'ENOENT')) return undefined
 				throw error
@@ -123,9 +126,14 @@ async function loadAll(root: string): Promise<LoadedRuns> {
 	})
 	const records: RunRecord[] = []
 	const problems: string[] = []
+	const orphans: RunId[] = []
 	for (const entry of entries) {
 		if (!entry.isDirectory() || !RunId.safeParse(entry.name).success) continue
 		const file = path.join(root, entry.name, recordFile)
+		if (!existsSync(file)) {
+			orphans.push(entry.name)
+			continue
+		}
 		try {
 			records.push(RunRecord.parse(JSON.parse(await readFile(file, 'utf8'))))
 		} catch (error) {
@@ -133,7 +141,7 @@ async function loadAll(root: string): Promise<LoadedRuns> {
 		}
 	}
 	records.sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-	return { records, problems }
+	return { records, problems, orphans }
 }
 
 /** Runs writes to the same key one after another, and can wait for all of them. */

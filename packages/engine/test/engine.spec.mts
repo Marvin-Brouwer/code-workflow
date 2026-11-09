@@ -1,11 +1,12 @@
-import { rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
-import { openRunStore, type RunStore } from '../src/runs/run-store.mts'
+import { openRunStore, runDirectory, type RunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
 import { deferred } from './support/deferred.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -73,7 +74,7 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		const { engine, backend } = await openEngine()
 
 		// Act
-		const started = await engine.startRun({ directory, workflow: 'hello', signal })
+		const started = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
 		const finished = await untilStatus(engine, started.id, 'succeeded')
 
 		// Assert
@@ -90,7 +91,7 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Arrange
 		const directory = await workflowRepository({ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 		const { engine } = await openEngine()
-		const options = { directory, workflow: 'hello', key: 'webhook team/hello/1', signal }
+		const options = { directory, workflow: 'hello', key: 'webhook team/hello/1', abortSignal: signal }
 
 		// Act
 		const [first, second] = await Promise.all([engine.startRun(options), engine.startRun(options)])
@@ -105,10 +106,10 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 	test('gives the entry file the workflow and its parameters, also on a restart', async () => {
 		// Arrange
 		const directory = await workflowRepository({
-			main: runtimeScript(`const start = await mailbox.start(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`),
+			main: runtimeScript(`const start = await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`),
 		})
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'greet', input: { name: 'Ada' }, signal })
+		const { id } = await engine.startRun({ directory, workflow: 'greet', input: { name: 'Ada' }, abortSignal: signal })
 		const first = await untilStatus(engine, id, 'failed')
 
 		// Act
@@ -127,7 +128,7 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -143,7 +144,7 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -158,7 +159,7 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -182,7 +183,7 @@ mailbox.send({ type: 'succeeded' })
 		const { engine } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'later', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'later', abortSignal: signal })
 		await untilStatus(engine, id, 'succeeded')
 
 		// Assert
@@ -197,7 +198,7 @@ mailbox.send({ type: 'succeeded' })
 		})
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
 		const finished = await untilStatus(engine, id, 'succeeded')
 
 		// Assert
@@ -228,7 +229,7 @@ if (!restarted) {
 `),
 		})
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'later', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'later', abortSignal: signal })
 		await untilStatus(engine, id, 'failed')
 
 		// Act
@@ -250,7 +251,7 @@ if (!restarted) {
 		const { engine, backend } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'broken', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'broken', abortSignal: signal })
 		const failed = await untilStatus(engine, id, 'failed')
 
 		// Assert
@@ -267,7 +268,7 @@ if (!restarted) {
 		const { engine } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'crash', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'crash', abortSignal: signal })
 		const failed = await untilStatus(engine, id, 'failed')
 
 		// Assert
@@ -284,12 +285,27 @@ if (!restarted) {
 		const { engine } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'hello', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
 		const failed = await untilStatus(engine, id, 'failed')
 
 		// Assert
 		expect(failed.error).toContain('exit code 4')
 		expect(failed.error).toContain('no lockfile')
+	})
+
+	test('removes a run directory without a record when it opens', async () => {
+		// Arrange
+		const home = await temporaryDirectory()
+		const orphan = runDirectory(path.join(home, 'runs'), 'run-00000000000a')
+		await mkdir(orphan, { recursive: true })
+		await writeFile(path.join(orphan, 'start.json'), '{}')
+
+		// Act
+		const { engine } = await openEngine({ home })
+
+		// Assert
+		expect(existsSync(orphan)).toBe(false)
+		expect(engine.list()).toEqual([])
 	})
 
 	test('refuses a repository that has no entry file', async () => {
@@ -299,7 +315,7 @@ if (!restarted) {
 		const { engine } = await openEngine()
 
 		// Act
-		const starting = engine.startRun({ directory, workflow: 'missing', signal })
+		const starting = engine.startRun({ directory, workflow: 'missing', abortSignal: signal })
 
 		// Assert
 		await expect(starting).rejects.toMatchObject({ code: 'invalid' })
@@ -310,7 +326,7 @@ if (!restarted) {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine, backend } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		const sandbox = engine.get(id).sandbox?.id ?? ''
 		const [runtime = 0] = await pidsOf(backend.root, sandbox)
@@ -330,7 +346,7 @@ if (!restarted) {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine, backend } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -358,7 +374,7 @@ if (!restarted) {
 				},
 			}),
 		})
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
 
@@ -382,7 +398,7 @@ if (!restarted) {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const first = await openEngine()
-		const { id } = await first.engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await first.engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
 		const second = await openEngine({ home: first.home })
@@ -399,7 +415,7 @@ if (!restarted) {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const first = await openEngine()
-		const { id } = await first.engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await first.engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
 		const second = await openEngine({ home: first.home })
@@ -418,7 +434,7 @@ if (!restarted) {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })
 		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', signal })
+		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
 

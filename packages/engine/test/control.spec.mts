@@ -31,7 +31,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		const directory = await workflowRepository({ ask })
 
 		// Act
-		const started = await client.startRun({ directory, workflow: 'ask', signal })
+		const started = await client.startRun({ directory, workflow: 'ask', abortSignal: signal })
 		await vi.waitFor(async () => {
 			expect((await client.get(started.id, signal)).pending).toHaveLength(1)
 		}, 20_000)
@@ -49,7 +49,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
 		[
 			'a workflow that does not exist',
-			(client: ControlClient) => client.startRun({ directory: '/nowhere', workflow: 'develop', signal }),
+			(client: ControlClient) => client.startRun({ directory: '/nowhere', workflow: 'develop', abortSignal: signal }),
 			400,
 		],
 		['resuming a run that is not paused', (client: ControlClient) => client.resume('run-000000000000', signal), 404],

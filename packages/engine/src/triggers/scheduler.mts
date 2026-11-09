@@ -1,70 +1,66 @@
-import { setTimeout as delay } from 'node:timers/promises'
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
 import type { Engine } from '../engine/engine.mts'
-import { settleWithin } from '../engine/settle-within.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
-import type { Repository, RepositoryStore } from '../repositories/repository-store.mts'
-import { finishedStatuses } from '../runs/run-record.mts'
+import type { Repository } from '../repositories/repository-store.mts'
+import type { RunStatus } from '../runs/run-record.mts'
+import type { DescribedRepository } from './repository-watch.mts'
 
 type ScheduleDescription = Extract<TriggerDescription, { kind: 'schedule' }>
 
-/** What the scheduler needs. */
 export interface SchedulerOptions {
-	readonly engine: Engine
-	readonly repositories: RepositoryStore
+	readonly engine: Pick<Engine, 'list' | 'startRun'>
 	readonly log: (message: string) => void
 	/** The wall clock. Default: the system clock. */
 	readonly now?: () => Date
-	/** How often the repositories' entry files are read again for changed schedules. Default: a minute. */
-	readonly refreshMs?: number
 }
 
-/** Starts schedule runs on the wall clock, until it's closed. */
+/** Starts schedule runs on the wall clock, for the schedules it was last given. */
 export interface Scheduler {
-	/** Reads every registered repository's schedules again, such as after one was added. */
-	refresh(): Promise<void>
-	/** Stops every timer and waits, within `deadline`, for a refresh that's going on. */
-	close(deadline: AbortSignal): Promise<void>
+	/** Follows these repositories' schedules from now on: new ones are armed, changed or gone ones disarmed. */
+	update(described: readonly DescribedRepository[]): void
+	/** Stops every timer. Runs that were started go on. */
+	close(): void
 }
 
-/** A schedule with its timer. */
+/** A schedule with its timer, and what it was armed with. */
 interface Armed {
-	readonly cron: string
+	readonly directory: string
+	readonly workflow: string
 	readonly controller: AbortController
 }
 
-const defaultRefreshMs = 60_000
+/**
+ * Statuses of a schedule's run during which its next tick is skipped. A run that is `restartable`
+ * needs a person, so it doesn't hold its schedule up; a `paused` one is still going, and does.
+ */
+const goingStatuses: ReadonlySet<RunStatus> = new Set(['starting', 'running', 'paused'])
+
+/** How long starting a schedule's run may take: packing the source and saving the record. */
+const startTimeoutMs = 60_000
+
+/** Names a schedule of a repository, in run keys and logs. */
+function scheduleName(repository: string, schedule: string): string {
+	return `${repository}/${schedule}`
+}
 
 /**
- * Runs the schedule triggers of every registered repository. The entry files are described again
- * every `refreshMs` (cached per source, so that's cheap when nothing changed), and a schedule's
- * timer follows its cron expression on the engine's clock.
- *
- * A tick is skipped while the previous run of the same schedule is still going, also when it's
- * paused or waits for a human. Ticks missed while the engine wasn't running aren't made up for.
+ * Starts the schedule triggers of the repositories it's given, each on its cron expression and the
+ * engine's clock. A tick is skipped while the previous run of the same schedule is still going.
+ * Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
  */
-export function startScheduler(options: SchedulerOptions): Scheduler {
-	const { engine, repositories, log } = options
+export function createScheduler(options: SchedulerOptions): Scheduler {
+	const { engine, log } = options
 	const now = options.now ?? (() => new Date())
-	const lifetime = new AbortController()
 	const armed = new Map<string, Armed>()
 	/** Schedules whose run is being started, so a tick meanwhile is skipped too. */
 	const starting = new Set<string>()
-	/** The last problem reported per repository or schedule, so a broken entry file isn't reported every minute. */
-	const reported = new Map<string, string>()
-
-	const report = (subject: string, problem: string | undefined) => {
-		if (problem === undefined) reported.delete(subject)
-		else if (reported.get(subject) !== problem) {
-			reported.set(subject, problem)
-			log(problem)
-		}
-	}
+	/** Schedules whose cron expression was reported as broken, so it's reported once. */
+	const broken = new Set<string>()
 
 	const tick = async (repository: Repository, schedule: ScheduleDescription, at: Date) => {
-		const name = `${repository.name}/${schedule.id}`
+		const name = scheduleName(repository.name, schedule.id)
 		const going = engine
 			.list()
 			.find(
@@ -72,12 +68,11 @@ export function startScheduler(options: SchedulerOptions): Scheduler {
 					record.trigger?.kind === 'schedule' &&
 					record.trigger.id === schedule.id &&
 					record.trigger.repository === repository.name &&
-					!finishedStatuses.has(record.status),
+					goingStatuses.has(record.status),
 			)
 		if (going !== undefined || starting.has(name)) {
-			log(
-				`Skipped schedule ${name} at ${at.toISOString()}: ${going ? `run ${going.id} is still ${going.status}` : 'its last run is still starting'}.`,
-			)
+			const why = going === undefined ? 'its last run is still starting' : `run ${going.id} is still ${going.status}`
+			log(`Skipped schedule ${name} at ${at.toISOString()}: ${why}.`)
 			return
 		}
 		starting.add(name)
@@ -87,97 +82,63 @@ export function startScheduler(options: SchedulerOptions): Scheduler {
 				workflow: schedule.workflow,
 				trigger: { kind: 'schedule', id: schedule.id, repository: repository.name },
 				key: `schedule ${name}/${at.toISOString()}`,
-				signal: lifetime.signal,
+				abortSignal: AbortSignal.timeout(startTimeoutMs),
 			})
 		} catch (error) {
-			if (!lifetime.signal.aborted) log(`Starting schedule ${name} at ${at.toISOString()} failed: ${messageOf(error)}`)
+			log(`Starting schedule ${name} at ${at.toISOString()} failed: ${messageOf(error)}`)
 		} finally {
 			starting.delete(name)
 		}
 	}
 
-	const arm = (repository: Repository, schedule: ScheduleDescription, controller: AbortController) => {
-		const name = `${repository.name}/${schedule.id}`
+	const arm = (repository: Repository, schedule: ScheduleDescription, abortSignal: AbortSignal) => {
+		const name = scheduleName(repository.name, schedule.id)
 		let cron: Cron
 		try {
 			cron = new Cron(schedule.cron, { paused: true })
 		} catch (error) {
-			report(name, `Schedule ${name} doesn't run: ${messageOf(error)}`)
+			if (!broken.has(name)) log(`Schedule ${name} doesn't run: ${messageOf(error)}`)
+			broken.add(name)
 			return
 		}
-		report(name, undefined)
+		broken.delete(name)
 		const next = (after: Date) => {
 			const at = cron.nextRun(after)
 			if (at === null) return
-			wakeAt(
-				at,
-				() => {
-					next(at)
-					void tick(repository, schedule, at)
-				},
-				controller.signal,
-				now,
-			)
+			const fire = () => {
+				// From now, not from the tick: a timer that fired late, after a sleep, doesn't make up for what it missed.
+				next(new Date(Math.max(at.getTime(), now().getTime())))
+				void tick(repository, schedule, at)
+			}
+			wakeAt(at, fire, abortSignal, now)
 		}
 		next(now())
 	}
 
-	const refresh = async () => {
-		const wanted = new Map<string, { repository: Repository; schedule: ScheduleDescription }>()
-		const kept = new Set<string>()
-		for (const repository of await repositories.list()) {
-			try {
-				const description = await engine.describe(repository.directory, lifetime.signal)
-				report(repository.name, undefined)
-				for (const trigger of description.triggers) {
-					if (trigger.kind === 'schedule') wanted.set(`${repository.name}\0${trigger.id}`, { repository, schedule: trigger })
-				}
-			} catch (error) {
-				if (lifetime.signal.aborted) return
-				report(repository.name, `Reading the schedules of ${repository.name} failed, so they stay as they were: ${messageOf(error)}`)
-				for (const key of armed.keys()) if (key.startsWith(`${repository.name}\0`)) kept.add(key)
-			}
-		}
-		for (const [key, { controller, cron }] of armed) {
-			if (kept.has(key) || wanted.get(key)?.schedule.cron === cron) continue
-			controller.abort()
-			armed.delete(key)
-		}
-		for (const [key, { repository, schedule }] of wanted) {
-			if (armed.has(key)) continue
-			const controller = new AbortController()
-			lifetime.signal.addEventListener(
-				'abort',
-				() => {
-					controller.abort()
-				},
-				{ once: true },
-			)
-			armed.set(key, { cron: schedule.cron, controller })
-			arm(repository, schedule, controller)
-		}
-	}
-
-	let refreshing = Promise.resolve()
-	const refreshNow = () => {
-		refreshing = refreshing.then(refresh).catch((error: unknown) => {
-			if (!lifetime.signal.aborted) log(`Reading the schedules failed: ${messageOf(error)}`)
-		})
-		return refreshing
-	}
-	const loop = async () => {
-		while (!lifetime.signal.aborted) {
-			await refreshNow()
-			await delay(options.refreshMs ?? defaultRefreshMs, undefined, { signal: lifetime.signal }).catch(() => undefined)
-		}
-	}
-	const looping = loop()
-
 	return Object.freeze({
-		refresh: refreshNow,
-		async close(deadline) {
-			lifetime.abort(new Error('The scheduler is closing.'))
-			await settleWithin(Promise.all([looping, refreshing]), deadline)
+		update(described) {
+			const wanted = new Map<string, { repository: Repository; schedule: ScheduleDescription }>()
+			for (const { repository, description } of described) {
+				for (const trigger of description.triggers) {
+					if (trigger.kind === 'schedule') wanted.set(scheduleName(repository.name, trigger.id), { repository, schedule: trigger })
+				}
+			}
+			for (const [name, current] of armed) {
+				const want = wanted.get(name)
+				if (want?.repository.directory === current.directory && want.schedule.workflow === current.workflow) continue
+				current.controller.abort()
+				armed.delete(name)
+			}
+			for (const [name, { repository, schedule }] of wanted) {
+				if (armed.has(name)) continue
+				const controller = new AbortController()
+				armed.set(name, { directory: repository.directory, workflow: schedule.workflow, controller })
+				arm(repository, schedule, controller.signal)
+			}
+		},
+		close() {
+			for (const { controller } of armed.values()) controller.abort()
+			armed.clear()
 		},
 	} satisfies Scheduler)
 }

@@ -22,12 +22,7 @@ export function schedule<Shape extends z.ZodRawShape>(
 	cron: string,
 	...[parameters]: ScheduleParameters<z.input<z.ZodObject<Shape>>>
 ): ScheduleTrigger {
-	if (cron.trim().length === 0) throw new Error(`The schedule of ${workflow.name} has no cron expression.`)
-	return Object.freeze({
-		kind: 'schedule',
-		id: `${workflow.name} ${cron.trim()}`,
-		workflow,
-		cron: cron.trim(),
-		parameters: parameters ?? {},
-	})
+	const expression = cron.trim()
+	if (expression.length === 0) throw new Error(`The schedule of ${workflow.name} has no cron expression.`)
+	return Object.freeze({ kind: 'schedule', id: `${workflow.name} ${expression}`, workflow, cron: expression, parameters: parameters ?? {} })
 }

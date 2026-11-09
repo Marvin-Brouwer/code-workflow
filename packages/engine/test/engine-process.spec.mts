@@ -28,7 +28,7 @@ async function serveHere(home: string) {
 async function startWaitingRun(home: string) {
 	const directory = await workflowRepository({ ask })
 	const client = controlClient(controlSocketPath(home))
-	const { id } = await client.startRun({ directory, workflow: 'ask', signal })
+	const { id } = await client.startRun({ directory, workflow: 'ask', abortSignal: signal })
 	const record = await vi.waitFor(
 		async () => {
 			const current = await client.get(id, signal)

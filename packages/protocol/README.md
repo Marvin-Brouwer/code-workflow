@@ -13,16 +13,16 @@ The engine starts the runtime with `MESH_FLOW_MAILBOX` set. `RuntimeMailbox` sen
 ```ts
 import { RuntimeMailbox } from '@mesh-flow/protocol'
 
-const signal = AbortSignal.timeout(24 * 60 * 60_000)
+const abortSignal = AbortSignal.timeout(24 * 60 * 60_000)
 const mailbox = RuntimeMailbox.fromEnvironment()
-const start = await mailbox.start(signal) // what to do: check it with RunStart
+const start = await mailbox.readStart(abortSignal) // what to do: check it with RunStart
 mailbox.send({ type: 'event', event: { id: 'run', type: 'workflow-started', at: new Date().toISOString() } })
 
 mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: { key: { type: 'string' } } } })
-const { value } = await mailbox.answer('story', signal)
+const { value } = await mailbox.answer('story', abortSignal)
 
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'tomorrow', at: '2026-11-08T09:00:00Z' } })
-await mailbox.answer('tomorrow', signal)
+await mailbox.answer('tomorrow', abortSignal)
 
 mailbox.send({ type: 'succeeded' })
 ```

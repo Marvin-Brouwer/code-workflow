@@ -10,6 +10,15 @@ export interface DescriptionCache {
 	set(sourceKey: string, description: WorkflowsDescription): Promise<void>
 }
 
+/** The text as JSON, or `undefined` when it isn't, such as a file cut short by a crash. */
+function parseJsonOrUndefined(text: string): unknown {
+	try {
+		return JSON.parse(text)
+	} catch {
+		return undefined
+	}
+}
+
 /** Source keys are SHA-256 hashes; nothing else names a file. */
 const sourceKeyPattern = /^[0-9a-f]{64}$/
 
@@ -41,7 +50,7 @@ export function openDescriptionCache(directory: string): DescriptionCache {
 				throw error
 			})
 			if (text === undefined) return undefined
-			const parsed = WorkflowsDescription.safeParse(JSON.parse(text))
+			const parsed = WorkflowsDescription.safeParse(parseJsonOrUndefined(text))
 			return parsed.success ? parsed.data : undefined
 		},
 		async set(sourceKey, description) {

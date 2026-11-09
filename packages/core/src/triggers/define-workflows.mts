@@ -27,7 +27,8 @@ export interface WorkflowEntry {
  *
  * When the engine runs the entry file (`node workflows/main.mts` in the sandbox), it starts by
  * itself once the file is loaded, and does what the engine asked: describe what it declares, or
- * run one workflow.
+ * run one workflow. Anywhere else, such as in a test that imports the entry file, it only returns
+ * the triggers.
  */
 export function defineWorkflows(...triggers: Trigger[]): WorkflowEntry {
 	const seen = new Set<string>()
@@ -47,7 +48,9 @@ export function defineWorkflows(...triggers: Trigger[]): WorkflowEntry {
 }
 
 function hintFor(trigger: Trigger): string {
-	return trigger.kind === 'webhook' ? ' Give the second one a name of its own: webhook(workflow, schema, { name }).' : ''
+	if (trigger.kind === 'webhook') return ' Give the second one a name of its own: webhook(workflow, schema, { name }).'
+	if (trigger.kind === 'schedule') return ' A workflow has one schedule per cron expression.'
+	return ''
 }
 
 /** Whether `file` is the file the engine started this process with. */

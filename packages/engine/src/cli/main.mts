@@ -8,10 +8,10 @@ import { controlClient } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { RepositoryName } from '../repositories/repository-store.mts'
-import { serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
+import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
 import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
-import { WorkflowName } from '../workflow/workflow-name.mts'
+import { WebhookName } from '../workflow/workflow-name.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
@@ -21,6 +21,9 @@ const requestTimeoutMs = 5 * 60_000
 
 /** How long closing the backend may take when the engine fails to start. */
 const closeTimeoutMs = 60_000
+
+/** The highest TCP port number. */
+const maxPort = 65_535
 
 /** How many random bytes a generated webhook secret has. */
 const generatedSecretBytes = 32
@@ -56,7 +59,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.option('--backend <name>', 'the sandbox backend: microsandbox or gvisor (default: what this machine supports)', parseBackend)
 		.option('--runsc <command>', "how to call runsc for gVisor, such as 'sudo /usr/bin/runsc'", (value) => value.split(' ').filter(Boolean))
 		.option('--webhook-port <port>', 'takes webhook deliveries on this port (default: no webhooks)', parsePort)
-		.option('--webhook-host <host>', 'the address the webhook port listens on', '127.0.0.1')
+		.option('--webhook-host <host>', 'the address the webhook port listens on', defaultWebhookHost)
 		.action(async (options: { backend?: BackendName; runsc?: string[]; webhookPort?: number; webhookHost: string }) => {
 			const startup = new AbortController()
 			const { webhookPort, webhookHost, ...backendOptions } = options
@@ -86,7 +89,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.option('-p, --parameters <json>', "the workflow's parameters, as JSON", parseJson)
 		.action(async (workflow: string, options: { directory: string; parameters?: unknown }) => {
 			const directory = path.resolve(options.directory)
-			const record = await client().startRun({ directory, workflow, parameters: options.parameters, signal: requestSignal() })
+			const record = await client().startRun({ directory, workflow, parameters: options.parameters, abortSignal: requestSignal() })
 			console.log(formatRunLine(record))
 		})
 
@@ -101,8 +104,8 @@ export async function main(argv: readonly string[]): Promise<void> {
 			console.log(formatDescription(description, registered?.name))
 		})
 
-	const repository = program.command('repository').description('The repositories whose webhooks and schedules the engine serves.')
-	repository
+	const repositoryCommand = program.command('repository').description('The repositories whose webhooks and schedules the engine serves.')
+	repositoryCommand
 		.command('add')
 		.description('Registers a workflow repository, so its webhooks get a URL and its schedules run.')
 		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
@@ -113,13 +116,13 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const added = await client().addRepository({ name, directory }, requestSignal())
 			console.log(`${added.name}  ${added.directory}`)
 		})
-	repository
+	repositoryCommand
 		.command('list')
 		.description('Lists the registered repositories.')
 		.action(async () => {
 			for (const { name, directory } of await client().repositories(requestSignal())) console.log(`${name}  ${directory}`)
 		})
-	repository
+	repositoryCommand
 		.command('remove')
 		.description('Unregisters a repository. Its runs stay; its webhooks and schedules stop.')
 		.argument('<name>')
@@ -138,7 +141,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.action(async (repositoryName: string, webhook: string, options: { generate?: boolean }) => {
 			const secret = options.generate ? randomBytes(generatedSecretBytes).toString('hex') : (await text(process.stdin)).trim()
 			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in, or use --generate.')
-			await openWebhookSecrets(webhookSecretsFile(home())).set(RepositoryName.parse(repositoryName), WorkflowName.parse(webhook), secret)
+			await openWebhookSecrets(webhookSecretsFile(home())).set(RepositoryName.parse(repositoryName), WebhookName.parse(webhook), secret)
 			if (options.generate) console.log(secret)
 		})
 
@@ -205,7 +208,7 @@ function parseBackend(value: string): BackendName {
 
 function parsePort(value: string): number {
 	const port = Number(value)
-	if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new InvalidArgumentError('Use a port number.')
+	if (!Number.isInteger(port) || port < 0 || port > maxPort) throw new InvalidArgumentError('Use a port number.')
 	return port
 }
 

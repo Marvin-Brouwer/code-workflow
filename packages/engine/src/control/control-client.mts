@@ -26,17 +26,19 @@ export interface ControlClient {
 		readonly directory: string
 		readonly workflow: string
 		readonly parameters?: unknown
-		readonly signal: AbortSignal
+		readonly abortSignal: AbortSignal
 	}): Promise<RunRecord>
 	answer(run: string, requestId: string, value: unknown, signal: AbortSignal): Promise<RunRecord>
 	stop(run: string, signal: AbortSignal): Promise<RunRecord>
 	resume(run: string, signal: AbortSignal): Promise<RunRecord>
 	restart(run: string, signal: AbortSignal): Promise<RunRecord>
 	/** What a repository's entry file declares, described in a sandbox. */
-	describe(directory: string, signal: AbortSignal): Promise<WorkflowsDescription>
-	repositories(signal: AbortSignal): Promise<Repository[]>
-	addRepository(repository: Repository, signal: AbortSignal): Promise<Repository>
-	removeRepository(name: string, signal: AbortSignal): Promise<void>
+	describe(directory: string, abortSignal: AbortSignal): Promise<WorkflowsDescription>
+	/** The repositories whose webhooks and schedules the engine serves. */
+	repositories(abortSignal: AbortSignal): Promise<Repository[]>
+	/** Registers a repository, or points a registered name at another directory. */
+	addRepository(repository: Repository, abortSignal: AbortSignal): Promise<Repository>
+	removeRepository(name: string, abortSignal: AbortSignal): Promise<void>
 }
 
 /** The route of one run. */
@@ -52,19 +54,19 @@ export function controlClient(socketPath: string): ControlClient {
 		list: (signal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, signal),
 		get: (run, signal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, signal),
 		events: (run, signal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, signal),
-		startRun: ({ directory, workflow, parameters, signal }) =>
-			call(socketPath, RunRecord, 'POST', '/runs', { directory, workflow, parameters }, signal),
+		startRun: ({ directory, workflow, parameters, abortSignal }) =>
+			call(socketPath, RunRecord, 'POST', '/runs', { directory, workflow, parameters }, abortSignal),
 		answer: (run, requestId, value, signal) =>
 			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, signal),
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
-		describe: (directory, signal) => call(socketPath, WorkflowsDescription, 'POST', '/describe', { directory }, signal),
-		repositories: (signal) => call(socketPath, z.array(Repository), 'GET', '/repositories', undefined, signal),
-		addRepository: ({ name, directory }, signal) =>
-			call(socketPath, Repository, 'PUT', `/repositories/${encodeURIComponent(name)}`, { directory }, signal),
-		removeRepository: async (name, signal) => {
-			await call(socketPath, z.unknown(), 'DELETE', `/repositories/${encodeURIComponent(name)}`, undefined, signal)
+		describe: (directory, abortSignal) => call(socketPath, WorkflowsDescription, 'POST', '/describe', { directory }, abortSignal),
+		repositories: (abortSignal) => call(socketPath, z.array(Repository), 'GET', '/repositories', undefined, abortSignal),
+		addRepository: ({ name, directory }, abortSignal) =>
+			call(socketPath, Repository, 'PUT', `/repositories/${encodeURIComponent(name)}`, { directory }, abortSignal),
+		removeRepository: async (name, abortSignal) => {
+			await call(socketPath, z.unknown(), 'DELETE', `/repositories/${encodeURIComponent(name)}`, undefined, abortSignal)
 		},
 	} satisfies ControlClient)
 }

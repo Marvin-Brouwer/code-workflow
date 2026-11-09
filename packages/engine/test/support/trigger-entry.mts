@@ -8,7 +8,7 @@ import { runtimeScript } from './workflow-repository.mts'
  */
 export function triggerEntry(description: WorkflowsDescription, body = `mailbox.send({ type: 'succeeded' })`): string {
 	return runtimeScript(`
-const start = await mailbox.start(signal)
+const start = await mailbox.readStart(signal)
 if (start.mode === 'describe') {
 	mailbox.send({ type: 'described', description: ${JSON.stringify(description)} })
 } else if (start.trigger?.kind === 'webhook' && start.input?.label !== 'ai-fix') {

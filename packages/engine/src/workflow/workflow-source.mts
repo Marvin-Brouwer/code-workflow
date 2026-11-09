@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readlink } from 'node:fs/promises'
 import path from 'node:path'
 import { create } from 'tar'
 import type { RunSource } from '../runs/run-record.mts'
@@ -37,15 +37,24 @@ export async function packWorkflowSource(directory: string, tarball: string, abo
 }
 
 /**
- * Names the workflow source as it is on disk now: a SHA-256 of every git file's path and content.
- * On a clean checkout it changes with the commit and nothing else; uncommitted changes change it
- * too, so a description is never reused for code it wasn't made from.
+ * Names the workflow source as it is on disk now: a SHA-256 of every git file's path and content,
+ * a symbolic link's target in place of its content. On a clean checkout it changes with the commit
+ * and nothing else; uncommitted changes change it too, so a description is never reused for code
+ * it wasn't made from. A submodule counts by its path only.
  */
 export async function sourceKey(directory: string, abortSignal: AbortSignal): Promise<string> {
 	const hash = createHash('sha256')
 	for (const file of await listSourceFiles(directory, abortSignal)) {
-		const content = await readFile(path.join(directory, file), { signal: abortSignal })
+		const content = await contentOf(path.join(directory, file), abortSignal)
 		hash.update(`${file}\0${String(content.length)}\0`).update(content)
 	}
 	return hash.digest('hex')
+}
+
+/** What a git file holds: a file's bytes, a link's target, nothing for a directory such as a submodule. */
+async function contentOf(file: string, abortSignal: AbortSignal): Promise<Buffer> {
+	const stats = await lstat(file)
+	if (stats.isSymbolicLink()) return Buffer.from(`link:${await readlink(file)}`)
+	if (stats.isFile()) return readFile(file, { signal: abortSignal })
+	return Buffer.from('directory')
 }
