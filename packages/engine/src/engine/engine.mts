@@ -221,6 +221,14 @@ export class Engine {
 		if (unavailable !== undefined && unavailable.length > 0) {
 			throw new EngineError('unavailable', `${options.app} can't run now, so no run was started:\n${unavailable.join('\n')}`)
 		}
+		const missing = this.#gateway?.missingTools(deployed.manifest.description.tools) ?? []
+		if (missing.length > 0) {
+			throw new EngineError(
+				'unavailable',
+				`${options.app} can't run now, so no run was started: no loaded connector brings the host tools ${missing.join(', ')}. ` +
+					'Add the connector with `mesh-flow connector add <package>` and start the engine again.',
+			)
+		}
 		const app: RunApp = {
 			name: deployed.name,
 			version: deployed.version,

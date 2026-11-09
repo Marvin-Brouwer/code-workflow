@@ -18,6 +18,19 @@ It picks the sandbox backend for the machine ([`chooseBackend`](../sandbox/READM
 
 Ctrl+C shuts it down without leaving anything running. It pauses every running sandbox to disk, saves the run records and closes the backend. A second Ctrl+C skips the pauses that haven't finished, and those runs can be restarted later. A third exits right away.
 
+### Load connectors
+
+A connector package's host tools run on the host with credentials, so which packages the engine loads is your setting, never the app's. Install the package where `mesh-flow serve` runs and add it; the engine loads its `host` entry point the next time it starts:
+
+```bash
+pnpm add @mesh-flow/github
+mesh-flow connector add @mesh-flow/github
+mesh-flow credential set github/token < token.txt
+mesh-flow connector list
+```
+
+A trigger refuses a run, before it makes a sandbox, when the app lists a host tool no loaded connector brings, the way it refuses one whose models no provider serves.
+
 ### Build and deploy an app
 
 An app is a package whose `main` in `package.json` is its entry file, which exports `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)). The engine doesn't take the source: it takes the built app, bundled with its dependencies, so the sandbox has nothing to set up and only runs `node`.

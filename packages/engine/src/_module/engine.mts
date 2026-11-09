@@ -8,6 +8,14 @@
 export { openAppStore, type AppStore, type AppVersion } from '../apps/app-store.mts'
 export { controlClient, ControlError, DeployedApp, type ControlClient } from '../control/control-client.mts'
 export { controlApi } from '../control/control-api.mts'
+export {
+	connectorSettingsFileName,
+	ConnectorSetting,
+	openConnectorSettings,
+	PackageName,
+	type ConnectorSettings,
+} from '../connectors/connector-settings.mts'
+export { hostEntry, loadConnectors, type LoadConnectorsOptions, type LoadedConnector } from '../connectors/load-connectors.mts'
 export { controlSocketPath } from '../control/control-socket.mts'
 export { Engine, type CloseDeadlines, type EngineOptions, type StartRunOptions } from '../engine/engine.mts'
 export { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'

@@ -267,6 +267,20 @@ mailbox.send({ type: 'succeeded' })
 		expect(engine.list()).toEqual([])
 	})
 
+	test('refuses a run before its sandbox when no loaded connector brings a host tool the app lists', async () => {
+		// Arrange
+		const { engine, apps } = await openEngine()
+		await deployTestApp(apps, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { tools: ['echo', 'githubComment'] })
+
+		// Act
+		const refused = engine.startRun({ ...userRun('calls'), abortSignal })
+
+		// Assert
+		await expect(refused).rejects.toMatchObject({ code: 'unavailable' })
+		await expect(refused).rejects.toThrow('host tools githubComment. Add the connector with `mesh-flow connector add')
+		expect(engine.list()).toEqual([])
+	})
+
 	test("refuses a run when the provider of the app's model has no key", async () => {
 		// Arrange
 		const { engine, apps, gatewayHome } = await openEngine()
