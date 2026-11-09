@@ -264,10 +264,13 @@ export default defineWorkflows(
   workflow without parameters gets a plain button.
 - **`webhook(workflow, schema)`** starts a run for each delivery that fits a zod schema. The
   schema's output type has to be the workflow's parameters, so a mapping is a `.transform` on the
-  schema, not a separate function. Connectors export schemas for their providers' events
-  (`github.issueLabeled(label)`) together with how the provider signs a delivery; any zod schema
-  works too, with a shared-secret header. The signing secret is set in the UI and checked by the
-  engine before anything else, so the sandbox never sees it. The delivery id is the run's key: a
+  schema, not a separate function. Nothing about it is provider specific: any zod schema works,
+  and how a delivery is signed is plain data, `webhook(workflow, schema, { signature })`, from a
+  small set the engine has built in (a secret header as GitLab sends it, an HMAC of the body in a
+  header as GitHub and most others send it; a secret header by default). It has to be data: the
+  engine checks it on the host, where workflow code never runs. Connectors only add convenience,
+  a schema per event with its signature filled in (`github.issueLabeled(label)`). The secret is
+  set in the UI and checked by the engine before anything else, so the sandbox never sees it. The delivery id is the run's key: a
   redelivery reuses the run it already started.
 - **`schedule(workflow, cron, parameters?)`** starts a run on the engine's wall clock (timed waits
   are engine-side, section 5). The parameters are fixed values, checked against the workflow's
@@ -422,9 +425,9 @@ export const aws = connector({
   the sandbox half (section 7).
 - Workflows import the connectors they use, so the describe run tells the engine each workflow's
   requirements.
-- Connectors with webhooks export a zod schema per event (`github.issueLabeled(label)`) and how the
-  provider signs a delivery, for `webhook` triggers and for events into a running run (review
-  watching).
+- Connectors with webhooks may export a zod schema per event with its signature scheme filled in
+  (`github.issueLabeled(label)`), as a shortcut for `webhook` triggers and for events into a running
+  run (review watching). `webhook` itself doesn't need a connector.
 
 ## 9. Settings
 

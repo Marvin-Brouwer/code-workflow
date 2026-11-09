@@ -114,8 +114,8 @@ credentials stay as they are.
   `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
   and starting one named workflow from the entry file.
 - **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
-  workflow from `workflows/main.mts`; webhook ingress (signature, JSON Schema check, 4xx, delivery
-  id as run key); the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
+  workflow from `workflows/main.mts`; generic webhook ingress (the built-in signature schemes,
+  JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
   lists what the entry file declares. Webhook secrets come from the local credential store; until
   the gateway's store exists (step 5), a webhook secret is set with the CLI and kept in the engine's
   home directory, never in the workflow repository.
@@ -150,8 +150,8 @@ checks for `verify`.
   while it waits.
 - **Credentials** never in the sandbox: API calls and pushes are host-side tools; how fetching
   gets its credential is decided here (see [gateway-tool-calls.md](gateway-tool-calls.md)).
-- **Webhooks:** `github.issueLabeled(label)` and the review events as schemas, and GitHub's
-  signature check, for `webhook` triggers and for review watching.
+- **Webhook shortcuts:** `github.issueLabeled(label)` and the review events as schemas with
+  GitHub's signature scheme filled in, for `webhook` triggers and for review watching.
 
 `examples/github-issue` is deliberately tiny: one issue, one repository, no separate QA or code
 review, no dependency order. Pick up the issue, fix it, open a pull request, handle review comments
