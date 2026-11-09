@@ -42,7 +42,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
  * | `GET /apps` | every deployed app's current version and what it declares |
- * | `PUT /apps/:name` | deploys a built app as the new current version: `{ tarball }` |
+ * | `PUT /apps/:name` | deploys a built app as the new current version: `{ tarball }`; answers with the settings it still needs in `missing` |
  * | `DELETE /apps/:name` | removes an app; runs on it keep their copy |
  *
  * Errors come back as `{ error }`, with 404, 409 or 400 for what the engine refused.
@@ -72,7 +72,8 @@ export function controlApi(engine: Engine, apps?: ControlApps): Hono {
 			const { tarball } = DeployBody.parse(await c.req.json())
 			const deployed = await store.deploy(c.req.param('name'), tarball, c.req.raw.signal)
 			changed()
-			return c.json(shownApp(deployed))
+			const missing = await engine.missingSettings(deployed.manifest.description, c.req.raw.signal)
+			return c.json({ ...shownApp(deployed), missing })
 		})
 		api.delete('/apps/:name', async (c) => {
 			const name = c.req.param('name')

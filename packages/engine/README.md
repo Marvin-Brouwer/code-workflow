@@ -29,7 +29,7 @@ mesh-flow credential set github/token < token.txt
 mesh-flow connector list
 ```
 
-A trigger refuses a run, before it makes a sandbox, when the app lists a host tool no loaded connector brings, the way it refuses one whose models no provider serves.
+The settings an app needs follow from what it declares: a provider with a key for each of its models, a loaded connector for each of its host tools. `mesh-flow deploy` and `mesh-flow dev` print what is still missing, and a trigger refuses a run before it makes a sandbox until it's in.
 
 ### Build and deploy an app
 

@@ -156,6 +156,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				requestSignal(),
 			)
 			console.log(`${deployed.name}  ${deployed.version}`)
+			reportMissing(deployed.missing)
 		})
 
 	program
@@ -180,6 +181,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
 					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.name} ${deployed.version}.`)
+					reportMissing(deployed.missing)
 				} catch (error) {
 					if (!stopping.signal.aborted) log(`Not deployed: ${messageOf(error)}`)
 				}
@@ -316,6 +318,12 @@ export async function main(argv: readonly string[]): Promise<void> {
 		log(messageOf(error))
 		process.exitCode = 1
 	}
+}
+
+/** Says what the engine still needs before the deployed app can run, so it's known before the first trigger. */
+function reportMissing(missing: readonly string[]): void {
+	if (missing.length === 0) return
+	log(`The app can't run until these settings are in:\n${missing.map((line) => `- ${line}`).join('\n')}`)
 }
 
 /** Where connectors keep what they hold between calls, in an engine's home. */

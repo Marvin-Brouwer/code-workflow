@@ -8,6 +8,10 @@ import { RunRecord } from '../runs/run-record.mts'
 export const DeployedApp = z.object({ name: z.string(), version: z.string(), manifest: AppManifest })
 export type DeployedApp = z.infer<typeof DeployedApp>
 
+/** What a deploy answers: the app, and the settings the engine still needs before it can run, each as a line that says what to do. */
+export const DeployOutcome = DeployedApp.extend({ missing: z.array(z.string()) })
+export type DeployOutcome = z.infer<typeof DeployOutcome>
+
 /** Thrown when the engine refused a request or isn't running. */
 export class ControlError extends Error {
 	readonly status: number | undefined
@@ -39,7 +43,7 @@ export interface ControlClient {
 	/** Every deployed app's current version. */
 	apps(abortSignal: AbortSignal): Promise<DeployedApp[]>
 	/** Deploys the built app packed in `tarball`, on this machine, as the new current version of `name`. */
-	deploy(name: string, tarball: string, abortSignal: AbortSignal): Promise<DeployedApp>
+	deploy(name: string, tarball: string, abortSignal: AbortSignal): Promise<DeployOutcome>
 	removeApp(name: string, abortSignal: AbortSignal): Promise<void>
 }
 
@@ -64,7 +68,7 @@ export function controlClient(socketPath: string): ControlClient {
 		restart: act('restart'),
 		apps: (abortSignal) => call(socketPath, z.array(DeployedApp), 'GET', '/apps', undefined, abortSignal),
 		deploy: (name, tarball, abortSignal) =>
-			call(socketPath, DeployedApp, 'PUT', `/apps/${encodeURIComponent(name)}`, { tarball }, abortSignal),
+			call(socketPath, DeployOutcome, 'PUT', `/apps/${encodeURIComponent(name)}`, { tarball }, abortSignal),
 		removeApp: async (name, abortSignal) => {
 			await call(socketPath, z.unknown(), 'DELETE', `/apps/${encodeURIComponent(name)}`, undefined, abortSignal)
 		},
