@@ -8,8 +8,8 @@ export interface SandboxLayout {
 	readonly app: string
 }
 
-/** The mailbox at the protocol's default place, and the app at `/app`. */
+/** The mailbox at the protocol's default place, and the app at `/mesh-flow/app`, clear of an image's own `/app`. */
 export const defaultSandboxLayout: SandboxLayout = {
 	mailbox: defaultMailboxDirectory,
-	app: '/app',
+	app: '/mesh-flow/app',
 }

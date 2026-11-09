@@ -83,12 +83,19 @@ export async function watchApp(options: WatchAppOptions): Promise<void> {
 		}
 	}
 
-	// The top level on its own, so a new folder there gets a watch of its own too.
+	const unwatchFolder = (name: string) => {
+		watchers.get(name)?.close()
+		watchers.delete(name)
+	}
+
+	// The top level on its own, so a new folder there gets a watch of its own too. A watch on a
+	// folder that was removed hears nothing, also once the folder is back, so it's made again.
 	const top = watch(directory, (_event, name) => {
 		if (name === null || ignored.has(name)) return
 		settle()
 		void readdir(directory, { withFileTypes: true }).then((entries) => {
-			for (const entry of entries) if (entry.isDirectory() && entry.name === name) watchFolder(name)
+			unwatchFolder(name)
+			if (entries.some((entry) => entry.isDirectory() && entry.name === name)) watchFolder(name)
 		}, failed)
 	})
 	top.on('error', failed)

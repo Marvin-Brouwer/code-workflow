@@ -67,7 +67,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 /** Throws when emptying `out` would delete the repository, or everything. */
 function assertSafeOut(directory: string, out: string): void {
 	const outward = path.relative(out, directory)
-	const holdsDirectory = outward === '' || (!outward.startsWith('..') && !path.isAbsolute(outward))
+	const holdsDirectory = outward === '' || (outward.split(path.sep)[0] !== '..' && !path.isAbsolute(outward))
 	if (holdsDirectory || path.dirname(out) === out) {
 		throw new Error(
 			`${out} is emptied before a build, and it holds the app's repository: give a folder of its own, such as .mesh-flow/app.`,

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -93,6 +93,27 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledTimes(2)
+		}, waitForCallMs)
+	})
+
+	test('watches a folder again that was removed and made again', async () => {
+		// Arrange
+		const { directory, calls } = await watchedApp()
+		await rm(path.join(directory, 'workflows'), { recursive: true })
+		await delay(settledMs)
+		await mkdir(path.join(directory, 'workflows'))
+		await delay(settledMs)
+		await vi.waitFor(() => {
+			expect(calls).toHaveBeenCalled()
+		}, waitForCallMs)
+		const before = calls.mock.calls.length
+
+		// Act
+		await writeFile(path.join(directory, 'workflows', 'a.mts'), '')
+
+		// Assert
+		await vi.waitFor(() => {
+			expect(calls.mock.calls.length).toBeGreaterThan(before)
 		}, waitForCallMs)
 	})
 

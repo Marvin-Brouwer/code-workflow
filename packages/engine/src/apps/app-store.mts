@@ -200,13 +200,11 @@ async function sha256Of(file: string, abortSignal: AbortSignal): Promise<string>
 	return hash.digest('hex')
 }
 
-/** `tar.list`, with a file that isn't a tarball as the caller's mistake. */
+/** `tar.list`, with a file that can't be read as a tarball, corrupt or not one at all, as the caller's mistake. */
 async function listTarball(options: tar.TarOptionsWithAliasesAsyncFile): Promise<void> {
 	try {
 		await tar.list(options)
 	} catch (error) {
-		if (hasErrorCode(error, 'TAR_BAD_ARCHIVE'))
-			throw new EngineError('invalid', `${options.file} isn't a tarball: deploy what mesh-flow build wrote.`)
-		throw error
+		throw new EngineError('invalid', `${options.file} can't be read as a tarball (${messageOf(error)}): deploy what mesh-flow build wrote.`)
 	}
 }

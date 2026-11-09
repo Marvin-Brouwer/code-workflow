@@ -9,6 +9,7 @@ import { controlSocketPath, listenOnControlSocket } from '../control/control-soc
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { messageOf } from '../errors.mts'
+import { settleWithin } from '../engine/settle-within.mts'
 import { openRunStore } from '../runs/run-store.mts'
 import { createScheduler } from '../triggers/scheduler.mts'
 import { webhookApi } from '../triggers/webhook-api.mts'
@@ -128,7 +129,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			await Promise.all([closeServer(server), webhooks ? closeServer(webhooks.server) : undefined])
 			scheduler.close()
 			// A deploy that was under way when the servers closed finishes before the home is let go.
-			await apps.close()
+			await settleWithin(apps.close(), deadlines.backend)
 			await engine.close(deadlines)
 		} finally {
 			// Reported, not thrown: an error closing the engine is the one to see.
