@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
+import { EndpointGrant, runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
 import { describeApp } from '../app/describe-app.mts'
+import { gatewayClient, type GatewayClient } from '../gateway/gateway-client.mts'
 import { describeError } from '../run/describe-error.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import type { ScheduleTrigger, WebhookTrigger } from '../triggers/trigger.mts'
@@ -20,7 +22,8 @@ type Begun = { readonly workflow: AnyWorkflow; readonly parameters: unknown } | 
  * it, the workspace and agent store in the home directory, stopped by `SIGTERM` or `SIGINT`. Sets
  * the exit code from the outcome, and exits right away once stopped or once it has described itself.
  *
- * Model providers come with the gateway; until then a loop in an engine run fails up front.
+ * Host tools and the agents' models go through the gateway, on the endpoint the engine handed over
+ * in the mailbox.
  */
 export async function startFromEngine(app: MeshFlowApp, environment: NodeJS.ProcessEnv = process.env): Promise<void> {
 	const channel = RuntimeMailbox.fromEnvironment(environment)
@@ -66,10 +69,12 @@ async function dispatch(
 		return 0
 	}
 	const runId = environment[runIdEnvironmentVariable]
+	const gateway = await gatewayOf(channel, runId, abortSignal)
 	const outcome = await runAnyWorkflow(begun.workflow, {
 		parameters: begun.parameters,
 		channel,
 		abortSignal,
+		...(gateway === undefined ? {} : { gateway }),
 		workspace: path.join(homedir(), 'workspace'),
 		agentStore: path.join(homedir(), '.mesh-flow', 'agents.sqlite'),
 		...(runId === undefined ? {} : { runId }),
@@ -96,6 +101,13 @@ async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' 
 	const parsed = await untilAborted(trigger.schema.safeParseAsync(request.input), abortSignal)
 	if (!parsed.success) return { skipped: `The delivery isn't for ${trigger.workflow.name}:\n${z.prettifyError(parsed.error)}` }
 	return { workflow: trigger.workflow, parameters: parsed.data }
+}
+
+/** The gateway client for the endpoint the engine handed over, if it has a gateway. Calls are named after the run, so they don't repeat across attempts. */
+async function gatewayOf(channel: RuntimeMailbox, runId: string | undefined, abortSignal: AbortSignal): Promise<GatewayClient | undefined> {
+	const grant = await channel.takeGateway(abortSignal)
+	if (grant === undefined) return undefined
+	return gatewayClient(channel, EndpointGrant.parse(grant), randomUUID().slice(0, 8), abortSignal)
 }
 
 /** The workflow called `name` among those the entry file's modules define. */

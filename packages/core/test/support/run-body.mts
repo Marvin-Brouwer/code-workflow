@@ -1,5 +1,6 @@
 import type { Models } from '@earendil-works/pi-ai'
 import { onTestFinished } from 'vitest'
+import type { GatewayClient } from '../../src/gateway/gateway-client.mts'
 import { runWorkflow, type RunOutcome } from '../../src/workflow/run-workflow.mts'
 import { workflow } from '../../src/workflow/workflow.mts'
 import { memoryChannel, type MemoryChannel } from './memory-channel.mts'
@@ -21,6 +22,8 @@ export interface BodyRunOptions {
 	readonly agentStore?: string
 	/** The workspace, for runs that share one. A fresh directory without it. */
 	readonly workspace?: string
+	/** The run's side of a gateway, made with the run's signal. */
+	readonly gateway?: (lifetime: AbortSignal) => GatewayClient
 }
 
 /** Runs `body` as a workflow, in a fresh workspace, on a memory channel. The run is stopped when the test ends. */
@@ -48,6 +51,7 @@ export async function runBody(body: () => Promise<unknown>, options: BodyRunOpti
 		workspace,
 		...(options.models === undefined ? {} : { models: options.models }),
 		...(options.agentStore === undefined ? {} : { agentStore: options.agentStore }),
+		...(options.gateway === undefined ? {} : { gateway: options.gateway(controller.signal) }),
 	})
 	outcome
 		.then((ended) => {

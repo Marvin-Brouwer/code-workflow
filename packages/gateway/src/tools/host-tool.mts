@@ -20,6 +20,8 @@ export interface ToolDefinition<Input extends z.ZodType = z.ZodType> {
 	readonly name: string
 	readonly description?: string
 	readonly input: Input
+	/** What the tool returns, for the stub in the sandbox to check. The host doesn't. */
+	readonly output?: z.ZodType
 }
 
 /** A tool that runs on the host with a credential. The sandbox only has its stub. */

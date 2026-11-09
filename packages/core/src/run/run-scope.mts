@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import type { Endpoint, GatewayClient } from '../gateway/gateway-client.mts'
 import type { AgentHarness } from '../loop/agent-harness.mts'
 import type { LoopClock } from '../loop/loop-clock.mts'
 import type { RunChannel } from './run-channel.mts'
@@ -18,6 +19,8 @@ export interface RunContext {
 	count(name: string): number
 	/** The run's agent harness, opened by the first loop. */
 	agents(): Promise<AgentHarness>
+	/** The run's side of the gateway, for host tools and model calls. Absent outside the engine, unless a test gives one. */
+	readonly gateway: GatewayClient | undefined
 }
 
 /**
@@ -31,8 +34,11 @@ export interface Scope {
 	readonly eventId?: string
 	/** Names of the nodes around this code, outermost first, such as `inDependencyOrder` node ids. */
 	readonly names: readonly string[]
-	/** The loops this code runs in, outermost first, when it's a tool call of an agent. */
-	readonly loop?: { readonly clocks: readonly LoopClock[] }
+	/**
+	 * The loops this code runs in, outermost first, when it's a tool call of an agent, and the
+	 * innermost loop's gateway endpoint when its template has host tools.
+	 */
+	readonly loop?: { readonly clocks: readonly LoopClock[]; readonly endpoint?: Endpoint }
 }
 
 const storage = new AsyncLocalStorage<Scope>()
