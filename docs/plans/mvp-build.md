@@ -32,6 +32,7 @@ packages that don't depend on the open decisions first.
 | 4 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 3 |
 | 5 | `@mesh-flow/connector-github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks; the smallest workflow that runs end to end | 1 to 4 |
 | 6 | the other connectors and `example` | `connector-atlassian`, `connector-gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 4, and 5 for the shared review-watching shape |
+| 7 | triggers | `defineWorkflows`, `userTrigger`, `webhook`, `schedule`; workflow parameters; describe mode; webhook ingress and the scheduler in the engine | 2, 3, and 5 for GitHub's webhook schemas |
 
 ### 1. `@mesh-flow/sandbox`
 
@@ -163,6 +164,28 @@ the first proof that the sandbox, engine, core and gateway work together.
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
 against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
+
+### 7. Triggers
+
+[Design section 4, Triggers](../design.md#triggers). It doesn't change the gateway: tools,
+per-loop endpoints and credentials stay as they are. It can be built next to step 6.
+
+- **Core:** `workflow(name, parameters, body)` with the body getting `{ parameters, abortSignal }`
+  (also for workflows without parameters); `defineWorkflows`, `userTrigger`, `webhook`,
+  `schedule`, with the type checks between a trigger and its workflow as type tests; describe mode,
+  and starting one named workflow from the entry file.
+- **Engine:** read and cache the describe output per commit; `mesh-flow run <name>` starts that
+  workflow from `workflows/main.mts`; webhook ingress (signature, JSON Schema check, 4xx, delivery
+  id as run key); the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers`
+  lists what the entry file declares. Webhook secrets come from the local credential store.
+- **GitHub connector:** `github.issueLabeled(label)` and the review events as schemas, and GitHub's
+  signature check.
+- **`examples/github-issue`** gets an entry file with a `userTrigger` and a webhook on a label, and
+  `fix-issue` takes `{ issue }` as a parameter instead of asking for it with `input()`.
+- **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
+  sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
+  schedule tick is skipped; shutdown completes while a webhook request or a describe run never
+  settles.
 
 ## Rules for every package
 

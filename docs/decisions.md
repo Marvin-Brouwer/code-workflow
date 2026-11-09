@@ -51,6 +51,25 @@ Full sketches of all three exist; option C was chosen.
 - **Agents shipped in packages.** Models, providers and conventions are workflow/team specific.
   Packages take agents as parameters.
 - **`.view()` hooks or UI code in workflows.** The UI derives views from the event tree.
+- **Triggers on the workflow definition** (`workflow('fix-issue', { triggers: [...] }, body)`).
+  A workflow says what it does, not how it gets started, and there should be one place that shows
+  what is live. Replaced by the entry file, `workflows/main.mts`.
+- **Every workflow file gets a start button.** Was the behaviour before triggers. There's no way to
+  have a workflow that only runs from another workflow, a webhook or the CLI, and nowhere to see
+  what is live. Replaced by listing `userTrigger(workflow)` in the entry file.
+- **Triggers that name a workflow by string** (`{ workflows: [...], triggers: [userTrigger('fix-issue')] }`).
+  TypeScript can't check the name or that the trigger gives the workflow its parameters.
+- **A mapping function next to a webhook's schema** (`webhook(workflow, schema, (event) => ...)`).
+  Two mechanisms for one thing; zod's `.transform` already maps, and its output type is checked
+  against the workflow's parameters.
+- **Starting every run with an `input()` at the top instead of parameters.** A webhook-started run
+  could wait for a human, but the webhook's data would never reach the body, and a button would
+  start a run before it has what it needs. `input()` stays for questions during a run.
+- **Parameters and context as two arguments** (`async (parameters, { abortSignal })`). A workflow
+  without parameters would read `async (_, { abortSignal })`. One context object instead, with
+  `parameters` in it; not `input`, which is the name of the `input()` primitive the body uses.
+- **Running the entry file on the host to read the triggers.** The engine never runs workflow code
+  (design section 3). It runs the entry file in a sandbox in describe mode and caches the result.
 
 ## Agent loops
 

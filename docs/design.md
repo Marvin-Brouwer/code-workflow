@@ -219,7 +219,12 @@ status or identical comment).
 
 ### Other primitives
 
-- `input(question, fields)`: asks a human for typed input; the run waits.
+- `workflow(name, body)`, `workflow(name, parameters, body)`: defines a workflow. `parameters` is
+  a zod shape for what a run starts with. The body gets one context object with the parsed
+  `parameters` and the run's `abortSignal`. How a workflow gets started is not part of it (see
+  [Triggers](#triggers)).
+- `input(question, fields)`: asks a human for typed input; the run waits. This works in any run,
+  whatever started it: a run started by a webhook or a schedule waits for a human the same way.
 - `requestUserInput`: tool that lets an agent ask the user mid-loop.
 - `limit({ turns?, minutes? })`: a loop-wide limit, interpolated in the template.
 - `inDependencyOrder(nodes, deliver)`: runs `deliver` per node as soon as its dependencies have
@@ -227,6 +232,59 @@ status or identical comment).
   front on cycles or unknown ids; a failed node blocks only its dependents.
 - `workspace.file(path)`, `workspace.folder(path, options)`: run workspace in the sandbox.
 - `<connector>.checkSession()`: see section 8.
+
+### Triggers
+
+A workflow says what it does and what it starts with, never how it is started. One entry file in
+the workflow repository, `workflows/main.mts`, lists everything that can start a run, so there is
+one place to see what is live:
+
+```ts
+// workflows/fix-issue.mts
+export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ parameters, abortSignal }) => {
+	const issue = await github.collect(parameters.issue)
+	// ...
+})
+
+// workflows/main.mts
+export default defineWorkflows(
+	userTrigger(fixIssue),
+	webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
+	schedule(weeklyReport, '0 7 * * 1'),
+)
+```
+
+- **Triggers take the workflow itself, not its name,** so TypeScript checks that a trigger gives
+  the workflow the parameters it needs. One workflow can have several triggers.
+- **`userTrigger(workflow)`** is a button in the UI. The workflow's parameters become the button's
+  form, filled in before the run starts, so a run doesn't start before it has what it needs. A
+  workflow without parameters gets a plain button.
+- **`webhook(workflow, schema)`** starts a run for each delivery that fits a zod schema. The
+  schema's output type has to be the workflow's parameters, so a mapping is a `.transform` on the
+  schema, not a separate function. Connectors export schemas for their providers' events
+  (`github.issueLabeled(label)`) together with how the provider signs a delivery; any zod schema
+  works too, with a shared-secret header. The signing secret is set in the UI and checked by the
+  engine before anything else, so the sandbox never sees it. The delivery id is the run's key: a
+  redelivery reuses the run it already started.
+- **`schedule(workflow, cron, parameters?)`** starts a run on the engine's wall clock (timed waits
+  are engine-side, section 5). The parameters are fixed values, checked against the workflow's
+  shape at compile time. A tick is skipped while the previous run of that schedule is still going.
+- **Only workflows listed in the entry file can be started by the UI, a webhook or a schedule.**
+  The CLI and tests (`runWorkflow`) can still start any workflow the entry file's modules export.
+- **Nothing in the entry file is a setting.** Webhook secrets, enabling or pausing a trigger, and
+  overrides are user settings in the UI (section 9). The entry file only says that a workflow *can*
+  be started a certain way; the schema and the button work as soon as it is committed.
+- **The engine never runs the entry file on the host.** It runs it once per commit in a sandbox in
+  describe mode: `defineWorkflows` sends the workflows, their parameters as JSON Schema and their
+  triggers over the mailbox and exits. The engine caches that per commit. A run then starts the
+  entry file with the name of the workflow to run.
+- **Webhook payloads are checked in two steps.** The engine checks a delivery's signature and the
+  input side of the schema as JSON Schema (structure, literals, enums) before it creates a sandbox,
+  so an unrelated event never costs a run: it gets a 4xx. `.refine` and `.transform` are code, so
+  they run in the sandbox when the run starts; a payload they reject ends the run as *not for this
+  workflow*, which isn't a failure. Filters belong in the schema's structure where they can
+  (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled(label)`
+  does.
 
 ### Plan deviations (preset pattern)
 
@@ -370,6 +428,9 @@ export const aws = connector({
   keychain or an encrypted file. Same code path.
 - Startup fails only on infrastructure. Missing user settings never block startup.
 - Starting a run checks that workflow's requirements and shows a wizard with only what's missing.
+- Triggers (section 4) are declared in git and configured in the UI: webhook signing secrets,
+  enabling or pausing a trigger. A webhook or schedule that is declared but not configured yet
+  doesn't start runs, and the UI says so.
 - During a run, a revoked token or failed refresh becomes an input request ("reconnect X"), not
   a failure.
 - Model credentials should come from a list of owners (user, later team) so team-level providers
@@ -385,6 +446,8 @@ export const aws = connector({
 - Natural views: `inDependencyOrder` → lanes/DAG, review handling → event feed (one row per
   triaged comment), `verify` → attempts with findings.
 - Usage and cost per run from the gateway.
+- **Start buttons** come from the `userTrigger`s in the entry file, with the workflow's parameters
+  as the form. Webhooks and schedules are listed next to them, with their state and their runs.
 
 ## 11. Reuse from the earlier prototype
 
@@ -443,6 +506,12 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
 13. **Typed fields on `requestUserInput`**, like `input(question, fields)`, so an agent can ask for a
     choice or a value instead of free text. An idea, not decided.
 
+14. **Missed schedule ticks.** When the engine was down over a tick: run it once on start, or skip
+    it. Leaning towards once, so a daily job isn't lost to a reboot.
+15. **An MCP trigger.** Expose a workflow as an MCP tool, with its parameters as the tool's input
+    schema ("a tool is also a function", pointed outward). Later; it fits `defineWorkflows` as one
+    more trigger.
+
 Out of scope for now: token and cost budgets.
 
 ## Roadmap
@@ -450,7 +519,7 @@ Out of scope for now: token and cost budgets.
 1. Spikes: sandbox pause (E2B, microsandbox, gVisor), `loop` result typing. Done.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
-   connector; first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
+   connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
    then the `example` workflow, both end to end from a CLI with sequential repositories.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. `inDependencyOrder` with concurrency.
@@ -464,6 +533,8 @@ Out of scope for now: token and cost budgets.
 - **Gateway**: the host service that holds credentials and is the only egress needing them.
 - **Loop token**: the single-use, rotating token for a loop's tool endpoint (section 7); held by
   the runtime, never by the agent. Workflow code has a run-level one.
+- **Trigger**: what can start a run of a workflow (`userTrigger`, `webhook`, `schedule`), listed in
+  the workflow repository's entry file, `workflows/main.mts`.
 - **Exit tool**: `succeed`, `propose`, `verify` or `fail`, interpolated in a prompt; the only way
   an agent finishes.
 - **Check**: a lazy verification used by `verify`.
