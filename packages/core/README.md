@@ -8,7 +8,7 @@ Agent loops run on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi
 
 The samples share an `agents.mts` like this one. Agents belong to the workflow repository, not to packages: model, reasoning and system prompt are team specific.
 
-Calls to `loop`, tools and `input` run inside a workflow body (see [Workflows](#workflows)); the samples leave the body out.
+Calls to `loop`, tools and `input` run inside a workflow body (see [Workflows](#workflows)); the samples leave the body out. What starts a workflow is in [Triggers](#triggers).
 
 ```ts
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
@@ -149,32 +149,71 @@ An agent asks with `requestUserInput`: one question with a text answer, or a for
 
 ### Workflows
 
-`workflow` names the body. Under the engine, the file starts itself: `node workflows/develop.mts` runs it on the sandbox's mailbox, stops on `SIGTERM` or `SIGINT`, and exits with 0 or 1.
+`workflow` names a body and says what a run of it starts with: its parameters, as a zod shape like `input`'s fields. The body gets them, checked, next to the run's `abortSignal`. A workflow without parameters leaves them out.
 
 ```ts
 import { check, inDependencyOrder, propose, verify, workflow } from '@mesh-flow/core'
 import { z } from 'zod'
-import { developer, planner } from './agents.mts'
+import { developer, planner } from '../agents.mts'
 
 const Plan = z.object({ parts: z.array(z.object({ id: z.string(), dependsOn: z.array(z.string()), task: z.string() })) })
 const tests = check('tests', async () => [])
 
-export default workflow('develop', async () => {
-	const plan = await planner.loop`Plan stories/ABC-1.md in parts with ${propose(Plan)}.`
+export const develop = workflow('develop', { story: z.string().regex(/^[A-Z]+-\d+$/) }, async ({ parameters }) => {
+	const plan = await planner.loop`Plan stories/${parameters.story}.md in parts with ${propose(Plan)}.`
 	await inDependencyOrder(plan.parts, async (part, upstream) => {
 		await developer.loop`Do ${part.task}, after ${upstream}. Hand in with ${verify(tests)}.`
 	})
+})
+
+export const weeklyReport = workflow('weekly-report', async ({ abortSignal }) => {
+	// ...
 })
 ```
 
 `inDependencyOrder` starts each node once the nodes it depends on have returned, so independent nodes run concurrently. A failed node blocks only the nodes that depend on it; the others go on, and the call rejects with `DependencyOrderFailed`, which holds every result, failure and blocked node.
 
-Anywhere else, such as in a test, run it with a channel of your own. A channel sends the run's messages and answers its requests:
+### Triggers
+
+A workflow never says how it is started. The entry file, `workflows/main.mts`, lists everything that can start a run, so there is one place to see what is live:
+
+```ts
+import { defineWorkflows, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { z } from 'zod'
+import { develop, weeklyReport } from './develop.mts'
+
+const StoryLabeled = z.object({
+	action: z.literal('labeled'),
+	label: z.object({ name: z.literal('ai-develop') }),
+	story: z.object({ key: z.string() }),
+})
+
+export default defineWorkflows(
+	userTrigger(develop),
+	webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), {
+		signature: { scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' },
+		deliveryHeader: 'x-github-delivery',
+	}),
+	schedule(weeklyReport, '0 7 * * 1'),
+)
+```
+
+- `userTrigger(workflow)` is a button in the UI. The workflow's parameters are its form.
+- `webhook(workflow, schema, options?)` starts a run for each delivery that fits the schema. The schema's output has to be the workflow's parameters, so the mapping is a `.transform`. The engine checks the signature and the schema's structure (as JSON Schema) on the host, before it makes a sandbox; `.refine` and `.transform` run in the sandbox, and a delivery they turn down ends the run as skipped. Put filters in the structure where they can go, as literals and enums. The signature is a secret header (`x-webhook-secret` by default) or `hmac-sha256` of the body. The delivery header names a delivery, so a redelivery reuses its run. A second webhook of the same workflow needs a `name`, which goes into its URL.
+- `schedule(workflow, cron, parameters?)` starts a run on the engine's clock. The parameters are fixed, and only optional when the workflow needs none.
+
+TypeScript checks every trigger against its workflow: a webhook schema that doesn't give the parameters, or a schedule without them, doesn't compile. Secrets, and turning a trigger on or off, are settings of the engine, never code.
+
+Under the engine, the entry file starts itself: `node workflows/main.mts` reads what the engine asked for from the mailbox, and either describes what it declares (its workflows, their parameters as JSON Schema, its triggers) or runs one workflow by name, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. It can run any workflow its modules define, also one no trigger lists, which is how the CLI's `mesh-flow run <name>` works. `describeEntry(entry)` gives the same description in code, for a test of your entry file.
+
+### Running a workflow yourself
+
+Anywhere else, such as in a test, run a workflow with a channel of your own. A channel sends the run's messages and answers its requests:
 
 ```ts
 import { createModels } from '@earendil-works/pi-ai/models'
 import { runWorkflow, type RunChannel } from '@mesh-flow/core'
-import develop from './workflows/develop.mts'
+import { develop } from './workflows/develop.mts'
 
 // The providers the agents' models run on: under the engine they come from the gateway.
 const models = createModels()
@@ -188,10 +227,16 @@ const channel: RunChannel = {
 	answer: async () => ({ value: { approved: true } }),
 }
 
-const outcome = await runWorkflow(develop, { channel, models, abortSignal: AbortSignal.timeout(anHourMs), workspace: 'workspace' })
+const outcome = await runWorkflow(develop, {
+	parameters: { story: 'ABC-1' },
+	channel,
+	models,
+	abortSignal: AbortSignal.timeout(anHourMs),
+	workspace: 'workspace',
+})
 ```
 
-Under the engine the workspace is `~/workspace` and the agents' store is `~/.mesh-flow/agents.sqlite`.
+Parameters that don't fit fail the run before the body starts. Under the engine the workspace is `~/workspace` and the agents' store is `~/.mesh-flow/agents.sqlite`.
 
 ## Reruns
 

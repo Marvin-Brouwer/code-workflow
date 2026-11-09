@@ -286,8 +286,9 @@ export default defineWorkflows(
   be started a certain way; the schema and the button work as soon as it is committed.
 - **The engine never runs the entry file on the host.** It runs it once per commit in a sandbox in
   describe mode: `defineWorkflows` sends the workflows, their parameters as JSON Schema and their
-  triggers over the mailbox and exits. The engine caches that per commit. A run then starts the
-  entry file with the name of the workflow to run.
+  triggers over the mailbox and exits. The engine caches that per version of the source: a hash
+  of the git files as they are on disk, so the commit, plus uncommitted changes while you work. A
+  run then starts the entry file with the name of the workflow to run.
 - **A webhook trigger starts a run; an external event wakes one.** Events a running run waits for
   (review comments in `github.review`) arrive through the same ingress and signature check, but
   go to the run that waits for them, not to a trigger.
