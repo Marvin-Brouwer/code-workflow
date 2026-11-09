@@ -61,6 +61,31 @@ async function startRun(backend: SandboxBackend) {
 }
 
 describe('Engine.close', () => {
+	test('finishes within its deadlines while describing an entry file never settles', async () => {
+		// Arrange
+		const creating = deferred<undefined>()
+		const { backend, close } = stubBackend({
+			create: () => {
+				creating.resolve(undefined)
+				return never()
+			},
+		})
+		const home = await temporaryDirectory()
+		const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')) }, signal)
+		const directory = await workflowRepository({})
+		const describing = engine.describe(directory, signal).catch((error: unknown) => error)
+		await creating.promise
+		const started = Date.now()
+
+		// Act
+		await engine.close(shortDeadlines())
+
+		// Assert
+		expect(Date.now() - started).toBeLessThan(2_000)
+		expect(await describing).toMatchObject({ code: 'conflict' })
+		expect(close).toHaveBeenCalledOnce()
+	})
+
 	test('finishes within its deadlines when creating a sandbox never settles', async () => {
 		// Arrange
 		const { backend, close } = stubBackend({ create: never })

@@ -86,6 +86,43 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		})
 	})
 
+	test('starts one run for a key, also when it is asked twice at once', async () => {
+		// Arrange
+		const directory = await workflowRepository({ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
+		const { engine } = await openEngine()
+		const options = { directory, workflow: 'hello', key: 'webhook team/hello/1', signal }
+
+		// Act
+		const [first, second] = await Promise.all([engine.startRun(options), engine.startRun(options)])
+		const later = await engine.startRun(options)
+
+		// Assert
+		expect(second.id).toBe(first.id)
+		expect(later.id).toBe(first.id)
+		expect(engine.list()).toHaveLength(1)
+	})
+
+	test('gives the entry file the workflow and its parameters, also on a restart', async () => {
+		// Arrange
+		const directory = await workflowRepository({
+			main: runtimeScript(`const start = await mailbox.start(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`),
+		})
+		const { engine } = await openEngine()
+		const { id } = await engine.startRun({ directory, workflow: 'greet', input: { name: 'Ada' }, signal })
+		const first = await untilStatus(engine, id, 'failed')
+
+		// Act
+		await engine.restart(id, signal)
+		await vi.waitFor(() => {
+			expect(engine.get(id).status).not.toBe('starting')
+		})
+		const second = await untilStatus(engine, id, 'failed')
+
+		// Assert
+		expect(JSON.parse(first.error ?? '')).toEqual({ mode: 'run', workflow: 'greet', input: { name: 'Ada' } })
+		expect(second.error).toBe(first.error)
+	})
+
 	test('relays an input request and its answer', async () => {
 		// Arrange
 		const directory = await workflowRepository({ ask: askAndEcho })

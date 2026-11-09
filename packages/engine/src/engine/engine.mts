@@ -249,7 +249,10 @@ export class Engine {
 		const { config, file } = await findEntry(directory).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
-		const key = await sourceKey(directory, waitSignal)
+		const key = await sourceKey(directory, waitSignal).catch((error: unknown) => {
+			waitSignal.throwIfAborted()
+			throw error
+		})
 		const cached = await this.#descriptions.get(key)
 		if (cached !== undefined) return cached
 		let describing = this.#describing.get(key)
