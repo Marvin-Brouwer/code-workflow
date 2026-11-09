@@ -21,11 +21,13 @@ export interface DescribeInSandboxOptions {
 }
 
 /**
- * The entry file itself failed to describe itself: it reported a failure, or exited without a
+ * The entry file failed to describe itself: it reported a failure, or exited without a
  * description. It fails the same way on every try for the same source, unlike a sandbox or a setup
  * step that failed.
  */
-export class EntryFileError extends Error {}
+export class EntryFileError extends Error {
+	override readonly name = 'EntryFileError'
+}
 
 /**
  * Runs the entry file in describe mode in a sandbox of its own and returns what it declares. The

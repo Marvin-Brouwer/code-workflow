@@ -54,12 +54,12 @@ function useClockAt(now: string): void {
 	})
 }
 
-const start = '2026-11-09T10:00:00.000Z'
+const tenAm = '2026-11-09T10:00:00.000Z'
 
 describe('createScheduler', () => {
 	test('skips a tick while the last run is going, and not while it waits to be restarted', async () => {
 		// Arrange
-		useClockAt(start)
+		useClockAt(tenAm)
 		const going = fakeEngine('paused')
 		const restartable = fakeEngine('restartable')
 		openScheduler(going.engine).scheduler.update([{ repository, description }])
@@ -75,7 +75,7 @@ describe('createScheduler', () => {
 
 	test('arms a schedule again when its repository points at another directory', async () => {
 		// Arrange
-		useClockAt(start)
+		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
 		scheduler.update([{ repository, description }])
@@ -91,7 +91,7 @@ describe('createScheduler', () => {
 
 	test('does not make up for ticks it missed when the clock jumps', async () => {
 		// Arrange
-		useClockAt(start)
+		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		openScheduler(engine).scheduler.update([{ repository, description }])
 
@@ -105,7 +105,7 @@ describe('createScheduler', () => {
 
 	test('starts nothing once it is closed', async () => {
 		// Arrange
-		useClockAt(start)
+		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
 		scheduler.update([{ repository, description }])
