@@ -76,7 +76,8 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
 
 ## 4. Authoring model
 
-A workflow is an async function. The whole vocabulary is in `packages/core/src/index.d.ts`.
+A workflow is an async function. The whole vocabulary is exported from
+`packages/core/src/_module/core.mts`.
 
 ```ts
 export default workflow('develop', async () => {

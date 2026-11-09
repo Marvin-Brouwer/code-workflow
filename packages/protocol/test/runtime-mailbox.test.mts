@@ -7,6 +7,8 @@ import { RuntimeMessage } from '../src/runtime-message.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const signal = new AbortController().signal
+/** Past the mailbox's first look for an answer and well before its next one (it looks every 250 ms). */
+const pastFirstLookMs = 50
 
 describe('RuntimeMailbox', () => {
 	test('appends every message as one line of the outbox', async () => {
@@ -83,6 +85,21 @@ describe('RuntimeMailbox', () => {
 
 		// Assert
 		await expect(waiting).rejects.toThrow()
+	})
+
+	test('rejects with the reason the signal aborted with, also between two looks', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await mkdir(mailboxLayout(directory).inbox)
+		const controller = new AbortController()
+		const waiting = new RuntimeMailbox(directory).answer('story', controller.signal)
+		await new Promise((resolve) => setTimeout(resolve, pastFirstLookMs))
+
+		// Act
+		controller.abort(new Error('The run was stopped (SIGTERM).'))
+
+		// Assert
+		await expect(waiting).rejects.toThrow('The run was stopped (SIGTERM).')
 	})
 
 	test('refuses to start outside the engine', () => {

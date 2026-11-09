@@ -2,7 +2,8 @@
 
 Status: in progress. Package 1, [`@mesh-flow/sandbox`](../../packages/sandbox/README.md), is built
 and its conformance suite runs on real backends in CI. Package 2,
-[`@mesh-flow/engine`](../../packages/engine/README.md), is built. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+[`@mesh-flow/engine`](../../packages/engine/README.md), is built. Package 3,
+[`@mesh-flow/core`](../../packages/core/README.md), is built. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
@@ -85,7 +86,8 @@ The host process. It never runs workflow code ([design section 3](../design.md#3
 
 ### 3. `@mesh-flow/core`
 
-Turns `packages/core/src/*.d.ts` into an implementation that runs inside the sandbox.
+Implements the authoring vocabulary (now `packages/core/src/_module/core.mts`), running inside the
+sandbox.
 
 - `loop`'s result types come from [`pocs/loop-typing/src/core.mts`](../../pocs/loop-typing/src/core.mts)
   (proven in the typing POC).
