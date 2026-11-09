@@ -75,7 +75,7 @@ import { CallAnswer, EndpointGrant, RuntimeMailbox } from '@mesh-flow/protocol'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const mailbox = RuntimeMailbox.fromEnvironment()
-const grant = EndpointGrant.parse(await mailbox.takeGateway(abortSignal))
+const grant = EndpointGrant.parse(await mailbox.takeGrant(abortSignal))
 const [token = ''] = grant.tokens
 
 mailbox.send({ type: 'call', id: 'call-1', endpoint: grant.endpoint, token, call: { type: 'resolve-model', model: 'claude-opus-5-5' } })
@@ -91,7 +91,7 @@ const answer = CallAnswer.parse((await mailbox.take('call-1', abortSignal)).valu
 | `{ type: 'resolve-model', model }` | a `ResolvedModel`: the first of the user's providers that offers the model |
 | `{ type: 'model', request }` | a `ModelResponse`: what the provider answered, with the credential added on the host |
 
-A token is good for one call. One that comes again, or one the endpoint never handed out, closes the endpoint and fails the run: someone else had it. Tokens live only in the runtime's memory, which is why `takeGateway` and `take` remove the files they read.
+A token is good for one call. One that comes again, or one the endpoint never handed out, closes the endpoint and fails the run: someone else had it. Tokens live only in the runtime's memory, which is why `takeGrant` and `take` remove the files they read.
 
 ## The mailbox
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ToolName } from './gateway-call.mts'
 
 /** A JSON Schema, as a plain object. */
 export const JsonSchema = z.record(z.string(), z.unknown())
@@ -70,7 +71,7 @@ export const WorkflowsDescription = z.object({
 	workflows: z.array(WorkflowDescription),
 	triggers: z.array(TriggerDescription),
 	/** Apps built before the gateway list none. */
-	tools: z.array(z.string().min(1)).default([]),
+	tools: z.array(ToolName).default([]),
 	/** The model ids of the app's agents, which a trigger checks against the providers before it starts a run. */
 	models: z.array(z.string().min(1)).default([]),
 })

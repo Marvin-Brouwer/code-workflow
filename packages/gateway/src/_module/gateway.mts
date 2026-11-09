@@ -8,7 +8,7 @@ export { CredentialName, openCredentialStore, type CredentialReader, type Creden
 export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, type StoreKey } from '../credentials/store-key.mts'
 export { openGateway, tokensPerEndpoint, type AcceptedCall, type Gateway, type GatewayOptions, type InterruptedCall } from '../gateway.mts'
 export { openGatewayHome, type GatewayHome } from '../gateway-home.mts'
-export { knownKinds, supportedApis } from '../providers/model-apis.mts'
+export { knownKinds } from '../providers/model-apis.mts'
 export {
 	openProviderSettings,
 	providerCredential,

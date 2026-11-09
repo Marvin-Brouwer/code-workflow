@@ -1,9 +1,7 @@
-import { mkdir, readFile } from 'node:fs/promises'
-import path from 'node:path'
-import lockfile from 'proper-lockfile'
 import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
-import { hasErrorCode } from '../errors.mts'
+import { readTextIfExists } from '../files/read-text-if-exists.mts'
+import { withFileLock } from '../files/with-file-lock.mts'
 
 /** Names a provider the user added, such as `anthropic` or `work-openrouter`. */
 export const ProviderName = z.string().regex(/^[a-z0-9][\w-]{0,63}$/, 'Use 1 to 64 lowercase letters, digits, _ or -.')
@@ -46,30 +44,20 @@ export interface ProviderSettings {
 	readonly order: (names: readonly string[], abortSignal: AbortSignal) => Promise<void>
 }
 
-const lockRetries = { retries: 20, minTimeout: 25, maxTimeout: 250 }
-
 /** The provider settings kept in `file`. */
 export function openProviderSettings(file: string): ProviderSettings {
 	const list = async (abortSignal: AbortSignal): Promise<ProviderSetting[]> => {
-		const text = await readFile(file, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
-			if (hasErrorCode(error, 'ENOENT')) return undefined
-			throw error
-		})
+		const text = await readTextIfExists(file, abortSignal)
 		return text === undefined ? [] : ProviderSettingsFile.parse(JSON.parse(text)).providers
 	}
-	const change = async (abortSignal: AbortSignal, edit: (providers: ProviderSetting[]) => ProviderSetting[] | undefined) => {
-		await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
-		const release = await lockfile.lock(path.dirname(file), { lockfilePath: `${file}.lock`, retries: lockRetries })
-		try {
+	const change = (abortSignal: AbortSignal, edit: (providers: ProviderSetting[]) => ProviderSetting[] | undefined) =>
+		withFileLock(file, async () => {
 			const next = edit(await list(abortSignal))
 			if (next === undefined) return false
 			abortSignal.throwIfAborted()
 			await writeFileAtomic(file, `${JSON.stringify({ providers: next }, null, '\t')}\n`, { mode: 0o600 })
 			return true
-		} finally {
-			await release()
-		}
-	}
+		})
 	return Object.freeze<ProviderSettings>({
 		list,
 		async put(provider, abortSignal) {

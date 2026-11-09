@@ -1,9 +1,7 @@
-import { mkdir, readFile } from 'node:fs/promises'
-import path from 'node:path'
-import lockfile from 'proper-lockfile'
 import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
-import { hasErrorCode } from '../errors.mts'
+import { readTextIfExists } from '../files/read-text-if-exists.mts'
+import { withFileLock } from '../files/with-file-lock.mts'
 import { seal, unseal } from './sealed-file.mts'
 import type { StoreKey } from './store-key.mts'
 
@@ -35,9 +33,6 @@ export interface CredentialStore extends CredentialReader {
 
 const Secrets = z.record(z.string(), z.string())
 
-/** How long a write waits for another process's write to the store. */
-const lockRetries = { retries: 20, minTimeout: 25, maxTimeout: 250 }
-
 /**
  * Opens the credential store in `file`, sealed with `key` (AES-256-GCM). The file is made on the
  * first write, readable by its owner only. Writes from several processes, such as the engine and
@@ -50,26 +45,18 @@ const lockRetries = { retries: 20, minTimeout: 25, maxTimeout: 250 }
  */
 export function openCredentialStore(file: string, key: StoreKey): CredentialStore {
 	const read = async (abortSignal: AbortSignal): Promise<Record<string, string>> => {
-		const text = await readFile(file, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
-			if (hasErrorCode(error, 'ENOENT')) return undefined
-			throw error
-		})
+		const text = await readTextIfExists(file, abortSignal)
 		if (text === undefined) return {}
 		return Secrets.parse(JSON.parse(unseal(text, await key.read(abortSignal))))
 	}
-	const change = async (abortSignal: AbortSignal, edit: (secrets: Record<string, string>) => boolean): Promise<boolean> => {
-		await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
-		const release = await lockfile.lock(path.dirname(file), { lockfilePath: `${file}.lock`, retries: lockRetries })
-		try {
+	const change = (abortSignal: AbortSignal, edit: (secrets: Record<string, string>) => boolean): Promise<boolean> =>
+		withFileLock(file, async () => {
 			const secrets = await read(abortSignal)
 			if (!edit(secrets)) return false
 			abortSignal.throwIfAborted()
 			await writeFileAtomic(file, seal(JSON.stringify(secrets), await key.read(abortSignal)), { mode: 0o600 })
 			return true
-		} finally {
-			await release()
-		}
-	}
+		})
 	return Object.freeze<CredentialStore>({
 		get: async (name, abortSignal) => (await read(abortSignal))[CredentialName.parse(name)],
 		async set(name, secret, abortSignal) {

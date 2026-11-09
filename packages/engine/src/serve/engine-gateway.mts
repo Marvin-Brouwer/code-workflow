@@ -17,12 +17,12 @@ export interface EngineGatewayOptions {
  * Opens the gateway's directory in an engine's home, as the engine and the CLI both do, and moves
  * webhook secrets from where engines kept them before into its credential store.
  */
-export async function openEngineGateway(home: string, abortSignal: AbortSignal, options: EngineGatewayOptions = {}): Promise<GatewayHome> {
-	const gateway = await openGatewayHome(
-		gatewayDirectory(home),
-		abortSignal,
-		options.keychain === undefined ? {} : { keychain: options.keychain },
-	)
-	await moveLegacyWebhookSecrets(home, gateway.credentials, abortSignal)
-	return gateway
+export async function openEngineGatewayHome(
+	home: string,
+	abortSignal: AbortSignal,
+	options: EngineGatewayOptions = {},
+): Promise<GatewayHome> {
+	const gatewayHome = await openGatewayHome(gatewayDirectory(home), abortSignal, options)
+	await moveLegacyWebhookSecrets(home, gatewayHome.credentials, abortSignal)
+	return gatewayHome
 }

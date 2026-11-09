@@ -436,14 +436,14 @@ export class Engine {
 			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
-		const gateway = await this.#gateway?.openRun(id, app.tools, abortSignal)
+		const grant = await this.#gateway?.openRun(id, app.tools, abortSignal)
 		const setup = {
 			tarball: this.#store.appOf(id),
 			entry: app.entry,
 			layout: this.#layout,
 			start,
 			env: { [runIdEnvironmentVariable]: id },
-			gateway,
+			grant,
 		}
 		await setUpRuntime(sandbox, channel, setup, abortSignal)
 		await this.#update(id, { status: 'running' }, ['starting'])
@@ -460,7 +460,6 @@ export class Engine {
 			}
 			const { events, requests, calls, cancels, outcome } = sortMessages(delivery.messages)
 			await this.#store.appendEvents(id, events)
-			for (const cancelled of cancels) this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
 			if (outcome) {
 				// Saved with the cursor, so an outcome that was read can't be lost. The sandbox goes after.
 				const { sandbox } = this.get(id)
@@ -481,16 +480,18 @@ export class Engine {
 			)
 			for (const request of requests) this.#schedule(id, channel, request, signal)
 			for (const taken of accepted) this.#answerCall(id, channel, taken.call, taken.accepted, signal)
+			// After the calls of this delivery are running, so a cancel read with its call still stops it.
+			for (const cancelled of cancels) this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
 		}
 	}
 
 	/** Takes a gateway call. Without a gateway, the call gets an error and no next token. */
-	async #accept(id: RunId, call: CallMessage, signal: AbortSignal): Promise<AcceptedCall> {
+	async #accept(id: RunId, call: CallMessage, abortSignal: AbortSignal): Promise<AcceptedCall> {
 		if (this.#gateway === undefined) {
 			const answer: CallAnswer = { outcome: { ok: false, error: 'This engine has no gateway.' } }
 			return { answer: () => Promise.resolve(answer) }
 		}
-		return this.#gateway.accept(id, call, signal)
+		return this.#gateway.accept(id, call, abortSignal)
 	}
 
 	/**
@@ -499,7 +500,7 @@ export class Engine {
 	 * gateway, which answers it as interrupted when the run is resumed. A call that shows someone
 	 * else has the run's tokens fails the run.
 	 */
-	#answerCall(id: RunId, channel: SandboxChannel, call: CallMessage, accepted: AcceptedCall, signal: AbortSignal): void {
+	#answerCall(id: RunId, channel: SandboxChannel, call: CallMessage, accepted: AcceptedCall, abortSignal: AbortSignal): void {
 		if (accepted.compromised !== undefined) {
 			this.#log(`Run ${id}: ${accepted.compromised}`)
 			void this.#halt(id, this.#cleanupSignal())
@@ -513,29 +514,48 @@ export class Engine {
 		const cancel = new AbortController()
 		calls?.set(call.id, cancel)
 		void accepted
-			.answer(AbortSignal.any([signal, cancel.signal]))
+			.answer(AbortSignal.any([abortSignal, cancel.signal]))
 			.then(async (answer) => {
-				signal.throwIfAborted()
-				await this.#answerFromGateway(id, channel, call.id, answer, signal)
+				abortSignal.throwIfAborted()
+				await this.#answerFromGateway(id, channel, call.id, answer, abortSignal)
+			})
+			.catch(async (error: unknown) => {
+				if (abortSignal.aborted) return
+				// The runtime would wait for the answer, and its token, until the run ends.
+				this.#log(`Answering call ${call.id} of run ${id} failed: ${messageOf(error)}`)
+				await this.#halt(id, this.#cleanupSignal())
+				await this.#fail(id, new Error(`Answering gateway call ${call.id} failed: ${messageOf(error)}`))
 			})
 			.catch((error: unknown) => {
-				if (!signal.aborted) this.#log(`Answering call ${call.id} of run ${id} failed: ${messageOf(error)}`)
+				this.#log(`Couldn't fail run ${id} after a call's answer failed: ${messageOf(error)}`)
 			})
 			.finally(() => {
 				calls?.delete(call.id)
 			})
 	}
 
-	/** Writes a gateway answer to the inbox, then lets the gateway forget the call. */
-	async #answerFromGateway(id: RunId, channel: SandboxChannel, requestId: string, answer: CallAnswer, signal: AbortSignal): Promise<void> {
-		await channel.answer(requestId, { value: answer }, signal)
-		await this.#gateway?.settle(id, requestId, signal)
+	/**
+	 * Writes a gateway answer to the inbox, then lets the gateway forget the call. Forgetting it isn't
+	 * cut short by a stop: once the answer is in, a resume mustn't answer the call again.
+	 */
+	async #answerFromGateway(
+		id: RunId,
+		channel: SandboxChannel,
+		requestId: string,
+		answer: CallAnswer,
+		abortSignal: AbortSignal,
+	): Promise<void> {
+		await channel.answer(requestId, { value: answer }, abortSignal)
+		await this.#gateway?.settle(id, requestId, this.#cleanupSignal())
 	}
 
-	/** Answers the calls a resumed run made before the engine stopped, as interrupted. */
-	async #answerInterrupted(id: RunId, channel: SandboxChannel, signal: AbortSignal): Promise<void> {
-		for (const call of (await this.#gateway?.interrupted(id, signal)) ?? []) {
-			await this.#answerFromGateway(id, channel, call.id, call.answer, signal)
+	/**
+	 * Answers the calls a resumed run made before the engine stopped, as interrupted. The gateway
+	 * keeps them, so one read again from where the cursor was saved gets the same answer.
+	 */
+	async #answerInterrupted(id: RunId, channel: SandboxChannel, abortSignal: AbortSignal): Promise<void> {
+		for (const call of (await this.#gateway?.interrupted(id, abortSignal)) ?? []) {
+			await channel.answer(call.id, { value: call.answer }, abortSignal)
 		}
 	}
 

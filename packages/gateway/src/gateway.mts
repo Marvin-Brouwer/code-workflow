@@ -1,7 +1,7 @@
 import path from 'node:path'
 import type { CallAnswer, CallMessage, EndpointGrant, GatewayCall, ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
 import type { CredentialStore } from './credentials/credential-store.mts'
-import { openRunStates, type EndpointState, type RunState } from './endpoints/run-state.mts'
+import { openRunStates, ownEntry, type EndpointState, type RunState } from './endpoints/run-state.mts'
 import { newLoopEndpointId, newToken, tokenHash } from './endpoints/tokens.mts'
 import { messageOf } from './errors.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
@@ -64,7 +64,11 @@ export interface Gateway {
 	readonly accept: (runId: string, message: CallMessage, abortSignal: AbortSignal) => Promise<AcceptedCall>
 	/** Forgets an in-flight call once its answer is in the sandbox. */
 	readonly settle: (runId: string, requestId: string, abortSignal: AbortSignal) => Promise<void>
-	/** The calls taken but never answered, as when the engine stopped during them, each with an error and its next token. */
+	/**
+	 * The calls taken but never answered, as when the engine stopped during them, each with an error
+	 * and its next token. Call it once when an attempt resumes, before reading the outbox again:
+	 * those calls are then answered as interrupted when they are read again, and each is listed once.
+	 */
 	readonly interrupted: (runId: string, abortSignal: AbortSignal) => Promise<InterruptedCall[]>
 	/** What the run used of each model so far. */
 	readonly usage: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
@@ -86,13 +90,21 @@ const runEndpoint = 'run'
 /** The answer to a call that came again after an engine restart: it may or may not have run. */
 const interruptedError = 'The engine stopped while this call ran, so whether it took effect is unknown.'
 
+/** Usage is counted also when the call was stopped right after the answer: it was paid for. */
+const neverAborted = new AbortController().signal
+
+/** What a provider without a key needs. */
+function setKeyHint(provider: string): string {
+	return `Set it with \`mesh-flow provider key ${provider}\`.`
+}
+
 /** Opens a gateway. Nothing is read until a run calls. */
 export function openGateway(options: GatewayOptions): Gateway {
 	const states = openRunStates(path.join(options.home, 'runs'))
 	const tools = new Map((options.tools ?? []).map((tool) => [tool.name, tool]))
 	const fetchModel = options.fetch ?? fetch
 
-	const run = async (runId: string, endpoint: EndpointState, call: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
+	const perform = async (runId: string, endpoint: EndpointState, call: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
 		if (call.type === 'tool') {
 			if (!endpoint.tools.includes(call.tool)) throw new Error(`${call.tool} isn't one of the tools of this endpoint.`)
 			const tool = tools.get(call.tool)
@@ -131,7 +143,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		states.update(
 			runId,
 			(state) => {
-				if (state?.endpoints[endpoint]?.loop !== true) return { state, value: null }
+				if (state === undefined || ownEntry(state.endpoints, endpoint)?.loop !== true) return { state, value: null }
 				const { [endpoint]: _closed, ...open } = state.endpoints
 				return { state: { ...state, endpoints: open }, value: null }
 			},
@@ -145,9 +157,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 			try {
 				const { provider } = resolveModel(providers, modelId)
 				if (keys.has(providerCredential(provider.name))) return []
-				return [
-					`Provider ${provider.name} serves model ${modelId} but has no API key. Set it with \`mesh-flow provider key ${provider.name}\`.`,
-				]
+				return [`Provider ${provider.name} serves model ${modelId} but has no API key. ${setKeyHint(provider.name)}`]
 			} catch (error) {
 				return [messageOf(error)]
 			}
@@ -157,15 +167,13 @@ export function openGateway(options: GatewayOptions): Gateway {
 	const callModel = async (runId: string, request: Extract<GatewayCall, { type: 'model' }>['request'], abortSignal: AbortSignal) => {
 		const choice = chosenModel(await options.providers.list(abortSignal), request.provider, request.model)
 		const key = await options.credentials.get(providerCredential(choice.provider.name), abortSignal)
-		if (key === undefined)
-			throw new Error(`Provider ${choice.provider.name} has no API key. Set it with \`mesh-flow provider key ${choice.provider.name}\`.`)
+		if (key === undefined) throw new Error(`Provider ${choice.provider.name} has no API key. ${setKeyHint(choice.provider.name)}`)
 		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: fetchModel, abortSignal })
 		const used = usageOf(response.body, choice.model)
 		await states.update(
 			runId,
 			(state) => ({ state: state && { ...state, usage: addUsage(state.usage, choice.model.id, used) }, value: undefined }),
-			// Counted also when the call was stopped right after the answer: it was paid for.
-			new AbortController().signal,
+			neverAborted,
 		)
 		return response
 	}
@@ -176,9 +184,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 				runId,
 				(state) => {
 					const tokens = newTokens()
+					const runTools = [...new Set(appTools)]
 					const fresh: RunState = {
-						tools: [...new Set(appTools)],
-						endpoints: { [runEndpoint]: { loop: false, tools: [...new Set(appTools)], tokens: tokens.map(tokenHash) } },
+						tools: runTools,
+						endpoints: { [runEndpoint]: { loop: false, tools: runTools, tokens: tokens.map(tokenHash) } },
 						inFlight: {},
 						usage: state?.usage ?? {},
 					}
@@ -190,11 +199,14 @@ export function openGateway(options: GatewayOptions): Gateway {
 			states.update(
 				runId,
 				(state): { state: RunState | undefined; value: AcceptedCall } => {
-					const again = state?.inFlight[message.id]
-					// Read again after an engine restart: it was taken already, maybe run already.
-					if (again !== undefined) return { state, value: answered({ next: again.next, outcome: { ok: false, error: interruptedError } }) }
-					const endpoint = state?.endpoints[message.endpoint]
-					if (state === undefined || endpoint === undefined || !endpoint.tokens.includes(tokenHash(message.token))) {
+					const spent = tokenHash(message.token)
+					const again = state && ownEntry(state.inFlight, message.id)
+					// Read again from where the cursor was saved, after a resume: taken already, maybe run already.
+					// Anything else that comes again is someone replaying a call.
+					if (again?.interrupted === true && again.endpoint === message.endpoint && again.spent === spent)
+						return { state, value: answered({ next: again.next, outcome: { ok: false, error: interruptedError } }) }
+					const endpoint = state && ownEntry(state.endpoints, message.endpoint)
+					if (state === undefined || endpoint === undefined || again !== undefined || !endpoint.tokens.includes(spent)) {
 						const reason =
 							state?.revoked ??
 							(endpoint === undefined
@@ -204,19 +216,18 @@ export function openGateway(options: GatewayOptions): Gateway {
 						return { state: closed, value: { compromised: reason, ...answered({ outcome: { ok: false, error: reason } }) } }
 					}
 					const next = newToken()
-					const spent = tokenHash(message.token)
 					const rotated: EndpointState = { ...endpoint, tokens: [...endpoint.tokens.filter((hash) => hash !== spent), tokenHash(next)] }
 					return {
 						state: {
 							...state,
 							endpoints: { ...state.endpoints, [message.endpoint]: rotated },
-							inFlight: { ...state.inFlight, [message.id]: { endpoint: message.endpoint, next } },
+							inFlight: { ...state.inFlight, [message.id]: { endpoint: message.endpoint, spent, next, interrupted: false } },
 						},
 						value: {
 							answer: async (callSignal) => {
 								try {
 									// A tool that ignores its signal can't hold up a stop.
-									const result = await untilAborted(run(runId, rotated, message.call, callSignal), callSignal)
+									const result = await untilAborted(perform(runId, rotated, message.call, callSignal), callSignal)
 									return { next, outcome: { ok: true, result: result ?? null } }
 								} catch (error) {
 									return {
@@ -243,13 +254,21 @@ export function openGateway(options: GatewayOptions): Gateway {
 				},
 				abortSignal,
 			),
-		async interrupted(runId, abortSignal) {
-			const state = await states.load(runId, abortSignal)
-			return Object.entries(state?.inFlight ?? {}).map(([id, call]) => ({
-				id,
-				answer: { next: call.next, outcome: { ok: false, error: interruptedError } },
-			}))
-		},
+		interrupted: (runId, abortSignal) =>
+			states.update(
+				runId,
+				(state) => {
+					if (state === undefined) return { state, value: [] }
+					const calls = Object.entries(state.inFlight)
+					const unanswered = calls.filter(([, call]) => !call.interrupted)
+					const marked = Object.fromEntries(calls.map(([id, call]) => [id, { ...call, interrupted: true }]))
+					return {
+						state: { ...state, inFlight: marked },
+						value: unanswered.map(([id, call]) => ({ id, answer: { next: call.next, outcome: { ok: false, error: interruptedError } } })),
+					}
+				},
+				abortSignal,
+			),
 		usage: async (runId, abortSignal) => (await states.load(runId, abortSignal))?.usage ?? {},
 		unavailableModels,
 		closeRun: (runId, abortSignal) => states.update(runId, (state) => ({ state: undefined, value: state?.usage ?? {} }), abortSignal),

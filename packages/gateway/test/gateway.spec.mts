@@ -5,10 +5,12 @@ import { hostTool } from '../src/tools/host-tool.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
+/** A token of the right shape that the gateway never handed out. */
+const unknownToken = 'x'.repeat(43)
 
 const echo = hostTool({ name: 'echo', input: z.object({ text: z.string() }) }, ({ text }) => Promise.resolve({ echoed: text }))
-const secretReader = hostTool({ name: 'readSecret', input: z.object({}) }, (_input, { credentials, abortSignal: signal }) =>
-	credentials.get('service/token', signal),
+const secretReader = hostTool({ name: 'readSecret', input: z.object({}) }, (_input, context) =>
+	context.credentials.get('service/token', context.abortSignal),
 )
 
 /** The token of a grant at `index`, which a test knows is there. */
@@ -57,13 +59,46 @@ describe('openGateway', () => {
 
 		// Act
 		const replayed = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 0), echoCall))
+		const afterwards = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 1), echoCall))
 
 		// Assert
 		expect(replayed.compromised).toContain('Someone else has the run')
 		expect(replayed.answer.next).toBeUndefined()
-		const afterwards = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 1), echoCall))
 		expect(afterwards.answer.outcome).toMatchObject({ ok: false })
 		expect(afterwards.compromised).toBeDefined()
+	})
+
+	test('closes the run when a call that is still running comes again', async () => {
+		// Arrange
+		const { gateway } = await testGateway({ tools: [echo] })
+		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
+		await gateway.accept(runId, message, abortSignal)
+
+		// Act
+		const replayed = await gateway.accept(runId, message, abortSignal)
+
+		// Assert
+		expect(replayed.compromised).toContain('Someone else has the run')
+	})
+
+	test.each([
+		['call id', 'constructor', 'run'],
+		['endpoint', 'call-proto', 'constructor'],
+	])('closes the run on a bad token with %s named like an object key', async (_what, id, endpoint) => {
+		// Arrange
+		const { gateway } = await testGateway({ tools: [echo] })
+		await gateway.openRun(runId, ['echo'], abortSignal)
+
+		// Act
+		const guessed = await gateway.accept(
+			runId,
+			callOf(endpoint, unknownToken, { type: 'tool', tool: 'echo', input: { text: 'hi' } }, id),
+			abortSignal,
+		)
+
+		// Assert
+		expect(guessed.compromised).toBeDefined()
 	})
 
 	test('refuses a token that was never handed out', async () => {
@@ -75,7 +110,7 @@ describe('openGateway', () => {
 		const guessed = await callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, 'x'.repeat(43), { type: 'tool', tool: 'echo', input: { text: 'hi' } }),
+			callOf(grant.endpoint, unknownToken, { type: 'tool', tool: 'echo', input: { text: 'hi' } }),
 		)
 
 		// Assert
@@ -155,19 +190,35 @@ describe('openGateway', () => {
 		// Act
 		const interrupted = await restarted.interrupted(runId, abortSignal)
 		const readAgain = await callGateway(restarted, runId, message)
-
-		// Assert
-		expect(interrupted.map((call) => call.id)).toEqual([message.id])
-		expect(errorOf(interrupted[0]?.answer)).toContain('engine stopped')
-		expect(readAgain.compromised).toBeUndefined()
-		expect(readAgain.answer.next).toBe(interrupted[0]?.answer.next)
 		const next = readAgain.answer.next ?? ''
 		const goesOn = await callGateway(
 			restarted,
 			runId,
 			callOf(grant.endpoint, next, { type: 'tool', tool: 'echo', input: { text: 'again' } }),
 		)
+
+		// Assert
+		expect(interrupted.map((call) => call.id)).toEqual([message.id])
+		expect(errorOf(interrupted[0]?.answer)).toContain('engine stopped')
+		expect(readAgain.compromised).toBeUndefined()
+		expect(readAgain.answer.next).toBe(interrupted[0]?.answer.next)
 		expect(resultOf(goesOn.answer)).toEqual({ echoed: 'again' })
+	})
+
+	test('lists an interrupted call once, however often the run resumes', async () => {
+		// Arrange
+		const { gateway, home } = await testGateway({ tools: [echo] })
+		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		await gateway.accept(runId, callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } }), abortSignal)
+		const { gateway: restarted } = await testGateway({ tools: [echo], home })
+
+		// Act
+		const first = await restarted.interrupted(runId, abortSignal)
+		const second = await restarted.interrupted(runId, abortSignal)
+
+		// Assert
+		expect(first).toHaveLength(1)
+		expect(second).toEqual([])
 	})
 
 	test('settles a call promptly when it is stopped, even if the tool never does', async () => {
@@ -202,9 +253,9 @@ const anthropicRequest = {
 	body: JSON.stringify({ model: 'claude-opus-5-5', max_tokens: 10, messages: [] }),
 } as const
 
-async function withAnthropic(fetchImpl: typeof fetch) {
+async function withAnthropic(fetchImpl: typeof fetch, baseUrl?: string) {
 	const setup = await testGateway({ fetch: fetchImpl })
-	await setup.providers.put({ name: 'anthropic', kind: 'anthropic' }, abortSignal)
+	await setup.providers.put({ name: 'anthropic', kind: 'anthropic', ...(baseUrl === undefined ? {} : { baseUrl }) }, abortSignal)
 	await setup.credentials.set('provider/anthropic', 'sk-real', abortSignal)
 	const grant = await setup.gateway.openRun(runId, [], abortSignal)
 	return { ...setup, grant }
@@ -270,6 +321,55 @@ describe('model calls', () => {
 		// Assert
 		expect(errorOf(answer)).toContain("isn't a model request")
 		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test('refuses a path that climbs out of a base URL with a path of its own', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, grant } = await withAnthropic(sent, 'https://proxy.example/anthropic')
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'model', request: { ...anthropicRequest, path: '/../../elsewhere/v1/messages' } }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toContain("isn't a model request")
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test("sends a model request below a base URL's path, with its query", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
+		const { gateway, grant } = await withAnthropic(sent, 'https://proxy.example/anthropic/')
+
+		// Act
+		await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'model', request: { ...anthropicRequest, path: '/v1/messages?beta=true' } }),
+		)
+
+		// Assert
+		const [url] = sent.mock.calls[0] ?? []
+		expect(url).toEqual(new URL('https://proxy.example/anthropic/v1/messages?beta=true'))
+	})
+
+	test("drops the headers that would pick another account for the key's usage", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
+		const { gateway, grant } = await withAnthropic(sent)
+		const headers = { ...anthropicRequest.headers, 'OpenAI-Organization': 'org-other', 'proxy-authorization': 'Basic x' }
+
+		// Act
+		await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'model', request: { ...anthropicRequest, headers } }))
+
+		// Assert
+		const [, init] = sent.mock.calls[0] ?? []
+		expect(Object.keys(init?.headers ?? {})).not.toContain('OpenAI-Organization')
+		expect(Object.keys(init?.headers ?? {})).not.toContain('proxy-authorization')
 	})
 
 	test('refuses a body for another model than the call names', async () => {

@@ -2,13 +2,32 @@ import type { ModelRequest, ModelResponse } from '@mesh-flow/protocol'
 import { modelApi } from './model-apis.mts'
 import type { ModelChoice } from './resolve-model.mts'
 
-/** The provider's base URL for a model: the user's override, or pi-ai's. */
-export function baseUrlOf({ provider, model }: ModelChoice): string {
-	return (provider.baseUrl ?? model.baseUrl).replace(/\/+$/, '')
+/** A URL or path without the slashes it ends with. */
+function withoutTrailingSlash(url: string): string {
+	return url.replace(/\/+$/, '')
 }
 
-/** Headers the sandbox doesn't get to set: credentials, and what `fetch` sets itself. */
-const droppedRequestHeaders = new Set(['authorization', 'x-api-key', 'api-key', 'cookie', 'host', 'content-length', 'connection'])
+/** The provider's base URL for a model: the user's override, or pi-ai's. */
+function baseUrlOf({ provider, model }: ModelChoice): string {
+	return withoutTrailingSlash(provider.baseUrl ?? model.baseUrl)
+}
+
+/**
+ * Headers the sandbox doesn't get to set: credentials, the account a key's usage goes to, and what
+ * `fetch` sets itself.
+ */
+const droppedRequestHeaders = new Set([
+	'authorization',
+	'proxy-authorization',
+	'x-api-key',
+	'api-key',
+	'openai-organization',
+	'openai-project',
+	'cookie',
+	'host',
+	'content-length',
+	'connection',
+])
 
 /** Headers of the provider's answer that don't describe the body the sandbox gets: `fetch` decoded it, and it's whole. */
 const droppedResponseHeaders = new Set(['set-cookie', 'content-encoding', 'content-length', 'transfer-encoding', 'connection'])
@@ -26,9 +45,15 @@ export async function sendModelRequest(
 ): Promise<ModelResponse> {
 	const api = modelApi(choice.model.api)
 	if (api === undefined) throw new Error(`The gateway can't send ${choice.model.api} requests.`)
-	const url = new URL(`${baseUrlOf(choice)}${request.path}`)
-	const pathBelowBase = url.pathname.slice(new URL(baseUrlOf(choice)).pathname.replace(/\/+$/, '').length)
-	if (!api.paths.includes(pathBelowBase)) throw new Error(`${request.path} isn't a model request of ${choice.model.api}.`)
+	// The path has to be one of the API's as written, so no `..` or encoding leads the key elsewhere.
+	const queryAt = request.path.indexOf('?')
+	const path = queryAt === -1 ? request.path : request.path.slice(0, queryAt)
+	if (!api.paths.includes(path) || request.path.includes('#'))
+		throw new Error(`${request.path} isn't a model request of ${choice.model.api}.`)
+	const base = new URL(baseUrlOf(choice))
+	const url = new URL(`${withoutTrailingSlash(base.href)}${request.path}`)
+	if (url.origin !== base.origin || url.pathname !== `${withoutTrailingSlash(base.pathname)}${path}`)
+		throw new Error(`${request.path} isn't a model request of ${choice.model.api}.`)
 	if (bodyModel(request.body) !== choice.model.id) throw new Error(`The request's body isn't for model ${choice.model.id}.`)
 
 	const headers = Object.fromEntries(Object.entries(request.headers).filter(([name]) => !droppedRequestHeaders.has(name.toLowerCase())))

@@ -8,12 +8,11 @@ export interface GatewayChannel {
 	take(requestId: string, abortSignal: AbortSignal): Promise<Answer>
 }
 
-/** An endpoint on the gateway: its id, the host tools it takes, and its free tokens. */
+/** An endpoint on the gateway: its id and the host tools it takes. Its tokens stay in the client. */
 export interface Endpoint {
 	readonly id: string
 	/** The host tools it takes. `undefined` for the run's own endpoint, which takes every tool the app lists. */
 	readonly tools: ReadonlySet<string> | undefined
-	readonly tokens: TokenPool
 }
 
 /** A call to the gateway failed on the host: refused, or the host tool or the provider failed. */
@@ -37,24 +36,31 @@ export interface GatewayClient {
 }
 
 /**
- * A client on `channel` for the run's endpoint in `grant`. `lifetime` is the run's signal: a call
+ * A client on `channel` for the run's endpoint in `grant`. `runAbortSignal` is the run's signal: a call
  * the caller stopped waiting for is cancelled on the host, and its answer, with the next token,
  * is still picked up until the run ends.
  */
-export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, lifetime: AbortSignal): GatewayClient {
-	let calls = 0
-	const run: Endpoint = { id: grant.endpoint, tools: undefined, tokens: new TokenPool(grant.tokens) }
+export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
+	let callCount = 0
+	const pools = new Map<string, TokenPool>([[grant.endpoint, new TokenPool(grant.tokens)]])
+	const run: Endpoint = Object.freeze({ id: grant.endpoint, tools: undefined })
+	const poolOf = (endpoint: Endpoint) => {
+		const pool = pools.get(endpoint.id)
+		if (pool === undefined) throw new GatewayCallError(`Endpoint ${endpoint.id} is closed.`)
+		return pool
+	}
 
 	const call = async (endpoint: Endpoint, gatewayCall: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
-		const token = await endpoint.tokens.take(abortSignal)
-		const id = `call-${idPrefix}-${String(++calls)}`
+		const pool = poolOf(endpoint)
+		const token = await pool.take(abortSignal)
+		const id = `call-${idPrefix}-${String(++callCount)}`
 		channel.send({ type: 'call', id, endpoint: endpoint.id, token, call: gatewayCall })
 		// Whether the answer was taken already, so a stop that comes after it doesn't wait for it again.
 		const progress = { taken: false }
-		const answered = channel.take(id, AbortSignal.any([abortSignal, lifetime])).then((answer) => {
+		const answered = channel.take(id, AbortSignal.any([abortSignal, runAbortSignal])).then((answer) => {
 			progress.taken = true
 			const parsed = CallAnswer.parse(answer.value)
-			if (parsed.next !== undefined) endpoint.tokens.give(parsed.next)
+			if (parsed.next !== undefined) pool.give(parsed.next)
 			return parsed
 		})
 		try {
@@ -62,27 +68,29 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			if (!outcome.ok) throw new GatewayCallError(outcome.error)
 			return outcome.result
 		} catch (error) {
-			if (progress.taken || !abortSignal.aborted || lifetime.aborted) throw error
+			if (progress.taken || !abortSignal.aborted || runAbortSignal.aborted) throw error
 			channel.send({ type: 'cancel', id })
 			// The answer still comes, with the next token: the rest of the run needs it.
-			const recovered = channel.take(id, lifetime).then((answer) => {
+			const recovered = channel.take(id, runAbortSignal).then((answer) => {
 				const next = CallAnswer.safeParse(answer.value)
-				if (next.success && next.data.next !== undefined) endpoint.tokens.give(next.data.next)
+				if (next.success && next.data.next !== undefined) pool.give(next.data.next)
 			})
 			recovered.catch(() => undefined)
 			throw error
 		}
 	}
 
-	return {
+	return Object.freeze<GatewayClient>({
 		run,
 		call,
 		async openLoop(tools, abortSignal) {
 			const opened = EndpointGrant.parse(await call(run, { type: 'open', tools: [...tools] }, abortSignal))
-			return { id: opened.endpoint, tools: new Set(tools), tokens: new TokenPool(opened.tokens) }
+			pools.set(opened.endpoint, new TokenPool(opened.tokens))
+			return Object.freeze({ id: opened.endpoint, tools: new Set(tools) })
 		},
 		async closeLoop(endpoint, abortSignal) {
+			pools.delete(endpoint.id)
 			await call(run, { type: 'close', endpoint: endpoint.id }, abortSignal)
 		},
-	}
+	})
 }

@@ -1,6 +1,6 @@
 import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type { CredentialStore } from '@mesh-flow/gateway'
+import { CredentialName, type CredentialStore } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { hasErrorCode } from '../errors.mts'
 
@@ -15,14 +15,18 @@ export interface WebhookSecrets {
 }
 
 /** The name a webhook's secret has in the credential store. */
-export function webhookCredential(app: string, webhook: string): string {
+function webhookCredential(app: string, webhook: string): string {
 	return `webhook/${app}/${webhook}`
 }
 
 /** The webhook secrets in the gateway's credential store. */
 export function openWebhookSecrets(credentials: CredentialStore): WebhookSecrets {
 	return Object.freeze<WebhookSecrets>({
-		get: (app, webhook, abortSignal) => credentials.get(webhookCredential(app, webhook), abortSignal),
+		async get(app, webhook, abortSignal) {
+			// A name no credential can have, as from a request to any URL, has no secret.
+			const name = CredentialName.safeParse(webhookCredential(app, webhook))
+			return name.success ? credentials.get(name.data, abortSignal) : undefined
+		},
 		set: (app, webhook, secret, abortSignal) => credentials.set(webhookCredential(app, webhook), secret, abortSignal),
 	})
 }
@@ -43,7 +47,9 @@ export async function moveLegacyWebhookSecrets(home: string, credentials: Creden
 	if (text === undefined) return 0
 	let moved = 0
 	for (const [key, secret] of Object.entries(LegacySecrets.parse(JSON.parse(text)))) {
-		const [app = '', webhook = ''] = key.split('/')
+		const parts = key.split('/')
+		const [app, webhook] = parts
+		if (parts.length !== 2 || app === undefined || webhook === undefined) continue
 		const name = webhookCredential(app, webhook)
 		if ((await credentials.get(name, abortSignal)) !== undefined) continue
 		await credentials.set(name, secret, abortSignal)

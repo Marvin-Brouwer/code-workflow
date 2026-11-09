@@ -1,6 +1,7 @@
 import type { Gateway } from '@mesh-flow/gateway'
-import type { Answer } from '@mesh-flow/protocol'
+import type { Answer, CallMessage } from '@mesh-flow/protocol'
 import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
+import { untilAborted } from '../../src/run/until-aborted.mts'
 
 /**
  * A channel straight to a gateway in this process, as the engine would carry the calls: each call
@@ -17,7 +18,7 @@ export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortS
 		answers.set(id, created)
 		return created
 	}
-	const answer = async (message: { readonly id: string } & Parameters<Gateway['accept']>[1]) => {
+	const answer = async (message: CallMessage) => {
 		const stop = new AbortController()
 		running.set(message.id, stop)
 		const accepted = await gateway.accept(runId, message, lifetime)
@@ -35,14 +36,7 @@ export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortS
 			})
 		},
 		async take(requestId, abortSignal) {
-			abortSignal.throwIfAborted()
-			const { promise } = slot(requestId)
-			const taken = await new Promise<Answer>((resolve, reject) => {
-				abortSignal.addEventListener('abort', () => {
-					reject(abortSignal.reason)
-				})
-				promise.then(resolve, reject)
-			})
+			const taken = await untilAborted(slot(requestId).promise, abortSignal)
 			answers.delete(requestId)
 			return taken
 		},

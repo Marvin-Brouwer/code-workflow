@@ -38,7 +38,19 @@ describe('openProviderSettings', () => {
 
 		// Assert
 		expect((await providers.list(abortSignal)).map((provider) => provider.name)).toEqual(['b', 'a'])
-		await expect(providers.order(['b'], abortSignal)).rejects.toThrow('Name every provider once')
+	})
+
+	test('refuses an order that leaves a provider out', async () => {
+		// Arrange
+		const providers = await settings()
+		await providers.put({ name: 'a', kind: 'anthropic' }, abortSignal)
+		await providers.put({ name: 'b', kind: 'openai' }, abortSignal)
+
+		// Act
+		const ordering = providers.order(['b'], abortSignal)
+
+		// Assert
+		await expect(ordering).rejects.toThrow('Name every provider once')
 	})
 })
 

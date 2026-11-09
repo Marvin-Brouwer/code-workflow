@@ -22,9 +22,6 @@ const modelApis: Readonly<Partial<Record<Api, ModelApi>>> = {
 	'openai-responses': { paths: ['/responses'], credential: bearer },
 }
 
-/** The model APIs the gateway can send, for messages. */
-export const supportedApis: readonly string[] = Object.keys(modelApis)
-
 /** How to send requests of `api`, or `undefined` when the gateway can't. */
 export function modelApi(api: Api): ModelApi | undefined {
 	return modelApis[api]

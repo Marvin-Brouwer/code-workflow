@@ -69,7 +69,7 @@ async function dispatch(
 		return 0
 	}
 	const runId = environment[runIdEnvironmentVariable]
-	const gateway = await gatewayOf(channel, runId, abortSignal)
+	const gateway = await gatewayOf(channel, abortSignal)
 	const outcome = await runAnyWorkflow(begun.workflow, {
 		parameters: begun.parameters,
 		channel,
@@ -103,11 +103,17 @@ async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' 
 	return { workflow: trigger.workflow, parameters: parsed.data }
 }
 
-/** The gateway client for the endpoint the engine handed over, if it has a gateway. Calls are named after the run, so they don't repeat across attempts. */
-async function gatewayOf(channel: RuntimeMailbox, runId: string | undefined, abortSignal: AbortSignal): Promise<GatewayClient | undefined> {
-	const grant = await channel.takeGateway(abortSignal)
+/** How much of a random UUID a call id starts with. */
+const callIdPrefixLength = 8
+
+/**
+ * The gateway client for the endpoint the engine handed over, if it has a gateway. Call ids start
+ * with a random prefix for each attempt, so they don't repeat an earlier attempt's.
+ */
+async function gatewayOf(channel: RuntimeMailbox, abortSignal: AbortSignal): Promise<GatewayClient | undefined> {
+	const grant = await channel.takeGrant(abortSignal)
 	if (grant === undefined) return undefined
-	return gatewayClient(channel, EndpointGrant.parse(grant), randomUUID().slice(0, 8), abortSignal)
+	return gatewayClient(channel, EndpointGrant.parse(grant), randomUUID().slice(0, callIdPrefixLength), abortSignal)
 }
 
 /** The workflow called `name` among those the entry file's modules define. */

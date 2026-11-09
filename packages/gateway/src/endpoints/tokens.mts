@@ -13,7 +13,10 @@ export function tokenHash(token: string): string {
 	return createHash('sha256').update(token).digest('hex')
 }
 
+/** How many random bytes a loop endpoint's id has: enough that two loops never share one. */
+const loopIdBytes = 9
+
 /** A new id for a loop's endpoint. */
 export function newLoopEndpointId(): string {
-	return `loop-${randomBytes(9).toString('base64url')}`
+	return `loop-${randomBytes(loopIdBytes).toString('base64url')}`
 }

@@ -1,6 +1,15 @@
 import path from 'node:path'
-import { hostTool, keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway, type HostTool } from '@mesh-flow/gateway'
-import { describe, expect, test, vi } from 'vitest'
+import {
+	hostTool,
+	keyFile,
+	openCredentialStore,
+	openGateway,
+	openProviderSettings,
+	tokensPerEndpoint,
+	type Gateway,
+	type HostTool,
+} from '@mesh-flow/gateway'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
 import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
@@ -25,6 +34,8 @@ const neverDefinition = { name: 'never', input: z.object({}) }
 
 const echo = hostToolStub(echoDefinition)
 const never = hostToolStub(neverDefinition)
+/** A stub of a host tool the gateway doesn't have. */
+const unlisted = hostToolStub({ name: 'unlisted', input: z.object({}) })
 
 /** Started, and never settles until its call is stopped. */
 const neverStarted = vi.fn<(abortSignal: AbortSignal) => void>()
@@ -38,6 +49,9 @@ const hostTools: readonly HostTool[] = [
 
 /** A gateway in a fresh directory, and what the runtime's side needs to reach it. Records the endpoint of every call. */
 async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
+	onTestFinished(() => {
+		neverStarted.mockClear()
+	})
 	const home = await temporaryDirectory()
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
 	const providers = openProviderSettings(path.join(home, 'providers.json'))
@@ -45,9 +59,9 @@ async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
 	const calls: { readonly endpoint: string; readonly type: string }[] = []
 	const gateway: Gateway = {
 		...opened,
-		accept(id, message, signal) {
+		accept(id, message, acceptAbortSignal) {
 			calls.push({ endpoint: message.endpoint, type: message.call.type })
-			return opened.accept(id, message, signal)
+			return opened.accept(id, message, acceptAbortSignal)
 		},
 	}
 	const grant = await gateway.openRun(runId, definedHostTools(), abortSignal)
@@ -88,7 +102,7 @@ describe('gateway', () => {
 		const tools = definedHostTools()
 
 		// Assert
-		expect(tools).toEqual(['echo', 'never'])
+		expect(tools).toEqual(['echo', 'never', 'unlisted'])
 	})
 
 	test('runs a host tool called from code on the run endpoint', async () => {
@@ -106,7 +120,6 @@ describe('gateway', () => {
 	test("rejects with the host's error when the host says no", async () => {
 		// Arrange
 		const { client } = await withGateway()
-		const unlisted = hostToolStub({ name: 'unlisted', input: z.object({}) })
 
 		// Act
 		const run = await runBody(() => unlisted({}), { gateway: client })
@@ -169,5 +182,23 @@ describe('gateway', () => {
 		expect(await run.outcome).toMatchObject({ status: 'failed' })
 		expect(Date.now() - started).toBeLessThan(promptlyMs)
 		expect(neverStarted.mock.calls[0]?.[0].aborted).toBe(true)
+	})
+
+	test('settles promptly when the run stops while calls wait for a token, every token held by a call that never settles', async () => {
+		// Arrange
+		const { client } = await withGateway()
+		const callsAtOnce = tokensPerEndpoint + 2
+		const run = await runBody(() => Promise.all(Array.from({ length: callsAtOnce }, () => never({}))), { gateway: client })
+		await vi.waitFor(() => {
+			expect(neverStarted).toHaveBeenCalledTimes(tokensPerEndpoint)
+		})
+		const started = Date.now()
+
+		// Act
+		run.controller.abort(new Error('stop'))
+
+		// Assert
+		expect(await run.outcome).toMatchObject({ status: 'failed' })
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 	})
 })

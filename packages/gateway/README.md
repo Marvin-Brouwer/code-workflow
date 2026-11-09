@@ -67,6 +67,7 @@ The input is checked on the host against the definition's schema, whatever the s
 
 ```ts
 import { openGateway, openGatewayHome } from '@mesh-flow/gateway'
+import type { CallAnswer, CallMessage } from '@mesh-flow/protocol'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
@@ -75,12 +76,17 @@ const gateway = openGateway({ home: home.directory, credentials: home.credential
 // Before the runtime starts: the run's own endpoint, for the host tools its app lists.
 const grant = await gateway.openRun('run-1', ['githubComment'], abortSignal)
 
-// For every call the engine reads from the mailbox:
-// const accepted = await gateway.accept('run-1', message, abortSignal)
-// ...save that the message was read, then
-// const answer = await accepted.answer(abortSignal) // write it to the inbox, then
-// await gateway.settle('run-1', message.id, abortSignal)
+// For every call the engine reads from the mailbox.
+async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer) => Promise<void>) {
+	const accepted = await gateway.accept('run-1', message, abortSignal)
+	if (accepted.compromised !== undefined) throw new Error(accepted.compromised)
+	// Save that the message was read here, then run it.
+	await writeAnswer(await accepted.answer(abortSignal))
+	await gateway.settle('run-1', message.id, abortSignal)
+}
 ```
+
+`accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way.
 
 - **A run's endpoint** takes calls from workflow code, the model calls, and opening and closing loop endpoints.
 - **A loop's endpoint** takes only the tools in that loop's template. The runtime opens it when the loop starts and closes it when the loop settles.

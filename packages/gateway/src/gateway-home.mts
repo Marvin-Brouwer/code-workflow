@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { openCredentialStore, type CredentialStore } from './credentials/credential-store.mts'
-import { defaultStoreKey, type DefaultStoreKeyOptions } from './credentials/store-key.mts'
+import { credentialsFileName, defaultStoreKey, type DefaultStoreKeyOptions } from './credentials/store-key.mts'
 import { openProviderSettings, type ProviderSettings } from './providers/provider-settings.mts'
 
 /** A gateway's directory on the host, and what is kept in it. */
@@ -11,7 +11,7 @@ export interface GatewayHome {
 	/** The user's model providers, in order. */
 	readonly providers: ProviderSettings
 	/** Where the key the credentials are sealed with is, for the log. */
-	readonly keyIsIn: string
+	readonly keyLocation: string
 }
 
 /**
@@ -27,8 +27,8 @@ export async function openGatewayHome(
 	const key = await defaultStoreKey(directory, abortSignal, options)
 	return {
 		directory,
-		credentials: openCredentialStore(path.join(directory, 'credentials.json'), key),
+		credentials: openCredentialStore(path.join(directory, credentialsFileName), key),
 		providers: openProviderSettings(path.join(directory, 'providers.json')),
-		keyIsIn: key.where,
+		keyLocation: key.where,
 	}
 }

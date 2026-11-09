@@ -12,6 +12,9 @@ import type { GatewayClient } from './gateway-client.mts'
  */
 const noKey = 'mesh-flow-gateway-adds-the-key'
 
+/** Who the key comes from, as pi-ai's auth names it. */
+const keySource = 'mesh-flow gateway'
+
 /**
  * The run's models, through the gateway. A model id is resolved on the host, model first, to one of
  * the user's providers. The provider's SDK runs here, as pi-ai always runs it, and makes the
@@ -54,7 +57,7 @@ function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provide
 		...(inner.baseUrl === undefined ? {} : { baseUrl: inner.baseUrl }),
 		...(inner.headers === undefined ? {} : { headers: inner.headers }),
 		auth: {
-			apiKey: { name: 'mesh-flow gateway', resolve: () => Promise.resolve({ auth: { apiKey: noKey }, source: 'mesh-flow gateway' }) },
+			apiKey: { name: keySource, resolve: () => Promise.resolve({ auth: { apiKey: noKey }, source: keySource }) },
 		},
 		getModels: () => inner.getModels().map((model) => ({ ...model, provider: choice.provider })),
 		stream: (model, context, given): AssistantMessageEventStream => inner.stream(asInner(model), context, options(model, given)),

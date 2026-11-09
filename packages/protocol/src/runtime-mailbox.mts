@@ -60,13 +60,13 @@ export class RuntimeMailbox {
 	 * it's read, so the tokens are only in the runtime's memory. `undefined` when the engine wrote
 	 * none, because it has no gateway.
 	 */
-	async takeGateway(abortSignal: AbortSignal): Promise<unknown> {
-		const text = await readFile(this.#layout.gatewayFile, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
+	async takeGrant(abortSignal: AbortSignal): Promise<unknown> {
+		const text = await readFile(this.#layout.grantFile, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
 			if (isMissing(error)) return undefined
 			throw error
 		})
 		if (text === undefined) return undefined
-		await rm(this.#layout.gatewayFile, { force: true })
+		await rm(this.#layout.grantFile, { force: true })
 		const parsed: unknown = JSON.parse(text)
 		return parsed
 	}

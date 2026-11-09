@@ -1,8 +1,8 @@
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
-import { hasErrorCode } from '../errors.mts'
+import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { RunUsage } from '../providers/usage.mts'
 
 /** One endpoint of a run: the tools it takes and the hashes of the tokens that work on it now. */
@@ -15,7 +15,18 @@ const EndpointState = z.object({
 export type EndpointState = z.infer<typeof EndpointState>
 
 /** A call that was accepted and isn't answered yet, with the token its answer will carry. */
-const InFlightCall = z.object({ endpoint: z.string(), next: z.string() })
+const InFlightCall = z.object({
+	endpoint: z.string(),
+	/** The hash of the token it was made with. */
+	spent: z.string(),
+	next: z.string(),
+	/**
+	 * Answered as interrupted after a resume. Kept, so that reading the call again from where the
+	 * cursor was saved isn't taken for a stolen token.
+	 */
+	interrupted: z.boolean().default(false),
+})
+export type InFlightCall = z.infer<typeof InFlightCall>
 
 /**
  * What the gateway knows of one run, on disk so that a run paused across an engine restart can go
@@ -32,6 +43,11 @@ export const RunState = z.object({
 	revoked: z.string().optional(),
 })
 export type RunState = z.infer<typeof RunState>
+
+/** `record[key]` when `record` has it as its own key, so a key such as `constructor` finds nothing. */
+export function ownEntry<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
+	return Object.hasOwn(record, key) ? record[key] : undefined
+}
 
 /** A run id as a file name: the engine's ids are letters, digits and dashes. */
 const RunIdText = z.string().regex(/^[\w-]{1,64}$/)
@@ -52,10 +68,7 @@ export function openRunStates(directory: string): RunStates {
 	const queues = new Map<string, Promise<unknown>>()
 	const fileOf = (runId: string) => path.join(directory, `${RunIdText.parse(runId)}.json`)
 	const load = async (runId: string, abortSignal: AbortSignal): Promise<RunState | undefined> => {
-		const text = await readFile(fileOf(runId), { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
-			if (hasErrorCode(error, 'ENOENT')) return undefined
-			throw error
-		})
+		const text = await readTextIfExists(fileOf(runId), abortSignal)
 		return text === undefined ? undefined : RunState.parse(JSON.parse(text))
 	}
 	return Object.freeze<RunStates>({

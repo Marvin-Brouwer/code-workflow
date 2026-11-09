@@ -11,16 +11,16 @@ import { AppName, WebhookName } from '../apps/names.mts'
 import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
+import { openEngineGatewayHome } from '../serve/engine-gateway.mts'
 import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
-import { openEngineGateway } from '../serve/engine-gateway.mts'
 import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
 import { appNameOf } from './app-name.mts'
+import { addCredentialCommands } from './credential-commands.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
 import { addProviderCommands } from './provider-commands.mts'
-import { addCredentialCommands } from './credential-commands.mts'
 import { withPackedApp } from './with-packed-app.mts'
 import { watchApp } from './watch-app.mts'
 
@@ -85,7 +85,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 
 	const home = () => path.resolve(program.opts<{ home: string }>().home)
 	const keychain = () => program.opts<{ keychain: boolean }>().keychain
-	const gateway = (abortSignal: AbortSignal) => openEngineGateway(home(), abortSignal, { keychain: keychain() })
+	const gatewayHome = (abortSignal: AbortSignal) => openEngineGatewayHome(home(), abortSignal, { keychain: keychain() })
 	const client = () => controlClient(controlSocketPath(home()))
 
 	program
@@ -251,13 +251,13 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const secret = options.generate ? randomBytes(generatedSecretBytes).toString('hex') : (await text(process.stdin)).trim()
 			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in, or use --generate.')
 			const abortSignal = requestSignal()
-			const secrets = openWebhookSecrets((await gateway(abortSignal)).credentials)
+			const secrets = openWebhookSecrets((await gatewayHome(abortSignal)).credentials)
 			await secrets.set(AppName.parse(appName), WebhookName.parse(webhook), secret, abortSignal)
 			if (options.generate) console.log(secret)
 		})
 
-	addProviderCommands(program, gateway)
-	addCredentialCommands(program, gateway)
+	addProviderCommands(program, gatewayHome)
+	addCredentialCommands(program, gatewayHome)
 
 	program
 		.command('list')

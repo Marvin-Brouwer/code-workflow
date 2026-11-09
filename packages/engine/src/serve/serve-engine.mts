@@ -15,7 +15,7 @@ import { openRunStore } from '../runs/run-store.mts'
 import { createScheduler } from '../triggers/scheduler.mts'
 import { webhookApi } from '../triggers/webhook-api.mts'
 import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
-import { gatewayDirectory, openEngineGateway } from './engine-gateway.mts'
+import { openEngineGatewayHome } from './engine-gateway.mts'
 import { lockHome } from './home-lock.mts'
 
 /** The address the webhook port listens on unless another is given: this machine only. */
@@ -87,14 +87,14 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let apps: AppStore
 	let gatewayHome: GatewayHome
 	try {
-		gatewayHome = await openEngineGateway(
+		gatewayHome = await openEngineGatewayHome(
 			options.home,
 			options.abortSignal,
 			options.keychain === undefined ? {} : { keychain: options.keychain },
 		)
-		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyIsIn}.`)
+		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyLocation}.`)
 		const gateway = openGateway({
-			home: gatewayDirectory(options.home),
+			home: gatewayHome.directory,
 			credentials: gatewayHome.credentials,
 			providers: gatewayHome.providers,
 			tools: options.tools ?? [],

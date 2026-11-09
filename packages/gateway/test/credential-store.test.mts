@@ -7,16 +7,17 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
 
-async function store(home?: string) {
+/** A credential store in `home`, or in a fresh directory. */
+async function openTestStore(home?: string) {
 	const directory = home ?? (await temporaryDirectory())
 	const file = path.join(directory, 'credentials.json')
-	return { file, directory, store: openCredentialStore(file, keyFile(path.join(directory, 'store.key'))) }
+	return { file, directory, credentials: openCredentialStore(file, keyFile(path.join(directory, 'store.key'))) }
 }
 
 describe('openCredentialStore', () => {
 	test('keeps a secret and gives it back, sealed on disk', async () => {
 		// Arrange
-		const { store: credentials, file } = await store()
+		const { credentials, file } = await openTestStore()
 
 		// Act
 		await credentials.set('provider/anthropic', 'sk-secret-value', abortSignal)
@@ -28,7 +29,7 @@ describe('openCredentialStore', () => {
 
 	test('lists names, never secrets, and removes one', async () => {
 		// Arrange
-		const { store: credentials } = await store()
+		const { credentials } = await openTestStore()
 		await credentials.set('webhook/team/b', 'one', abortSignal)
 		await credentials.set('provider/a', 'two', abortSignal)
 
@@ -43,8 +44,8 @@ describe('openCredentialStore', () => {
 
 	test('sees what another opening of the store wrote, as the CLI and the engine do', async () => {
 		// Arrange
-		const { store: engine, directory } = await store()
-		const { store: cli } = await store(directory)
+		const { credentials: engine, directory } = await openTestStore()
+		const { credentials: cli } = await openTestStore(directory)
 
 		// Act
 		await cli.set('provider/openai', 'sk-from-cli', abortSignal)
@@ -55,7 +56,7 @@ describe('openCredentialStore', () => {
 
 	test("doesn't open with another key", async () => {
 		// Arrange
-		const { store: credentials, file } = await store()
+		const { credentials, file } = await openTestStore()
 		await credentials.set('provider/a', 'secret', abortSignal)
 		const other = openCredentialStore(file, keyFile(path.join(await temporaryDirectory(), 'other.key')))
 
@@ -68,7 +69,7 @@ describe('openCredentialStore', () => {
 
 	test('refuses a name that could be a path', async () => {
 		// Arrange
-		const { store: credentials } = await store()
+		const { credentials } = await openTestStore()
 
 		// Act
 		const setting = credentials.set('provider a', 'secret', abortSignal)

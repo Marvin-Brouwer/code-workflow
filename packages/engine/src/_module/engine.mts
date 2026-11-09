@@ -15,6 +15,6 @@ export { defaultSandboxLayout, type SandboxLayout } from '../engine/sandbox-layo
 export { RunId } from '../runs/run-id.mts'
 export { RunApp, RunRecord, RunStatus } from '../runs/run-record.mts'
 export { openRunStore, runDirectory, type LoadedRuns, type RunStore } from '../runs/run-store.mts'
-export { gatewayDirectory, openEngineGateway, type EngineGatewayOptions } from '../serve/engine-gateway.mts'
+export { gatewayDirectory, openEngineGatewayHome, type EngineGatewayOptions } from '../serve/engine-gateway.mts'
 export { serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
 export { handleShutdown, type HandleShutdownOptions, type ShutdownProcess } from '../shutdown/handle-shutdown.mts'

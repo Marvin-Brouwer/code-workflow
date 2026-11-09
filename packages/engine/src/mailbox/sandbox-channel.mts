@@ -55,8 +55,8 @@ export class SandboxChannel {
 	}
 
 	/** Hands the runtime the run's gateway endpoint. Written before it starts; the runtime removes it once read. */
-	async writeGateway(grant: EndpointGrant, abortSignal: AbortSignal): Promise<void> {
-		await this.#sandbox.writeFile(this.#layout.gatewayFile, JSON.stringify(grant), abortSignal)
+	async writeGrant(grant: EndpointGrant, abortSignal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(this.#layout.grantFile, JSON.stringify(grant), abortSignal)
 	}
 
 	/** Starts the runtime in the background. Its pid goes to the mailbox, so a poll sees it die. */

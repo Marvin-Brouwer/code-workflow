@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
-const packages = fileURLToPath(new URL('..', import.meta.url))
+const packagesDirectory = fileURLToPath(new URL('..', import.meta.url))
 
 export default defineConfig({
 	resolve: {
@@ -9,8 +9,8 @@ export default defineConfig({
 		// the `source` condition: Pi's packages, under the gateway, declare it too without shipping
 		// their sources.
 		alias: [
-			{ find: /^@mesh-flow\/([\w-]+)$/, replacement: `${packages}$1/src/_module/$1.mts` },
-			{ find: /^@mesh-flow\/([\w-]+)\/([\w-]+)$/, replacement: `${packages}$1/src/_module/$2.mts` },
+			{ find: /^@mesh-flow\/([\w-]+)$/, replacement: `${packagesDirectory}$1/src/_module/$1.mts` },
+			{ find: /^@mesh-flow\/([\w-]+)\/([\w-]+)$/, replacement: `${packagesDirectory}$1/src/_module/$2.mts` },
 		],
 	},
 	test: {

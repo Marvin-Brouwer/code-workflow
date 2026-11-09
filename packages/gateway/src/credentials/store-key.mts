@@ -1,9 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AsyncEntry } from '@napi-rs/keyring'
-import writeFileAtomic from 'write-file-atomic'
-import { hasErrorCode } from '../errors.mts'
+import { hasErrorCode, messageOf } from '../errors.mts'
 import { storeKeyBytes } from './sealed-file.mts'
 
 /** Where the key the credential store is sealed with comes from. Made on first use. */
@@ -46,22 +45,35 @@ export function keyFile(file: string): StoreKey {
 			if (known !== undefined) return toKey(known, file)
 			const made = randomBytes(storeKeyBytes)
 			await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
-			await writeFileAtomic(file, made, { mode: 0o600 })
-			return made
+			// Only when there is none yet: when two processes make one at once, both use the first.
+			const written = await writeFile(file, made, { mode: 0o600, flag: 'wx', signal: abortSignal }).then(
+				() => true,
+				(error: unknown) => {
+					if (hasErrorCode(error, 'EEXIST')) return false
+					throw error
+				},
+			)
+			return written ? made : toKey(await readFile(file, { signal: abortSignal }), file)
 		},
 	}
 }
+
+/** The sealed credentials' file in a gateway's home. */
+export const credentialsFileName = 'credentials.json'
 
 /** Where {@link defaultStoreKey} may look for a key. */
 export interface DefaultStoreKeyOptions {
 	/** Whether to use the OS keychain. Off, for tests that mustn't touch the user's keychain. Default: on. */
 	readonly keychain?: boolean
+	/** The keychain's key for an account. {@link keychainKey} by default; a test passes its own. */
+	readonly keychainKey?: (account: string) => StoreKey
 }
 
 /**
  * The key a gateway in `home` uses: the key file when there is one, otherwise the OS keychain,
- * otherwise a new key file. Once a key is made, it stays where it was made, so a keychain that is
- * locked later fails loudly instead of quietly starting a new store.
+ * otherwise a new key file. Once a key is made, it stays where it was made: when the keychain fails
+ * and the credentials are sealed already, this throws instead of starting a key file, which would
+ * never open them.
  */
 export async function defaultStoreKey(home: string, abortSignal: AbortSignal, options: DefaultStoreKeyOptions = {}): Promise<StoreKey> {
 	const file = keyFile(path.join(home, 'store.key'))
@@ -70,13 +82,21 @@ export async function defaultStoreKey(home: string, abortSignal: AbortSignal, op
 		() => false,
 	)
 	if (fileExists || options.keychain === false) return file
-	const keychain = keychainKey(home)
+	const keychain = (options.keychainKey ?? keychainKey)(home)
 	try {
 		await keychain.read(abortSignal)
 		return keychain
 	} catch (error) {
 		abortSignal.throwIfAborted()
 		if (error instanceof KeyLengthError) throw error
+		const sealed = await readFile(path.join(home, credentialsFileName), { signal: abortSignal }).then(
+			() => true,
+			() => false,
+		)
+		if (sealed)
+			throw new Error(`The credentials in ${home} are sealed with a key in the OS keychain, which can't be read: ${messageOf(error)}`, {
+				cause: error,
+			})
 		return file
 	}
 }
