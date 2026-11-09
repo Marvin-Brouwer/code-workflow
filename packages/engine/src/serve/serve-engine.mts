@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { createServer, type RequestListener, type Server } from 'node:http'
 import path from 'node:path'
 import { getRequestListener } from '@hono/node-server'
+import { openGateway, type GatewayHome, type HostTool } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import { controlApi } from '../control/control-api.mts'
@@ -13,7 +14,8 @@ import { messageOf } from '../errors.mts'
 import { openRunStore } from '../runs/run-store.mts'
 import { createScheduler } from '../triggers/scheduler.mts'
 import { webhookApi } from '../triggers/webhook-api.mts'
-import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
+import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
+import { gatewayDirectory, openEngineGateway } from './engine-gateway.mts'
 import { lockHome } from './home-lock.mts'
 
 /** The address the webhook port listens on unless another is given: this machine only. */
@@ -37,6 +39,10 @@ export interface ServeEngineOptions {
 	 * tunnel or a reverse proxy with TLS in front of it to reach it from outside.
 	 */
 	readonly webhooks?: { readonly port: number; readonly host?: string }
+	/** The host halves of the tools apps may call through the gateway. Default: none. */
+	readonly tools?: readonly HostTool[]
+	/** Whether the credential store's key may be kept in the OS keychain. Default: yes. */
+	readonly keychain?: boolean
 	/** Bounds starting up: taking the socket and reconciling. */
 	readonly abortSignal: AbortSignal
 }
@@ -46,6 +52,8 @@ export interface ServedEngine {
 	readonly engine: Engine
 	/** The deployed apps, in the home's `apps` folder. */
 	readonly apps: AppStore
+	/** The gateway's credentials and providers, in the home's `gateway` folder. */
+	readonly gateway: GatewayHome
 	readonly socketPath: string
 	/** Where webhook deliveries go, such as `http://127.0.0.1:8787`, when webhooks are served. */
 	readonly webhookUrl?: string
@@ -77,13 +85,27 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 
 	let engine: Engine
 	let apps: AppStore
+	let gatewayHome: GatewayHome
 	try {
+		gatewayHome = await openEngineGateway(
+			options.home,
+			options.abortSignal,
+			options.keychain === undefined ? {} : { keychain: options.keychain },
+		)
+		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyIsIn}.`)
+		const gateway = openGateway({
+			home: gatewayDirectory(options.home),
+			credentials: gatewayHome.credentials,
+			providers: gatewayHome.providers,
+			tools: options.tools ?? [],
+		})
 		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal, log)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
 				store: openRunStore(path.join(options.home, 'runs')),
 				apps,
+				gateway,
 				...(options.layout ? { layout: options.layout } : {}),
 				log,
 			},
@@ -106,7 +128,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 
 	let webhooks: { server: Server; url: string } | undefined
 	if (options.webhooks) {
-		const secrets = openWebhookSecrets(webhookSecretsFile(options.home))
+		const secrets = openWebhookSecrets(gatewayHome.credentials)
 		const ingress = getRequestListener(webhookApi({ engine, current: apps.current, secrets, log }).fetch)
 		const webhookServer = createServer((request, response) => {
 			void ingress(request, response)
@@ -141,6 +163,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	return {
 		engine,
 		apps,
+		gateway: gatewayHome,
 		socketPath,
 		...(webhooks ? { webhookUrl: webhooks.url } : {}),
 		close(deadlines) {

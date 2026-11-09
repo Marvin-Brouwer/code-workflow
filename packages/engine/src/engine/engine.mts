@@ -1,6 +1,9 @@
+import { mergeUsage, type AcceptedCall, type Gateway, type RunUsage } from '@mesh-flow/gateway'
 import {
 	runIdEnvironmentVariable,
 	type Answer,
+	type CallAnswer,
+	type CallMessage,
 	type RunStart,
 	type RuntimeEvent,
 	type RuntimeMessage,
@@ -37,6 +40,11 @@ export interface EngineOptions {
 	readonly log?: (message: string) => void
 	/** The engine's clock, for wakes and timestamps. Default: the system clock. */
 	readonly now?: () => Date
+	/**
+	 * Runs the calls that need a credential: host tools and model calls. Without it, a run gets no
+	 * gateway endpoint, and its agents have no model to run on.
+	 */
+	readonly gateway?: Gateway
 }
 
 /** Which trigger of which app starts a run, and with what. */
@@ -71,6 +79,8 @@ interface ActiveRun {
 	sandbox?: Sandbox
 	channel?: SandboxChannel
 	work: Promise<void>
+	/** The gateway calls running now, by request id, so the runtime can cancel them. */
+	readonly calls: Map<string, AbortController>
 }
 
 /** Which sandbox a run record points at. */
@@ -104,6 +114,7 @@ export class Engine {
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
+	readonly #gateway: Gateway | undefined
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
@@ -120,6 +131,7 @@ export class Engine {
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
+		this.#gateway = options.gateway
 	}
 
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
@@ -203,7 +215,13 @@ export class Engine {
 				`Version ${deployed.version} of ${options.app} asks for a sandbox this engine can't make: deploy it again.`,
 			)
 		}
-		const app: RunApp = { name: deployed.name, version: deployed.version, entry: deployed.manifest.entry, sandbox: sandbox.data }
+		const app: RunApp = {
+			name: deployed.name,
+			version: deployed.version,
+			entry: deployed.manifest.entry,
+			sandbox: sandbox.data,
+			tools: deployed.manifest.description.tools,
+		}
 		const id = newRunId()
 		// A copy of its own, so the run keeps its code when the app is deployed again or removed.
 		await this.#store.saveApp(id, deployed.tarball, waitSignal).catch(async (error: unknown) => {
@@ -389,6 +407,7 @@ export class Engine {
 			throw error
 		})
 		runSignal.throwIfAborted()
+		await this.#answerInterrupted(id, channel, runSignal)
 		return channel
 	}
 
@@ -413,7 +432,15 @@ export class Engine {
 			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
-		const setup = { tarball: this.#store.appOf(id), entry: app.entry, layout: this.#layout, start, env: { [runIdEnvironmentVariable]: id } }
+		const gateway = await this.#gateway?.openRun(id, app.tools, abortSignal)
+		const setup = {
+			tarball: this.#store.appOf(id),
+			entry: app.entry,
+			layout: this.#layout,
+			start,
+			env: { [runIdEnvironmentVariable]: id },
+			gateway,
+		}
 		await setUpRuntime(sandbox, channel, setup, abortSignal)
 		await this.#update(id, { status: 'running' }, ['starting'])
 		await this.#pump(id, channel, abortSignal)
@@ -427,15 +454,19 @@ export class Engine {
 				const log = await channel.logTail(signal).catch(() => '')
 				throw new Error(`The runtime exited without saying how the run ended.${log ? `\n${log}` : ''}`)
 			}
-			const { events, requests, outcome } = sortMessages(delivery.messages)
+			const { events, requests, calls, cancels, outcome } = sortMessages(delivery.messages)
 			await this.#store.appendEvents(id, events)
+			for (const cancelled of cancels) this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
 			if (outcome) {
 				// Saved with the cursor, so an outcome that was read can't be lost. The sandbox goes after.
 				const { sandbox } = this.get(id)
-				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [] }, ['running'])
+				const usage = await this.#closeGateway(id)
+				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [], usage }, ['running'])
 				if (sandbox) await this.#discard(id, sandbox)
 				return
 			}
+			// Taken before the cursor moves past them, so a call that was read is never lost.
+			const accepted = await Promise.all(calls.map(async (call) => ({ call, accepted: await this.#accept(id, call, signal) })))
 			await this.#update(
 				id,
 				(record) => ({
@@ -445,7 +476,75 @@ export class Engine {
 				['running'],
 			)
 			for (const request of requests) this.#schedule(id, channel, request, signal)
+			for (const taken of accepted) this.#answerCall(id, channel, taken.call, taken.accepted, signal)
 		}
+	}
+
+	/** Takes a gateway call. Without a gateway, the call gets an error and no next token. */
+	async #accept(id: RunId, call: CallMessage, signal: AbortSignal): Promise<AcceptedCall> {
+		if (this.#gateway === undefined) {
+			const answer: CallAnswer = { outcome: { ok: false, error: 'This engine has no gateway.' } }
+			return { answer: () => Promise.resolve(answer) }
+		}
+		return this.#gateway.accept(id, call, signal)
+	}
+
+	/**
+	 * Runs a gateway call in the background and answers it through the channel of the attempt that
+	 * made it. A call stopped by a stop or a shutdown isn't answered: it stays in flight with the
+	 * gateway, which answers it as interrupted when the run is resumed. A call that shows someone
+	 * else has the run's tokens fails the run.
+	 */
+	#answerCall(id: RunId, channel: SandboxChannel, call: CallMessage, accepted: AcceptedCall, signal: AbortSignal): void {
+		if (accepted.compromised !== undefined) {
+			this.#log(`Run ${id}: ${accepted.compromised}`)
+			void this.#halt(id, this.#cleanupSignal())
+				.then(() => this.#fail(id, new Error(accepted.compromised)))
+				.catch((error: unknown) => {
+					this.#log(`Couldn't fail run ${id} after a bad token: ${messageOf(error)}`)
+				})
+			return
+		}
+		const calls = this.#active.get(id)?.calls
+		const cancel = new AbortController()
+		calls?.set(call.id, cancel)
+		void accepted
+			.answer(AbortSignal.any([signal, cancel.signal]))
+			.then(async (answer) => {
+				signal.throwIfAborted()
+				await this.#answerFromGateway(id, channel, call.id, answer, signal)
+			})
+			.catch((error: unknown) => {
+				if (!signal.aborted) this.#log(`Answering call ${call.id} of run ${id} failed: ${messageOf(error)}`)
+			})
+			.finally(() => {
+				calls?.delete(call.id)
+			})
+	}
+
+	/** Writes a gateway answer to the inbox, then lets the gateway forget the call. */
+	async #answerFromGateway(id: RunId, channel: SandboxChannel, requestId: string, answer: CallAnswer, signal: AbortSignal): Promise<void> {
+		await channel.answer(requestId, { value: answer }, signal)
+		await this.#gateway?.settle(id, requestId, signal)
+	}
+
+	/** Answers the calls a resumed run made before the engine stopped, as interrupted. */
+	async #answerInterrupted(id: RunId, channel: SandboxChannel, signal: AbortSignal): Promise<void> {
+		for (const call of (await this.#gateway?.interrupted(id, signal)) ?? []) {
+			await this.#answerFromGateway(id, channel, call.id, call.answer, signal)
+		}
+	}
+
+	/** Closes the run's gateway endpoints and returns its usage, with that of earlier attempts. */
+	async #closeGateway(id: RunId): Promise<RunUsage | undefined> {
+		if (this.#gateway === undefined) return this.get(id).usage
+		const used = await this.#gateway.closeRun(id, this.#cleanupSignal()).catch((error: unknown) => {
+			this.#log(`Closing the gateway endpoints of run ${id} failed: ${messageOf(error)}`)
+			return {}
+		})
+		const earlier = this.get(id).usage
+		if (earlier === undefined && Object.keys(used).length === 0) return undefined
+		return mergeUsage(earlier ?? {}, used)
 	}
 
 	/** Wakes are answered by the engine's own clock, through the channel of the attempt that asked. */
@@ -478,7 +577,8 @@ export class Engine {
 		// The run may have ended while it was being halted; how it ended stands.
 		if (finishedStatuses.has(current.status)) return current
 		const { sandbox } = current
-		const stopped = await this.#update(id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [] })
+		const usage = await this.#closeGateway(id)
+		const stopped = await this.#update(id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [], usage })
 		if (sandbox) await this.#discard(id, sandbox)
 		return stopped
 	}
@@ -491,7 +591,7 @@ export class Engine {
 	#drive(id: RunId, work: (active: ActiveRun, signal: AbortSignal) => Promise<void>): void {
 		const controller = new AbortController()
 		const signal = AbortSignal.any([this.#lifetime.signal, controller.signal])
-		const active: ActiveRun = { controller, work: Promise.resolve() }
+		const active: ActiveRun = { controller, work: Promise.resolve(), calls: new Map() }
 		this.#active.set(id, active)
 		active.work = work(active, signal)
 			.catch((error: unknown) => (signal.aborted ? undefined : this.#fail(id, error)))
@@ -507,7 +607,8 @@ export class Engine {
 	/** Records that a run failed, then removes its sandbox. */
 	async #fail(id: RunId, error: unknown): Promise<void> {
 		const { sandbox } = this.get(id)
-		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [] })
+		const usage = await this.#closeGateway(id)
+		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [], usage })
 		if (sandbox) await this.#discard(id, sandbox)
 	}
 
@@ -584,6 +685,9 @@ function restartEvent(at: Date): RuntimeEvent {
 interface SortedMessages {
 	readonly events: RuntimeEvent[]
 	readonly requests: RuntimeRequest[]
+	readonly calls: CallMessage[]
+	/** The ids of calls the runtime stopped waiting for. */
+	readonly cancels: string[]
 	readonly outcome?: RunChange
 }
 
@@ -591,13 +695,17 @@ interface SortedMessages {
 function sortMessages(messages: readonly RuntimeMessage[]): SortedMessages {
 	const events: RuntimeEvent[] = []
 	const requests: RuntimeRequest[] = []
+	const calls: CallMessage[] = []
+	const cancels: string[] = []
 	let outcome: RunChange | undefined
 	for (const message of messages) {
 		if (message.type === 'event') events.push(message.event)
 		else if (message.type === 'request') requests.push(message.request)
+		else if (message.type === 'call') calls.push(message)
+		else if (message.type === 'cancel') cancels.push(message.id)
 		else if (message.type === 'succeeded') outcome = { status: 'succeeded' }
 		else if (message.type === 'skipped') outcome = { status: 'skipped', reason: message.reason }
 		else if (message.type === 'failed') outcome = { status: 'failed', error: message.error }
 	}
-	return { events, requests, ...(outcome ? { outcome } : {}) }
+	return { events, requests, calls, cancels, ...(outcome ? { outcome } : {}) }
 }

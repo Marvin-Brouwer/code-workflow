@@ -33,7 +33,7 @@ function fakeEngine(status: RunStatus = 'running') {
 			id: `run-${String(runs.length).padStart(12, '0')}`,
 			workflow: 'report',
 			trigger: options.trigger,
-			app: { name: options.app, version: 'v1', entry: 'main.mjs', sandbox },
+			app: { name: options.app, version: 'v1', entry: 'main.mjs', sandbox, tools: [] },
 			status,
 			cursor: 0,
 			pending: [],

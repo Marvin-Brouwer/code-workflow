@@ -1,47 +1,54 @@
-import { mkdir, readFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
+import type { CredentialStore } from '@mesh-flow/gateway'
 import { z } from 'zod'
-import writeFileAtomic from 'write-file-atomic'
 import { hasErrorCode } from '../errors.mts'
 
-const Secrets = z.record(z.string(), z.string().min(1))
-
 /**
- * The secrets webhooks are signed with, by repository and webhook, in a file in the engine's home
- * that only its owner can read. Never in the workflow repository. They move to the gateway's
- * credential store once it exists.
- *
- * The CLI writes the file and the engine reads it on every delivery, so a new secret works at once.
+ * The secrets webhooks are signed with, by app and webhook, in the gateway's credential store as
+ * `webhook/<app>/<webhook>`. Never in the app. The CLI sets them and the engine reads them on every
+ * delivery, so a new secret works at once.
  */
 export interface WebhookSecrets {
-	get(repository: string, webhook: string): Promise<string | undefined>
-	set(repository: string, webhook: string, secret: string): Promise<void>
+	get(app: string, webhook: string, abortSignal: AbortSignal): Promise<string | undefined>
+	set(app: string, webhook: string, secret: string, abortSignal: AbortSignal): Promise<void>
 }
 
-/** The file the secrets are kept in, in the engine's home. */
-export function webhookSecretsFile(home: string): string {
-	return path.join(home, 'secrets', 'webhooks.json')
+/** The name a webhook's secret has in the credential store. */
+export function webhookCredential(app: string, webhook: string): string {
+	return `webhook/${app}/${webhook}`
 }
 
-function keyOf(repository: string, webhook: string): string {
-	return `${repository}/${webhook}`
+/** The webhook secrets in the gateway's credential store. */
+export function openWebhookSecrets(credentials: CredentialStore): WebhookSecrets {
+	return Object.freeze<WebhookSecrets>({
+		get: (app, webhook, abortSignal) => credentials.get(webhookCredential(app, webhook), abortSignal),
+		set: (app, webhook, secret, abortSignal) => credentials.set(webhookCredential(app, webhook), secret, abortSignal),
+	})
 }
 
-/** The webhook secrets kept in `file`. The file is read again on every `get`, so the CLI's changes count at once. */
-export function openWebhookSecrets(file: string): WebhookSecrets {
-	const read = async () => {
-		const text = await readFile(file, 'utf8').catch((error: unknown) => {
-			if (hasErrorCode(error, 'ENOENT')) return '{}'
-			throw error
-		})
-		return Secrets.parse(JSON.parse(text))
+const LegacySecrets = z.record(z.string(), z.string().min(1))
+
+/**
+ * Moves the secrets an engine kept in `secrets/webhooks.json` in its home, before the gateway, into
+ * the credential store, then removes the file. A secret already in the store stays as it is.
+ * Resolves to how many it moved.
+ */
+export async function moveLegacyWebhookSecrets(home: string, credentials: CredentialStore, abortSignal: AbortSignal): Promise<number> {
+	const file = path.join(home, 'secrets', 'webhooks.json')
+	const text = await readFile(file, { encoding: 'utf8', signal: abortSignal }).catch((error: unknown) => {
+		if (hasErrorCode(error, 'ENOENT')) return undefined
+		throw error
+	})
+	if (text === undefined) return 0
+	let moved = 0
+	for (const [key, secret] of Object.entries(LegacySecrets.parse(JSON.parse(text)))) {
+		const [app = '', webhook = ''] = key.split('/')
+		const name = webhookCredential(app, webhook)
+		if ((await credentials.get(name, abortSignal)) !== undefined) continue
+		await credentials.set(name, secret, abortSignal)
+		moved++
 	}
-	return Object.freeze({
-		get: async (repository, webhook) => (await read())[keyOf(repository, webhook)],
-		async set(repository, webhook, secret) {
-			await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
-			const secrets = { ...(await read()), [keyOf(repository, webhook)]: secret }
-			await writeFileAtomic(file, `${JSON.stringify(secrets, null, '\t')}\n`, { mode: 0o600 })
-		},
-	} satisfies WebhookSecrets)
+	await rm(file, { force: true })
+	return moved
 }

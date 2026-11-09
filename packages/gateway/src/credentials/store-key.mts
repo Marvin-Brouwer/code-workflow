@@ -52,18 +52,24 @@ export function keyFile(file: string): StoreKey {
 	}
 }
 
+/** Where {@link defaultStoreKey} may look for a key. */
+export interface DefaultStoreKeyOptions {
+	/** Whether to use the OS keychain. Off, for tests that mustn't touch the user's keychain. Default: on. */
+	readonly keychain?: boolean
+}
+
 /**
  * The key a gateway in `home` uses: the key file when there is one, otherwise the OS keychain,
  * otherwise a new key file. Once a key is made, it stays where it was made, so a keychain that is
  * locked later fails loudly instead of quietly starting a new store.
  */
-export async function defaultStoreKey(home: string, abortSignal: AbortSignal): Promise<StoreKey> {
+export async function defaultStoreKey(home: string, abortSignal: AbortSignal, options: DefaultStoreKeyOptions = {}): Promise<StoreKey> {
 	const file = keyFile(path.join(home, 'store.key'))
 	const fileExists = await readFile(file.where, { signal: abortSignal }).then(
 		() => true,
 		() => false,
 	)
-	if (fileExists) return file
+	if (fileExists || options.keychain === false) return file
 	const keychain = keychainKey(home)
 	try {
 		await keychain.read(abortSignal)
@@ -75,6 +81,7 @@ export async function defaultStoreKey(home: string, abortSignal: AbortSignal): P
 	}
 }
 
+/** A key that is there but isn't a key: never replaced by a new one, since the store would be lost. */
 class KeyLengthError extends Error {
 	override readonly name = 'KeyLengthError'
 }

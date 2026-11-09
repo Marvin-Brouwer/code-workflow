@@ -18,7 +18,8 @@ describe('keyFile', () => {
 		// Assert
 		expect(first).toHaveLength(32)
 		expect(second.equals(first)).toBe(true)
-		expect((await stat(file)).mode & 0o777).toBe(0o600)
+		// Windows has no POSIX modes; the file is in the user's own profile there.
+		if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600)
 	})
 
 	test("refuses a key file that isn't a key", async () => {

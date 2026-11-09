@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { controlClient } from '../src/control/control-client.mts'
 import type { RunRecord } from '../src/runs/run-record.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
-import { openWebhookSecrets, webhookSecretsFile } from '../src/triggers/webhook-secrets.mts'
+import { openWebhookSecrets } from '../src/triggers/webhook-secrets.mts'
 import { deferred } from './support/deferred.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -92,11 +92,20 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 		},
 	})
 	const log = vi.fn<(message: string) => void>()
-	const served = await serveEngine({ home, backend, layout: hostSandboxLayout, webhooks: { port: 0 }, log, abortSignal: signal })
+	const served = await serveEngine({
+		home,
+		backend,
+		layout: hostSandboxLayout,
+		webhooks: { port: 0 },
+		log,
+		keychain: false,
+		abortSignal: signal,
+	})
 	const close = (pauseMs = 5_000) => served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(pauseMs * 2) })
 	onTestFinished(() => close())
-	await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'fix-issue', secret)
-	await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'signed', secret)
+	const secrets = openWebhookSecrets(served.gateway.credentials)
+	await secrets.set(testAppName, 'fix-issue', secret, signal)
+	await secrets.set(testAppName, 'signed', secret, signal)
 	const client = controlClient(served.socketPath)
 	await deployThroughApi(client, { main: triggerEntry(body) }, { workflows: declared.workflows, triggers })
 	const deliver = (webhook: string, delivery: string, headers: Record<string, string>, app = testAppName) =>
@@ -105,7 +114,7 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 			body: delivery,
 			headers: { 'content-type': 'application/json', ...headers },
 		})
-	return { served, client, created, log, deliver, close, home }
+	return { served, client, created, log, deliver, close, home, secrets }
 }
 
 async function untilStatus(client: ReturnType<typeof controlClient>, id: string, status: RunRecord['status']): Promise<RunRecord> {
@@ -206,9 +215,9 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 
 	test('answer 404 for a webhook the app does not have, and for an app that is not deployed', async () => {
 		// Arrange
-		const { home, deliver, log } = await serve()
-		await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'deploy', secret)
-		await openWebhookSecrets(webhookSecretsFile(home)).set('elsewhere', 'fix-issue', secret)
+		const { secrets, deliver, log } = await serve()
+		await secrets.set(testAppName, 'deploy', secret, signal)
+		await secrets.set('elsewhere', 'fix-issue', secret, signal)
 
 		// Act
 		const unknownWebhook = await deliver('deploy', JSON.stringify(payload), { 'x-webhook-secret': secret })

@@ -95,6 +95,9 @@ importers:
       '@mesh-flow/build':
         specifier: workspace:*
         version: link:../build
+      '@mesh-flow/gateway':
+        specifier: workspace:*
+        version: link:../gateway
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol

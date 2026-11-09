@@ -118,3 +118,8 @@ function parsed(text: string): unknown {
 		return undefined
 	}
 }
+
+/** Two runs' usage together, such as two attempts of one run. */
+export function mergeUsage(left: RunUsage, right: RunUsage): RunUsage {
+	return Object.entries(right).reduce((merged, [modelId, used]) => addUsage(merged, modelId, used), left)
+}

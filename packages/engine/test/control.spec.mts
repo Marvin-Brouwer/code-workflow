@@ -13,6 +13,7 @@ const signal = new AbortController().signal
 async function serve() {
 	const home = await temporaryDirectory()
 	const served = await serveEngine({
+		keychain: false,
 		home,
 		backend: hostBackend(path.join(home, 'sandboxes')),
 		layout: hostSandboxLayout,
