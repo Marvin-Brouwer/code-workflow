@@ -11,7 +11,12 @@ const signal = new AbortController().signal
 
 async function serve() {
 	const home = await temporaryDirectory()
-	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	const served = await serveEngine({
+		home,
+		backend: hostBackend(path.join(home, 'sandboxes')),
+		layout: hostSandboxLayout,
+		abortSignal: signal,
+	})
 	onTestFinished(() => served.close({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) }))
 	const client = controlClient(served.socketPath)
 	return { client, home }

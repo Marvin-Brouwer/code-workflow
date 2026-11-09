@@ -21,6 +21,13 @@ export interface DescribeInSandboxOptions {
 }
 
 /**
+ * The entry file itself failed to describe itself: it reported a failure, or exited without a
+ * description. It fails the same way on every try for the same source, unlike a sandbox or a setup
+ * step that failed.
+ */
+export class EntryFileError extends Error {}
+
+/**
  * Runs the entry file in describe mode in a sandbox of its own and returns what it declares. The
  * entry file is workflow code, so it never runs on the host. The sandbox is removed afterwards.
  */
@@ -35,11 +42,11 @@ export async function describeInSandbox(options: DescribeInSandboxOptions, abort
 			const delivery = await channel.poll(cursor, abortSignal)
 			if (delivery.kind === 'gone') {
 				const log = await channel.logTail(abortSignal).catch(() => '')
-				throw new Error(`The entry file exited without describing itself.${log ? `\n${log}` : ''}`)
+				throw new EntryFileError(`The entry file exited without describing itself.${log ? `\n${log}` : ''}`)
 			}
 			for (const message of delivery.messages) {
 				if (message.type === 'described') return message.description
-				if (message.type === 'failed') throw new Error(`Describing the entry file failed: ${message.error}`)
+				if (message.type === 'failed') throw new EntryFileError(`Describing the entry file failed: ${message.error}`)
 			}
 			cursor = delivery.cursor
 		}

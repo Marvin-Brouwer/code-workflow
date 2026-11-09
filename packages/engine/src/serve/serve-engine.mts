@@ -41,7 +41,7 @@ export interface ServeEngineOptions {
 	/** How often the registered repositories are described again, for their webhooks and schedules. Default: a minute. */
 	readonly repositoryRefreshMs?: number
 	/** Bounds starting up: taking the socket and reconciling. */
-	readonly signal: AbortSignal
+	readonly abortSignal: AbortSignal
 }
 
 /** An engine that serves its control API. */
@@ -67,9 +67,9 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	})
 	const socketPath = controlSocketPath(options.home)
 	const log = options.log ?? (() => undefined)
-	const unlock = await lockHome(options.home, socketPath, log, options.signal)
+	const unlock = await lockHome(options.home, socketPath, log, options.abortSignal)
 	try {
-		options.signal.throwIfAborted()
+		options.abortSignal.throwIfAborted()
 		await listenOnControlSocket(server, socketPath)
 	} catch (error) {
 		await unlock()
@@ -86,7 +86,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 				...(options.layout ? { layout: options.layout } : {}),
 				log,
 			},
-			options.signal,
+			options.abortSignal,
 		)
 	} catch (error) {
 		await closeServer(server)
@@ -117,7 +117,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let webhooks: { server: Server; url: string } | undefined
 	if (options.webhooks) {
 		const secrets = openWebhookSecrets(webhookSecretsFile(options.home))
-		const ingress = getRequestListener(webhookApi({ engine, described: (name) => watch.described(name), secrets, log }).fetch)
+		const ingress = getRequestListener(webhookApi({ engine, described: watch.described, secrets, log }).fetch)
 		const webhookServer = createServer((request, response) => {
 			void ingress(request, response)
 		})

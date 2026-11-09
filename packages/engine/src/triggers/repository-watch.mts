@@ -11,6 +11,7 @@ export interface DescribedRepository {
 	readonly description: WorkflowsDescription
 }
 
+/** What the repository watch needs. */
 export interface RepositoryWatchOptions {
 	readonly engine: Pick<Engine, 'describe'>
 	readonly repositories: RepositoryStore
@@ -24,7 +25,7 @@ export interface RepositoryWatchOptions {
 /** The last description of every registered repository, kept fresh in the background. */
 export interface RepositoryWatch {
 	/** The last description of the repository called `name`, if it was ever described. */
-	described(name: string): DescribedRepository | undefined
+	readonly described: (name: string) => DescribedRepository | undefined
 	/** Describes every repository again now, such as after one was added. */
 	refresh(): Promise<void>
 	/** Stops refreshing, and waits within `deadlineSignal` for a refresh that's going on. */

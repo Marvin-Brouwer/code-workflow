@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { Engine } from '../engine/engine.mts'
+import { type Engine, startRunTimeoutMs } from '../engine/engine.mts'
 import { EngineError } from '../engine/engine-error.mts'
 import { messageOf } from '../errors.mts'
 import { payloadProblems } from './payload-problems.mts'
@@ -25,9 +25,6 @@ const maxBodyBytes = 25 * 1024 * 1024
 /** The longest delivery name taken from a header. */
 const maxDeliveryNameLength = 200
 
-/** How long starting an accepted delivery's run may take: packing the source and saving the record. */
-const startTimeoutMs = 60_000
-
 /** The route a repository's webhook is delivered to. */
 export function webhookPath(repository: string, webhook: string): string {
 	return `/webhooks/${encodeURIComponent(repository)}/${encodeURIComponent(webhook)}`
@@ -40,10 +37,11 @@ export function webhookPath(repository: string, webhook: string): string {
  *
  * | Check | Answer when it fails |
  * |---|---|
- * | the webhook has a secret, and the repository's entry file has the webhook | 404 |
- * | the repository was described already | 503 |
+ * | a secret is set for the repository's webhook | 404 |
+ * | the repository was described | 503 |
+ * | its entry file has the webhook | 404 |
  * | the delivery is signed with the secret | 401 |
- * | the body is JSON | 400 |
+ * | the body is JSON, up to 25 MB | 400, 413 |
  * | the payload fits the input side of the trigger's schema, as JSON Schema | 422 |
  *
  * Nothing before the signature check reads more than the secrets file, and nothing describes the
@@ -102,7 +100,7 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 				input: payload,
 				trigger: { kind: 'webhook', id, repository: repository.name },
 				key,
-				abortSignal: AbortSignal.timeout(startTimeoutMs),
+				abortSignal: AbortSignal.timeout(startRunTimeoutMs),
 			})
 			return c.json({ run: record.id, status: record.status }, 202)
 		},

@@ -1,5 +1,5 @@
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
-import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
@@ -37,29 +37,33 @@ function fakeEngine(status: RunStatus = 'running') {
 }
 
 /** A scheduler on `engine`, closed when the test ends. */
-function scheduler(engine: ReturnType<typeof fakeEngine>['engine']) {
+function openScheduler(engine: ReturnType<typeof fakeEngine>['engine']) {
 	const log = vi.fn<(message: string) => void>()
-	const created = createScheduler({ engine, log })
+	const scheduler = createScheduler({ engine, log })
 	onTestFinished(() => {
-		created.close()
+		scheduler.close()
 	})
-	return { scheduler: created, log }
+	return { scheduler, log }
 }
 
-describe('createScheduler', () => {
-	beforeEach(() => {
-		vi.useFakeTimers({ now: new Date('2026-11-09T10:00:00.000Z') })
-	})
-	afterEach(() => {
+/** Fake timers with the clock at `now`, real ones again when the test ends. */
+function useClockAt(now: string): void {
+	vi.useFakeTimers({ now: new Date(now) })
+	onTestFinished(() => {
 		vi.useRealTimers()
 	})
+}
 
+const start = '2026-11-09T10:00:00.000Z'
+
+describe('createScheduler', () => {
 	test('skips a tick while the last run is going, and not while it waits to be restarted', async () => {
 		// Arrange
+		useClockAt(start)
 		const going = fakeEngine('paused')
 		const restartable = fakeEngine('restartable')
-		scheduler(going.engine).scheduler.update([{ repository, description }])
-		scheduler(restartable.engine).scheduler.update([{ repository, description }])
+		openScheduler(going.engine).scheduler.update([{ repository, description }])
+		openScheduler(restartable.engine).scheduler.update([{ repository, description }])
 
 		// Act
 		await vi.advanceTimersByTimeAsync(3_000)
@@ -71,13 +75,14 @@ describe('createScheduler', () => {
 
 	test('arms a schedule again when its repository points at another directory', async () => {
 		// Arrange
+		useClockAt(start)
 		const { engine, startRun } = fakeEngine('succeeded')
-		const { scheduler: created } = scheduler(engine)
-		created.update([{ repository, description }])
+		const { scheduler } = openScheduler(engine)
+		scheduler.update([{ repository, description }])
 		await vi.advanceTimersByTimeAsync(1_000)
 
 		// Act
-		created.update([{ repository: { ...repository, directory: '/repositories/moved' }, description }])
+		scheduler.update([{ repository: { ...repository, directory: '/repositories/moved' }, description }])
 		await vi.advanceTimersByTimeAsync(1_000)
 
 		// Assert
@@ -86,8 +91,9 @@ describe('createScheduler', () => {
 
 	test('does not make up for ticks it missed when the clock jumps', async () => {
 		// Arrange
+		useClockAt(start)
 		const { engine, startRun } = fakeEngine('succeeded')
-		scheduler(engine).scheduler.update([{ repository, description }])
+		openScheduler(engine).scheduler.update([{ repository, description }])
 
 		// Act
 		vi.setSystemTime(new Date('2026-11-09T11:00:00.000Z'))
@@ -99,12 +105,13 @@ describe('createScheduler', () => {
 
 	test('starts nothing once it is closed', async () => {
 		// Arrange
+		useClockAt(start)
 		const { engine, startRun } = fakeEngine('succeeded')
-		const { scheduler: created } = scheduler(engine)
-		created.update([{ repository, description }])
+		const { scheduler } = openScheduler(engine)
+		scheduler.update([{ repository, description }])
 
 		// Act
-		created.close()
+		scheduler.close()
 		await vi.advanceTimersByTimeAsync(3_000)
 
 		// Assert

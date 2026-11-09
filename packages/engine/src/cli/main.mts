@@ -73,7 +73,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				},
 			})
 			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
-			served = await serveEngine({ home: home(), backend, log, signal: startup.signal, ...webhooks }).catch(async (error: unknown) => {
+			served = await serveEngine({ home: home(), backend, log, abortSignal: startup.signal, ...webhooks }).catch(async (error: unknown) => {
 				await backend.close(AbortSignal.timeout(closeTimeoutMs))
 				throw error
 			})

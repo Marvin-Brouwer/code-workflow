@@ -18,7 +18,7 @@ import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunRecord, type RunStatus, type RunTrigger } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
-import { describeInSandbox } from '../triggers/describe-in-sandbox.mts'
+import { describeInSandbox, EntryFileError } from '../triggers/describe-in-sandbox.mts'
 import { memoryDescriptionCache, type DescriptionCache } from '../triggers/description-cache.mts'
 import { entryFile, findEntry, type WorkflowConfig } from '../workflow/workflow-config.mts'
 import { packWorkflowSource, sourceKey } from '../workflow/workflow-source.mts'
@@ -89,6 +89,12 @@ const cleanupTimeoutMs = 60_000
 /** How long describing an entry file may take, setup steps such as `npm ci` included. */
 const describeTimeoutMs = 10 * 60_000
 
+/** How many sources' describe failures are kept; the oldest goes first. */
+const maxDescribeFailures = 100
+
+/** How long starting a run from a trigger may take: packing the source and saving the record. */
+export const startRunTimeoutMs = 60_000
+
 /**
  * The host process's view of runs: it starts each run in its own sandbox, relays requests and
  * answers through the sandbox's mailbox, pauses everything on shutdown and reconciles on start.
@@ -118,7 +124,11 @@ export class Engine {
 	readonly #descriptions: DescriptionCache
 	/** Describes going on, by source key, so callers who ask at once share one sandbox. */
 	readonly #describing = new Map<string, Promise<WorkflowsDescription>>()
-	/** Why describing a source failed, by source key, so a broken entry file costs one sandbox per version, not one per ask. */
+	/**
+	 * Why an entry file failed to describe itself, by source key, so a broken entry file costs one
+	 * sandbox per version, not one per ask. A sandbox or setup step that failed isn't kept: the next
+	 * ask tries again.
+	 */
 	readonly #describeFailures = new Map<string, EngineError>()
 	#closing: Promise<void> | undefined
 
@@ -196,16 +206,16 @@ export class Engine {
 	}
 
 	async #create(options: StartRunOptions): Promise<RunRecord> {
-		const signal = this.#withLifetime(options.abortSignal)
+		const waitSignal = this.#withLifetime(options.abortSignal)
 		const { config, file } = await findEntry(options.directory).catch((error: unknown) => {
 			throw new EngineError('invalid', messageOf(error))
 		})
 
 		const id = newRunId()
-		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), signal).catch(async (error: unknown) => {
+		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), waitSignal).catch(async (error: unknown) => {
 			// Best effort: the pack error is the one to report.
 			await this.#store.removeRun(id).catch(() => undefined)
-			if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason))
+			if (waitSignal.aborted) throw waitSignal.reason instanceof Error ? waitSignal.reason : new Error(String(waitSignal.reason))
 			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
 		})
 		const { trigger } = options
@@ -291,9 +301,9 @@ export class Engine {
 			const options = { backend: this.#backend, layout: this.#layout, config, file, tarball, log: this.#log }
 			const description = await describeInSandbox({ ...options, cleanupSignal: () => this.#cleanupSignal() }, abortSignal).catch(
 				(error: unknown) => {
-					if (abortSignal.aborted) throw error
-					const failure = new EngineError('invalid', messageOf(error))
-					if (packedKey === key) this.#describeFailures.set(key, failure)
+					if (abortSignal.aborted || !(error instanceof EntryFileError)) throw error
+					const failure = new EngineError('invalid', error.message)
+					if (packedKey === key) this.#keepDescribeFailure(key, failure)
 					throw failure
 				},
 			)
@@ -302,6 +312,13 @@ export class Engine {
 		} finally {
 			await rm(scratch, { recursive: true, force: true })
 		}
+	}
+
+	/** Keeps why describing the source `key` failed, and forgets the oldest past the limit. */
+	#keepDescribeFailure(key: string, failure: EngineError): void {
+		this.#describeFailures.set(key, failure)
+		const [oldest] = this.#describeFailures.keys()
+		if (this.#describeFailures.size > maxDescribeFailures && oldest !== undefined) this.#describeFailures.delete(oldest)
 	}
 
 	/** Answers an input request. The runtime validates the value against what it asked for. */

@@ -18,20 +18,20 @@ export class ControlError extends Error {
 
 /** Talks to a running engine over its control socket, for the CLI. Each call is one request. */
 export interface ControlClient {
-	list(signal: AbortSignal): Promise<RunRecord[]>
-	get(run: string, signal: AbortSignal): Promise<RunRecord>
+	list(abortSignal: AbortSignal): Promise<RunRecord[]>
+	get(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/** The run's events, in the order the runtime sent them. */
-	events(run: string, signal: AbortSignal): Promise<RuntimeEvent[]>
+	events(run: string, abortSignal: AbortSignal): Promise<RuntimeEvent[]>
 	startRun(options: {
 		readonly directory: string
 		readonly workflow: string
 		readonly parameters?: unknown
 		readonly abortSignal: AbortSignal
 	}): Promise<RunRecord>
-	answer(run: string, requestId: string, value: unknown, signal: AbortSignal): Promise<RunRecord>
-	stop(run: string, signal: AbortSignal): Promise<RunRecord>
-	resume(run: string, signal: AbortSignal): Promise<RunRecord>
-	restart(run: string, signal: AbortSignal): Promise<RunRecord>
+	answer(run: string, requestId: string, value: unknown, abortSignal: AbortSignal): Promise<RunRecord>
+	stop(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/** What a repository's entry file declares, described in a sandbox. */
 	describe(directory: string, abortSignal: AbortSignal): Promise<WorkflowsDescription>
 	/** The repositories whose webhooks and schedules the engine serves. */
@@ -48,16 +48,16 @@ function runPath(run: string): string {
 
 /** A client for the engine that serves on `socketPath`. */
 export function controlClient(socketPath: string): ControlClient {
-	const act = (action: 'stop' | 'resume' | 'restart') => (run: string, signal: AbortSignal) =>
-		call(socketPath, RunRecord, 'POST', `${runPath(run)}/${action}`, {}, signal)
+	const act = (action: 'stop' | 'resume' | 'restart') => (run: string, abortSignal: AbortSignal) =>
+		call(socketPath, RunRecord, 'POST', `${runPath(run)}/${action}`, {}, abortSignal)
 	return Object.freeze({
-		list: (signal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, signal),
-		get: (run, signal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, signal),
-		events: (run, signal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, signal),
+		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
+		get: (run, abortSignal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, abortSignal),
+		events: (run, abortSignal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, abortSignal),
 		startRun: ({ directory, workflow, parameters, abortSignal }) =>
 			call(socketPath, RunRecord, 'POST', '/runs', { directory, workflow, parameters }, abortSignal),
-		answer: (run, requestId, value, signal) =>
-			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, signal),
+		answer: (run, requestId, value, abortSignal) =>
+			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, abortSignal),
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
@@ -72,7 +72,14 @@ export function controlClient(socketPath: string): ControlClient {
 }
 
 /** One request to the control API, with the response checked against `schema`. */
-function call<T>(socketPath: string, schema: z.ZodType<T>, method: string, route: string, body: unknown, signal: AbortSignal): Promise<T> {
+function call<T>(
+	socketPath: string,
+	schema: z.ZodType<T>,
+	method: string,
+	route: string,
+	body: unknown,
+	abortSignal: AbortSignal,
+): Promise<T> {
 	const payload = body === undefined ? undefined : JSON.stringify(body)
 	return new Promise<T>((resolve, reject) => {
 		const outgoing = request(
@@ -80,7 +87,7 @@ function call<T>(socketPath: string, schema: z.ZodType<T>, method: string, route
 				socketPath,
 				path: route,
 				method,
-				signal,
+				signal: abortSignal,
 				headers: payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
 			},
 			(response) => {

@@ -40,7 +40,7 @@ mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge re
 
 ### Triggers
 
-A repository's entry file, `workflows/main.mts`, lists what can start its workflows: buttons, webhooks and schedules (see [`@mesh-flow/core`](../core/README.md#triggers)). The engine never runs it on the host. It runs it once per version of the source in a sandbox, in describe mode, and keeps what it declares in its home, by a hash of the repository's git files as they are on disk. An entry file that can't be described fails once per version of the source too, not on every ask.
+A repository's entry file, `workflows/main.mts`, lists what can start its workflows: buttons, webhooks and schedules (see [`@mesh-flow/core`](../core/README.md#triggers)). The engine never runs it on the host. It runs it once per version of the source in a sandbox, in describe mode, and keeps what it declares in its home, by a hash of the repository's git files as they are on disk. An entry file that fails to describe itself fails once per version of the source too, not on every ask; a sandbox or setup step that failed is tried again on the next ask.
 
 `serve` describes every registered repository in the background: when it starts, when a repository is added, and every minute after (`repositoryRefreshMs` in `serveEngine`). Webhooks and schedules go by the last description, so after a change to the entry file they may follow the old one for up to a minute. A run always packs the source as it is when it starts, and fails if its trigger is gone from it. A repository that can't be described keeps its last description, and the problem is logged once.
 
@@ -107,14 +107,14 @@ The image needs what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod
 import { Engine, openRunStore } from '@mesh-flow/engine'
 import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
-const signal = AbortSignal.timeout(60_000)
+const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const engine = await Engine.open({ backend: microsandboxBackend(), store, log: console.error }, signal)
+const engine = await Engine.open({ backend: microsandboxBackend(), store, log: console.error }, abortSignal)
 
-const run = await engine.startRun({ directory: '/path/to/workflows', workflow: 'develop', input: { key: 'ABC-123' }, abortSignal: signal })
-const declared = await engine.describe('/path/to/workflows', signal) // workflows and triggers, from a sandbox
+const run = await engine.startRun({ directory: '/path/to/workflows', workflow: 'develop', input: { key: 'ABC-123' }, abortSignal })
+const declared = await engine.describe('/path/to/workflows', abortSignal) // workflows and triggers, from a sandbox
 // ... later, when the run waits for input:
-await engine.answer(run.id, 'story', { key: 'ABC-123' }, signal)
+await engine.answer(run.id, 'story', { key: 'ABC-123' }, abortSignal)
 
 await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
 ```

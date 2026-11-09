@@ -19,7 +19,12 @@ mailbox.send({ type: 'succeeded' })
 
 /** Serves an engine on the host backend in this process, closed when the test ends. */
 async function serveHere(home: string) {
-	const served = await serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), layout: hostSandboxLayout, signal })
+	const served = await serveEngine({
+		home,
+		backend: hostBackend(path.join(home, 'sandboxes')),
+		layout: hostSandboxLayout,
+		abortSignal: signal,
+	})
 	onTestFinished(() => served.close(deadlines()))
 	return served
 }
@@ -91,7 +96,7 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		await startEngineProcess(home)
 
 		// Act
-		const second = serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), signal })
+		const second = serveEngine({ home, backend: hostBackend(path.join(home, 'sandboxes')), abortSignal: signal })
 
 		// Assert
 		await expect(second).rejects.toThrow('already running')

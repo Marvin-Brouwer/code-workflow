@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
-import type { Engine } from '../engine/engine.mts'
+import { type Engine, startRunTimeoutMs } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
 import type { Repository } from '../repositories/repository-store.mts'
@@ -9,6 +9,7 @@ import type { DescribedRepository } from './repository-watch.mts'
 
 type ScheduleDescription = Extract<TriggerDescription, { kind: 'schedule' }>
 
+/** What the scheduler needs. */
 export interface SchedulerOptions {
 	readonly engine: Pick<Engine, 'list' | 'startRun'>
 	readonly log: (message: string) => void
@@ -37,9 +38,6 @@ interface Armed {
  */
 const goingStatuses: ReadonlySet<RunStatus> = new Set(['starting', 'running', 'paused'])
 
-/** How long starting a schedule's run may take: packing the source and saving the record. */
-const startTimeoutMs = 60_000
-
 /** Names a schedule of a repository, in run keys and logs. */
 function scheduleName(repository: string, schedule: string): string {
 	return `${repository}/${schedule}`
@@ -59,7 +57,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	/** Schedules whose cron expression was reported as broken, so it's reported once. */
 	const broken = new Set<string>()
 
-	const tick = async (repository: Repository, schedule: ScheduleDescription, at: Date) => {
+	const tick = async (repository: Repository, schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
 		const name = scheduleName(repository.name, schedule.id)
 		const going = engine
 			.list()
@@ -82,10 +80,11 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 				workflow: schedule.workflow,
 				trigger: { kind: 'schedule', id: schedule.id, repository: repository.name },
 				key: `schedule ${name}/${at.toISOString()}`,
-				abortSignal: AbortSignal.timeout(startTimeoutMs),
+				abortSignal: AbortSignal.timeout(startRunTimeoutMs),
 			})
 		} catch (error) {
-			log(`Starting schedule ${name} at ${at.toISOString()} failed: ${messageOf(error)}`)
+			// Disarmed meanwhile, as on shutdown: the engine turning the run down is expected then.
+			if (!abortSignal.aborted) log(`Starting schedule ${name} at ${at.toISOString()} failed: ${messageOf(error)}`)
 		} finally {
 			starting.delete(name)
 		}
@@ -108,7 +107,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 			const fire = () => {
 				// From now, not from the tick: a timer that fired late, after a sleep, doesn't make up for what it missed.
 				next(new Date(Math.max(at.getTime(), now().getTime())))
-				void tick(repository, schedule, at)
+				void tick(repository, schedule, at, abortSignal)
 			}
 			wakeAt(at, fire, abortSignal, now)
 		}

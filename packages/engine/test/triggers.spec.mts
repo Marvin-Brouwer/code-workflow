@@ -100,7 +100,7 @@ async function serve({
 		webhooks: { port: 0 },
 		repositoryRefreshMs: refreshMs,
 		log,
-		signal,
+		abortSignal: signal,
 	})
 	const close = (pauseMs = 5_000) => served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(pauseMs * 2) })
 	onTestFinished(() => close())
@@ -346,6 +346,31 @@ describe.skipIf(process.platform !== 'linux')('describing an entry file', () => 
 		expect(again).toEqual(description)
 		expect(created).toHaveBeenCalledOnce()
 		expect(served.engine.list()).toEqual([])
+	})
+
+	test('tries again after the sandbox failed, rather than keeping the failure', async () => {
+		// Arrange
+		let creates = 0
+		const { client, directory } = await serve({
+			refreshMs: noRefreshMs,
+			untilDescribed: false,
+			wrap: (backend) => ({
+				...backend,
+				create: (spec, createSignal) => {
+					creates += 1
+					return creates === 1 ? Promise.reject(new Error('The sandbox daemon is restarting.')) : backend.create(spec, createSignal)
+				},
+			}),
+		})
+		await expect.poll(() => creates).toBeGreaterThanOrEqual(1)
+		// Shares the failing describe, or comes after it.
+		await client.describe(directory, signal).catch(() => undefined)
+
+		// Act
+		const described = await client.describe(directory, signal)
+
+		// Assert
+		expect(described).toEqual(description)
 	})
 
 	test('fails once per version of the source when the entry file cannot be described', async () => {
