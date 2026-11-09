@@ -64,8 +64,11 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
   The engine picks the local backend at startup ([`pocs/sandbox-pause`](../pocs/sandbox-pause/README.md)
   shows the rule). Snapshots don't move between backends or machines: a paused run resumes where it
   was paused.
-- **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, relays
-  human input and external events (webhooks), and serves the UI API. The prototype's
+- **The engine** never runs workflow code. It starts, snapshots and resumes sandboxes, starts runs
+  from triggers (buttons, webhooks, schedules; section 4), relays human input and external events
+  to running runs, and serves the UI API. What a workflow repository declares (workflows, their
+  parameters, triggers, agents and connectors) it learns by running the entry file in a sandbox in
+  describe mode ([Triggers](#triggers)). The prototype's
   `WorkflowRuntime` seam (`dispatch() → events`, `submitInput()`) is the host↔sandbox protocol,
   carried by a mailbox in the sandbox: the runtime appends messages to an outbox, the engine
   long-polls it and writes answers to an inbox, all through the sandbox interface's `exec` and
@@ -77,12 +80,12 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
 ## 4. Authoring model
 
 A workflow is an async function. The whole vocabulary is exported from
-`packages/core/src/_module/core.mts`.
+`packages/core/src/_module/core.mts`. What a run starts with is the workflow's parameters; how a
+run gets started is in the entry file ([Triggers](#triggers)).
 
 ```ts
-export default workflow('develop', async () => {
-    const { key } = await input('Which story should be developed?', { key: jira.key });
-    const story = await jira.collect(key);
+export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+    const story = await jira.collect(parameters.key);
 
     const research = await planner.loop`
         Research ${story}. Find related issues with ${jira.search} and read them with ${jira.dump}.
@@ -278,6 +281,9 @@ export default defineWorkflows(
   describe mode: `defineWorkflows` sends the workflows, their parameters as JSON Schema and their
   triggers over the mailbox and exits. The engine caches that per commit. A run then starts the
   entry file with the name of the workflow to run.
+- **A webhook trigger starts a run; an external event wakes one.** Events a running run waits for
+  (review comments in `github.review`) arrive through the same ingress and signature check, but
+  go to the run that waits for them, not to a trigger.
 - **Webhook payloads are checked in two steps.** The engine checks a delivery's signature and the
   input side of the schema as JSON Schema (structure, literals, enums) before it creates a sandbox,
   so an unrelated event never costs a run: it gets a 4xx. `.refine` and `.transform` are code, so
@@ -366,8 +372,8 @@ No credential ever enters the sandbox. Full rules in
 
 - Agents name a **model id**. The gateway resolves it model-first: the first provider in the
   user's ordered list that offers it.
-- Agents are module-level, so the engine knows a workflow's models before a run starts and checks
-  them against the user's providers up front.
+- Agents are module-level, so the describe run ([Triggers](#triggers)) tells the engine a
+  workflow's models before a run starts, and it checks them against the user's providers up front.
 - In the sandbox, pi-ai sends each provider's native request over the channel and the gateway
   forwards it with the credential, which keeps provider-specific features (thinking, caching, headers) intact.
 - Usage and cost per run are measured at the gateway.
@@ -414,13 +420,17 @@ export const aws = connector({
   can call it itself.
 - A connector's credentialed tools have their implementation in the gateway half and a stub in
   the sandbox half (section 7).
-- Workflows import the connectors they use, so the engine knows each workflow's requirements.
+- Workflows import the connectors they use, so the describe run tells the engine each workflow's
+  requirements.
+- Connectors with webhooks export a zod schema per event (`github.issueLabeled(label)`) and how the
+  provider signs a delivery, for `webhook` triggers and for events into a running run (review
+  watching).
 
 ## 9. Settings
 
 | Where | What |
 |---|---|
-| **Git** (workflow repo) | workflows, agents (model ids), static non-secret team config (start URLs, regions, accounts, thresholds) |
+| **Git** (workflow repo) | workflows, agents (model ids), the entry file with triggers, static non-secret team config (start URLs, regions, accounts, thresholds) |
 | **UI** (per user) | providers and their order, credentials, logins, overrides of static config |
 | **Host config** | infrastructure only: gateway URL, credential store, KMS key |
 

@@ -128,7 +128,8 @@ checks for `verify`.
 
 `examples/github-issue` is deliberately tiny: one issue, one repository, no separate QA or code
 review, no dependency order. Pick up the issue, fix it, open a pull request, handle review comments
-until it's merged:
+until it's merged. It starts by asking for the issue with `input()`, since workflow parameters and
+the entry file come with step 7, which converts it:
 
 ```ts
 export default workflow('fix-issue', async () => {
@@ -180,6 +181,8 @@ per-loop endpoints and credentials stay as they are. It can be built next to ste
   lists what the entry file declares. Webhook secrets come from the local credential store.
 - **GitHub connector:** `github.issueLabeled(label)` and the review events as schemas, and GitHub's
   signature check.
+- **Docs:** the core README (the file no longer starts itself) and the engine README (`run <name>`
+  goes through the entry file) describe what is built until then, so they change here.
 - **`examples/github-issue`** gets an entry file with a `userTrigger` and a webhook on a label, and
   `fix-issue` takes `{ issue }` as a parameter instead of asking for it with `input()`.
 - **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
