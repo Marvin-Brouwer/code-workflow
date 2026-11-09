@@ -14,12 +14,13 @@ import { RunId } from './run-id.mts'
  * | `paused` | its sandbox is paused to disk, with the runtime in it; `resume` picks it up |
  * | `restartable` | its sandbox is gone; `restart` runs it again from the top |
  * | `succeeded`, `failed`, `stopped` | done; nothing of it runs any more |
+ * | `skipped` | done without doing anything: the webhook delivery that started it isn't for its workflow |
  */
-export const RunStatus = z.enum(['starting', 'running', 'paused', 'restartable', 'succeeded', 'failed', 'stopped'])
+export const RunStatus = z.enum(['starting', 'running', 'paused', 'restartable', 'succeeded', 'failed', 'stopped', 'skipped'])
 export type RunStatus = z.infer<typeof RunStatus>
 
 /** Statuses a run never leaves on its own. */
-export const finishedStatuses: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped'])
+export const finishedStatuses: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped'])
 
 /** The workflow code a run runs: the git files of a directory, kept as a tarball next to the record. */
 export const RunSource = z.object({
@@ -48,6 +49,8 @@ export const RunRecord = z.object({
 	/** What the runtime waits on, by request id. Several can be open at once. */
 	pending: z.array(RuntimeRequest),
 	error: z.string().optional(),
+	/** Why a skipped run was skipped. */
+	reason: z.string().optional(),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 })

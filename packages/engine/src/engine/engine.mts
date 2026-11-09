@@ -536,7 +536,8 @@ function sortMessages(messages: readonly RuntimeMessage[]): SortedMessages {
 		if (message.type === 'event') events.push(message.event)
 		else if (message.type === 'request') requests.push(message.request)
 		else if (message.type === 'succeeded') outcome = { status: 'succeeded' }
-		else outcome = { status: 'failed', error: message.error }
+		else if (message.type === 'skipped') outcome = { status: 'skipped', reason: message.reason }
+		else if (message.type === 'failed') outcome = { status: 'failed', error: message.error }
 	}
 	return { events, requests, ...(outcome ? { outcome } : {}) }
 }

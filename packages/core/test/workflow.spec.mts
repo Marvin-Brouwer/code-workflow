@@ -2,6 +2,9 @@ import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
 import { tool } from '../src/tool/tool.mts'
+import { runWorkflow } from '../src/workflow/run-workflow.mts'
+import { workflow } from '../src/workflow/workflow.mts'
+import { memoryChannel } from './support/memory-channel.mts'
 import { runBody } from './support/run-body.mts'
 import { scriptedModel } from './support/scripted-model.mts'
 
@@ -54,5 +57,43 @@ describe('runWorkflow', () => {
 
 		// Assert
 		await expect(run.result).rejects.toThrow('No provider of this run offers model claude-opus-5-5')
+	})
+
+	test('gives the body its parameters, as the schema made them', async () => {
+		// Arrange
+		const seen: unknown[] = []
+		const greet = workflow('greet', { name: z.string().trim(), times: z.number().default(1) }, async ({ parameters }) => {
+			seen.push(parameters)
+		})
+
+		// Act
+		const outcome = await runWorkflow(greet, {
+			parameters: { name: ' Ada ' },
+			channel: memoryChannel(),
+			abortSignal: AbortSignal.timeout(5_000),
+		})
+
+		// Assert
+		expect(outcome).toEqual({ status: 'succeeded' })
+		expect(seen).toEqual([{ name: 'Ada', times: 1 }])
+	})
+
+	test('fails a run whose parameters do not fit, without starting the body', async () => {
+		// Arrange
+		let started = false
+		const greet = workflow('greet', { name: z.string() }, async () => {
+			started = true
+		})
+		const channel = memoryChannel()
+
+		// Act
+		// @ts-expect-error The name is a string.
+		const outcome = await runWorkflow(greet, { parameters: { name: 1 }, channel, abortSignal: AbortSignal.timeout(5_000) })
+
+		// Assert
+		expect(outcome).toMatchObject({ status: 'failed' })
+		expect(started).toBe(false)
+		const last = channel.messages.at(-1)
+		expect(last?.type === 'failed' ? last.error : '').toContain("The parameters don't fit workflow greet")
 	})
 })

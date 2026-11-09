@@ -26,6 +26,19 @@ describe('RuntimeMailbox', () => {
 		expect(lines.slice(0, 2).map((line) => RuntimeMessage.parse(JSON.parse(line)).type)).toEqual(['event', 'succeeded'])
 	})
 
+	test('reads what the engine started it to do', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await writeFile(mailboxLayout(directory).startFile, JSON.stringify({ mode: 'describe' }))
+		const mailbox = new RuntimeMailbox(directory)
+
+		// Act
+		const start = await mailbox.start(signal)
+
+		// Assert
+		expect(start).toEqual({ mode: 'describe' })
+	})
+
 	test('refuses a request id it sent already, which would get the old answer', async () => {
 		// Arrange
 		const mailbox = new RuntimeMailbox(await temporaryDirectory())

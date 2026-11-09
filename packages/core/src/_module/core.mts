@@ -19,10 +19,23 @@ export { AgentGaveUp, ChecksFailed, ExitNotCalled, LoopFailed, LoopLimitExceeded
 export { toPrompt, type RendersInPrompt } from '../render/to-prompt.mts'
 export type { RunChannel } from '../run/run-channel.mts'
 export { tool, ToolInputError, type Tool, type ToolContext } from '../tool/tool.mts'
+export { defineWorkflows, type WorkflowEntry } from '../triggers/define-workflows.mts'
+export { describeEntry } from '../triggers/describe-entry.mts'
+export { schedule } from '../triggers/schedule.mts'
+export type { ScheduleTrigger, Trigger, UserTrigger, WebhookTrigger } from '../triggers/trigger.mts'
+export { userTrigger } from '../triggers/user-trigger.mts'
+export { webhook, type WebhookOptions, type WebhookSignature } from '../triggers/webhook.mts'
 export { DependencyOrderFailed, inDependencyOrder, type DependencyNode } from '../workflow/in-dependency-order.mts'
 export { input } from '../workflow/input.mts'
 export { runWorkflow, type RunOptions, type RunOutcome } from '../workflow/run-workflow.mts'
-export { workflow, type Workflow } from '../workflow/workflow.mts'
+export {
+	workflow,
+	type AnyWorkflow,
+	type NoParameters,
+	type ParametersOf,
+	type Workflow,
+	type WorkflowContext,
+} from '../workflow/workflow.mts'
 export { workspace } from '../workspace/workspace.mts'
 export type { WorkspaceFile } from '../workspace/workspace-file.mts'
 export type { WorkspaceFolder, WorkspaceFolderOptions } from '../workspace/workspace-folder.mts'

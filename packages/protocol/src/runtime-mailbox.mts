@@ -49,19 +49,25 @@ export class RuntimeMailbox {
 		if (this.#requested.has(requestId)) throw new Error(`Request ${requestId} was sent already. Use a new id for every request.`)
 	}
 
+	/** What the engine started the runtime to do, as JSON: check it with `RunStart`. */
+	async start(abortSignal: AbortSignal): Promise<unknown> {
+		const start: unknown = JSON.parse(await readFile(this.#layout.startFile, { encoding: 'utf8', signal: abortSignal }))
+		return start
+	}
+
 	/** Waits until the engine has answered the request with this id. */
-	async answer(requestId: string, signal: AbortSignal): Promise<Answer> {
+	async answer(requestId: string, abortSignal: AbortSignal): Promise<Answer> {
 		const file = answerFile(this.#layout, requestId)
 		for (;;) {
-			signal.throwIfAborted()
+			abortSignal.throwIfAborted()
 			const text = await readFile(file, 'utf8').catch((error: unknown) => {
 				if (isMissing(error)) return undefined
 				throw error
 			})
 			if (text !== undefined) return toAnswer(JSON.parse(text))
 			// `delay` rejects with a plain AbortError; the signal's reason says why the wait stopped.
-			await delay(answerPollMs, undefined, { signal }).catch(() => {
-				signal.throwIfAborted()
+			await delay(answerPollMs, undefined, { signal: abortSignal }).catch(() => {
+				abortSignal.throwIfAborted()
 			})
 		}
 	}
