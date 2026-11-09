@@ -208,7 +208,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 					// Read again from where the cursor was saved, after a resume: taken already, maybe run already.
 					// Anything else that comes again is someone replaying a call.
 					if (again?.interrupted === true && again.endpoint === message.endpoint && again.spent === spent)
-						return { state, value: answered({ next: again.next, outcome: { ok: false, error: interruptedError } }) }
+						return { state, value: acceptedWith({ next: again.next, outcome: { ok: false, error: interruptedError } }) }
 					const endpoint = state && ownEntry(state.endpoints, message.endpoint)
 					if (state === undefined || endpoint === undefined || again !== undefined || !endpoint.tokens.includes(spent)) {
 						const reason =
@@ -217,7 +217,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 								? `A call came for endpoint ${message.endpoint}, which run ${runId} doesn't have open.`
 								: `A token was used on endpoint ${message.endpoint} of run ${runId} that isn't good: used before, or never handed out. Someone else has the run's tokens.`)
 						const closed = state && { ...state, endpoints: {}, revoked: reason }
-						return { state: closed, value: { compromised: reason, ...answered({ outcome: { ok: false, error: reason } }) } }
+						return { state: closed, value: { compromised: reason, ...acceptedWith({ outcome: { ok: false, error: reason } }) } }
 					}
 					const next = newToken()
 					const rotated: EndpointState = { ...endpoint, tokens: [...endpoint.tokens.filter((hash) => hash !== spent), tokenHash(next)] }
@@ -299,6 +299,6 @@ function newTokens(): string[] {
 	return Array.from({ length: tokensPerEndpoint }, newToken)
 }
 
-function answered(answer: CallAnswer): AcceptedCall {
+function acceptedWith(answer: CallAnswer): AcceptedCall {
 	return { answer: () => Promise.resolve(answer) }
 }

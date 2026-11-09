@@ -48,19 +48,27 @@ export function keyFile(file: string): StoreKey {
 			await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
 			// Written whole next to it, then linked in place only when there is none yet: when two
 			// processes make one at once, both use the first, and a crash never leaves half a key.
-			const written = `${file}.${randomUUID()}.partial`
+			const partialFile = `${file}.${randomUUID()}.partial`
 			try {
-				await writeFile(written, made, { mode: 0o600, signal: abortSignal })
-				const linked = await link(written, file).then(
+				await writeFile(partialFile, made, { mode: 0o600, signal: abortSignal })
+				const linked = await link(partialFile, file).then(
 					() => true,
-					(error: unknown) => {
+					async (error: unknown) => {
 						if (hasErrorCode(error, 'EEXIST')) return false
-						throw error
+						// A file system without hard links: made in place, which is still only when there is none.
+						if (!hasErrorCode(error, 'EPERM') && !hasErrorCode(error, 'ENOTSUP')) throw error
+						return writeFile(file, made, { mode: 0o600, flag: 'wx', signal: abortSignal }).then(
+							() => true,
+							(fallback: unknown) => {
+								if (hasErrorCode(fallback, 'EEXIST')) return false
+								throw fallback
+							},
+						)
 					},
 				)
 				return linked ? made : toKey(await readFile(file, { signal: abortSignal }), file)
 			} finally {
-				await rm(written, { force: true })
+				await rm(partialFile, { force: true })
 			}
 		},
 	}

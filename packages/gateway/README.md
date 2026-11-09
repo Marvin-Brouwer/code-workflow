@@ -83,6 +83,7 @@ async function answerInterrupted(writeAnswer: (id: string, answer: CallAnswer) =
 		await writeAnswer(call.id, call.answer)
 		await gateway.settle('run-1', call.id, abortSignal)
 	}
+	// ...then, once the outbox was read past where the cursor was: await gateway.forgetInterrupted('run-1', abortSignal)
 }
 
 // For every call the engine reads from the mailbox.

@@ -46,13 +46,14 @@ export async function sendModelRequest(
 	const api = modelApi(choice.model.api)
 	if (api === undefined) throw new Error(`The gateway can't send ${choice.model.api} requests.`)
 	// The path has to be one of the API's as written, so no `..` or encoding leads the key elsewhere.
-	const refused = new Error(`${request.path} isn't a model request of ${choice.model.api}.`)
+	const refusedMessage = `${request.path} isn't a model request of ${choice.model.api}.`
 	const queryAt = request.path.indexOf('?')
 	const pathWithoutQuery = queryAt === -1 ? request.path : request.path.slice(0, queryAt)
-	if (!api.paths.includes(pathWithoutQuery) || request.path.includes('#')) throw refused
+	if (!api.paths.includes(pathWithoutQuery) || request.path.includes('#')) throw new Error(refusedMessage)
 	const base = new URL(baseUrlOf(choice))
 	const url = new URL(`${withoutTrailingSlash(base.href)}${request.path}`)
-	if (url.origin !== base.origin || url.pathname !== `${withoutTrailingSlash(base.pathname)}${pathWithoutQuery}`) throw refused
+	if (url.origin !== base.origin || url.pathname !== `${withoutTrailingSlash(base.pathname)}${pathWithoutQuery}`)
+		throw new Error(refusedMessage)
 	if (bodyModel(request.body) !== choice.model.id) throw new Error(`The request's body isn't for model ${choice.model.id}.`)
 
 	const headers = Object.fromEntries(Object.entries(request.headers).filter(([name]) => !droppedRequestHeaders.has(name.toLowerCase())))
