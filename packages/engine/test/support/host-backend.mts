@@ -91,8 +91,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 			},
 			readFile: (file, signal) => readFile(map(file), { encoding: 'utf8', signal }),
 			async writeFile(file, content, signal) {
+				// Like the real backends: the parent folder has to be there.
 				const target = map(file)
-				await mkdir(path.dirname(target), { recursive: true })
 				await writeFile(`${target}.tmp`, content, { signal })
 				await rename(`${target}.tmp`, target)
 			},
