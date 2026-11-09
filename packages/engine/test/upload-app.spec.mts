@@ -22,6 +22,8 @@ describe.skipIf(process.platform !== 'linux')('uploadApp', () => {
 		// Assert
 		const files = path.join(root, sandbox.id, 'files', 'mesh-flow')
 		expect(await readdir(files)).toEqual(['app'])
-		expect(await readdir(path.join(files, 'app'))).toContain('mesh-flow.json')
+		const unpacked = await readdir(path.join(files, 'app'))
+		expect(unpacked).toContain('mesh-flow.json')
+		expect(unpacked).not.toContain('.app.tgz.b64')
 	})
 })
