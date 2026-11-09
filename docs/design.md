@@ -268,9 +268,13 @@ export default defineWorkflows(
   and how a delivery is signed is plain data, `webhook(workflow, schema, { signature })`, from a
   small set the engine has built in (a secret header as GitLab sends it, an HMAC of the body in a
   header as GitHub and most others send it; a secret header by default). It has to be data: the
-  engine checks it on the host, where workflow code never runs. Connectors only add convenience,
-  a schema per event with its signature filled in (`github.issueLabeled(label)`). The secret is
-  set in the UI and checked by the engine before anything else, so the sandbox never sees it. The delivery id is the run's key: a
+  engine checks it on the host, where workflow code never runs. The secret is set in the UI and
+  checked by the engine before anything else, so the sandbox never sees it.
+- **Connectors add shortcuts on top, never something `webhook` can't do.** A schema per event with
+  its signature scheme filled in (`github.issueLabeled(label)`, `gitlab.mergeRequestOpened`), and
+  ready-made triggers built from those for the common case, which also do the mapping:
+  `github.onIssueLabeled(fixIssue, 'ai-fix')` starts `fixIssue` with `{ issue }`, and only compiles
+  for a workflow whose parameters take that. The delivery id is the run's key: a
   redelivery reuses the run it already started.
 - **`schedule(workflow, cron, parameters?)`** starts a run on the engine's wall clock (timed waits
   are engine-side, section 5). The parameters are fixed values, checked against the workflow's
@@ -426,8 +430,9 @@ export const aws = connector({
 - Workflows import the connectors they use, so the describe run tells the engine each workflow's
   requirements.
 - Connectors with webhooks may export a zod schema per event with its signature scheme filled in
-  (`github.issueLabeled(label)`), as a shortcut for `webhook` triggers and for events into a running
-  run (review watching). `webhook` itself doesn't need a connector.
+  (`github.issueLabeled(label)`) and ready-made triggers built on them
+  (`github.onIssueLabeled(workflow, label)`), as shortcuts for `webhook` triggers and for events
+  into a running run (review watching). `webhook` itself doesn't need a connector.
 
 ## 9. Settings
 

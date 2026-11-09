@@ -151,7 +151,9 @@ checks for `verify`.
 - **Credentials** never in the sandbox: API calls and pushes are host-side tools; how fetching
   gets its credential is decided here (see [gateway-tool-calls.md](gateway-tool-calls.md)).
 - **Webhook shortcuts:** `github.issueLabeled(label)` and the review events as schemas with
-  GitHub's signature scheme filled in, for `webhook` triggers and for review watching.
+  GitHub's signature scheme filled in, for `webhook` triggers and for review watching, and
+  `github.onIssueLabeled(workflow, label)` as a ready-made trigger. `connector-gitlab` gets the
+  same for merge requests in step 7.
 
 `examples/github-issue` is deliberately tiny: one issue, one repository, no separate QA or code
 review, no dependency order. Pick up the issue, fix it, open a pull request, handle review comments
@@ -161,7 +163,7 @@ until it's merged. It starts from a button or from labelling an issue `ai-fix`:
 // workflows/main.mts
 export default defineWorkflows(
 	userTrigger(fixIssue),
-	webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
+	github.onIssueLabeled(fixIssue, 'ai-fix'),
 )
 
 // workflows/fix-issue.mts
