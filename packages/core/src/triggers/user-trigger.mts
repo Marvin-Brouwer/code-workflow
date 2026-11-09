@@ -7,7 +7,7 @@ import type { UserTrigger } from './trigger.mts'
  * filled in before the run starts; a workflow without parameters gets a plain button.
  *
  * ```ts
- * export default defineWorkflows(userTrigger(fixIssue))
+ * export const triggers = defineWorkflows(userTrigger(fixIssue))
  * ```
  */
 export function userTrigger<Shape extends z.ZodRawShape>(workflow: Workflow<Shape>): UserTrigger {

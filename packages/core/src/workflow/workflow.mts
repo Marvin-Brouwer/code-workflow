@@ -33,7 +33,7 @@ export const WorkflowName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowerc
 /**
  * Defines a workflow. The body is ordinary async code: `await`, `if`, `for`, `Promise.all` and
  * `throw` are the control flow, and agents are calls inside it. A workflow says what it does and
- * what it starts with, never how it is started: that is the entry file's job (`defineWorkflows`).
+ * what it starts with, never how it is started: that is the entry file's job (`defineMeshFlow`).
  *
  * ```ts
  * export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {

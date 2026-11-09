@@ -42,7 +42,7 @@ const closeMs = 2_000
  * Runs a workflow: its body in a run scope, as the root of the event tree, then `succeeded` or
  * `failed` to the channel. Never throws; the outcome says how it went.
  *
- * Under the engine, the entry file (`defineWorkflows`) starts this with the workflow the engine
+ * Under the engine, the entry file (`defineMeshFlow`) starts this with the workflow the engine
  * asked for. Call it directly to run a workflow somewhere else, such as in a test with a channel
  * of your own.
  */

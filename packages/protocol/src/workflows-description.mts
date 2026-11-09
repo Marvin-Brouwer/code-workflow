@@ -49,8 +49,21 @@ export const TriggerDescription = z.discriminatedUnion('kind', [
 ])
 export type TriggerDescription = z.infer<typeof TriggerDescription>
 
-/** What an entry file declares: every workflow its modules define, and what can start them. */
+/**
+ * The sandbox every run of the app gets: an OCI image, its resources, and the only hosts it may
+ * reach over HTTPS. The engine checks it again against what its backends take.
+ */
+export const SandboxDescription = z.object({
+	image: z.string().min(1),
+	cpus: z.int().positive(),
+	memoryMb: z.int().positive(),
+	egress: z.object({ allow: z.array(z.string().min(1)).readonly() }),
+})
+export type SandboxDescription = z.infer<typeof SandboxDescription>
+
+/** What an entry file declares: its sandbox, every workflow its modules define, and what can start them. */
 export const WorkflowsDescription = z.object({
+	sandbox: SandboxDescription,
 	workflows: z.array(WorkflowDescription),
 	triggers: z.array(TriggerDescription),
 })

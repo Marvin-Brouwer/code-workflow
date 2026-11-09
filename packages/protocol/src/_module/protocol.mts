@@ -20,6 +20,7 @@ export { RunStart, TriggerRef } from '../run-start.mts'
 export {
 	JsonSchema,
 	SignatureScheme,
+	SandboxDescription,
 	TriggerDescription,
 	TriggerKind,
 	WorkflowDescription,

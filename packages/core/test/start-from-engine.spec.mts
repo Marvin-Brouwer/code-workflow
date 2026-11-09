@@ -49,7 +49,7 @@ async function startLikeTheEngine(source: string, start: unknown) {
 }
 
 const entry = `
-import { defineWorkflows, input, schedule, userTrigger, webhook, workflow } from '${core}'
+import { defineMeshFlow, image, input, schedule, userTrigger, webhook, workflow } from '${core}'
 import { z } from '${zod}'
 
 const greet = workflow('greet', { greeting: z.string().default('Hello') }, async ({ parameters }) => {
@@ -73,12 +73,15 @@ function neverSettles(): Promise<boolean> {
 	return new Promise(() => undefined)
 }
 
-export default defineWorkflows(
-	userTrigger(greet),
-	webhook(echo, onlyAiFix.transform((event) => ({ issue: event.issue.number }))),
-	schedule(echo, '0 7 * * 1', { issue: 7 }),
-	webhook(echo, IssueLabeled.refine(neverSettles).transform((event) => ({ issue: event.issue.number })), { name: 'stuck' }),
-)
+export default defineMeshFlow({
+	sandbox: image({ name: 'node:22-slim' }),
+	workflows: [
+		userTrigger(greet),
+		webhook(echo, onlyAiFix.transform((event) => ({ issue: event.issue.number }))),
+		schedule(echo, '0 7 * * 1', { issue: 7 }),
+		webhook(echo, IssueLabeled.refine(neverSettles).transform((event) => ({ issue: event.issue.number })), { name: 'stuck' }),
+	],
+})
 `
 
 const greet = { mode: 'run', workflow: 'greet' }
@@ -99,6 +102,7 @@ describe('an entry file started by the engine', () => {
 			{
 				type: 'described',
 				description: {
+					sandbox: { image: 'node:22-slim' },
 					workflows: [{ name: 'greet' }, { name: 'echo', parameters: { required: ['issue'] } }, { name: 'unlisted' }],
 					triggers: [
 						{ kind: 'user', id: 'greet', workflow: 'greet' },

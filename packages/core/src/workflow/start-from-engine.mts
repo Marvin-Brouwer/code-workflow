@@ -2,10 +2,10 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
 import { z } from 'zod'
+import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
+import { describeApp } from '../app/describe-app.mts'
 import { describeError } from '../run/describe-error.mts'
 import { untilAborted } from '../run/until-aborted.mts'
-import type { WorkflowEntry } from '../triggers/define-workflows.mts'
-import { describeEntry } from '../triggers/describe-entry.mts'
 import type { ScheduleTrigger, WebhookTrigger } from '../triggers/trigger.mts'
 import { runAnyWorkflow } from './run-workflow.mts'
 import type { AnyWorkflow } from './workflow.mts'
@@ -22,7 +22,7 @@ type Begun = { readonly workflow: AnyWorkflow; readonly parameters: unknown } | 
  *
  * Model providers come with the gateway; until then a loop in an engine run fails up front.
  */
-export async function startFromEngine(entry: WorkflowEntry, environment: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function startFromEngine(app: MeshFlowApp, environment: NodeJS.ProcessEnv = process.env): Promise<void> {
 	const channel = RuntimeMailbox.fromEnvironment(environment)
 	const controller = new AbortController()
 	const stop = (signal: NodeJS.Signals) => {
@@ -31,7 +31,7 @@ export async function startFromEngine(entry: WorkflowEntry, environment: NodeJS.
 	process.once('SIGTERM', stop)
 	process.once('SIGINT', stop)
 	try {
-		process.exitCode = await dispatch(entry, channel, environment, controller.signal)
+		process.exitCode = await dispatch(app, channel, environment, controller.signal)
 	} catch (error) {
 		channel.send({ type: 'failed', error: describeError(error) })
 		process.exitCode = 1
@@ -46,17 +46,17 @@ export async function startFromEngine(entry: WorkflowEntry, environment: NodeJS.
 
 /** Does what the start file asks for and returns the exit code. */
 async function dispatch(
-	entry: WorkflowEntry,
+	app: MeshFlowApp,
 	channel: RuntimeMailbox,
 	environment: NodeJS.ProcessEnv,
 	abortSignal: AbortSignal,
 ): Promise<number> {
 	const request = RunStart.parse(await channel.readStart(abortSignal))
 	if (request.mode === 'describe') {
-		channel.send({ type: 'described', description: describeEntry(entry) })
+		channel.send({ type: 'described', description: describeApp(app) })
 		return 0
 	}
-	const begun = await begin(entry, request, abortSignal)
+	const begun = await begin(app, request, abortSignal)
 	if ('skipped' in begun) {
 		channel.send({ type: 'skipped', reason: begun.skipped })
 		return 0
@@ -77,13 +77,13 @@ async function dispatch(
  * The workflow to run and its parameters. A webhook delivery goes through its trigger's schema
  * first, which may turn it down; a schedule's parameters are the ones in the entry file.
  */
-async function begin(entry: WorkflowEntry, request: Extract<RunStart, { mode: 'run' }>, abortSignal: AbortSignal): Promise<Begun> {
+async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' }>, abortSignal: AbortSignal): Promise<Begun> {
 	const { trigger: ref } = request
 	if (ref === undefined || ref.kind === 'user') return { workflow: workflowNamed(request.workflow), parameters: request.input }
-	const trigger = entry.triggers.find(
+	const trigger = app.triggers.find(
 		(candidate): candidate is ScheduleTrigger | WebhookTrigger => candidate.kind === ref.kind && candidate.id === ref.id,
 	)
-	if (trigger === undefined) throw new Error(`The entry file has no ${ref.kind} trigger ${ref.id} any more.`)
+	if (trigger === undefined) throw new Error(`The app has no ${ref.kind} trigger ${ref.id} any more.`)
 	if (trigger.workflow.name !== request.workflow)
 		throw new Error(`The ${ref.kind} trigger ${ref.id} starts ${trigger.workflow.name}, not ${request.workflow}.`)
 	if (trigger.kind === 'schedule') return { workflow: trigger.workflow, parameters: trigger.parameters }

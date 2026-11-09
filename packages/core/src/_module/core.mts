@@ -4,6 +4,9 @@
  *
  * @module
  */
+export { defineMeshFlow, type MeshFlowApp, type MeshFlowOptions } from '../app/define-mesh-flow.mts'
+export { describeApp } from '../app/describe-app.mts'
+export { image, type ImageOptions } from '../app/image.mts'
 export { agent, type Agent, type AgentOptions, type AsToolOptions } from '../agent/agent.mts'
 export { prompt, type Prompt } from '../agent/prompt.mts'
 export { requestUserInput } from '../agent/request-user-input.mts'
@@ -19,8 +22,7 @@ export { AgentGaveUp, ChecksFailed, ExitNotCalled, LoopFailed, LoopLimitExceeded
 export { toPrompt, type RendersInPrompt } from '../render/to-prompt.mts'
 export type { RunChannel } from '../run/run-channel.mts'
 export { tool, ToolInputError, type Tool, type ToolContext } from '../tool/tool.mts'
-export { defineWorkflows, type WorkflowEntry } from '../triggers/define-workflows.mts'
-export { describeEntry } from '../triggers/describe-entry.mts'
+export { defineWorkflows, type WorkflowBundle } from '../triggers/define-workflows.mts'
 export { schedule, scheduleShorthands, type ScheduleShorthand, type ScheduleWhen } from '../triggers/schedule.mts'
 export type { ScheduleTrigger, Trigger, UserTrigger, WebhookTrigger } from '../triggers/trigger.mts'
 export { userTrigger } from '../triggers/user-trigger.mts'

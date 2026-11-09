@@ -1,7 +1,9 @@
 import { describe, expect, expectTypeOf, test } from 'vitest'
 import { z } from 'zod'
+import { defineMeshFlow } from '../src/app/define-mesh-flow.mts'
+import { describeApp } from '../src/app/describe-app.mts'
+import { image } from '../src/app/image.mts'
 import { defineWorkflows } from '../src/triggers/define-workflows.mts'
-import { describeEntry } from '../src/triggers/describe-entry.mts'
 import { schedule } from '../src/triggers/schedule.mts'
 import { userTrigger } from '../src/triggers/user-trigger.mts'
 import { webhook } from '../src/triggers/webhook.mts'
@@ -73,26 +75,6 @@ describe('defineWorkflows', () => {
 		expect(defining).toThrow('Give the second one a name of its own')
 	})
 
-	test('describes the workflows it is given, with their parameters as JSON Schema', () => {
-		// Arrange
-		const entry = defineWorkflows(userTrigger(fixIssue), schedule(report, '0 7 * * 1'))
-
-		// Act
-		const description = describeEntry(entry, [fixIssue, report])
-
-		// Assert
-		expect(description).toEqual({
-			workflows: [
-				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
-				{ name: 'report', parameters: { type: 'object', properties: {} } },
-			],
-			triggers: [
-				{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },
-				{ kind: 'schedule', id: 'report 0 7 * * 1', workflow: 'report', cron: '0 7 * * 1', parameters: {} },
-			],
-		})
-	})
-
 	test('turns a schedule shorthand into its cron expression, and names the schedule by what was written', () => {
 		// Act
 		const daily = schedule(report, 'daily')
@@ -117,6 +99,58 @@ describe('defineWorkflows', () => {
 		expect(signed).toMatchObject({
 			signature: { scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' },
 			deliveryHeader: 'x-github-delivery',
+		})
+	})
+})
+
+describe('defineMeshFlow', () => {
+	test('lists the triggers of its bundles and its own, in order', () => {
+		// Arrange
+		const bundle = defineWorkflows(userTrigger(fixIssue), webhook(fixIssue, toParameters))
+
+		// Act
+		const app = defineMeshFlow({ sandbox: image({ name: 'node:22-slim' }), workflows: [bundle, schedule(report, 'daily')] })
+
+		// Assert
+		expect(app.triggers.map((trigger) => [trigger.kind, trigger.id])).toEqual([
+			['user', 'fix-issue'],
+			['webhook', 'fix-issue'],
+			['schedule', 'report daily'],
+		])
+	})
+
+	test('refuses a trigger that two bundles both list', () => {
+		// Arrange
+		const workflows = [defineWorkflows(userTrigger(fixIssue)), defineWorkflows(userTrigger(fixIssue))]
+
+		// Act
+		const defining = () => defineMeshFlow({ sandbox: image({ name: 'node:22-slim' }), workflows })
+
+		// Assert
+		expect(defining).toThrow('The user trigger fix-issue is listed twice.')
+	})
+
+	test('describes its sandbox, and the workflows it is given with their parameters as JSON Schema', () => {
+		// Arrange
+		const app = defineMeshFlow({
+			sandbox: image({ name: 'node:22-slim', egress: ['api.example.com'] }),
+			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
+		})
+
+		// Act
+		const description = describeApp(app, [fixIssue, report])
+
+		// Assert
+		expect(description).toEqual({
+			sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['api.example.com'] } },
+			workflows: [
+				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
+				{ name: 'report', parameters: { type: 'object', properties: {} } },
+			],
+			triggers: [
+				{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },
+				{ kind: 'schedule', id: 'report 0 7 * * 1', workflow: 'report', cron: '0 7 * * 1', parameters: {} },
+			],
 		})
 	})
 })

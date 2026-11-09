@@ -20,6 +20,7 @@ const secret = 'correct horse battery staple'
 const payload = { label: 'ai-fix', issue: { number: 12 } }
 
 const description: WorkflowsDescription = {
+	sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
 	workflows: [{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } }],
 	triggers: [
 		{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },

@@ -34,5 +34,5 @@ export interface ScheduleTrigger {
 	readonly parameters: unknown
 }
 
-/** Something that can start a run, listed in the entry file. */
+/** Something that can start a run, listed in the app's `defineMeshFlow`. */
 export type Trigger = UserTrigger | WebhookTrigger | ScheduleTrigger

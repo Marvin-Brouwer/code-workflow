@@ -42,7 +42,7 @@ export const defaultSecretHeader = 'x-webhook-secret'
  * 	issue: z.object({ number: z.number() }),
  * })
  *
- * export default defineWorkflows(
+ * export const triggers = defineWorkflows(
  * 	webhook(fixIssue, IssueLabeled.transform((event) => ({ issue: event.issue.number })), {
  * 		signature: { scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' },
  * 		deliveryHeader: 'x-github-delivery',

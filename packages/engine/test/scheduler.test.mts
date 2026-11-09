@@ -6,7 +6,11 @@ import { createScheduler } from '../src/triggers/scheduler.mts'
 
 const repository = { name: 'team', directory: '/repositories/team' }
 const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workflow: 'report', cron: '* * * * * *' }
-const description: WorkflowsDescription = { workflows: [{ name: 'report', parameters: { type: 'object' } }], triggers: [everySecond] }
+const description: WorkflowsDescription = {
+	sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
+	workflows: [{ name: 'report', parameters: { type: 'object' } }],
+	triggers: [everySecond],
+}
 
 /** An engine that records the runs it's asked to start, each with `status`, and starts nothing. */
 function fakeEngine(status: RunStatus = 'running') {

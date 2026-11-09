@@ -24,7 +24,7 @@ type ScheduleParameters<Input> = NoParameters extends Input ? [parameters?: Inpu
  * parameters:
  *
  * ```ts
- * export default defineWorkflows(
+ * export const triggers = defineWorkflows(
  * 	schedule(cleanUp, 'daily'),
  * 	schedule(weeklyReport, '0 7 * * 1', { team: 'web' }),
  * )
