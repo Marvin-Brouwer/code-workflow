@@ -173,6 +173,20 @@ const release = await input('How should the release go?', {
 
 An agent asks with `requestUserInput`: one question with a text answer, or a form with the same kinds of field.
 
+### Waiting
+
+`wait` waits for a while on the engine's clock, so the sandbox can be paused meanwhile, and a timer that disagrees across a pause never matters. It's how a workflow polls something outside, such as a pull request, between host tool calls. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`.
+
+```ts
+import { wait } from '@mesh-flow/core'
+
+for (;;) {
+	const pullRequest = await github.pullRequest(opened)
+	if (pullRequest.merged) break
+	await wait({ seconds: 30 })
+}
+```
+
 ### Workflows
 
 `workflow` names a body and says what a run of it starts with: its parameters, as a zod shape like `input`'s fields. The body gets them, checked, next to the run's `abortSignal`. A workflow without parameters leaves them out.

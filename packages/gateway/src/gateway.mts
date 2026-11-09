@@ -81,6 +81,8 @@ export interface Gateway {
 	 * Empty when all can. A trigger checks the app's models with it before it makes a sandbox.
 	 */
 	readonly unavailableModels: (models: readonly string[], abortSignal: AbortSignal) => Promise<string[]>
+	/** Which of `tools` this gateway has no host tool for. A trigger checks the app's tools with it before it makes a sandbox. */
+	readonly missingTools: (tools: readonly string[]) => string[]
 	/** Closes every endpoint of the run and forgets it. Resolves to what the run used. */
 	readonly closeRun: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
 }
@@ -182,7 +184,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 		return response
 	}
 
+	const missingTools = (appTools: readonly string[]) => [...new Set(appTools)].filter((name) => !tools.has(name))
+
 	return Object.freeze<Gateway>({
+		missingTools,
 		openRun: (runId, appTools, abortSignal) =>
 			states.update(
 				runId,

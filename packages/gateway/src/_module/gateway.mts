@@ -18,4 +18,14 @@ export {
 } from '../providers/provider-settings.mts'
 export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
-export { hostTool, HostToolInputError, type HostTool, type HostToolContext, type ToolDefinition } from '../tools/host-tool.mts'
+export {
+	connectorHost,
+	ConnectorName,
+	hostTool,
+	HostToolInputError,
+	type ConnectorHost,
+	type ConnectorHostOptions,
+	type HostTool,
+	type HostToolContext,
+	type ToolDefinition,
+} from '../tools/host-tool.mts'

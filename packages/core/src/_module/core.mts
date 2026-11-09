@@ -29,6 +29,7 @@ export { schedule, scheduleShorthands, type ScheduleShorthand, type ScheduleWhen
 export type { ScheduleTrigger, Trigger, UserTrigger, WebhookTrigger } from '../triggers/trigger.mts'
 export { userTrigger } from '../triggers/user-trigger.mts'
 export { webhook, type WebhookOptions, type WebhookSignature } from '../triggers/webhook.mts'
+export { wait, type WaitSpec } from '../wait/wait.mts'
 export { DependencyOrderFailed, inDependencyOrder, type DependencyNode } from '../workflow/in-dependency-order.mts'
 export { input } from '../workflow/input.mts'
 export { runWorkflow, type RunOptions, type RunOutcome } from '../workflow/run-workflow.mts'

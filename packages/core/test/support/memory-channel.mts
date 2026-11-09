@@ -1,4 +1,4 @@
-import type { Answer, InputRequest, RuntimeEvent, RuntimeMessage } from '@mesh-flow/protocol'
+import type { Answer, InputRequest, RuntimeEvent, RuntimeMessage, WakeRequest } from '@mesh-flow/protocol'
 import type { RunChannel } from '../../src/run/run-channel.mts'
 
 /** A channel in memory: it keeps what the run sends, and the test answers requests through `reply`. */
@@ -7,6 +7,8 @@ export interface MemoryChannel extends RunChannel {
 	readonly events: readonly RuntimeEvent[]
 	/** The input requests sent so far. */
 	readonly inputs: readonly InputRequest[]
+	/** The wake requests sent so far. */
+	readonly wakes: readonly WakeRequest[]
 	/** Resolves with the next input request the run sends, or one it sent already and nobody answered. */
 	nextInput(): Promise<InputRequest>
 	/** Answers a request. */
@@ -32,6 +34,9 @@ export function memoryChannel(): MemoryChannel {
 		},
 		get inputs() {
 			return messages.flatMap((message) => (message.type === 'request' && message.request.kind === 'input' ? [message.request] : []))
+		},
+		get wakes() {
+			return messages.flatMap((message) => (message.type === 'request' && message.request.kind === 'wake' ? [message.request] : []))
 		},
 		send(message) {
 			messages.push(message)
