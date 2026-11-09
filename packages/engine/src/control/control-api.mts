@@ -1,27 +1,28 @@
+import { TriggerRef } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
+import type { AppStore, AppVersion } from '../apps/app-store.mts'
+import { AppName } from '../apps/names.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
-import { messageOf } from '../errors.mts'
-import { Repository, type RepositoryStore } from '../repositories/repository-store.mts'
-import { findEntry } from '../workflow/workflow-config.mts'
-import { WorkflowName } from '../workflow/workflow-name.mts'
 
-/** The body of `POST /runs`. */
-export const StartRunBody = z.object({ directory: z.string().min(1), workflow: WorkflowName, parameters: z.unknown().optional() })
+/** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
+export const StartRunBody = z.object({ app: AppName, trigger: TriggerRef, input: z.unknown().optional() })
 
-/** The body of `POST /describe`. */
-export const DescribeBody = z.object({ directory: z.string().min(1) })
+/** The body of `PUT /apps/:name`: the built app, packed, on this machine. */
+export const DeployBody = z.object({ tarball: z.string().min(1) })
 
-/** The body of `PUT /repositories/:name`: where the repository is on the host. */
-export const RepositoryBody = z.object({ directory: z.string().min(1) })
-
-/** The repositories the engine serves triggers for, and what to do when they change. */
-export interface ControlRepositories {
-	readonly store: RepositoryStore
-	/** Called after a repository was added or removed, such as to read the schedules again. */
+/** The deployed apps, and what to do when they change. */
+export interface ControlApps {
+	readonly store: AppStore
+	/** Called after an app was deployed or removed, such as to arm its schedules. */
 	readonly changed: () => void
+}
+
+/** What the control API says about a deployed app. */
+function shownApp({ name, version, manifest }: AppVersion) {
+	return { name, version, manifest }
 }
 
 /** The body of `POST /runs/:run/answers/:request`. */
@@ -35,65 +36,56 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | Route | Does |
  * |---|---|
  * | `GET /runs` | every run record |
- * | `POST /runs` | starts a run: `{ directory, workflow, parameters? }` |
+ * | `POST /runs` | starts a run through a trigger: `{ app, trigger: { kind, id }, input }` |
  * | `GET /runs/:run` | one run record |
  * | `GET /runs/:run/events` | the run's event tree so far |
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
- * | `POST /describe` | what a repository's entry file declares: `{ directory }` |
- * | `GET /repositories` | the repositories the engine serves triggers for |
- * | `PUT /repositories/:name` | registers a repository: `{ directory }` |
- * | `DELETE /repositories/:name` | unregisters one |
+ * | `GET /apps` | every deployed app's current version and what it declares |
+ * | `PUT /apps/:name` | deploys a built app as the new current version: `{ tarball }` |
+ * | `DELETE /apps/:name` | removes an app; runs on it keep their copy |
  *
  * Errors come back as `{ error }`, with 404, 409 or 400 for what the engine refused.
  */
-export function controlApi(engine: Engine, repositories?: ControlRepositories): Hono {
-	const app = new Hono()
+export function controlApi(engine: Engine, apps?: ControlApps): Hono {
+	const api = new Hono()
 
-	app.get('/runs', (c) => c.json(engine.list()))
-	app.post('/runs', async (c) => {
-		const { directory, workflow, parameters } = StartRunBody.parse(await c.req.json())
-		return c.json(await engine.startRun({ directory, workflow, input: parameters, abortSignal: c.req.raw.signal }), 201)
+	api.get('/runs', (c) => c.json(engine.list()))
+	api.post('/runs', async (c) => {
+		const { app, trigger, input } = StartRunBody.parse(await c.req.json())
+		return c.json(await engine.startRun({ app, trigger, input, abortSignal: c.req.raw.signal }), 201)
 	})
-	app.get('/runs/:run', (c) => c.json(engine.get(c.req.param('run'))))
-	app.get('/runs/:run/events', async (c) => c.json(await engine.events(c.req.param('run'))))
-	app.post('/runs/:run/answers/:request', async (c) => {
+	api.get('/runs/:run', (c) => c.json(engine.get(c.req.param('run'))))
+	api.get('/runs/:run/events', async (c) => c.json(await engine.events(c.req.param('run'))))
+	api.post('/runs/:run/answers/:request', async (c) => {
 		const { value } = AnswerBody.parse(await c.req.json())
 		return c.json(await engine.answer(c.req.param('run'), c.req.param('request'), value, c.req.raw.signal))
 	})
-	app.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
-	app.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
-	app.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
+	api.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
+	api.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
+	api.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
 
-	app.post('/describe', async (c) => {
-		const { directory } = DescribeBody.parse(await c.req.json())
-		return c.json(await engine.describe(directory, c.req.raw.signal))
-	})
-
-	if (repositories !== undefined) {
-		const { store, changed } = repositories
-		app.get('/repositories', async (c) => c.json(await store.list()))
-		app.put('/repositories/:name', async (c) => {
-			const repository = Repository.parse({ ...RepositoryBody.parse(await c.req.json()), name: c.req.param('name') })
-			await findEntry(repository.directory).catch((error: unknown) => {
-				throw new EngineError('invalid', messageOf(error))
-			})
-			await store.add(repository)
+	if (apps !== undefined) {
+		const { store, changed } = apps
+		api.get('/apps', (c) => c.json(store.list().map(shownApp)))
+		api.put('/apps/:name', async (c) => {
+			const { tarball } = DeployBody.parse(await c.req.json())
+			const deployed = await store.deploy(c.req.param('name'), tarball, c.req.raw.signal)
 			changed()
-			return c.json(repository)
+			return c.json(shownApp(deployed))
 		})
-		app.delete('/repositories/:name', async (c) => {
+		api.delete('/apps/:name', async (c) => {
 			const name = c.req.param('name')
-			if (!(await store.remove(name))) throw new EngineError('not-found', `There is no repository ${name}.`)
+			if (!(await store.remove(name))) throw new EngineError('not-found', `There is no app ${name}.`)
 			changed()
 			return c.json({ removed: name })
 		})
 	}
 
-	app.onError((error, c) => {
+	api.onError((error, c) => {
 		if (error instanceof EngineError) return c.json({ error: error.message }, statusOf[error.code])
 		if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: `Bad request: ${error.message}` }, 400)
 		return c.json({ error: error.message }, 500)
 	})
-	return app
+	return api
 }

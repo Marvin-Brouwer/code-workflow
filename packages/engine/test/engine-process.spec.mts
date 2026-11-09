@@ -6,7 +6,7 @@ import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
 import { exitOf, startEngineProcess } from './support/engine-process.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+import { deployThroughApi, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
@@ -31,9 +31,9 @@ async function serveHere(home: string) {
 
 /** Starts a run in an engine process and waits until it asks for input. Returns the runtime's pid. */
 async function startWaitingRun(home: string) {
-	const directory = await workflowRepository({ ask })
 	const client = controlClient(controlSocketPath(home))
-	const { id } = await client.startRun({ directory, workflow: 'ask', abortSignal: signal })
+	await deployThroughApi(client, { ask })
+	const { id } = await client.startRun({ ...userRun('ask'), abortSignal: signal })
 	const record = await vi.waitFor(
 		async () => {
 			const current = await client.get(id, signal)

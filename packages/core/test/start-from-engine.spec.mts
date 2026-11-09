@@ -147,6 +147,20 @@ describe('an entry file started by the engine', () => {
 		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'nobody to greet' })
 	})
 
+	test('runs a schedule fired by hand with the parameters it was given', async () => {
+		// Act
+		const run = await startLikeTheEngine(entry, {
+			mode: 'run',
+			workflow: 'echo',
+			trigger: { kind: 'schedule', id: 'echo 0 7 * * 1' },
+			input: { issue: 9 },
+		})
+
+		// Assert
+		expect(await run.exited, run.stderr()).toBe(1)
+		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'issue 9' })
+	})
+
 	// Windows has no SIGTERM: `kill` ends the process outright. The engine runs workflows in a Linux sandbox.
 	test.skipIf(process.platform === 'win32')('stops on SIGTERM while it waits, and says so', async () => {
 		// Arrange

@@ -1,23 +1,34 @@
 import { randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { text } from 'node:stream/consumers'
+import { buildApp } from '@mesh-flow/build'
+import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError } from 'commander'
 import envPaths from 'env-paths'
-import { controlClient } from '../control/control-client.mts'
+import { AppName, WebhookName } from '../apps/names.mts'
+import { controlClient, type ControlClient } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
-import { RepositoryName } from '../repositories/repository-store.mts'
 import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
 import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
-import { WebhookName } from '../workflow/workflow-name.mts'
+import { appNameOf } from './app-name.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
+import { withPackedApp } from './pack-app.mts'
+import { watchApp } from './watch-app.mts'
 
 /** How long a CLI command waits for the engine. */
 const requestTimeoutMs = 5 * 60_000
+
+/** How long a build may take, installing native dependencies included. */
+const buildTimeoutMs = 10 * 60_000
+
+/** Where `build` puts the built app, and where `deploy` takes it from, relative to the app. */
+const defaultOut = path.join('.mesh-flow', 'app')
 
 /** How long closing the backend may take when the engine fails to start. */
 const closeTimeoutMs = 60_000
@@ -78,70 +89,129 @@ export async function main(argv: readonly string[]): Promise<void> {
 				throw error
 			})
 			log(`Engine ready on ${served.socketPath}.`)
-			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<repository>/<webhook>.`)
+			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<app>/<webhook>.`)
 		})
 
 	program
-		.command('run')
-		.description("Starts a run of a workflow through the repository's entry file, main.mts.")
-		.argument('<workflow>', 'the workflow, by the name workflow() gives it')
-		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
-		.option('-p, --parameters <json>', "the workflow's parameters, as JSON", parseJson)
-		.action(async (workflow: string, options: { directory: string; parameters?: unknown }) => {
+		.command('build')
+		.description(
+			'Builds the app whose package.json is here into one file, with its native dependencies for the sandbox, and describes it. CI runs this.',
+		)
+		.option('-C, --directory <directory>', "the app's repository", process.cwd())
+		.option('-o, --out <folder>', 'where the built app goes', defaultOut)
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, 'x64')
+		.action(async (options: { directory: string; out: string; cpu: AppPlatform['cpu'] }) => {
 			const directory = path.resolve(options.directory)
-			const record = await client().startRun({ directory, workflow, parameters: options.parameters, abortSignal: requestSignal() })
+			const out = path.resolve(directory, options.out)
+			const manifest = await buildApp({
+				directory,
+				out,
+				platform: { os: 'linux', cpu: options.cpu },
+				abortSignal: AbortSignal.timeout(buildTimeoutMs),
+			})
+			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
+		})
+
+	program
+		.command('deploy')
+		.description('Hands a built app to the engine on this machine as the new current version. Its webhooks and schedules follow it.')
+		.argument('[folder]', 'the built app', defaultOut)
+		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
+		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.action(async (folder: string, options: { directory: string; app?: string }) => {
+			const directory = path.resolve(options.directory)
+			const name = await appNameOf(directory, options.app)
+			const deployed = await withPackedApp(path.resolve(directory, folder), (tarball) => client().deploy(name, tarball, requestSignal()))
+			console.log(`${deployed.name}  ${deployed.version}`)
+		})
+
+	program
+		.command('dev')
+		.description(
+			'Builds and deploys the app here to the engine on this machine, again on every change, so its triggers are live while you work.',
+		)
+		.option('-C, --directory <directory>', "the app's repository", process.cwd())
+		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.option('--cpu <cpu>', "the sandbox's CPU: x64 or arm64", parseCpu, 'x64')
+		.action(async (options: { directory: string; app?: string; cpu: AppPlatform['cpu'] }) => {
+			const directory = path.resolve(options.directory)
+			const name = await appNameOf(directory, options.app)
+			const out = path.join(directory, defaultOut)
+			const stopping = new AbortController()
+			process.once('SIGINT', () => {
+				stopping.abort(new Error('Stopped.'))
+			})
+			const buildAndDeploy = async () => {
+				try {
+					const signal = AbortSignal.any([stopping.signal, AbortSignal.timeout(buildTimeoutMs)])
+					await buildApp({ directory, out, platform: { os: 'linux', cpu: options.cpu }, abortSignal: signal })
+					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, signal))
+					log(`Deployed ${deployed.name} ${deployed.version}.`)
+				} catch (error) {
+					if (!stopping.signal.aborted) log(`Not deployed: ${messageOf(error)}`)
+				}
+			}
+			await buildAndDeploy()
+			log('Watching for changes. Ctrl+C stops.')
+			watchApp(directory, buildAndDeploy, stopping.signal)
+		})
+
+	program
+		.command('trigger')
+		.description(
+			"Starts a run through one of the app's triggers, as the button, a delivery or the schedule would. The signature check is skipped.",
+		)
+		.argument('<kind>', 'user, webhook or schedule', parseTriggerKind)
+		.argument('<trigger>', "its id: the workflow for a user trigger, the webhook's name, or a schedule as `mesh-flow triggers` lists it")
+		.requiredOption('-p, --parameters <json>', "the workflow's parameters, or a webhook's payload: JSON, or @file")
+		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
+		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.action(async (kind: TriggerKind, id: string, options: { parameters: string; directory: string; app?: string }) => {
+			const input = await readJsonOrFile(options.parameters)
+			const app = await appNameOf(path.resolve(options.directory), options.app)
+			const record = await client().startRun({ app, trigger: { kind, id }, input, abortSignal: requestSignal() })
 			console.log(formatRunLine(record))
 		})
 
 	program
 		.command('triggers')
-		.description("Lists the workflows and triggers a repository's entry file declares. Runs it in a sandbox, once per change.")
-		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
-		.action(async (options: { directory: string }) => {
-			const directory = path.resolve(options.directory)
-			const description = await client().describe(directory, requestSignal())
-			const registered = (await client().repositories(requestSignal())).find((repository) => repository.directory === directory)
-			console.log(formatDescription(description, registered?.name))
+		.description("Lists the workflows and triggers of the app's current version.")
+		.option('-C, --directory <directory>', "the app's repository, for its name", process.cwd())
+		.option('--app <name>', "the app's name (default: the name in package.json)")
+		.action(async (options: { directory: string; app?: string }) => {
+			const name = await appNameOf(path.resolve(options.directory), options.app)
+			const deployed = await deployedApp(client(), name)
+			console.log(formatDescription(deployed.manifest.description, deployed.name))
 		})
 
-	const repositoryCommand = program.command('repository').description('The repositories whose webhooks and schedules the engine serves.')
-	repositoryCommand
-		.command('add')
-		.description('Registers a workflow repository, so its webhooks get a URL and its schedules run.')
-		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
-		.option('--name <name>', "the repository's name in webhook URLs (default: the directory's name)")
-		.action(async (options: { directory: string; name?: string }) => {
-			const directory = path.resolve(options.directory)
-			const name = RepositoryName.parse(options.name ?? path.basename(directory).toLowerCase())
-			const added = await client().addRepository({ name, directory }, requestSignal())
-			console.log(`${added.name}  ${added.directory}`)
-		})
-	repositoryCommand
+	const appCommand = program.command('app').description('The apps deployed to the engine.')
+	appCommand
 		.command('list')
-		.description('Lists the registered repositories.')
+		.description('Lists the deployed apps and their current versions.')
 		.action(async () => {
-			for (const { name, directory } of await client().repositories(requestSignal())) console.log(`${name}  ${directory}`)
+			for (const { name, version, manifest } of await client().apps(requestSignal()))
+				console.log(`${name}  ${version}  built ${manifest.builtAt}`)
 		})
-	repositoryCommand
+	appCommand
 		.command('remove')
-		.description('Unregisters a repository. Its runs stay; its webhooks and schedules stop.')
+		.description('Removes an app. Its runs stay; its webhooks and schedules stop.')
 		.argument('<name>')
 		.action(async (name: string) => {
-			await client().removeRepository(name, requestSignal())
+			await client().removeApp(AppName.parse(name), requestSignal())
 		})
 
 	program
 		.command('webhook')
 		.description('Webhook settings.')
 		.command('secret')
-		.description("Sets the secret a repository's webhook is signed with, read from stdin. It's kept in the engine's home only.")
-		.argument('<repository>')
+		.description("Sets the secret an app's webhook is signed with, read from stdin. It's kept in the engine's home only.")
+		.argument('<app>')
 		.argument('<webhook>')
 		.option('--generate', 'makes a random secret and prints it, to paste into the sender')
-		.action(async (repositoryName: string, webhook: string, options: { generate?: boolean }) => {
+		.action(async (appName: string, webhook: string, options: { generate?: boolean }) => {
 			const secret = options.generate ? randomBytes(generatedSecretBytes).toString('hex') : (await text(process.stdin)).trim()
 			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in, or use --generate.')
-			await openWebhookSecrets(webhookSecretsFile(home())).set(RepositoryName.parse(repositoryName), WebhookName.parse(webhook), secret)
+			await openWebhookSecrets(webhookSecretsFile(home())).set(AppName.parse(appName), WebhookName.parse(webhook), secret)
 			if (options.generate) console.log(secret)
 		})
 
@@ -218,4 +288,28 @@ function parseJson(value: string): unknown {
 	} catch {
 		throw new InvalidArgumentError('This is not JSON. Quote strings: \'"text"\'.')
 	}
+}
+
+function parseCpu(value: string): AppPlatform['cpu'] {
+	const parsed = AppPlatform.shape.cpu.safeParse(value)
+	if (!parsed.success) throw new InvalidArgumentError('Use x64 or arm64.')
+	return parsed.data
+}
+
+function parseTriggerKind(value: string): TriggerKind {
+	const parsed = TriggerKind.safeParse(value)
+	if (!parsed.success) throw new InvalidArgumentError(`Use one of ${TriggerKind.options.join(', ')}.`)
+	return parsed.data
+}
+
+/** JSON, or the JSON in a file after `@`. */
+async function readJsonOrFile(value: string): Promise<unknown> {
+	return parseJson(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value)
+}
+
+/** The current version of the deployed app called `name`. */
+async function deployedApp(client: ControlClient, name: string) {
+	const found = (await client.apps(requestSignal())).find((app) => app.name === name)
+	if (found === undefined) throw new Error(`There is no app ${name}. Deploy it with \`mesh-flow deploy\`, or run \`mesh-flow dev\`.`)
+	return found
 }

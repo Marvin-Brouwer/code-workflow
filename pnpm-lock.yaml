@@ -82,6 +82,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
+      '@mesh-flow/build':
+        specifier: workspace:*
+        version: link:../build
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol

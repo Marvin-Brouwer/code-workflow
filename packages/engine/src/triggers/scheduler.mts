@@ -3,9 +3,8 @@ import { Cron } from 'croner'
 import { startRunTimeoutMs, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
-import type { Repository } from '../repositories/repository-store.mts'
+import type { AppVersion } from '../apps/app-store.mts'
 import type { RunStatus } from '../runs/run-record.mts'
-import type { DescribedRepository } from './repository-watch.mts'
 
 type ScheduleDescription = Extract<TriggerDescription, { kind: 'schedule' }>
 
@@ -19,16 +18,15 @@ export interface SchedulerOptions {
 
 /** Starts schedule runs on the wall clock, for the schedules it was last given. */
 export interface Scheduler {
-	/** Follows these repositories' schedules from now on: new ones are armed, changed or gone ones disarmed. */
-	update(described: readonly DescribedRepository[]): void
+	/** Follows these apps' schedules from now on: new ones are armed, changed or gone ones disarmed. */
+	update(apps: readonly AppVersion[]): void
 	/** Stops every timer. Runs that were started go on. */
 	close(): void
 }
 
-/** A schedule with its timer, and what it was armed with. */
+/** A schedule with its timer, and the app version it was armed for. */
 interface Armed {
-	readonly directory: string
-	readonly workflow: string
+	readonly version: string
 	readonly controller: AbortController
 }
 
@@ -38,13 +36,13 @@ interface Armed {
  */
 const goingStatuses: ReadonlySet<RunStatus> = new Set(['starting', 'running', 'paused'])
 
-/** Names a schedule of a repository, in run keys and logs. */
-function scheduleName(repository: string, schedule: string): string {
-	return `${repository}/${schedule}`
+/** Names a schedule of an app, in run keys and logs. */
+function scheduleName(app: string, schedule: string): string {
+	return `${app}/${schedule}`
 }
 
 /**
- * Starts the schedule triggers of the repositories it's given, each on its cron expression and the
+ * Starts the schedule triggers of the apps it's given, each on its cron expression and the
  * engine's clock. A tick is skipped while the previous run of the same schedule is still going.
  * Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
  */
@@ -57,15 +55,15 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	/** Schedules whose cron expression was reported as broken, so it's reported once. */
 	const broken = new Set<string>()
 
-	const tick = async (repository: Repository, schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
-		const name = scheduleName(repository.name, schedule.id)
+	const tick = async (app: string, schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
+		const name = scheduleName(app, schedule.id)
 		const going = engine
 			.list()
 			.find(
 				(record) =>
-					record.trigger?.kind === 'schedule' &&
+					record.trigger.kind === 'schedule' &&
 					record.trigger.id === schedule.id &&
-					record.trigger.repository === repository.name &&
+					record.app.name === app &&
 					goingStatuses.has(record.status),
 			)
 		if (going !== undefined || starting.has(name)) {
@@ -76,9 +74,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 		starting.add(name)
 		try {
 			await engine.startRun({
-				directory: repository.directory,
-				workflow: schedule.workflow,
-				trigger: { kind: 'schedule', id: schedule.id, repository: repository.name },
+				app,
+				trigger: { kind: 'schedule', id: schedule.id },
 				key: `schedule ${name}/${at.toISOString()}`,
 				abortSignal: AbortSignal.timeout(startRunTimeoutMs),
 			})
@@ -90,8 +87,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 		}
 	}
 
-	const arm = (repository: Repository, schedule: ScheduleDescription, abortSignal: AbortSignal) => {
-		const name = scheduleName(repository.name, schedule.id)
+	const arm = (app: string, schedule: ScheduleDescription, abortSignal: AbortSignal) => {
+		const name = scheduleName(app, schedule.id)
 		let cron: Cron
 		try {
 			cron = new Cron(schedule.cron, { paused: true })
@@ -107,7 +104,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 			const fire = () => {
 				// From now, not from the tick: a timer that fired late, after a sleep, doesn't make up for what it missed.
 				next(new Date(Math.max(at.getTime(), now().getTime())))
-				void tick(repository, schedule, at, abortSignal)
+				void tick(app, schedule, at, abortSignal)
 			}
 			wakeAt(at, fire, abortSignal, now)
 		}
@@ -115,24 +112,24 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	}
 
 	return Object.freeze({
-		update(described) {
-			const wanted = new Map<string, { repository: Repository; schedule: ScheduleDescription }>()
-			for (const { repository, description } of described) {
-				for (const trigger of description.triggers) {
-					if (trigger.kind === 'schedule') wanted.set(scheduleName(repository.name, trigger.id), { repository, schedule: trigger })
+		update(apps) {
+			const wanted = new Map<string, { app: AppVersion; schedule: ScheduleDescription }>()
+			for (const app of apps) {
+				for (const trigger of app.manifest.description.triggers) {
+					if (trigger.kind === 'schedule') wanted.set(scheduleName(app.name, trigger.id), { app, schedule: trigger })
 				}
 			}
 			for (const [name, current] of armed) {
-				const want = wanted.get(name)
-				if (want?.repository.directory === current.directory && want.schedule.workflow === current.workflow) continue
+				// A new version may have changed the schedule's workflow or parameters: armed again.
+				if (wanted.get(name)?.app.version === current.version) continue
 				current.controller.abort()
 				armed.delete(name)
 			}
-			for (const [name, { repository, schedule }] of wanted) {
+			for (const [name, { app, schedule }] of wanted) {
 				if (armed.has(name)) continue
 				const controller = new AbortController()
-				armed.set(name, { directory: repository.directory, workflow: schedule.workflow, controller })
-				arm(repository, schedule, controller.signal)
+				armed.set(name, { version: app.version, controller })
+				arm(app.name, schedule, controller.signal)
 			}
 		},
 		close() {

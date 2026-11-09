@@ -3,15 +3,13 @@ import { createServer, type RequestListener, type Server } from 'node:http'
 import path from 'node:path'
 import { getRequestListener } from '@hono/node-server'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
+import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { messageOf } from '../errors.mts'
-import { openRepositoryStore } from '../repositories/repository-store.mts'
 import { openRunStore } from '../runs/run-store.mts'
-import { openDescriptionCache } from '../triggers/description-cache.mts'
-import { watchRepositories } from '../triggers/repository-watch.mts'
 import { createScheduler } from '../triggers/scheduler.mts'
 import { webhookApi } from '../triggers/webhook-api.mts'
 import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
@@ -38,8 +36,6 @@ export interface ServeEngineOptions {
 	 * tunnel or a reverse proxy with TLS in front of it to reach it from outside.
 	 */
 	readonly webhooks?: { readonly port: number; readonly host?: string }
-	/** How often the registered repositories are described again, for their webhooks and schedules. Default: a minute. */
-	readonly repositoryRefreshMs?: number
 	/** Bounds starting up: taking the socket and reconciling. */
 	readonly abortSignal: AbortSignal
 }
@@ -47,6 +43,8 @@ export interface ServeEngineOptions {
 /** An engine that serves its control API. */
 export interface ServedEngine {
 	readonly engine: Engine
+	/** The deployed apps, in the home's `apps` folder. */
+	readonly apps: AppStore
 	readonly socketPath: string
 	/** Where webhook deliveries go, such as `http://127.0.0.1:8787`, when webhooks are served. */
 	readonly webhookUrl?: string
@@ -77,12 +75,14 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 
 	let engine: Engine
+	let apps: AppStore
 	try {
+		apps = await openAppStore(path.join(options.home, 'apps'))
 		engine = await Engine.open(
 			{
 				backend: options.backend,
 				store: openRunStore(path.join(options.home, 'runs')),
-				descriptions: openDescriptionCache(path.join(options.home, 'descriptions')),
+				apps,
 				...(options.layout ? { layout: options.layout } : {}),
 				log,
 			},
@@ -93,23 +93,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		await unlock()
 		throw error
 	}
-	const repositories = openRepositoryStore(path.join(options.home, 'repositories.json'))
 	const scheduler = createScheduler({ engine, log })
-	const watch = watchRepositories({
-		engine,
-		repositories,
-		log,
-		refreshed: (described) => {
-			scheduler.update(described)
-		},
-		...(options.repositoryRefreshMs === undefined ? {} : { refreshMs: options.repositoryRefreshMs }),
-	})
-	const changed = () => void watch.refresh()
-	const stopTriggers = async (deadlineSignal: AbortSignal) => {
-		await watch.close(deadlineSignal)
-		scheduler.close()
+	const changed = () => {
+		scheduler.update(apps.list())
 	}
-	const api = getRequestListener(controlApi(engine, { store: repositories, changed }).fetch)
+	changed()
+	const api = getRequestListener(controlApi(engine, { store: apps, changed }).fetch)
 	listener = (request, response) => {
 		void api(request, response)
 	}
@@ -117,14 +106,14 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let webhooks: { server: Server; url: string } | undefined
 	if (options.webhooks) {
 		const secrets = openWebhookSecrets(webhookSecretsFile(options.home))
-		const ingress = getRequestListener(webhookApi({ engine, described: watch.described, secrets, log }).fetch)
+		const ingress = getRequestListener(webhookApi({ engine, current: apps.current, secrets, log }).fetch)
 		const webhookServer = createServer((request, response) => {
 			void ingress(request, response)
 		})
 		try {
 			webhooks = { server: webhookServer, url: await listenOnPort(webhookServer, options.webhooks.port, options.webhooks.host) }
 		} catch (error) {
-			await stopTriggers(AbortSignal.timeout(closeStepMs))
+			scheduler.close()
 			await closeServer(server)
 			await engine.close({ pause: AbortSignal.timeout(closeStepMs), backend: AbortSignal.timeout(closeStepMs) })
 			await unlock()
@@ -136,7 +125,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	const close = async (deadlines: CloseDeadlines) => {
 		try {
 			await Promise.all([closeServer(server), webhooks ? closeServer(webhooks.server) : undefined])
-			await stopTriggers(deadlines.pause)
+			scheduler.close()
 			await engine.close(deadlines)
 		} finally {
 			// Reported, not thrown: an error closing the engine is the one to see.
@@ -147,6 +136,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 	return {
 		engine,
+		apps,
 		socketPath,
 		...(webhooks ? { webhookUrl: webhooks.url } : {}),
 		close(deadlines) {

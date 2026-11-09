@@ -1,15 +1,27 @@
-import type { WorkflowsDescription } from '@mesh-flow/protocol'
+import type { TriggerDescription } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
+import type { AppVersion } from '../src/apps/app-store.mts'
 import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
 
-const repository = { name: 'team', directory: '/repositories/team' }
+const sandbox = { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workflow: 'report', cron: '* * * * * *' }
-const description: WorkflowsDescription = {
-	sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
-	workflows: [{ name: 'report', parameters: { type: 'object' } }],
-	triggers: [everySecond],
+const everyOtherSecond = { kind: 'schedule' as const, id: 'report */2 * * * * *', workflow: 'report', cron: '*/2 * * * * *' }
+
+/** Version `version` of the app `team`, listing `triggers`. */
+function teamApp(version: string, triggers: TriggerDescription[] = [everySecond]): AppVersion {
+	return {
+		name: 'team',
+		version,
+		manifest: {
+			entry: 'main.mjs',
+			platform: { os: 'linux', cpu: 'x64' },
+			description: { sandbox, workflows: [{ name: 'report', parameters: { type: 'object' } }], triggers },
+			builtAt: '2026-11-09T09:00:00.000Z',
+		},
+		tarball: `/apps/team/${version}/app.tgz`,
+	}
 }
 
 /** An engine that records the runs it's asked to start, each with `status`, and starts nothing. */
@@ -19,15 +31,9 @@ function fakeEngine(status: RunStatus = 'running') {
 		const at = new Date().toISOString()
 		const record: RunRecord = {
 			id: `run-${String(runs.length).padStart(12, '0')}`,
-			workflow: options.workflow,
-			...(options.trigger === undefined ? {} : { trigger: options.trigger }),
-			source: { directory: options.directory, commit: 'abc', dirty: false },
-			config: {
-				sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
-				setup: [],
-				start: ['node'],
-				entry: 'main.mts',
-			},
+			workflow: 'report',
+			trigger: options.trigger,
+			app: { name: options.app, version: 'v1', entry: 'main.mjs', sandbox },
 			status,
 			cursor: 0,
 			pending: [],
@@ -66,8 +72,8 @@ describe('createScheduler', () => {
 		useClockAt(tenAm)
 		const going = fakeEngine('paused')
 		const restartable = fakeEngine('restartable')
-		openScheduler(going.engine).scheduler.update([{ repository, description }])
-		openScheduler(restartable.engine).scheduler.update([{ repository, description }])
+		openScheduler(going.engine).scheduler.update([teamApp('v1')])
+		openScheduler(restartable.engine).scheduler.update([teamApp('v1')])
 
 		// Act
 		await vi.advanceTimersByTimeAsync(3_000)
@@ -77,27 +83,29 @@ describe('createScheduler', () => {
 		expect(restartable.startRun).toHaveBeenCalledTimes(3)
 	})
 
-	test('arms a schedule again when its repository points at another directory', async () => {
+	test('follows the schedules of the version deployed now, and none once the app is gone', async () => {
 		// Arrange
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
-		scheduler.update([{ repository, description }])
+		scheduler.update([teamApp('v1')])
 		await vi.advanceTimersByTimeAsync(1_000)
 
 		// Act
-		scheduler.update([{ repository: { ...repository, directory: '/repositories/moved' }, description }])
-		await vi.advanceTimersByTimeAsync(1_000)
+		scheduler.update([teamApp('v2', [everyOtherSecond])])
+		await vi.advanceTimersByTimeAsync(2_000)
+		scheduler.update([])
+		await vi.advanceTimersByTimeAsync(3_000)
 
 		// Assert
-		expect(startRun.mock.calls.map(([options]) => options.directory)).toEqual(['/repositories/team', '/repositories/moved'])
+		expect(startRun.mock.calls.map(([options]) => options.trigger.id)).toEqual(['report * * * * * *', 'report */2 * * * * *'])
 	})
 
 	test('does not make up for ticks it missed when the clock jumps', async () => {
 		// Arrange
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
-		openScheduler(engine).scheduler.update([{ repository, description }])
+		openScheduler(engine).scheduler.update([teamApp('v1')])
 
 		// Act
 		vi.setSystemTime(new Date('2026-11-09T11:00:00.000Z'))
@@ -112,7 +120,7 @@ describe('createScheduler', () => {
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
-		scheduler.update([{ repository, description }])
+		scheduler.update([teamApp('v1')])
 
 		// Act
 		scheduler.close()

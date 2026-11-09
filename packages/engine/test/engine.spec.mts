@@ -1,16 +1,17 @@
 import { existsSync } from 'node:fs'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
+import { openAppStore } from '../src/apps/app-store.mts'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore, runDirectory, type RunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout, isAlive, pidsOf } from './support/host-backend.mts'
 import { deferred } from './support/deferred.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
+import { deployTestApp, runtimeScript, testAppName, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
@@ -24,16 +25,17 @@ interface OpenEngineOptions {
 	readonly wrapStore?: (store: RunStore) => RunStore
 }
 
-/** An engine on the host backend, closed when the test ends. */
+/** An engine on the host backend, with its own app store, closed when the test ends. */
 async function openEngine({ home, wrap = (backend) => backend, wrapStore = (store) => store }: OpenEngineOptions = {}) {
 	const directory = home ?? (await temporaryDirectory())
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
 	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
+	const apps = await openAppStore(path.join(directory, 'apps'))
 	const log = vi.fn<(message: string) => void>()
-	const engine = await Engine.open({ backend, store, layout: hostSandboxLayout, log }, signal)
+	const engine = await Engine.open({ backend, store, apps, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))
-	return { engine, backend, store, log, home: directory }
+	return { engine, backend, store, apps, log, home: directory }
 }
 
 async function untilStatus(engine: Engine, id: string, status: RunStatus): Promise<RunRecord> {
@@ -66,19 +68,19 @@ mailbox.send({ type: 'succeeded' })
 describe.skipIf(process.platform !== 'linux')('Engine', () => {
 	test('runs a workflow to the end, keeps its events and removes its sandbox', async () => {
 		// Arrange
-		const directory = await workflowRepository({
+		const { apps, engine, backend } = await openEngine()
+		await deployTestApp(apps, {
 			hello: runtimeScript(
 				`event('root', 'workflow-started')\nevent('child', 'log', { parentId: 'root' })\nmailbox.send({ type: 'succeeded' })`,
 			),
 		})
-		const { engine, backend } = await openEngine()
 
 		// Act
-		const started = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
+		const started = await engine.startRun({ ...userRun('hello'), abortSignal: signal })
 		const finished = await untilStatus(engine, started.id, 'succeeded')
 
 		// Assert
-		expect(finished.source.dirty).toBe(false)
+		expect(finished.app).toMatchObject({ name: testAppName, entry: 'main.mts' })
 		expect((await engine.events(started.id)).map((event) => event.type)).toEqual(['workflow-started', 'log'])
 		expect(finished.sandbox).toBeUndefined()
 		// The sandbox goes after the outcome is saved.
@@ -89,9 +91,9 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('starts one run for a key, also when it is asked twice at once', async () => {
 		// Arrange
-		const directory = await workflowRepository({ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
-		const { engine } = await openEngine()
-		const options = { directory, workflow: 'hello', key: 'webhook team/hello/1', abortSignal: signal }
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
+		const options = { ...userRun('hello'), key: 'webhook team/hello/1', abortSignal: signal }
 
 		// Act
 		const [first, second] = await Promise.all([engine.startRun(options), engine.startRun(options)])
@@ -105,11 +107,17 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('gives the entry file the workflow and its parameters, also on a restart', async () => {
 		// Arrange
-		const directory = await workflowRepository({
-			main: runtimeScript(`const start = await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`),
-		})
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'greet', input: { name: 'Ada' }, abortSignal: signal })
+		const { apps, engine } = await openEngine()
+		await deployTestApp(
+			apps,
+			{
+				main: runtimeScript(
+					`const start = await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`,
+				),
+			},
+			{ triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }] },
+		)
+		const { id } = await engine.startRun({ ...userRun('greet'), input: { name: 'Ada' }, abortSignal: signal })
 		const first = await untilStatus(engine, id, 'failed')
 
 		// Act
@@ -120,15 +128,20 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 		const second = await untilStatus(engine, id, 'failed')
 
 		// Assert
-		expect(JSON.parse(first.error ?? '')).toEqual({ mode: 'run', workflow: 'greet', input: { name: 'Ada' } })
+		expect(JSON.parse(first.error ?? '')).toEqual({
+			mode: 'run',
+			workflow: 'greet',
+			trigger: { kind: 'user', id: 'greet' },
+			input: { name: 'Ada' },
+		})
 		expect(second.error).toBe(first.error)
 	})
 
 	test('relays an input request and its answer', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -142,9 +155,9 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('refuses a second answer to a request while the first is on its way', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -157,9 +170,9 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('refuses an answer to a request the run does not wait for', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -171,7 +184,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('answers a wake request on its own clock', async () => {
 		// Arrange
-		const directory = await workflowRepository({
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, {
 			later: runtimeScript(`
 const at = new Date(Date.now() + 300).toISOString()
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'later', at } })
@@ -180,10 +194,9 @@ event('woke', 'woke', { early: Date.now() < Date.parse(at) })
 mailbox.send({ type: 'succeeded' })
 `),
 		})
-		const { engine } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'later', abortSignal: signal })
+		const { id } = await engine.startRun({ ...userRun('later'), abortSignal: signal })
 		await untilStatus(engine, id, 'succeeded')
 
 		// Assert
@@ -192,13 +205,13 @@ mailbox.send({ type: 'succeeded' })
 
 	test('keeps how a run ended when removing its sandbox fails', async () => {
 		// Arrange
-		const directory = await workflowRepository({ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
-		const { engine, log } = await openEngine({
+		const { apps, engine, log } = await openEngine({
 			wrap: (backend) => ({ ...backend, remove: () => Promise.reject(new Error('device busy')) }),
 		})
+		await deployTestApp(apps, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
+		const { id } = await engine.startRun({ ...userRun('hello'), abortSignal: signal })
 		const finished = await untilStatus(engine, id, 'succeeded')
 
 		// Assert
@@ -211,7 +224,8 @@ mailbox.send({ type: 'succeeded' })
 	test('does not let a wake of a failed attempt answer the restarted one', async () => {
 		// Arrange
 		const marker = path.join(await temporaryDirectory(), 'attempted')
-		const directory = await workflowRepository({
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, {
 			later: runtimeScript(`
 const { existsSync, writeFileSync } = await import('node:fs')
 const restarted = existsSync(${JSON.stringify(marker)})
@@ -228,8 +242,7 @@ if (!restarted) {
 }
 `),
 		})
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'later', abortSignal: signal })
+		const { id } = await engine.startRun({ ...userRun('later'), abortSignal: signal })
 		await untilStatus(engine, id, 'failed')
 
 		// Act
@@ -245,13 +258,13 @@ if (!restarted) {
 
 	test('fails a run whose runtime reports a failure', async () => {
 		// Arrange
-		const directory = await workflowRepository({
+		const { apps, engine, backend } = await openEngine()
+		await deployTestApp(apps, {
 			broken: runtimeScript(`mailbox.send({ type: 'failed', error: 'The plan was rejected.' })`),
 		})
-		const { engine, backend } = await openEngine()
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'broken', abortSignal: signal })
+		const { id } = await engine.startRun({ ...userRun('broken'), abortSignal: signal })
 		const failed = await untilStatus(engine, id, 'failed')
 
 		// Assert
@@ -264,33 +277,16 @@ if (!restarted) {
 
 	test('fails a run whose runtime exits without an outcome, with the end of its log', async () => {
 		// Arrange
-		const directory = await workflowRepository({ crash: runtimeScript(`console.error('out of cheese')\nprocess.exit(2)`) })
-		const { engine } = await openEngine()
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { crash: runtimeScript(`console.error('out of cheese')\nprocess.exit(2)`) })
 
 		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'crash', abortSignal: signal })
+		const { id } = await engine.startRun({ ...userRun('crash'), abortSignal: signal })
 		const failed = await untilStatus(engine, id, 'failed')
 
 		// Assert
 		expect(failed.error).toContain('exited without saying how the run ended')
 		expect(failed.error).toContain('out of cheese')
-	})
-
-	test('fails a run whose setup fails, before the runtime starts', async () => {
-		// Arrange
-		const directory = await workflowRepository(
-			{ hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
-			{ setup: [['sh', '-c', 'echo "no lockfile" >&2; exit 4']] },
-		)
-		const { engine } = await openEngine()
-
-		// Act
-		const { id } = await engine.startRun({ directory, workflow: 'hello', abortSignal: signal })
-		const failed = await untilStatus(engine, id, 'failed')
-
-		// Assert
-		expect(failed.error).toContain('exit code 4')
-		expect(failed.error).toContain('no lockfile')
 	})
 
 	test('removes a run directory without a record when it opens', async () => {
@@ -308,25 +304,29 @@ if (!restarted) {
 		expect(engine.list()).toEqual([])
 	})
 
-	test('refuses a repository that has no entry file', async () => {
+	test('refuses an app that is not deployed, and a trigger its version does not list', async () => {
 		// Arrange
-		const directory = await workflowRepository({})
-		await rm(path.join(directory, 'main.mts'))
-		const { engine } = await openEngine()
+		const { apps, engine } = await openEngine()
+		const { version } = await deployTestApp(apps, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 
 		// Act
-		const starting = engine.startRun({ directory, workflow: 'missing', abortSignal: signal })
+		const undeployed = engine.startRun({ app: 'elsewhere', trigger: { kind: 'user', id: 'hello' }, abortSignal: signal })
+		const unlisted = engine.startRun({ ...userRun('missing'), abortSignal: signal })
 
 		// Assert
-		await expect(starting).rejects.toMatchObject({ code: 'invalid' })
+		await expect(undeployed).rejects.toMatchObject({ code: 'not-found', message: 'There is no app elsewhere: deploy it first.' })
+		await expect(unlisted).rejects.toMatchObject({
+			code: 'not-found',
+			message: `Version ${version} of ${testAppName} has no user trigger missing.`,
+		})
 		expect(engine.list()).toEqual([])
 	})
 
 	test('stops a run and removes its sandbox', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine, backend } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine, backend } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		const sandbox = engine.get(id).sandbox?.id ?? ''
 		const [runtime = 0] = await pidsOf(backend.root, sandbox)
@@ -344,9 +344,9 @@ if (!restarted) {
 
 	test('finishes stopping a run when the caller stops waiting', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine, backend } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine, backend } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
 		// Act
@@ -364,8 +364,7 @@ if (!restarted) {
 		// Arrange
 		const held = deferred<undefined>()
 		let holding = false
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine, backend } = await openEngine({
+		const { apps, engine, backend } = await openEngine({
 			wrapStore: (store) => ({
 				...store,
 				save: async (record) => {
@@ -374,7 +373,8 @@ if (!restarted) {
 				},
 			}),
 		})
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
 
@@ -396,9 +396,9 @@ if (!restarted) {
 
 	test('refuses a second resume while the first is under way', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
 		const first = await openEngine()
-		const { id } = await first.engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		await deployTestApp(first.apps, { ask: askAndEcho })
+		const { id } = await first.engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
 		const second = await openEngine({ home: first.home })
@@ -413,9 +413,9 @@ if (!restarted) {
 
 	test('pauses a waiting run on close and resumes it after a restart of the engine', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
 		const first = await openEngine()
-		const { id } = await first.engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		await deployTestApp(first.apps, { ask: askAndEcho })
+		const { id } = await first.engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
 		const second = await openEngine({ home: first.home })
@@ -432,11 +432,12 @@ if (!restarted) {
 
 	test('restarts a stopped run from the top, with the code it first ran', async () => {
 		// Arrange
-		const directory = await workflowRepository({ ask: askAndEcho })
-		const { engine } = await openEngine()
-		const { id } = await engine.startRun({ directory, workflow: 'ask', abortSignal: signal })
+		const { apps, engine } = await openEngine()
+		await deployTestApp(apps, { ask: askAndEcho })
+		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
+		await deployTestApp(apps, { ask: runtimeScript(`mailbox.send({ type: 'failed', error: 'the new version' })`) })
 
 		// Act
 		await engine.restart(id, signal)

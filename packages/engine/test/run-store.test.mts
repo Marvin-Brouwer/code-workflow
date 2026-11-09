@@ -9,12 +9,12 @@ function record(id: string, createdAt: string): RunRecord {
 	return {
 		id,
 		workflow: 'develop',
-		source: { directory: '/repository', commit: 'abc', dirty: false },
-		config: {
+		trigger: { kind: 'user', id: 'develop' },
+		app: {
+			name: 'team',
+			version: '0123456789ab',
+			entry: 'main.mjs',
 			sandbox: { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } },
-			setup: [],
-			start: ['node'],
-			entry: 'main.mts',
 		},
 		status: 'running',
 		cursor: 3,

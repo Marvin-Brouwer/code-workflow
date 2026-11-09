@@ -75,7 +75,8 @@ async function dispatch(
 
 /**
  * The workflow to run and its parameters. A webhook delivery goes through its trigger's schema
- * first, which may turn it down; a schedule's parameters are the ones in the entry file.
+ * first, which may turn it down. A schedule's parameters are the ones in the entry file, unless the
+ * run was fired by hand with parameters of its own.
  */
 async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' }>, abortSignal: AbortSignal): Promise<Begun> {
 	const { trigger: ref } = request
@@ -86,7 +87,7 @@ async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' 
 	if (trigger === undefined) throw new Error(`The app has no ${ref.kind} trigger ${ref.id} any more.`)
 	if (trigger.workflow.name !== request.workflow)
 		throw new Error(`The ${ref.kind} trigger ${ref.id} starts ${trigger.workflow.name}, not ${request.workflow}.`)
-	if (trigger.kind === 'schedule') return { workflow: trigger.workflow, parameters: trigger.parameters }
+	if (trigger.kind === 'schedule') return { workflow: trigger.workflow, parameters: request.input ?? trigger.parameters }
 	// A `.refine` or `.transform` can wait on anything; a stop doesn't wait for it.
 	const parsed = await untilAborted(trigger.schema.safeParseAsync(request.input), abortSignal)
 	if (!parsed.success) return { skipped: `The delivery isn't for ${trigger.workflow.name}:\n${z.prettifyError(parsed.error)}` }

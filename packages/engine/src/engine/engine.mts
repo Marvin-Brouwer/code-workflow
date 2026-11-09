@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import {
 	runIdEnvironmentVariable,
 	type Answer,
@@ -8,20 +5,17 @@ import {
 	type RuntimeEvent,
 	type RuntimeMessage,
 	type RuntimeRequest,
+	type TriggerRef,
 	type WakeRequest,
-	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
-import { abortable, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
+import { abortable, SandboxSpec, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
+import type { AppStore } from '../apps/app-store.mts'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
-import { finishedStatuses, type RunRecord, type RunStatus, type RunTrigger } from '../runs/run-record.mts'
+import { finishedStatuses, type RunApp, type RunRecord, type RunStatus } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
-import { describeInSandbox, EntryFileError } from '../triggers/describe-in-sandbox.mts'
-import { memoryDescriptionCache, type DescriptionCache } from '../triggers/description-cache.mts'
-import { entryFile, findEntry, type WorkflowConfig } from '../workflow/workflow-config.mts'
-import { packWorkflowSource, sourceKey } from '../workflow/workflow-source.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
@@ -35,32 +29,31 @@ export interface EngineOptions {
 	readonly backend: SandboxBackend
 	/** Where the run records are kept. */
 	readonly store: RunStore
+	/** The deployed apps runs start from. */
+	readonly apps: AppStore
 	/** Where things go inside a sandbox. */
 	readonly layout?: SandboxLayout
 	/** Where the engine reports what it did on its own, such as reconciling. Default: nowhere. */
 	readonly log?: (message: string) => void
 	/** The engine's clock, for wakes and timestamps. Default: the system clock. */
 	readonly now?: () => Date
-	/** Where descriptions of entry files are kept, by source key. Default: in memory. */
-	readonly descriptions?: DescriptionCache
 }
 
-/** Which workflow to start a run of, and with what. */
+/** Which trigger of which app starts a run, and with what. */
 export interface StartRunOptions {
-	/** The workflow repository on the host, with its `mesh-flow.config.json` and entry file. */
-	readonly directory: string
-	/** The workflow's name, as `workflow()` names it. The entry file's modules have to define it. */
-	readonly workflow: string
+	/** The deployed app; the run starts on its current version. */
+	readonly app: string
+	/** One of the triggers the app's current version lists. Its workflow is the one that runs. */
+	readonly trigger: TriggerRef
 	/**
-	 * The run's parameters, which the runtime checks against the workflow's; for a webhook
-	 * trigger, the delivery's payload, which the trigger's schema turns into them. Default `{}`.
+	 * For a user trigger or a schedule, the run's parameters, which the runtime checks against the
+	 * workflow's; for a webhook, the delivery's payload, which the trigger's schema turns into them.
+	 * Without it, a schedule runs with its own parameters.
 	 */
 	readonly input?: unknown
-	/** The trigger that starts the run, when one does. */
-	readonly trigger?: RunTrigger
 	/** Names what the run is for, such as a webhook delivery. A run with this key already is returned instead. */
 	readonly key?: string
-	/** Bounds packing the source and saving the record. The run itself goes on in the background. */
+	/** Bounds copying the app and saving the record. The run itself goes on in the background. */
 	readonly abortSignal: AbortSignal
 }
 
@@ -86,13 +79,7 @@ type SandboxRef = NonNullable<RunRecord['sandbox']>
 /** How long cleaning up after a run, such as removing its sandbox, may take. */
 const cleanupTimeoutMs = 60_000
 
-/** How long describing an entry file may take, setup steps such as `npm ci` included. */
-const describeTimeoutMs = 10 * 60_000
-
-/** How many sources' describe failures are kept; the oldest goes first. */
-const maxDescribeFailures = 100
-
-/** How long starting a run from a trigger may take: packing the source and saving the record. */
+/** How long starting a run from a trigger may take: copying the app and saving the record. */
 export const startRunTimeoutMs = 60_000
 
 /**
@@ -102,8 +89,8 @@ export const startRunTimeoutMs = 60_000
  *
  * @example
  * ```ts
- * const engine = await Engine.open({ backend, store: openRunStore(directory) }, signal)
- * const run = await engine.startRun({ directory: process.cwd(), workflow: 'develop', abortSignal: signal })
+ * const engine = await Engine.open({ backend, store: openRunStore(runs), apps: await openAppStore(apps) }, signal)
+ * const run = await engine.startRun({ app: 'team', trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal: signal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
  * ```
@@ -111,6 +98,7 @@ export const startRunTimeoutMs = 60_000
 export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
+	readonly #apps: AppStore
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
@@ -121,24 +109,15 @@ export class Engine {
 	readonly #answering = new Set<string>()
 	/** Runs with a key that are being started, so a second start with the key waits for the first. */
 	readonly #keyed = new Map<string, Promise<RunRecord>>()
-	readonly #descriptions: DescriptionCache
-	/** Describes going on, by source key, so callers who ask at once share one sandbox. */
-	readonly #describing = new Map<string, Promise<WorkflowsDescription>>()
-	/**
-	 * Why an entry file failed to describe itself, by source key, so a broken entry file costs one
-	 * sandbox per version, not one per ask. A sandbox or setup step that failed isn't kept: the next
-	 * ask tries again.
-	 */
-	readonly #describeFailures = new Map<string, EngineError>()
 	#closing: Promise<void> | undefined
 
 	private constructor(options: EngineOptions) {
 		this.#backend = options.backend
 		this.#store = options.store
+		this.#apps = options.apps
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
-		this.#descriptions = options.descriptions ?? memoryDescriptionCache()
 	}
 
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
@@ -147,7 +126,7 @@ export class Engine {
 		const { records, problems, orphans } = await options.store.loadAll()
 		for (const problem of problems) engine.#log(problem)
 		for (const id of orphans) {
-			// Left by a start that died before its record was saved, with its source and maybe a webhook's payload.
+			// Left by a start that died before its record was saved, with its app and maybe a webhook's payload.
 			await options.store.removeRun(id).catch((error: unknown) => {
 				engine.#log(`Removing ${id}, which has no run record, failed: ${messageOf(error)}`)
 			})
@@ -187,8 +166,8 @@ export class Engine {
 	}
 
 	/**
-	 * Starts a run of a workflow through the repository's entry file. Returns once the record is
-	 * saved; the sandbox is made and set up in the background, so follow the run's status. With a
+	 * Starts a run through one of an app's triggers, on the app's current version. Returns once the
+	 * record is saved; the sandbox is made and set up in the background, so follow the run's status. With a
 	 * `key`, a run that has it already is returned instead, also while it's being started.
 	 */
 	async startRun(options: StartRunOptions): Promise<RunRecord> {
@@ -207,22 +186,31 @@ export class Engine {
 
 	async #create(options: StartRunOptions): Promise<RunRecord> {
 		const waitSignal = this.#withLifetime(options.abortSignal)
-		const { config, file } = await findEntry(options.directory).catch((error: unknown) => {
-			throw new EngineError('invalid', messageOf(error))
-		})
-
+		const deployed = this.#apps.current(options.app)
+		if (deployed === undefined) throw new EngineError('not-found', `There is no app ${options.app}: deploy it first.`)
+		const { kind, id: triggerId } = options.trigger
+		const listed = deployed.manifest.description.triggers.find((known) => known.kind === kind && known.id === triggerId)
+		if (listed === undefined) {
+			throw new EngineError('not-found', `Version ${deployed.version} of ${options.app} has no ${kind} trigger ${triggerId}.`)
+		}
+		const app: RunApp = {
+			name: deployed.name,
+			version: deployed.version,
+			entry: deployed.manifest.entry,
+			sandbox: SandboxSpec.parse(deployed.manifest.description.sandbox),
+		}
 		const id = newRunId()
-		const source = await packWorkflowSource(options.directory, this.#store.sourceOf(id), waitSignal).catch(async (error: unknown) => {
-			// Best effort: the pack error is the one to report.
+		// A copy of its own, so the run keeps its code when the app is deployed again or removed.
+		await this.#store.saveApp(id, deployed.tarball).catch(async (error: unknown) => {
 			await this.#store.removeRun(id).catch(() => undefined)
-			if (waitSignal.aborted) throw waitSignal.reason instanceof Error ? waitSignal.reason : new Error(String(waitSignal.reason))
-			throw new EngineError('invalid', `Packing ${options.directory} failed: ${messageOf(error)}`)
+			throw error
 		})
-		const { trigger } = options
+		waitSignal.throwIfAborted()
+		const trigger: TriggerRef = { kind, id: triggerId }
 		const start: RunStart = {
 			mode: 'run',
-			workflow: options.workflow,
-			...(trigger === undefined ? {} : { trigger: { kind: trigger.kind, id: trigger.id } }),
+			workflow: listed.workflow,
+			trigger,
 			...(options.input === undefined ? {} : { input: options.input }),
 		}
 		await this.#store.saveStart(id, start)
@@ -233,11 +221,10 @@ export class Engine {
 		const createdAt = this.#now().toISOString()
 		const record: RunRecord = {
 			id,
-			workflow: options.workflow,
-			...(trigger === undefined ? {} : { trigger }),
+			workflow: listed.workflow,
+			trigger,
 			...(options.key === undefined ? {} : { key: options.key }),
-			source,
-			config,
+			app,
 			status: 'starting',
 			cursor: 0,
 			pending: [],
@@ -250,75 +237,10 @@ export class Engine {
 		this.#drive(id, async (active, runSignal) => {
 			await saving
 			runSignal.throwIfAborted()
-			await this.#start(id, file, active, runSignal)
+			await this.#start(id, active, runSignal)
 		})
 		await saving
 		return record
-	}
-
-	/**
-	 * What a repository's entry file declares: its workflows, their parameters and its triggers.
-	 * The entry file runs in describe mode in a sandbox, never on the host. Descriptions are kept by
-	 * source key, so the same code is described once, and callers who ask at the same time share
-	 * one sandbox. A source whose entry file can't be described fails with `invalid`, and keeps
-	 * failing without another sandbox until the source changes. Aborting `abortSignal` stops the
-	 * waiting; the describe goes on for the others.
-	 */
-	async describe(directory: string, abortSignal: AbortSignal): Promise<WorkflowsDescription> {
-		this.#assertOpen()
-		const waitSignal = this.#withLifetime(abortSignal)
-		const { config, file } = await findEntry(directory).catch((error: unknown) => {
-			throw new EngineError('invalid', messageOf(error))
-		})
-		const key = await sourceKey(directory, waitSignal).catch((error: unknown) => {
-			waitSignal.throwIfAborted()
-			throw error
-		})
-		const cached = await this.#descriptions.get(key)
-		if (cached !== undefined) return cached
-		const failure = this.#describeFailures.get(key)
-		if (failure !== undefined) throw failure
-		let describing = this.#describing.get(key)
-		if (describing === undefined) {
-			describing = this.#describeAt(key, directory, config, file).finally(() => {
-				this.#describing.delete(key)
-			})
-			this.#describing.set(key, describing)
-			// Every caller may have stopped waiting; a failure is theirs to see, never unhandled.
-			describing.catch(() => undefined)
-		}
-		return abortable(describing, waitSignal)
-	}
-
-	async #describeAt(key: string, directory: string, config: WorkflowConfig, file: string): Promise<WorkflowsDescription> {
-		const abortSignal = AbortSignal.any([this.#lifetime.signal, AbortSignal.timeout(describeTimeoutMs)])
-		const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-describe-'))
-		try {
-			const tarball = path.join(scratch, 'source.tgz')
-			await packWorkflowSource(directory, tarball, abortSignal)
-			// A file that changed after the key was made is in the tarball: then the result is for another source.
-			const packedKey = await sourceKey(directory, abortSignal)
-			const options = { backend: this.#backend, layout: this.#layout, config, file, tarball, log: this.#log }
-			const description = await describeInSandbox({ ...options, cleanupSignal: () => this.#cleanupSignal() }, abortSignal).catch(
-				(error: unknown) => {
-					if (abortSignal.aborted || !(error instanceof EntryFileError)) throw error
-					const failure = new EngineError('invalid', error.message)
-					if (packedKey === key) this.#keepDescribeFailure(key, failure)
-					throw failure
-				},
-			)
-			if (packedKey === key) await this.#descriptions.set(key, description)
-			return description
-		} finally {
-			await rm(scratch, { recursive: true, force: true })
-		}
-	}
-
-	/** Keeps why describing the source `key` failed, and forgets the oldest past the limit. */
-	#keepDescribeFailure(key: string, failure: EngineError): void {
-		this.#describeFailures.set(key, failure)
-		const [oldest] = this.#describeFailures.keys()
-		if (this.#describeFailures.size > maxDescribeFailures && oldest !== undefined) this.#describeFailures.delete(oldest)
 	}
 
 	/** Answers an input request. The runtime validates the value against what it asked for. */
@@ -384,7 +306,6 @@ export class Engine {
 		signal.throwIfAborted()
 		const record = this.#requireStatus(id, ['restartable', 'failed', 'stopped'])
 		const leftOver = record.sandbox
-		const file = entryFile(record.config)
 		// The status changes and the drive starts before anything is awaited, so a second restart
 		// is refused and a stop sees the run as taken.
 		const saving = this.#update(record.id, {
@@ -400,7 +321,7 @@ export class Engine {
 			runSignal.throwIfAborted()
 			if (leftOver) await this.#discard(record.id, leftOver)
 			await this.#store.appendEvents(record.id, [restartEvent(this.#now())])
-			await this.#start(record.id, file, active, runSignal)
+			await this.#start(record.id, active, runSignal)
 		})
 		return saving
 	}
@@ -420,8 +341,7 @@ export class Engine {
 		this.#lifetime.abort(new EngineError('conflict', 'The engine is shutting down.'))
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
-		const describing = [...this.#describing.values()]
-		await settleWithin(Promise.allSettled([...active.map(([, run]) => run.work), ...describing]), pause)
+		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
 		await Promise.allSettled(active.map(([id, run]) => this.#pauseOnClose(id, run, pause)))
 		await settleWithin(this.#store.flush(), backend)
 		await abortable(this.#backend.close(backend), backend)
@@ -472,12 +392,12 @@ export class Engine {
 		return channel
 	}
 
-	/** Makes the sandbox, uploads and sets up the workflow, starts the runtime and follows it. */
-	async #start(id: RunId, file: string, active: ActiveRun, signal: AbortSignal): Promise<void> {
+	/** Makes the sandbox, uploads the app, starts the runtime and follows it. */
+	async #start(id: RunId, active: ActiveRun, signal: AbortSignal): Promise<void> {
 		const record = this.get(id)
-		const { config } = record
+		const { app } = record
 		const start = await this.#store.loadStart(record)
-		const sandbox = await this.#backend.create(config.sandbox, signal)
+		const sandbox = await this.#backend.create(app.sandbox, signal)
 		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { sandbox: ref }, ['starting']).catch(async (error: unknown) => {
@@ -485,7 +405,7 @@ export class Engine {
 			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
-		const setup = { tarball: this.#store.sourceOf(id), config, file, layout: this.#layout, start, env: { [runIdEnvironmentVariable]: id } }
+		const setup = { tarball: this.#store.appOf(id), entry: app.entry, layout: this.#layout, start, env: { [runIdEnvironmentVariable]: id } }
 		await setUpRuntime(sandbox, channel, setup, signal)
 		await this.#update(id, { status: 'running' }, ['starting'])
 		await this.#pump(id, channel, signal)

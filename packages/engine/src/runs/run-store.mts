@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
@@ -20,17 +20,19 @@ export interface LoadedRuns {
  *
  * - `run.json`: the record, replaced atomically on every save;
  * - `events.jsonl`: the run's event tree, one event per line, appended;
- * - `source.tgz`: the workflow code the run started with, so a restart runs the same code;
- * - `start.json`: what the entry file is to run, with the run's parameters or a webhook's payload.
+ * - `app.tgz`: the built app the run started with, so a restart runs the same code;
+ * - `start.json`: what the app is to run, with the run's parameters or a webhook's payload.
  *
  * Writes to one run happen one after another; `flush` waits for all of them.
  */
 export interface RunStore {
-	/** Where the run's packed workflow source goes. */
-	sourceOf(id: RunId): string
-	/** Keeps what the entry file is to run, once, before the run's record is saved. */
+	/** The run's own copy of the built app, packed. */
+	appOf(id: RunId): string
+	/** Keeps a copy of the built app the run starts on, once, before the run's record is saved. */
+	saveApp(id: RunId, tarball: string): Promise<void>
+	/** Keeps what the app is to run, once, before the run's record is saved. */
 	saveStart(id: RunId, start: RunStart): Promise<void>
-	/** What the entry file is to run. Runs from before start files run their workflow without parameters. */
+	/** What the app is to run. Runs from before start files run their workflow without parameters. */
 	loadStart(record: RunRecord): Promise<RunStart>
 	/** Saves a copy of the record as it is now. */
 	save(record: RunRecord): Promise<void>
@@ -43,7 +45,7 @@ export interface RunStore {
 	 * doesn't keep the engine from starting.
 	 */
 	loadAll(): Promise<LoadedRuns>
-	/** Removes what a run left behind before it had a record, such as a half-packed source. */
+	/** Removes what a run left behind before it had a record, such as a half-copied app. */
 	removeRun(id: RunId): Promise<void>
 	/** Waits for every write that has started. */
 	flush(): Promise<void>
@@ -51,7 +53,7 @@ export interface RunStore {
 
 const recordFile = 'run.json'
 const eventsFile = 'events.jsonl'
-const sourceFile = 'source.tgz'
+const appFile = 'app.tgz'
 const startFile = 'start.json'
 
 /** The directory of one run under `root`. Throws for anything that isn't a run id, such as `../etc`. */
@@ -65,7 +67,13 @@ export function openRunStore(root: string): RunStore {
 	const file = (id: RunId, name: string) => path.join(runDirectory(root, id), name)
 
 	return Object.freeze({
-		sourceOf: (id) => file(id, sourceFile),
+		appOf: (id) => file(id, appFile),
+
+		saveApp: (id, tarball) =>
+			queues.write(id, async () => {
+				await mkdir(runDirectory(root, id), { recursive: true })
+				await copyFile(tarball, file(id, appFile))
+			}),
 
 		saveStart: (id, start) =>
 			queues.write(id, async () => {

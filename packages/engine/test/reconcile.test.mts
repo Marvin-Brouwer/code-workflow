@@ -25,8 +25,8 @@ function run(id: string, status: RunStatus, sandbox?: string, backend: BackendNa
 	return {
 		id,
 		workflow: 'develop',
-		source: { directory: '/repository', commit: 'abc', dirty: false },
-		config: { sandbox: spec, setup: [], start: ['node'], entry: 'main.mts' },
+		trigger: { kind: 'user', id: 'develop' },
+		app: { name: 'team', version: '0123456789ab', entry: 'main.mjs', sandbox: spec },
 		status,
 		cursor: 0,
 		pending: [],

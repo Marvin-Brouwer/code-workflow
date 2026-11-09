@@ -1,5 +1,4 @@
 import { createHmac } from 'node:crypto'
-import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
@@ -12,15 +11,15 @@ import { openWebhookSecrets, webhookSecretsFile } from '../src/triggers/webhook-
 import { deferred } from './support/deferred.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
+import { deployThroughApi, testAppName } from './support/test-app.mts'
 import { triggerEntry } from './support/trigger-entry.mts'
-import { runtimeScript, workflowRepository } from './support/workflow-repository.mts'
 
 const signal = new AbortController().signal
 const secret = 'correct horse battery staple'
 const payload = { label: 'ai-fix', issue: { number: 12 } }
 
-const description: WorkflowsDescription = {
-	sandbox: { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
+/** What the test app declares, besides its sandbox. */
+const declared: Pick<WorkflowsDescription, 'workflows' | 'triggers'> = {
 	workflows: [{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } }],
 	triggers: [
 		{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },
@@ -46,6 +45,15 @@ const description: WorkflowsDescription = {
 	],
 }
 
+/** A schedule of fix-issue that ticks every second. */
+const everySecond = {
+	kind: 'schedule' as const,
+	id: 'fix-issue * * * * * *',
+	workflow: 'fix-issue',
+	cron: '* * * * * *',
+	parameters: { issue: 1 },
+}
+
 /** What the ingress answers for a delivery it took. */
 const Accepted = z.object({ run: z.string(), status: z.string() })
 
@@ -60,29 +68,16 @@ function signed(body: string): Record<string, string> {
 }
 
 interface ServeOptions {
-	/** The entry file. Default: one with {@link description}. */
-	readonly entry?: string
+	/** What the entry file does once it has started. Default: succeed. */
+	readonly body?: string
+	/** The triggers the app lists. Default: those in {@link declared}. */
+	readonly triggers?: WorkflowsDescription['triggers']
 	/** Changes what the backend does. */
 	readonly wrap?: (backend: SandboxBackend) => SandboxBackend
-	/** How often the engine describes the repository again. Default: 200 ms. */
-	readonly refreshMs?: number
-	/** Whether to wait until the engine has described the repository. Default: yes. */
-	readonly untilDescribed?: boolean
 }
 
-/** How often the tests let the engine describe its repositories again. */
-const fastRefreshMs = 200
-
-/** Long enough that the engine doesn't describe again during a test. */
-const noRefreshMs = 10 * 60_000
-
-/** An engine that serves webhooks for one registered repository, `team`, closed when the test ends. */
-async function serve({
-	entry = triggerEntry(description),
-	wrap = (backend) => backend,
-	refreshMs = fastRefreshMs,
-	untilDescribed = true,
-}: ServeOptions = {}) {
+/** An engine that serves webhooks, with the test app deployed and its webhook secrets set, closed when the test ends. */
+async function serve({ body, triggers = declared.triggers, wrap = (backend) => backend }: ServeOptions = {}) {
 	const home = await temporaryDirectory()
 	const host = hostBackend(path.join(home, 'sandboxes'))
 	const created = vi.fn()
@@ -94,31 +89,20 @@ async function serve({
 		},
 	})
 	const log = vi.fn<(message: string) => void>()
-	const served = await serveEngine({
-		home,
-		backend,
-		layout: hostSandboxLayout,
-		webhooks: { port: 0 },
-		repositoryRefreshMs: refreshMs,
-		log,
-		abortSignal: signal,
-	})
+	const served = await serveEngine({ home, backend, layout: hostSandboxLayout, webhooks: { port: 0 }, log, abortSignal: signal })
 	const close = (pauseMs = 5_000) => served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(pauseMs * 2) })
 	onTestFinished(() => close())
-	const directory = await workflowRepository({ main: entry })
+	await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'fix-issue', secret)
+	await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'signed', secret)
 	const client = controlClient(served.socketPath)
-	await client.addRepository({ name: 'team', directory }, signal)
-	await openWebhookSecrets(webhookSecretsFile(home)).set('team', 'fix-issue', secret)
-	await openWebhookSecrets(webhookSecretsFile(home)).set('team', 'signed', secret)
-	const deliver = (webhook: string, body: string, headers: Record<string, string>) =>
-		fetch(`${served.webhookUrl ?? ''}/webhooks/team/${webhook}`, {
+	await deployThroughApi(client, { main: triggerEntry(body) }, { workflows: declared.workflows, triggers })
+	const deliver = (webhook: string, delivery: string, headers: Record<string, string>, app = testAppName) =>
+		fetch(`${served.webhookUrl ?? ''}/webhooks/${app}/${webhook}`, {
 			method: 'POST',
-			body,
+			body: delivery,
 			headers: { 'content-type': 'application/json', ...headers },
 		})
-	// An unsigned delivery is turned down with a 503 until the repository is described, and with a 401 or 404 after.
-	if (untilDescribed) await expect.poll(async () => (await deliver('fix-issue', '{}', {})).status, { timeout: 20_000 }).not.toBe(503)
-	return { served, client, directory, created, log, deliver, close, home }
+	return { served, client, created, log, deliver, close, home }
 }
 
 async function untilStatus(client: ReturnType<typeof controlClient>, id: string, status: RunRecord['status']): Promise<RunRecord> {
@@ -149,8 +133,9 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(await runOf(again)).toBe(run)
 		const record = await untilStatus(client, run, 'succeeded')
 		expect(record).toMatchObject({
-			trigger: { kind: 'webhook', id: 'fix-issue', repository: 'team' },
-			key: 'webhook team/fix-issue/delivery-1',
+			app: { name: testAppName },
+			trigger: { kind: 'webhook', id: 'fix-issue' },
+			key: `webhook ${testAppName}/fix-issue/delivery-1`,
 		})
 		expect(await client.events(run, signal)).toEqual([
 			expect.objectContaining({ trigger: { kind: 'webhook', id: 'fix-issue' }, input: payload }),
@@ -160,9 +145,7 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 
 	test('answer a payload that does not fit with a 4xx, before any sandbox is made for it', async () => {
 		// Arrange
-		const { client, deliver, created, directory } = await serve()
-		await client.describe(directory, signal)
-		created.mockClear()
+		const { client, deliver, created } = await serve()
 
 		// Act
 		const response = await deliver('fix-issue', JSON.stringify({ label: 'ai-fix' }), { 'x-webhook-secret': secret })
@@ -174,9 +157,9 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(await client.list(signal)).toEqual([])
 	})
 
-	test('refuse a delivery that is not signed with the secret', async () => {
+	test('refuse a delivery that is not signed with the secret, and make no sandbox for it', async () => {
 		// Arrange
-		const { client, deliver, log } = await serve()
+		const { client, deliver, log, created } = await serve()
 
 		// Act
 		const unsigned = await deliver('fix-issue', JSON.stringify(payload), {})
@@ -184,6 +167,7 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 
 		// Assert
 		expect([unsigned.status, wrong.status]).toEqual([401, 401])
+		expect(created).not.toHaveBeenCalled()
 		expect(await client.list(signal)).toEqual([])
 		expect(log).toHaveBeenCalledWith(expect.stringContaining("isn't signed with the secret"))
 	})
@@ -217,16 +201,20 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect([first.status, same.status, other.status]).toEqual([202, 200, 202])
 	})
 
-	test('answer 404 for a webhook the entry file does not have', async () => {
+	test('answer 404 for a webhook the app does not have, and for an app that is not deployed', async () => {
 		// Arrange
-		const { home, deliver } = await serve()
-		await openWebhookSecrets(webhookSecretsFile(home)).set('team', 'deploy', secret)
+		const { home, deliver, log } = await serve()
+		await openWebhookSecrets(webhookSecretsFile(home)).set(testAppName, 'deploy', secret)
+		await openWebhookSecrets(webhookSecretsFile(home)).set('elsewhere', 'fix-issue', secret)
 
 		// Act
-		const response = await deliver('deploy', JSON.stringify(payload), { 'x-webhook-secret': secret })
+		const unknownWebhook = await deliver('deploy', JSON.stringify(payload), { 'x-webhook-secret': secret })
+		const unknownApp = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret }, 'elsewhere')
 
 		// Assert
-		expect(response.status).toBe(404)
+		expect([unknownWebhook.status, unknownApp.status]).toEqual([404, 404])
+		expect(log).toHaveBeenCalledWith(expect.stringContaining('has no webhook deploy'))
+		expect(log).toHaveBeenCalledWith(expect.stringContaining('there is no app elsewhere'))
 	})
 
 	test('end a run as skipped when the schema in the sandbox turns the delivery down', async () => {
@@ -244,11 +232,10 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(record.error).toBeUndefined()
 	})
 
-	test('answer 503 until the repository is described, and shut down while describing never settles', async () => {
+	test("shut down while the sandbox of a delivery's run is never made", async () => {
 		// Arrange
 		const creating = deferred<undefined>()
 		const { deliver, close } = await serve({
-			untilDescribed: false,
 			wrap: (backend) => ({
 				...backend,
 				create: () => {
@@ -257,49 +244,29 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 				},
 			}),
 		})
+		const delivery = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 		await creating.promise
 
 		// Act
-		const delivery = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 		const started = Date.now()
 		await close(200)
 
 		// Assert
-		expect(delivery.status).toBe(503)
+		expect(delivery.status).toBe(202)
 		expect(Date.now() - started).toBeLessThan(2_000)
-	})
-
-	test('make no sandbox for an unsigned delivery, also when the source changed', async () => {
-		// Arrange
-		const { deliver, created, directory } = await serve({ refreshMs: noRefreshMs })
-		await writeFile(path.join(directory, 'workflows', 'extra.mts'), '// changed\n')
-		created.mockClear()
-
-		// Act
-		const response = await deliver('fix-issue', JSON.stringify(payload), {})
-
-		// Assert
-		expect(response.status).toBe(401)
-		expect(created).not.toHaveBeenCalled()
 	})
 })
 
 describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 	test('skip a tick while the previous run of the schedule is still going', async () => {
 		// Arrange
-		const everySecond = {
-			...description,
-			triggers: [
-				{ kind: 'schedule' as const, id: 'fix-issue * * * * * *', workflow: 'fix-issue', cron: '* * * * * *', parameters: { issue: 1 } },
-			],
-		}
 		const waitsForever = `mailbox.send({ type: 'request', request: { kind: 'input', id: 'hold', question: 'Go on?', fields: {} } })\nawait mailbox.answer('hold', signal)`
 
 		// Act
-		const { client, log } = await serve({ entry: triggerEntry(everySecond, waitsForever) })
+		const { client, log } = await serve({ body: waitsForever, triggers: [everySecond] })
 		await vi.waitFor(
 			() => {
-				expect(log).toHaveBeenCalledWith(expect.stringContaining('Skipped schedule team/fix-issue * * * * * *'))
+				expect(log).toHaveBeenCalledWith(expect.stringContaining(`Skipped schedule ${testAppName}/fix-issue * * * * * *`))
 			},
 			{ timeout: 10_000, interval: 100 },
 		)
@@ -307,18 +274,12 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		// Assert
 		const runs = await client.list(signal)
 		expect(runs).toHaveLength(1)
-		expect(runs[0]).toMatchObject({ trigger: { kind: 'schedule', id: 'fix-issue * * * * * *', repository: 'team' } })
+		expect(runs[0]).toMatchObject({ app: { name: testAppName }, trigger: { kind: 'schedule', id: 'fix-issue * * * * * *' } })
 	})
 
 	test('start a schedule again once its previous run has ended', async () => {
-		// Arrange
-		const everySecond = {
-			...description,
-			triggers: [{ kind: 'schedule' as const, id: 'fix-issue * * * * * *', workflow: 'fix-issue', cron: '* * * * * *' }],
-		}
-
 		// Act
-		const { client } = await serve({ entry: triggerEntry(everySecond) })
+		const { client } = await serve({ triggers: [everySecond] })
 
 		// Assert
 		await vi.waitFor(
@@ -329,63 +290,40 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 			{ timeout: 10_000, interval: 100 },
 		)
 	})
-})
 
-describe.skipIf(process.platform !== 'linux')('describing an entry file', () => {
-	test('happens once per version of the source, in a sandbox that is removed afterwards', async () => {
+	test('start nothing more once the app is removed', async () => {
 		// Arrange
-		const { client, directory, created, served } = await serve({ refreshMs: noRefreshMs })
-		await client.describe(directory, signal)
-		created.mockClear()
+		const { client } = await serve({ triggers: [everySecond] })
+		await vi.waitFor(
+			async () => {
+				expect(await client.list(signal)).not.toEqual([])
+			},
+			{ timeout: 10_000, interval: 100 },
+		)
 
 		// Act
-		const again = await client.describe(directory, signal)
-		await writeFile(path.join(directory, 'workflows', 'extra.mts'), '// changed\n')
-		await client.describe(directory, signal)
+		await client.removeApp(testAppName, signal)
+		const afterRemoving = (await client.list(signal)).length
+		await new Promise((resolve) => setTimeout(resolve, 2_500))
 
 		// Assert
-		expect(again).toEqual(description)
-		expect(created).toHaveBeenCalledOnce()
-		expect(served.engine.list()).toEqual([])
+		expect((await client.list(signal)).length).toBe(afterRemoving)
 	})
 
-	test('tries again after the sandbox failed, rather than keeping the failure', async () => {
+	test('fire a schedule by hand, with the parameters it is given', async () => {
 		// Arrange
-		let creates = 0
-		const { client, directory } = await serve({
-			refreshMs: noRefreshMs,
-			untilDescribed: false,
-			wrap: (backend) => ({
-				...backend,
-				create: (spec, createSignal) => {
-					creates += 1
-					return creates === 1 ? Promise.reject(new Error('The sandbox daemon is restarting.')) : backend.create(spec, createSignal)
-				},
-			}),
+		const { client } = await serve({ triggers: [{ ...everySecond, id: 'fix-issue 0 0 1 1 *', cron: '0 0 1 1 *' }] })
+
+		// Act
+		const run = await client.startRun({
+			app: testAppName,
+			trigger: { kind: 'schedule', id: 'fix-issue 0 0 1 1 *' },
+			input: { issue: 9 },
+			abortSignal: signal,
 		})
-		await expect.poll(() => creates).toBeGreaterThanOrEqual(1)
-		// Shares the failing describe, or comes after it.
-		await client.describe(directory, signal).catch(() => undefined)
-
-		// Act
-		const described = await client.describe(directory, signal)
+		await untilStatus(client, run.id, 'succeeded')
 
 		// Assert
-		expect(described).toEqual(description)
-	})
-
-	test('fails once per version of the source when the entry file cannot be described', async () => {
-		// Arrange
-		const broken = runtimeScript(`throw new Error('broken entry file')`)
-		const { client, directory, created } = await serve({ entry: broken, refreshMs: noRefreshMs, untilDescribed: false })
-
-		// Act
-		const first = client.describe(directory, signal)
-		await expect(first).rejects.toThrow()
-		const again = client.describe(directory, signal)
-
-		// Assert
-		await expect(again).rejects.toThrow()
-		expect(created).toHaveBeenCalledOnce()
+		expect(await client.events(run.id, signal)).toEqual([expect.objectContaining({ input: { issue: 9 } })])
 	})
 })
