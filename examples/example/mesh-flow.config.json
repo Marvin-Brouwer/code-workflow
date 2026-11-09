@@ -1,0 +1,10 @@
+{
+	"sandbox": {
+		"image": "node:22-slim",
+		"cpus": 2,
+		"memoryMb": 4096,
+		"egress": { "allow": ["registry.npmjs.org"] }
+	},
+	"setup": [["npm", "ci"]],
+	"start": ["node"]
+}

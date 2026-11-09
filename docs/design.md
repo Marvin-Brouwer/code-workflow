@@ -276,7 +276,8 @@ export default defineWorkflows(
   `github.onIssueLabeled(fixIssue, 'ai-fix')` starts `fixIssue` with `{ issue }`, and only compiles
   for a workflow whose parameters take that. The delivery id is the run's key: a
   redelivery reuses the run it already started.
-- **`schedule(workflow, cron, parameters?)`** starts a run on the engine's wall clock (timed waits
+- **`schedule(workflow, when, parameters?)`** starts a run on the engine's wall clock, at a cron
+  expression or `hourly`, `daily`, `weekly` or `monthly` (timed waits
   are engine-side, section 5). The parameters are fixed values, checked against the workflow's
   shape at compile time. A tick is skipped while the previous run of that schedule is still going.
 - **Only workflows listed in the entry file can be started by the UI, a webhook or a schedule.**
@@ -284,6 +285,11 @@ export default defineWorkflows(
 - **Nothing in the entry file is a setting.** Webhook secrets, enabling or pausing a trigger, and
   overrides are user settings in the UI (section 9). The entry file only says that a workflow *can*
   be started a certain way; the schema and the button work as soon as it is committed.
+- **How to run the entry file is static data, next to it.** `mesh-flow.config.json` says which
+  sandbox a run gets (image, CPUs, memory, egress), which setup commands run first (`npm ci`) and
+  how to start the runtime. It can't live in the entry file: the engine needs it before the entry
+  file can load, because the entry file imports packages that setup installs, and it never runs
+  workflow code on the host. It holds no secrets, since it lives in git.
 - **The engine never runs the entry file on the host.** It runs it once per commit in a sandbox in
   describe mode: `defineWorkflows` sends the workflows, their parameters as JSON Schema and their
   triggers over the mailbox and exits. The engine caches that per version of the source: a hash
