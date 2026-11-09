@@ -13,7 +13,11 @@ import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-slim', memoryMb: 4096, egress: ['registry.npmjs.org'] }),
+	sandbox: image({
+		name: 'node:22-slim',
+		memoryMb: 4096,
+		egress: ['registry.npmjs.org'],
+	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

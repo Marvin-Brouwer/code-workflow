@@ -193,7 +193,11 @@ const StoryLabeled = z.object({
 })
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-slim', memoryMb: 4096, egress: ['api.example.com'] }),
+	sandbox: image({
+		name: 'node:22-slim',
+		memoryMb: 4096,
+		egress: ['api.example.com'],
+	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

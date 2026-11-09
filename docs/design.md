@@ -252,7 +252,10 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 
 // main.mts, the package's `main`
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-slim', egress: ['api.github.com'] }),
+	sandbox: image({
+		name: 'node:22-slim',
+		egress: ['api.github.com'],
+	}),
 	workflows: [
 		userTrigger(fixIssue),
 		webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),

@@ -175,7 +175,10 @@ import { fixIssue } from './workflows/fix-issue.mts'
 
 export default defineMeshFlow({
 	sandbox: image({ name: 'node:22-slim' }),
-	workflows: [userTrigger(fixIssue), github.onIssueLabeled(fixIssue, 'ai-fix')],
+	workflows: [
+		userTrigger(fixIssue),
+		github.onIssueLabeled(fixIssue, 'ai-fix'),
+	],
 })
 
 // workflows/fix-issue.mts
