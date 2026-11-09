@@ -1,12 +1,18 @@
+import { randomBytes } from 'node:crypto'
 import path from 'node:path'
+import { text } from 'node:stream/consumers'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError } from 'commander'
 import envPaths from 'env-paths'
 import { controlClient } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
+import { RepositoryName } from '../repositories/repository-store.mts'
 import { serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
+import { openWebhookSecrets, webhookSecretsFile } from '../triggers/webhook-secrets.mts'
+import { WorkflowName } from '../workflow/workflow-name.mts'
+import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
 import { openBackend } from './open-backend.mts'
 
@@ -15,6 +21,9 @@ const requestTimeoutMs = 5 * 60_000
 
 /** How long closing the backend may take when the engine fails to start. */
 const closeTimeoutMs = 60_000
+
+/** How many random bytes a generated webhook secret has. */
+const generatedSecretBytes = 32
 
 /** What `stop`, `resume` and `restart` do. */
 const actionDescriptions = {
@@ -46,9 +55,12 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Runs the engine in the foreground. Ctrl+C pauses running sandboxes and stops it.')
 		.option('--backend <name>', 'the sandbox backend: microsandbox or gvisor (default: what this machine supports)', parseBackend)
 		.option('--runsc <command>', "how to call runsc for gVisor, such as 'sudo /usr/bin/runsc'", (value) => value.split(' ').filter(Boolean))
-		.action(async (options: { backend?: BackendName; runsc?: string[] }) => {
+		.option('--webhook-port <port>', 'takes webhook deliveries on this port (default: no webhooks)', parsePort)
+		.option('--webhook-host <host>', 'the address the webhook port listens on', '127.0.0.1')
+		.action(async (options: { backend?: BackendName; runsc?: string[]; webhookPort?: number; webhookHost: string }) => {
 			const startup = new AbortController()
-			const backend = await openBackend({ home: home(), log, ...options })
+			const { webhookPort, webhookHost, ...backendOptions } = options
+			const backend = await openBackend({ home: home(), log, ...backendOptions })
 			let served: ServedEngine | undefined
 			handleShutdown({
 				log,
@@ -57,21 +69,77 @@ export async function main(argv: readonly string[]): Promise<void> {
 					await (served ? served.close(deadlines) : backend.close(deadlines.backend))
 				},
 			})
-			served = await serveEngine({ home: home(), backend, log, signal: startup.signal }).catch(async (error: unknown) => {
+			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
+			served = await serveEngine({ home: home(), backend, log, signal: startup.signal, ...webhooks }).catch(async (error: unknown) => {
 				await backend.close(AbortSignal.timeout(closeTimeoutMs))
 				throw error
 			})
 			log(`Engine ready on ${served.socketPath}.`)
+			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<repository>/<webhook>.`)
 		})
 
 	program
 		.command('run')
-		.description('Starts a run of a workflow from a workflow repository.')
-		.argument('<workflow>', 'the workflow, as its file name in the workflows folder without .mts')
+		.description("Starts a run of a workflow through the repository's entry file, workflows/main.mts.")
+		.argument('<workflow>', 'the workflow, by the name workflow() gives it')
 		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
-		.action(async (workflow: string, options: { directory: string }) => {
-			const record = await client().startRun({ directory: path.resolve(options.directory), workflow, signal: requestSignal() })
+		.option('-p, --parameters <json>', "the workflow's parameters, as JSON", parseJson)
+		.action(async (workflow: string, options: { directory: string; parameters?: unknown }) => {
+			const directory = path.resolve(options.directory)
+			const record = await client().startRun({ directory, workflow, parameters: options.parameters, signal: requestSignal() })
 			console.log(formatRunLine(record))
+		})
+
+	program
+		.command('triggers')
+		.description("Lists the workflows and triggers a repository's entry file declares. Runs it in a sandbox, once per change.")
+		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
+		.action(async (options: { directory: string }) => {
+			const directory = path.resolve(options.directory)
+			const description = await client().describe(directory, requestSignal())
+			const registered = (await client().repositories(requestSignal())).find((repository) => repository.directory === directory)
+			console.log(formatDescription(description, registered?.name))
+		})
+
+	const repository = program.command('repository').description('The repositories whose webhooks and schedules the engine serves.')
+	repository
+		.command('add')
+		.description('Registers a workflow repository, so its webhooks get a URL and its schedules run.')
+		.option('-C, --directory <directory>', 'the workflow repository', process.cwd())
+		.option('--name <name>', "the repository's name in webhook URLs (default: the directory's name)")
+		.action(async (options: { directory: string; name?: string }) => {
+			const directory = path.resolve(options.directory)
+			const name = RepositoryName.parse(options.name ?? path.basename(directory).toLowerCase())
+			const added = await client().addRepository({ name, directory }, requestSignal())
+			console.log(`${added.name}  ${added.directory}`)
+		})
+	repository
+		.command('list')
+		.description('Lists the registered repositories.')
+		.action(async () => {
+			for (const { name, directory } of await client().repositories(requestSignal())) console.log(`${name}  ${directory}`)
+		})
+	repository
+		.command('remove')
+		.description('Unregisters a repository. Its runs stay; its webhooks and schedules stop.')
+		.argument('<name>')
+		.action(async (name: string) => {
+			await client().removeRepository(name, requestSignal())
+		})
+
+	program
+		.command('webhook')
+		.description('Webhook settings.')
+		.command('secret')
+		.description("Sets the secret a repository's webhook is signed with, read from stdin. It's kept in the engine's home only.")
+		.argument('<repository>')
+		.argument('<webhook>')
+		.option('--generate', 'makes a random secret and prints it, to paste into the sender')
+		.action(async (repositoryName: string, webhook: string, options: { generate?: boolean }) => {
+			const secret = options.generate ? randomBytes(generatedSecretBytes).toString('hex') : (await text(process.stdin)).trim()
+			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in, or use --generate.')
+			await openWebhookSecrets(webhookSecretsFile(home())).set(RepositoryName.parse(repositoryName), WorkflowName.parse(webhook), secret)
+			if (options.generate) console.log(secret)
 		})
 
 	program
@@ -133,6 +201,12 @@ function parseBackend(value: string): BackendName {
 	const parsed = BackendName.safeParse(value)
 	if (!parsed.success) throw new InvalidArgumentError(`Use one of ${BackendName.options.join(', ')}.`)
 	return parsed.data
+}
+
+function parsePort(value: string): number {
+	const port = Number(value)
+	if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new InvalidArgumentError('Use a port number.')
+	return port
 }
 
 function parseJson(value: string): unknown {
