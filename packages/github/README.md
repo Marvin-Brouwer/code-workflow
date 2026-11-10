@@ -48,7 +48,7 @@ export const fixIssue = workflow('fix-issue', { issue: github.issue }, async ({ 
 
 ### Repositories
 
-`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its path. A checkout that is already there is reused.
+`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its path. A checkout of the repository that is already there is reused, and switched to the branch when it is on another; one folder holds one repository, so a second repository with the same name in one run is an error.
 
 `github.push(repository)` is a tool: it commits every change in the checkout with the message it's given and pushes the branch. Code calls it too, as a function, and `openPullRequest` calls it first.
 
@@ -58,9 +58,9 @@ The clone comes from the host as a git bundle, and what the agent pushes goes ba
 
 `github.openPullRequest(repository, { title, description })` pushes, then opens a pull request from the branch onto the default branch, or returns the open one for the branch. In a prompt it renders as its URL. `github.pullRequest(ref)` reads one as it is now.
 
-`github.review(pullRequest, handlers, { every })` watches a pull request until it's merged or closed and resolves to `{ state, pullRequest }`. `comments` gets what reviewers said since the last look, oldest first and in one call per look, with the run's own comments left out; each item has an `id` such as `review-comment/12` that `github.reply(pullRequest)`, the agent's tool, answers in the right place. `checksFailed` gets the failed checks of a commit, once per commit. It looks every 30 seconds unless `every` says otherwise, waiting on the engine's clock.
+`github.review(pullRequest, handlers, { every })` watches a pull request until it's merged or closed and resolves to `{ state, pullRequest }`. `comments` gets what reviewers said since the last look, oldest first and in one call per look, each item once; what the run posted itself is left out, found by a marker in the comment and, when the token can say whose it is, by its author. Each item has an `id` such as `review-comment/12` that `github.reply(pullRequest)`, the agent's tool, answers in the right place. `checksFailed` gets the failed checks of a commit, once per commit, once every check on it has completed; a commit whose checks haven't appeared yet is looked at again. It looks every 30 seconds unless `every` says otherwise, waiting on the engine's clock.
 
-`github.checksPass(pullRequest)` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding.
+`github.checksPass(pullRequest, { every, appearWithin })` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding. Checks take a while to appear after a push, so a commit without any is looked at again until `appearWithin` (default 10 minutes) has passed; a repository without checks passes after that.
 
 ### Webhooks
 
@@ -87,7 +87,17 @@ Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --genera
 
 ## The host half
 
-`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` on every call, so a new token counts at once, and keep one bare clone per repository in the connector's directory in the engine's home. For a test, `githubHostTools({ directory, apiUrl, remoteUrl })` points them at a server of your own.
+`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` on every call, so a new token counts at once, and keep one bare clone per repository in the connector's directory in the engine's home, which runs share one call at a time. For a test, `githubHostTools` points them at servers of your own:
+
+```ts
+import { githubHostTools } from '@mesh-flow/github/host'
+
+const tools = githubHostTools({
+	directory: '/tmp/github-host',
+	apiUrl: 'http://127.0.0.1:4010',
+	remoteUrl: (repository) => `file:///tmp/remotes/${repository}.git`,
+})
+```
 
 ## Development
 

@@ -26,11 +26,20 @@ export type IssueData = z.infer<typeof IssueData>
 export const PostedComment = z.object({ id: z.int(), url: z.url() })
 export type PostedComment = z.infer<typeof PostedComment>
 
+/** What every marker this package leaves in a comment starts with. */
+const markerStart = '<!-- mesh-flow:'
+
 /** Mixed into a comment's body to find it again, so posting it twice updates it instead. */
 export function commentMarker(key: string): string {
-	return `<!-- mesh-flow:${key} -->`
+	return `${markerStart}${key} -->`
 }
 
+/** Whether a comment's body carries a marker: this package wrote it, so it isn't a reviewer's. */
+export function isMarked(body: string | null | undefined): boolean {
+	return body?.includes(markerStart) ?? false
+}
+
+/** Reads an issue on the host; the sandbox gets its fields, never the credential. */
 export const getIssue = {
 	name: 'githubIssue',
 	description: 'Reads a GitHub issue',
@@ -38,6 +47,7 @@ export const getIssue = {
 	output: IssueData,
 }
 
+/** Posts a comment on the host, or updates the one that carries the same `key`. */
 export const commentOnIssue = {
 	name: 'githubCommentIssue',
 	description: 'Comments on a GitHub issue or pull request. With a key, a later comment with the same key updates the earlier one.',
@@ -45,6 +55,7 @@ export const commentOnIssue = {
 	output: PostedComment,
 }
 
+/** Adds labels on the host. */
 export const labelIssue = {
 	name: 'githubLabelIssue',
 	description: 'Adds labels to a GitHub issue',
@@ -52,6 +63,7 @@ export const labelIssue = {
 	output: z.object({ labels: z.array(z.string()) }),
 }
 
+/** Closes the issue on the host. */
 export const closeIssue = {
 	name: 'githubCloseIssue',
 	description: 'Closes a GitHub issue',

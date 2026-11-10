@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { runGit } from '../git-process.mts'
-import { splitRepositoryName } from '../repository-name.mts'
-import { tokenCredential } from './api.mts'
+import { githubRemoteUrl, splitRepositoryName } from '../repository-name.mts'
+import { withScratchFile } from '../scratch-file.mts'
+import { requireToken } from './api.mts'
 
 /** Where the host clones live and how it reaches GitHub over git. */
 export interface GitRemoteOptions {
@@ -25,7 +25,10 @@ export interface GitRemote {
 		branch: string,
 		context: HostToolContext,
 	) => Promise<{ bundle: Buffer; defaultBranch: string; branchExists: boolean }>
-	/** Takes `branch` from a bundle the sandbox made into the clone and pushes it. Resolves to the branch's commit. */
+	/**
+	 * Takes `branch` from a bundle the sandbox made into the clone and pushes it. Resolves to the
+	 * branch's commit, which is the bundle's head; anything else fails the call.
+	 */
 	readonly pushBundle: (repository: string, branch: string, bundle: Buffer, context: HostToolContext) => Promise<string>
 }
 
@@ -35,10 +38,6 @@ const origin = 'origin'
 /** The refspec that keeps the clone's branches equal to the remote's: a mirror, without a checkout. */
 const mirrorRefspec = '+refs/heads/*:refs/heads/*'
 
-function githubRemoteUrl(repository: string): string {
-	return `https://github.com/${repository}.git`
-}
-
 /** Clones on the host for every repository, under `options.directory`. */
 export function gitRemote(options: GitRemoteOptions): GitRemote {
 	const remoteUrl = options.remoteUrl ?? githubRemoteUrl
@@ -47,9 +46,27 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 		return path.join(options.directory, owner, `${repo}.git`)
 	}
 
-	/** The clone of `repository`, made when missing, with the remote set to where it clones from. */
-	const openClone = async (repository: string, context: HostToolContext): Promise<string> => {
+	/**
+	 * One call at a time per clone: runs from different workflows share a repository's clone, and a
+	 * mirror fetch in the middle of a push would reset the branch the push is about to send.
+	 */
+	const lastOn = new Map<string, Promise<unknown>>()
+	async function withClone<T>(repository: string, context: HostToolContext, use: (clone: string) => Promise<T>): Promise<T> {
 		const clone = cloneOf(repository)
+		const turn = (lastOn.get(clone) ?? Promise.resolve()).then(
+			() => openClone(clone, repository, context).then(use),
+			() => openClone(clone, repository, context).then(use),
+		)
+		lastOn.set(clone, turn)
+		try {
+			return await turn
+		} finally {
+			if (lastOn.get(clone) === turn) lastOn.delete(clone)
+		}
+	}
+
+	/** Makes the clone when missing, and sets the remote to where it clones from. */
+	const openClone = async (clone: string, repository: string, context: HostToolContext): Promise<string> => {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
 		await git(clone, ['init', '--bare', '--quiet'], context)
 		const url = remoteUrl(repository)
@@ -59,28 +76,34 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	}
 
 	return Object.freeze<GitRemote>({
-		async fetchBundle(repository, branch, context) {
-			const clone = await openClone(repository, context)
-			await git(clone, ['fetch', '--quiet', '--prune', origin, mirrorRefspec], context)
-			await git(clone, ['remote', 'set-head', origin, '--auto'], context)
-			const defaultBranch = await defaultBranchOf(clone, context)
-			const exists = branch !== defaultBranch && (await branchExists(clone, branch, context))
-			const refs = exists ? [defaultBranch, branch] : [defaultBranch]
-			const bundle = await withScratchFile(async (file) => {
-				await git(clone, ['bundle', 'create', '--quiet', file, ...refs], context)
-				return readFile(file)
-			})
-			return { bundle, defaultBranch, branchExists: exists || branch === defaultBranch }
-		},
-		async pushBundle(repository, branch, bundle, context) {
-			const clone = await openClone(repository, context)
-			await withScratchFile(async (file) => {
-				await writeFile(file, bundle)
-				await git(clone, ['fetch', '--quiet', file, `+refs/heads/${branch}:refs/heads/${branch}`], context)
-			})
-			await git(clone, ['push', '--quiet', origin, `refs/heads/${branch}:refs/heads/${branch}`], context)
-			return (await git(clone, ['rev-parse', `refs/heads/${branch}`], context)).trim()
-		},
+		fetchBundle: (repository, branch, context) =>
+			withClone(repository, context, async (clone) => {
+				await mirror(clone, context)
+				await git(clone, ['remote', 'set-head', origin, '--auto'], context)
+				const defaultBranch = await defaultBranchOf(clone, context)
+				const exists = branch !== defaultBranch && (await branchExists(clone, branch, context))
+				const refs = exists ? [defaultBranch, branch] : [defaultBranch]
+				const bundle = await withScratchFile('clone.bundle', async (file) => {
+					await git(clone, ['bundle', 'create', '--quiet', file, ...refs], context)
+					return readFile(file)
+				})
+				return { bundle, defaultBranch, branchExists: exists || branch === defaultBranch }
+			}),
+		pushBundle: (repository, branch, bundle, context) =>
+			withClone(repository, context, async (clone) => {
+				// The bundle holds only what the sandbox's checkout had not pushed yet, so the clone needs the rest first.
+				await mirror(clone, context)
+				const head = await withScratchFile('push.bundle', async (file) => {
+					await writeFile(file, bundle)
+					const expected = await bundleHead(clone, file, branch, context)
+					await git(clone, ['fetch', '--quiet', file, `+refs/heads/${branch}:refs/heads/${branch}`], context)
+					return expected
+				})
+				await git(clone, ['push', '--quiet', origin, `refs/heads/${branch}:refs/heads/${branch}`], context)
+				const pushed = (await git(clone, ['rev-parse', `refs/heads/${branch}`], context)).trim()
+				if (pushed !== head) throw new Error(`Pushing ${branch} of ${repository} left it at ${pushed}, not at the bundle's ${head}.`)
+				return pushed
+			}),
 	})
 }
 
@@ -89,9 +112,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
  * a process list. Aborting the context kills the process.
  */
 async function git(clone: string, args: readonly string[], context: HostToolContext): Promise<string> {
-	const token = await context.credentials.get(tokenCredential, context.abortSignal)
-	if (token === undefined) throw new Error(`There is no GitHub token. Set it with \`mesh-flow credential set ${tokenCredential}\`.`)
-	const authorization = Buffer.from(`x-access-token:${token}`).toString('base64')
+	const authorization = Buffer.from(`x-access-token:${await requireToken(context)}`).toString('base64')
 	return runGit(
 		clone,
 		args,
@@ -104,6 +125,11 @@ async function git(clone: string, args: readonly string[], context: HostToolCont
 		},
 		context.abortSignal,
 	)
+}
+
+/** Makes the clone's branches equal to the remote's. */
+function mirror(clone: string, context: HostToolContext): Promise<string> {
+	return git(clone, ['fetch', '--quiet', '--prune', origin, mirrorRefspec], context)
 }
 
 /** The remote's default branch, as `remote set-head --auto` recorded it. */
@@ -119,12 +145,10 @@ function branchExists(clone: string, branch: string, context: HostToolContext): 
 	)
 }
 
-/** Runs `use` with a file path in a fresh directory, removed afterwards. */
-async function withScratchFile<T>(use: (file: string) => Promise<T>): Promise<T> {
-	const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-github-'))
-	try {
-		return await use(path.join(scratch, 'commits.bundle'))
-	} finally {
-		await rm(scratch, { recursive: true, force: true })
-	}
+/** The commit a bundle says `branch` is at. */
+async function bundleHead(clone: string, file: string, branch: string, context: HostToolContext): Promise<string> {
+	const heads = await git(clone, ['bundle', 'list-heads', file, `refs/heads/${branch}`], context)
+	const [sha] = heads.trim().split(/\s+/)
+	if (sha === undefined || sha === '') throw new Error(`The bundle holds no ${branch}.`)
+	return sha
 }

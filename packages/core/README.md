@@ -180,11 +180,17 @@ An agent asks with `requestUserInput`: one question with a text answer, or a for
 `wait` waits for a while on the engine's clock, so the sandbox can be paused meanwhile, and a timer that disagrees across a pause never matters. It's how a workflow polls something outside, such as a pull request, between host tool calls. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`.
 
 ```ts
-import { wait } from '@mesh-flow/core'
+import { hostToolStub, wait } from '@mesh-flow/core'
+import { z } from 'zod'
 
-for (;;) {
-	const pullRequest = await github.pullRequest(opened)
-	if (pullRequest.merged) break
+const pipeline = hostToolStub({
+	name: 'ciPipeline',
+	description: 'Reads a pipeline of the build server',
+	input: z.object({ id: z.string() }),
+	output: z.object({ done: z.boolean() }),
+})
+
+while (!(await pipeline({ id: 'build-7' })).done) {
 	await wait({ seconds: 30 })
 }
 ```

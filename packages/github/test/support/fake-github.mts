@@ -75,6 +75,8 @@ export interface FakeGithub {
 	readonly url: string
 	/** The login the token belongs to. */
 	readonly self: string
+	/** When set, `/user` answers 403, as it does for a GitHub App's installation token. */
+	userHidden: boolean
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>
 	repository(name: string): FakeRepository
@@ -173,7 +175,19 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		tokens.add(authorization.replace(/^(token|Bearer) /, ''))
 		return next()
 	})
-	app.get('/user', (context) => context.json({ login: self }))
+	const fake: FakeGithub = {
+		url: '',
+		self,
+		userHidden: false,
+		tokens,
+		repository,
+		issue: issueOf,
+		pullRequest: pullOf,
+		close: () => Promise.resolve(),
+	}
+	app.get('/user', (context) =>
+		fake.userHidden ? context.json({ message: 'Resource not accessible by integration' }, 403) : context.json({ login: self }),
+	)
 
 	const issues = new Hono().basePath('/repos/:owner/:repo')
 	issues.get('/issues/:number', (context) => {
@@ -293,7 +307,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 			server.closeAllConnections()
 		})
 	onTestFinished(close)
-	return { url: `http://127.0.0.1:${String(address.port)}`, self, tokens, repository, issue: issueOf, pullRequest: pullOf, close }
+	return Object.assign(fake, { url: `http://127.0.0.1:${String(address.port)}`, close })
 }
 
 /** A commit id for a branch name, the same every time. */

@@ -20,7 +20,7 @@ function hostModule(name: string, tools: readonly string[]): string {
 async function installed(packages: Record<string, string | undefined>): Promise<string> {
 	const root = await temporaryDirectory()
 	for (const [name, source] of Object.entries(packages)) {
-		// Outside node_modules, where TypeScript is still run as such, linked in by its name.
+		// The package lives outside node_modules, where vitest still transforms TypeScript; node_modules holds a link to it under its name.
 		const target = path.join(root, 'packages', name.replaceAll('/', '__'))
 		await mkdir(target, { recursive: true })
 		const exports = source === undefined ? {} : { './host': './host.mts' }

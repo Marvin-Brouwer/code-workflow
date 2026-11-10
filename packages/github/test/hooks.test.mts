@@ -11,7 +11,7 @@ function labeled(name: string) {
 		label: { name },
 		issue: { number: 7, title: 'Login fails', html_url: 'https://github.com/team/app/issues/7' },
 		repository: { full_name: 'team/app' },
-		sender: { login: 'marvin' },
+		sender: { login: 'reporter' },
 	}
 }
 

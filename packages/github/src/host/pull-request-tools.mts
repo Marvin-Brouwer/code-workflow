@@ -1,8 +1,10 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
+import { commentMarker, isMarked } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
+	type ChecksStatus,
 	getPullRequest,
 	openPullRequest,
 	replyToReviewItem,
@@ -50,11 +52,18 @@ const verdicts: Record<string, ReviewItem['verdict']> = {
 /** Check conclusions and status states that count as failed. */
 const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'error'])
 
+/** Left in every reply this package posts, so a look at the review never hands it back as a reviewer's. */
+const replyMarker = commentMarker('reply')
+
+/** The latest of two moments, either of which may be missing. */
+function later(a: string | undefined, b: string | undefined): string | undefined {
+	if (a === undefined) return b
+	if (b === undefined) return a
+	return a.localeCompare(b) >= 0 ? a : b
+}
+
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
-	/** Who the token belongs to, found once per process. `undefined` when the token can't say, as an installation token can't. */
-	let self: Promise<string | undefined> | undefined
-
 	return [
 		hostTool(openPullRequest, async ({ repository, head, base, title, body }, context) => {
 			const client = await api(context)
@@ -75,12 +84,13 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 		hostTool(reviewActivity, async ({ repository, number, since }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const until = new Date().toISOString()
 			const after = since === undefined ? undefined : new Date(since).getTime()
+			// At or after: GitHub keeps seconds, so a comment in the same second as the last one seen would be lost otherwise.
 			const isNew = (at: string | null | undefined): at is string =>
-				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() > after)
-			self ??= client.rest.users.getAuthenticated().then(
-				({ data }) => data.login,
+				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() >= after)
+			// Found on every look, never kept: the token can change hands, and a failed lookup is not an answer.
+			const self = client.rest.users.getAuthenticated().then(
+				({ data }): string | undefined => data.login,
 				() => undefined,
 			)
 			const [lineComments, reviews, comments] = await Promise.all([
@@ -100,7 +110,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			])
 			const items: ReviewItem[] = [
 				...lineComments
-					.filter((comment) => isNew(comment.created_at))
+					.filter((comment) => isNew(comment.created_at) && !isMarked(comment.body))
 					.map((comment) => ({
 						id: itemId('review-comment', comment.id),
 						kind: 'review-comment' as const,
@@ -113,18 +123,18 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						...(comment.in_reply_to_id === undefined ? {} : { inReplyTo: itemId('review-comment', comment.in_reply_to_id) }),
 					})),
 				...reviews
-					.filter((review) => isNew(review.submitted_at) && (review.body !== '' || review.state !== 'COMMENTED'))
+					.filter((review) => isNew(review.submitted_at) && !isMarked(review.body) && (review.body !== '' || review.state !== 'COMMENTED'))
 					.map((review) => ({
 						id: itemId('review', review.id),
 						kind: 'review' as const,
 						author: review.user?.login ?? '',
 						body: review.body,
 						url: review.html_url,
-						at: review.submitted_at ?? until,
+						at: review.submitted_at ?? new Date().toISOString(),
 						...(verdicts[review.state] === undefined ? {} : { verdict: verdicts[review.state] }),
 					})),
 				...comments
-					.filter((comment) => isNew(comment.created_at))
+					.filter((comment) => isNew(comment.created_at) && !isMarked(comment.body))
 					.map((comment) => ({
 						id: itemId('comment', comment.id),
 						kind: 'comment' as const,
@@ -134,19 +144,27 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						at: comment.created_at,
 					})),
 			].toSorted((a, b) => a.at.localeCompare(b.at))
+			// The clock is GitHub's, never the host's: the two can disagree, and a comment made while the lists were read must come next time.
+			const until = later(since, items.at(-1)?.at)
 			const login = await self
-			return { ...(login === undefined ? {} : { self: login }), items, until }
+			return { ...(login === undefined ? {} : { self: login }), items, ...(until === undefined ? {} : { until }) }
 		}),
 
 		hostTool(replyToReviewItem, async ({ repository, number, item, body }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const { kind, id } = parseItemId(item)
+			const marked = `${body}\n\n${replyMarker}`
 			if (kind === 'review-comment') {
-				const { data } = await client.rest.pulls.createReplyForReviewComment({ ...where, pull_number: number, comment_id: id, body })
+				const { data } = await client.rest.pulls.createReplyForReviewComment({
+					...where,
+					pull_number: number,
+					comment_id: id,
+					body: marked,
+				})
 				return { id: data.id, url: data.html_url }
 			}
-			const { data } = await client.rest.issues.createComment({ ...where, issue_number: number, body })
+			const { data } = await client.rest.issues.createComment({ ...where, issue_number: number, body: marked })
 			return { id: data.id, url: data.html_url }
 		}),
 
@@ -157,7 +175,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				client.paginate(client.rest.checks.listForRef, { ...where, ref, per_page: 100 }),
 				client.rest.repos.getCombinedStatusForRef({ ...where, ref }),
 			])
-			const pending = runs.some((run) => run.status !== 'completed') || combined.data.statuses.some((status) => status.state === 'pending')
+			const progress = checksStatus(runs, combined.data.statuses)
 			const failures: CheckFailure[] = [
 				...runs
 					.filter((run) => run.conclusion !== null && failedConclusions.has(run.conclusion))
@@ -174,9 +192,16 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						...(status.target_url === null ? {} : { url: status.target_url }),
 					})),
 			]
-			return { status: pending ? 'pending' : 'completed', failures }
+			return { status: progress, failures }
 		}),
 	]
+}
+
+/** Checks take a while to appear after a push: a commit with none yet is not a commit whose checks all passed. */
+function checksStatus(runs: readonly { status: string }[], commitStatuses: readonly { state: string }[]): ChecksStatus {
+	if (runs.length === 0 && commitStatuses.length === 0) return 'none'
+	const pending = runs.some((run) => run.status !== 'completed') || commitStatuses.some((commitStatus) => commitStatus.state === 'pending')
+	return pending ? 'pending' : 'completed'
 }
 
 function itemId(kind: ReviewItemKind, id: number): string {

@@ -1,11 +1,11 @@
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tool, toPrompt, workspace } from '@mesh-flow/core'
 import { z } from 'zod'
-import { BranchName, RepositoryName, splitRepositoryName } from '../repository-name.mts'
+import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
+import { withScratchFile } from '../scratch-file.mts'
 import { stubs } from '../stubs.mts'
-import { localGit } from './local-git.mts'
+import { hasRef, localGit } from './local-git.mts'
 
 /** A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as its path. */
 export interface Repository {
@@ -23,13 +23,17 @@ export interface Repository {
 /** The remote the sandbox's checkout knows: a ref under it tracks what the host has pushed. */
 export const origin = 'origin'
 
+/** Where the checkout remembers the remote's default branch, so a reused checkout needs no host call. */
+const defaultBranchConfigKey = 'mesh-flow.defaultBranch'
+
 /**
  * Checks a repository out into the workspace, on `branch`, which is made from the default branch
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential
- * reaches the sandbox; a checkout that is already there is reused.
+ * reaches the sandbox. A checkout of the repository that is already there is reused, switched to
+ * `branch` when it is on another; a folder left half-cloned is cloned again.
  *
  * ```ts
- * const repository = await github.checkout('team/app', { branch: `fix/${String(issue.number)}` })
+ * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
  * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)}.`
  * ```
  */
@@ -39,24 +43,26 @@ export const checkout = tool('githubCheckout', {
 	action: async ({ repository, branch }, { abortSignal }): Promise<Repository> => {
 		const folder = workspace.folder(splitRepositoryName(repository).repo)
 		const directory = folder.location()
-		if (await isCheckout(directory)) {
-			const defaultBranch = (await localGit(directory, ['config', '--get', 'mesh-flow.defaultBranch'], abortSignal)).trim()
+		const existing = await existingCheckout(directory, abortSignal)
+		if (existing === 'broken') await rm(directory, { recursive: true, force: true })
+		if (existing === 'checkout') {
+			const url = (await localGit(directory, ['remote', 'get-url', origin], abortSignal)).trim()
+			if (url !== githubRemoteUrl(repository))
+				throw new Error(`${folder.path} holds a checkout of another repository (${url}), so ${repository} can't go there.`)
+			const defaultBranch = (await localGit(directory, ['config', '--get', defaultBranchConfigKey], abortSignal)).trim()
+			await switchTo(directory, branch, defaultBranch, abortSignal)
 			return repositoryOf(repository, branch, defaultBranch, folder.path, directory)
 		}
 		const fetched = await stubs.cloneRepository({ repository, branch }, { abortSignal })
-		const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-github-'))
-		try {
-			const bundle = path.join(scratch, 'clone.bundle')
+		await withScratchFile('clone.bundle', async (bundle) => {
 			await writeFile(bundle, Buffer.from(fetched.bundle, 'base64'))
 			const from = fetched.branchExists ? branch : fetched.defaultBranch
 			await localGit(path.dirname(directory), ['clone', '--quiet', '--branch', from, bundle, directory], abortSignal)
-		} finally {
-			await rm(scratch, { recursive: true, force: true })
-		}
+		})
 		if (!fetched.branchExists) await localGit(directory, ['checkout', '--quiet', '-b', branch], abortSignal)
 		// The bundle is gone: the remote is only where the pushed state is tracked, under refs/remotes/origin.
-		await localGit(directory, ['remote', 'set-url', origin, `https://github.com/${repository}.git`], abortSignal)
-		await localGit(directory, ['config', 'mesh-flow.defaultBranch', fetched.defaultBranch], abortSignal)
+		await localGit(directory, ['remote', 'set-url', origin, githubRemoteUrl(repository)], abortSignal)
+		await localGit(directory, ['config', defaultBranchConfigKey, fetched.defaultBranch], abortSignal)
 		return repositoryOf(repository, branch, fetched.defaultBranch, folder.path, directory)
 	},
 })
@@ -65,9 +71,29 @@ function repositoryOf(name: string, branch: string, defaultBranch: string, folde
 	return Object.freeze({ name, branch, defaultBranch, path: folderPath, directory, [toPrompt]: () => folderPath })
 }
 
-async function isCheckout(directory: string): Promise<boolean> {
-	return stat(path.join(directory, '.git')).then(
-		(found) => found.isDirectory(),
+/** What is in the folder: nothing, a checkout git can work in, or the remains of one it can't. */
+async function existingCheckout(directory: string, abortSignal: AbortSignal): Promise<'absent' | 'checkout' | 'broken'> {
+	const present = await stat(directory).then(
+		() => true,
 		() => false,
 	)
+	if (!present) return 'absent'
+	const works = await localGit(directory, ['rev-parse', '--is-inside-work-tree'], abortSignal).then(
+		(output) => output.trim() === 'true',
+		() => false,
+	)
+	return works && (await hasRef(directory, 'HEAD', abortSignal)) ? 'checkout' : 'broken'
+}
+
+/** Puts the checkout on `branch`: as it is when it's there, made from what the remote has otherwise. */
+async function switchTo(directory: string, branch: string, defaultBranch: string, abortSignal: AbortSignal): Promise<void> {
+	const current = (await localGit(directory, ['rev-parse', '--abbrev-ref', 'HEAD'], abortSignal)).trim()
+	if (current === branch) return
+	if (await hasRef(directory, `refs/heads/${branch}`, abortSignal)) {
+		await localGit(directory, ['checkout', '--quiet', branch], abortSignal)
+		return
+	}
+	const tracked = `refs/remotes/${origin}/${branch}`
+	const from = (await hasRef(directory, tracked, abortSignal)) ? tracked : `refs/remotes/${origin}/${defaultBranch}`
+	await localGit(directory, ['checkout', '--quiet', '-b', branch, from], abortSignal)
 }

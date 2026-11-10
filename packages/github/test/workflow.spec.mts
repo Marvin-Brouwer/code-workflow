@@ -1,17 +1,16 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { toPrompt } from '@mesh-flow/core'
+import { runCheck, toPrompt } from '@mesh-flow/core'
 import { describe, expect, test, vi } from 'vitest'
-import { runCheck } from '../../core/src/check/check.mts'
 import { githubHostTools } from '../src/host/connector.mts'
+import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { checksPass } from '../src/pull-request/checks-pass.mts'
 import { openPullRequest } from '../src/pull-request/pull-request.mts'
 import { reply } from '../src/pull-request/reply.mts'
 import { review } from '../src/pull-request/review.mts'
-import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
-import { fakeGithub, shaOf } from './support/fake-github.mts'
+import { fakeGithub, shaOf, type FakeCheckRun } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
@@ -145,7 +144,7 @@ describe('github', () => {
 		])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
-			['Renamed.', 1],
+			['Renamed.\n\n<!-- mesh-flow:reply -->', 1],
 		])
 		expect(run.wakes).toBeGreaterThanOrEqual(1)
 	})
@@ -190,5 +189,119 @@ describe('github', () => {
 			sha,
 			failures: [{ name: 'tests', summary: '2 failed', url: 'https://ci.example/1' }],
 		})
+	})
+
+	test('reuses a checkout for another branch, clones again over a broken one, and refuses another repository in the folder', async () => {
+		// Arrange
+		const { gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const first = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			await writeFile(path.join(first.directory, 'fix.txt'), 'fixed\n')
+			await push(first)({ message: 'Fix' })
+			const other = await checkout({ repository: repositoryName, branch: 'fix/8' })
+			const otherHead = (await git(other.directory, 'rev-parse', '--abbrev-ref', 'HEAD')).trim()
+			const otherFiles = (await git(other.directory, 'ls-files')).split('\n')
+			const back = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			const backHead = (await git(back.directory, 'rev-parse', '--abbrev-ref', 'HEAD')).trim()
+			await rm(path.join(first.directory, '.git'), { recursive: true })
+			const again = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			const againFiles = (await git(again.directory, 'ls-files')).split('\n')
+			const refused = await checkout({ repository: 'other/app', branch: 'fix/7' }).then(
+				() => undefined,
+				(error: unknown) => (error instanceof Error ? error.message : String(error)),
+			)
+			return { first, other, otherHead, otherFiles, backHead, againFiles, refused }
+		})
+		const result = await run.result
+
+		// Assert
+		expect(result.other.directory).toBe(result.first.directory)
+		expect(result.otherHead).toBe('fix/8')
+		expect(result.otherFiles).toEqual(['README.md'])
+		expect(result.backHead).toBe('fix/7')
+		expect(result.againFiles).toEqual(['README.md', 'fix.txt'])
+		expect(result.refused).toContain('holds a checkout of another repository')
+	})
+
+	test("hands a comment from the same second as the last look over once, and never the run's own reply, also when the token can't say who it is", async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		api.userHidden = true
+		const pull = api.pullRequest(repositoryName, 5, { head: { ref: 'fix/7', sha: shaOf('fix/7') } })
+		const at = new Date().toISOString()
+		pull.comments.push({
+			id: 1,
+			body: 'Is this covered by a test?',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: at,
+		})
+		const comments = vi.fn<(items: readonly { id: string; body: string }[]) => Promise<void>>(async (items) => {
+			if (comments.mock.calls.length === 1) {
+				await reply({ repository: repositoryName, number: 5 })({ item: items[0]?.id ?? '', text: 'Yes, in fix.spec.mts.' })
+				// Made while the first look was read, GitHub's clock says, so it sits in the same second as the look's last item.
+				pull.comments.push({ id: 2, body: 'And documented?', user: { login: 'reviewer' }, html_url: `${pull.html_url}#c2`, created_at: at })
+				return
+			}
+			pull.merged = true
+			pull.state = 'closed'
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 5 }, { comments }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
+		expect(comments.mock.calls.map((call) => call[0].map((item) => item.body))).toEqual([
+			['Is this covered by a test?'],
+			['And documented?'],
+		])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Is this covered by a test?',
+			'Yes, in fix.spec.mts.\n\n<!-- mesh-flow:reply -->',
+			'And documented?',
+		])
+	})
+
+	test('waits for the checks of a fresh commit to appear before judging them, and passes a repository without checks once they had time to', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const sha = shaOf('fix/7')
+		const pull = api.pullRequest(repositoryName, 6, { head: { ref: 'fix/7', sha } })
+		const failed: FakeCheckRun[] = [
+			{ name: 'tests', status: 'completed', conclusion: 'failure', html_url: null, output: { title: null, summary: '1 failed' } },
+		]
+		const looksBeforeChecksAppear = 3
+		let looks = 0
+		vi.spyOn(api.repository(repositoryName).checks, 'get').mockImplementation(() =>
+			++looks > looksBeforeChecksAppear ? failed : undefined,
+		)
+		const checksFailed = vi.fn<(failed: { sha: string }) => Promise<void>>(async () => {
+			pull.state = 'closed'
+			await Promise.resolve()
+		})
+		const noChecks = api.pullRequest('team/quiet', 1, { head: { ref: 'fix/1', sha: shaOf('fix/1') } })
+
+		// Act
+		const checked = await runOnGateway(gateway, ({ abortSignal }) =>
+			runCheck(checksPass({ repository: repositoryName, number: 6 }, { every: { seconds: 1 } }), { abortSignal }),
+		)
+		const findings = await checked.result
+		const looksForFindings = looks
+		const watched = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 6 }, { checksFailed }))
+		await watched.result
+		const quiet = await runOnGateway(gateway, ({ abortSignal }) =>
+			runCheck(checksPass({ repository: 'team/quiet', number: noChecks.number }, { every: { seconds: 1 }, appearWithin: { seconds: 0 } }), {
+				abortSignal,
+			}),
+		)
+
+		// Assert
+		expect(findings).toEqual([{ source: 'check: tests', message: '1 failed' }])
+		expect(looksForFindings).toBe(looksBeforeChecksAppear + 1)
+		expect(checksFailed).toHaveBeenCalledTimes(1)
+		await expect(quiet.result).resolves.toEqual([])
 	})
 })

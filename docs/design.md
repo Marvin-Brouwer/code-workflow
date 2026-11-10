@@ -446,6 +446,11 @@ export const aws = connector({
   the sandbox half (section 7).
 - Workflows import the connectors they use, so the build's description tells the engine each workflow's
   requirements.
+- What ships in the MVP is the host half only: `connectorHost(name, tools)` from `@mesh-flow/gateway`,
+  which the engine loads from its own connector list (`mesh-flow connector add <package>`) and
+  points at a directory of its own. The settings schema, sessions and `checkSession` come with the
+  settings UI (section 9); until then a connector's credential is a named entry in the credential
+  store, such as `github/token`.
 - Connectors with webhooks may export a zod schema per event with its signature scheme filled in
   (`github.issueLabeled(label)`) and ready-made triggers built on them
   (`github.onIssueLabeled(workflow, label)`), as shortcuts for `webhook` triggers and for events

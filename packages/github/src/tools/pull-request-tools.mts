@@ -52,6 +52,7 @@ export const ReviewItem = z.object({
 })
 export type ReviewItem = z.infer<typeof ReviewItem>
 
+/** Opens the pull request on the host, or finds the open one for the branch. */
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
 	description: 'Opens a pull request on GitHub, or returns the open one for the branch',
@@ -59,6 +60,7 @@ export const openPullRequest = {
 	output: PullRequestData,
 }
 
+/** Reads the pull request on the host. */
 export const getPullRequest = {
 	name: 'githubPullRequest',
 	description: 'Reads a pull request on GitHub',
@@ -66,19 +68,25 @@ export const getPullRequest = {
 	output: PullRequestData,
 }
 
+/**
+ * Lists on the host what was said on the pull request at or after `since`, oldest first. Comments
+ * this package posted are left out. An item at the same second as `since` comes again, so the
+ * caller keeps the ids it has handled.
+ */
 export const reviewActivity = {
 	name: 'githubReviewActivity',
 	description: 'Lists what reviewers said on a pull request since a moment, oldest first',
 	input: PullRequestRef.extend({ since: z.iso.datetime().optional() }),
 	output: z.object({
-		/** Who the credential belongs to, so the workflow can leave its own comments out. */
+		/** Who the credential belongs to, when the token can say; the workflow leaves that author's comments out. */
 		self: z.string().optional(),
 		items: z.array(ReviewItem),
-		/** When the list was made: the `since` of the next call. */
-		until: z.iso.datetime(),
+		/** The moment of the latest item seen so far: the `since` of the next call. Absent until an item was seen. */
+		until: z.iso.datetime().optional(),
 	}),
 }
 
+/** Replies on the host, with a marker in the body so the reply is never listed as a reviewer's item. */
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
@@ -90,9 +98,14 @@ export const replyToReviewItem = {
 export const CheckFailure = z.object({ name: z.string(), summary: z.string(), url: z.url().optional() })
 export type CheckFailure = z.infer<typeof CheckFailure>
 
+/** How far the checks on a commit are: none have been made yet, some are still running, or all are done. */
+export const ChecksStatus = z.enum(['none', 'pending', 'completed'])
+export type ChecksStatus = z.infer<typeof ChecksStatus>
+
+/** Reads the checks and statuses on a commit on the host. */
 export const checksOnRef = {
 	name: 'githubChecks',
 	description: 'The checks and statuses on a commit of a GitHub repository',
 	input: z.object({ repository: RepositoryName, ref: Sha }),
-	output: z.object({ status: z.enum(['pending', 'completed']), failures: z.array(CheckFailure) }),
+	output: z.object({ status: ChecksStatus, failures: z.array(CheckFailure) }),
 }

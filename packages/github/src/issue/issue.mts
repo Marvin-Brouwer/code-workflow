@@ -1,5 +1,4 @@
 import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
-import type { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
 
@@ -85,6 +84,3 @@ export function markdownOf(data: IssueData): string {
 		'',
 	].join('\n')
 }
-
-/** The issue parameter's schema, for `workflow(name, { issue: github.issue }, ...)`. Exported for type tests. */
-export type IssueParameter = z.input<typeof IssueRef>

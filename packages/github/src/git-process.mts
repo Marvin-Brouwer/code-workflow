@@ -22,7 +22,14 @@ export async function runGit(
 		stdin: 'ignore',
 		detached: process.platform !== 'win32',
 	})
+	let exited = false
+	const noteExit = () => {
+		exited = true
+	}
+	subprocess.then(noteExit, noteExit)
 	const stop = () => {
+		// A pid is reused once its process is gone: never signal one that has exited.
+		if (exited) return
 		killTree(subprocess.pid)
 		setTimeout(() => {
 			killTree(subprocess.pid, 'SIGKILL')

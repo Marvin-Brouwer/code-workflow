@@ -1,6 +1,7 @@
 import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
+import { defaultLookEvery } from './look-interval.mts'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'
 
 /** The checks of one commit failed. */
@@ -12,7 +13,7 @@ export interface ChecksFailed {
 
 /** What `review` calls as a pull request's review goes on. Each handler finishes before the next event is looked at. */
 export interface ReviewHandlers {
-	/** New review comments, reviews and conversation comments, coalesced per look, oldest first. The run's own are left out. */
+	/** New review comments, reviews and conversation comments, coalesced per look, oldest first. What the run posted itself is left out. */
 	readonly comments?: (comments: readonly ReviewItem[]) => Promise<unknown>
 	/** The checks of a commit came out failed. Once per commit. */
 	readonly checksFailed?: (failed: ChecksFailed) => Promise<unknown>
@@ -30,13 +31,11 @@ export interface ReviewOutcome {
 	readonly pullRequest: PullRequest
 }
 
-const defaultEvery: WaitSpec = { seconds: 30 }
-
 /**
  * Watches a pull request until it's merged or closed, and calls the handlers as things happen on
  * it: review comments come in one list per look, so a reviewer's round is one call, and failed
- * checks come once per commit. Handlers run one at a time. The wait between looks is on the
- * engine's clock, where the run can be paused.
+ * checks come once per commit, once its checks have all completed. Handlers run one at a time. The
+ * wait between looks is on the engine's clock, where the run can be paused.
  *
  * ```ts
  * await github.review(pullRequest, {
@@ -56,14 +55,17 @@ export async function review(
 ): Promise<ReviewOutcome> {
 	const where = { repository: on.repository, number: on.number }
 	let since: string | undefined
+	// The host lists from the latest moment seen, inclusive, so an item at that second comes again.
+	const handled = new Set<string>()
 	const reportedChecks = new Set<string>()
 	for (;;) {
 		const current = pullRequestOf(await stubs.getPullRequest(where, context))
 		if (current.state === 'closed') return { state: current.merged ? 'merged' : 'closed', pullRequest: current }
 
 		const activity = await stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context)
-		since = activity.until
-		const comments = activity.items.filter((item) => item.author !== activity.self)
+		since = activity.until ?? since
+		const comments = activity.items.filter((item) => item.author !== activity.self && !handled.has(item.id))
+		for (const item of comments) handled.add(item.id)
 		if (comments.length > 0 && handlers.comments !== undefined) await handlers.comments(comments)
 
 		if (handlers.checksFailed !== undefined && !reportedChecks.has(current.head.sha)) {
@@ -75,6 +77,6 @@ export async function review(
 			}
 		}
 
-		await wait(options.every ?? defaultEvery)
+		await wait(options.every ?? defaultLookEvery)
 	}
 }

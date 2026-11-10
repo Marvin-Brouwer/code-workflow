@@ -6,8 +6,7 @@ import { describe, expect, onTestFinished, test } from 'vitest'
 import { gitRemote } from '../src/host/git-remote.mts'
 import { git, localRemote } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-
-const token = 'ghp_test'
+import { testToken as token } from './support/test-run.mts'
 
 /** A host tool context whose credential store has the token. */
 function context(abortSignal = new AbortController().signal): HostToolContext {
@@ -70,6 +69,49 @@ describe('gitRemote', () => {
 		expect(head).toBe(await remote.head('fix/1'))
 		expect(await remote.files('fix/1')).toEqual(['README.md', 'src/fix.txt'])
 		expect(again.branchExists).toBe(true)
+	})
+
+	test('serves runs that fetch and push the same repository at once, one at a time on its clone', async () => {
+		// Arrange
+		const remote = await localRemote()
+		const branches = ['fix/1', 'fix/2', 'fix/3', 'fix/4', 'fix/5']
+		for (const branch of branches) await remote.commit(branch, `${branch.replace('/', '-')}.txt`, 'fixed\n')
+		const host = gitRemote({ directory: await temporaryDirectory(), remoteUrl: () => remote.url })
+		const fetched = await host.fetchBundle('team/app', 'fix/1', context())
+		const checkout = await cloneBundle(fetched.bundle, 'fix/1')
+		await writeFile(path.join(checkout, 'later.txt'), 'later\n')
+		await git(checkout, 'add', '--all')
+		await git(checkout, 'commit', '--quiet', '--message', 'Later')
+		const bundleFile = path.join(checkout, '..', 'push.bundle')
+		await git(checkout, 'bundle', 'create', '--quiet', bundleFile, 'origin/fix/1..fix/1')
+		const other = gitRemote({ directory: await temporaryDirectory(), remoteUrl: () => remote.url })
+
+		// Act: a fresh host clone takes eight fetches at once, and a push lands while another host fetches.
+		const fetches = await Promise.allSettled(branches.concat(branches).map((branch) => other.fetchBundle('team/app', branch, context())))
+		const [head] = await Promise.all([
+			host.pushBundle('team/app', 'fix/1', await readFile(bundleFile), context()),
+			host.fetchBundle('team/app', 'fix/2', context()),
+			host.fetchBundle('team/app', 'fix/3', context()),
+		])
+
+		// Assert
+		expect(fetches.map((outcome) => outcome.status)).toEqual(fetches.map(() => 'fulfilled'))
+		expect(head).toBe((await git(checkout, 'rev-parse', 'fix/1')).trim())
+		expect(await remote.head('fix/1')).toBe(head)
+		expect(await remote.files('fix/1')).toEqual(['README.md', 'fix-1.txt', 'later.txt'])
+	})
+
+	test('refuses a bundle that does not hold the branch', async () => {
+		// Arrange
+		const remote = await localRemote()
+		const host = gitRemote({ directory: await temporaryDirectory(), remoteUrl: () => remote.url })
+		const fetched = await host.fetchBundle('team/app', 'fix/1', context())
+
+		// Act
+		const pushing = host.pushBundle('team/app', 'fix/1', fetched.bundle, context())
+
+		// Assert
+		await expect(pushing).rejects.toThrow('The bundle holds no fix/1.')
 	})
 
 	test('settles promptly when the call is stopped while the remote never answers', async () => {

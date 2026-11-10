@@ -1,10 +1,16 @@
 import path from 'node:path'
-import { runWorkflow, workflow, type RunChannel, type RunOutcome } from '@mesh-flow/core'
+import {
+	definedHostTools,
+	gatewayClient,
+	runWorkflow,
+	workflow,
+	type GatewayChannel,
+	type RunChannel,
+	type RunOutcome,
+} from '@mesh-flow/core'
 import { keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway, type HostTool } from '@mesh-flow/gateway'
 import type { Answer, CallMessage, RuntimeMessage } from '@mesh-flow/protocol'
 import { onTestFinished } from 'vitest'
-import { gatewayClient, type GatewayChannel } from '../../../core/src/gateway/gateway-client.mts'
-import { definedHostTools } from '../../../core/src/gateway/host-tool-stub.mts'
 import { tokenCredential } from '../../src/host/api.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 

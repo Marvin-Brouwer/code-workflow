@@ -15,18 +15,22 @@ export interface GithubApiOptions {
 /** A client for one call, with the token from the credential store and the call's signal. */
 export type ApiClient = (context: HostToolContext) => Promise<Octokit>
 
-/** The API's hostname, for the error when there is no token. */
+/** GitHub's REST API, where host tools go when no `apiUrl` is given. */
 export const defaultApiUrl = 'https://api.github.com'
+
+/** The token from the call's credential store, or an error saying how to set it. */
+export async function requireToken({ credentials, abortSignal }: HostToolContext): Promise<string> {
+	const token = await credentials.get(tokenCredential, abortSignal)
+	if (token === undefined) throw new Error(`There is no GitHub token. Set it with \`mesh-flow credential set ${tokenCredential}\`.`)
+	return token
+}
 
 /** Opens GitHub's REST API for host tools: every call takes the token from the credential store, so a new token counts at once. */
 export function githubApi(options: GithubApiOptions = {}): ApiClient {
-	return async ({ credentials, abortSignal }) => {
-		const token = await credentials.get(tokenCredential, abortSignal)
-		if (token === undefined) throw new Error(`There is no GitHub token. Set it with \`mesh-flow credential set ${tokenCredential}\`.`)
-		return new Octokit({
-			auth: token,
+	return async (context) =>
+		new Octokit({
+			auth: await requireToken(context),
 			baseUrl: options.apiUrl ?? defaultApiUrl,
-			request: { signal: abortSignal, ...(options.fetch === undefined ? {} : { fetch: options.fetch }) },
+			request: { signal: context.abortSignal, ...(options.fetch === undefined ? {} : { fetch: options.fetch }) },
 		})
-	}
 }
