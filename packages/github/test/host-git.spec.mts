@@ -16,6 +16,9 @@ function context(abortSignal = new AbortController().signal): HostToolContext {
 /** How long a stopped call may take to settle while git hangs. */
 const promptlyMs = 3_000
 
+/** How long git may take to make the clone and reach the remote: on a Windows runner, a few processes in a row take seconds. */
+const reachesRemoteWithinMs = 15_000
+
 /** A clone of a bundle, in a fresh directory. */
 async function cloneBundle(bundle: Buffer, branch: string): Promise<string> {
 	const root = await temporaryDirectory()
@@ -142,10 +145,10 @@ describe('gitRemote', () => {
 		const stop = new AbortController()
 
 		// Act
-		const fetching = host.fetchBundle('team/app', 'fix/1', context(stop.signal))
-		await expect.poll(() => seen.length).toBeGreaterThan(0)
+		const fetching = host.fetchBundle('team/app', 'fix/1', context(stop.signal)).catch(() => undefined)
+		await expect.poll(() => seen.length, { timeout: reachesRemoteWithinMs }).toBeGreaterThan(0)
 		stop.abort(new Error('Seen enough.'))
-		await fetching.catch(() => undefined)
+		await fetching
 
 		// Assert
 		expect(seen[0]).toBe(`Basic ${Buffer.from(`x-access-token:${testToken}`).toString('base64')}`)
