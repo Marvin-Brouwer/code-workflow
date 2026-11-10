@@ -31,6 +31,25 @@ importers:
         specifier: workspace:*
         version: link:../../packages/engine
 
+  examples/github-issue:
+    dependencies:
+      '@mesh-flow/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mesh-flow/github':
+        specifier: workspace:*
+        version: link:../../packages/github
+    devDependencies:
+      '@mesh-flow/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
   packages/build:
     dependencies:
       '@mesh-flow/protocol':

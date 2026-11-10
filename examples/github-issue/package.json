@@ -1,0 +1,22 @@
+{
+	"name": "github-issue",
+	"private": true,
+	"description": "The smallest mesh-flow app: pick up a GitHub issue, fix it, open a pull request and handle the review until it's merged",
+	"type": "module",
+	"main": "main.mts",
+	"scripts": {
+		"build": "mesh-flow build",
+		"deploy": "mesh-flow deploy",
+		"dev": "mesh-flow dev",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/github": "workspace:*"
+	},
+	"devDependencies": {
+		"@mesh-flow/engine": "workspace:*",
+		"@types/node": "^22.20.5",
+		"typescript": "~6.0.3"
+	}
+}
