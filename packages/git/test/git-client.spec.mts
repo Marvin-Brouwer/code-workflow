@@ -50,21 +50,11 @@ describe('gitClient', () => {
 		const line = String(git.checkout('fix/7', { create: true, from: 'main' }))
 
 		// Assert
-		expect(asked).toMatchObject({
-			ok: false,
-			exitCode: 1,
-			command: [
-				'git',
-				'-c',
-				'user.name=Test',
-				'-c',
-				'user.email=test@example.com',
-				'show-ref',
-				'--verify',
-				'--quiet',
-				'refs/heads/nowhere',
-			],
-		})
+		expect(asked).toMatchObject({ ok: false, exitCode: 1 })
+		// The platform's own config (`core.longpaths` on Windows) comes before the caller's.
+		expect(asked.command.join(' ')).toMatch(
+			/^git (-c \S+ )*-c user\.name=Test -c user\.email=test@example\.com show-ref --verify --quiet refs\/heads\/nowhere$/,
+		)
 		expect(line).toBe('git checkout -b fix/7 main')
 		expect(await git.hasBranch('fix/7')).toBe(false)
 	})
