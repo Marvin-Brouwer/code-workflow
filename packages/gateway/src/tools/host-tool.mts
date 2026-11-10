@@ -66,3 +66,32 @@ export function hostTool<Input extends z.ZodType, Output>(
 		},
 	})
 }
+
+/** What a connector's host half gets to make its tools. */
+export interface ConnectorHostOptions {
+	/** A directory of the connector's own in the gateway's home, for what it keeps between calls, such as clones. */
+	readonly directory: string
+}
+
+/**
+ * The host half of a connector package, as its `host` entry point exports it: a name, and the
+ * host tools it brings. The engine loads the connectors the user added and gives every run the
+ * tools of them its app lists.
+ *
+ * ```ts
+ * export const connector = connectorHost('github', ({ directory }) => githubHostTools({ directory }))
+ * ```
+ */
+export interface ConnectorHost {
+	/** Names the connector, as a directory name: lowercase letters, digits and dashes. */
+	readonly name: string
+	readonly tools: (options: ConnectorHostOptions) => readonly HostTool[]
+}
+
+/** Connector names: they go into directory names. */
+export const ConnectorName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'Use lowercase letters, digits and dashes.')
+
+/** Defines the host half of a connector, checked. */
+export function connectorHost(name: string, tools: ConnectorHost['tools']): ConnectorHost {
+	return Object.freeze<ConnectorHost>({ name: ConnectorName.parse(name), tools })
+}

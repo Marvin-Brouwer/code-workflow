@@ -1,0 +1,73 @@
+{
+	"name": "@mesh-flow/github",
+	"version": "0.0.0",
+	"description": "GitHub connector for mesh-flow: issues, repositories, pull requests, checks and webhooks, with credentials on the host only",
+	"keywords": [
+		"agents",
+		"github",
+		"mesh-flow",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/github#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/github"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/github.mts",
+			"types": "./dist/github.d.mts",
+			"import": "./dist/github.mjs"
+		},
+		"./hooks": {
+			"source": "./src/_module/hooks.mts",
+			"types": "./dist/hooks.d.mts",
+			"import": "./dist/hooks.mjs"
+		},
+		"./host": {
+			"source": "./src/_module/host.mts",
+			"types": "./dist/host.d.mts",
+			"import": "./dist/host.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/gateway": "workspace:*",
+		"@mesh-flow/git": "workspace:*",
+		"@octokit/rest": "^22.0.1",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^22.20.5",
+		"execa": "^10.2.1",
+		"hono": "^4.13.16",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=22.18"
+	}
+}

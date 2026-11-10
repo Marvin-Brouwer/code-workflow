@@ -21,6 +21,8 @@ export interface WorkspaceFolder {
 	/** Relative to the workspace, POSIX. */
 	readonly path: string
 	readonly options: WorkspaceFolderOptions
+	/** Where it is on disk, in the current run's workspace. Throws outside a run. */
+	location(): string
 	/** The files in it and its subfolders, sorted by path. None when it doesn't exist yet. */
 	files(): Promise<readonly WorkspaceFile[]>
 	[toPrompt](): Promise<string>
@@ -45,6 +47,7 @@ export function workspaceFolder(relative: string, options: WorkspaceFolderOption
 		kind: 'folder' as const,
 		path: folderPath,
 		options,
+		location: () => onDisk(folderPath, `Locating workspace folder ${folderPath}`),
 		files,
 		[toPrompt]: async () => {
 			const names = (await files()).map((file) => path.posix.relative(folderPath, file.path))

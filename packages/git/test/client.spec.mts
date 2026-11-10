@@ -1,0 +1,236 @@
+import { writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
+import path from 'node:path'
+import { describe, expect, onTestFinished, test } from 'vitest'
+import { basicAuthHeaderEnv } from '../src/auth.mts'
+import { gitClient, rawGit } from '../src/client.mts'
+import { temporaryDirectory } from './support/temporary-directory.mts'
+
+const identity = { 'user.name': 'Test', 'user.email': 'test@example.com' }
+
+/** How long a stopped command may take to settle while git hangs. */
+const promptlyMs = 3_000
+
+/** How long git may take to reach the server: a few processes in a row take seconds on a slow runner. */
+const reachesServerWithinMs = 15_000
+
+/** How long the fetch runs before the stop: long enough for git to be on its way to the server. */
+const stopAfterMs = 200
+
+/** A repository with one commit on `main`. */
+async function repository(abortSignal = new AbortController().signal) {
+	const directory = await temporaryDirectory()
+	const git = gitClient({ cwd: directory, gitConfig: identity, abortSignal })
+	await git.init({ branch: 'main', quiet: true })
+	await writeFile(path.join(directory, 'README.md'), '# Example\n')
+	await git.add()
+	await git.commit({ message: 'Start', quiet: true })
+	return git
+}
+
+describe('gitClient', () => {
+	test('runs a command when awaited, and fails on a non-zero exit with the command in the error', async () => {
+		// Arrange
+		const git = await repository()
+
+		// Act
+		const head = await git.revParse('HEAD')
+		const missing = git.revParse('--verify', 'refs/heads/nowhere')
+
+		// Assert
+		expect(head.ok).toBe(true)
+		expect(head.stdout.trim()).toMatch(/^[0-9a-f]{40}$/)
+		await expect(missing).rejects.toThrow('`git rev-parse --verify refs/heads/nowhere` failed (exit 128)')
+	})
+
+	test('hands the exit back from run(), swallows it in attempt(), and renders without running', async () => {
+		// Arrange
+		const git = await repository()
+
+		// Act
+		const asked = await git.showRef('refs/heads/nowhere').run()
+		await git.rebaseAbort().attempt()
+		const line = String(git.checkout('fix/7', { create: true, from: 'main' }))
+
+		// Assert
+		expect(asked).toMatchObject({ ok: false, exitCode: 1 })
+		// The platform's own config (`core.longpaths` on Windows) comes before the caller's.
+		expect(asked.command.join(' ')).toMatch(
+			/^git (-c \S+ )*-c user\.name=Test -c user\.email=test@example\.com show-ref --verify --quiet refs\/heads\/nowhere$/,
+		)
+		expect(line).toBe('git checkout -b fix/7 main')
+		expect(await git.hasLocalBranch('fix/7')).toBe(false)
+	})
+
+	test('answers the questions a workflow asks about a checkout', async () => {
+		// Arrange
+		const git = await repository()
+
+		// Act
+		await git.checkoutOrCreate('fix/7', 'main')
+		await writeFile(path.join(git.cwd, 'fix.txt'), 'fixed\n')
+		const dirty = await git.dirtyFiles()
+		await writeFile(path.join(git.cwd, 'README.md'), '# Changed\n')
+		const changed = await git.hasChanges()
+		await git.discardChanges()
+		const changedAfterDiscard = await git.hasChanges('README.md')
+		await git.setIdentity('Someone', 'someone@example.com')
+		await git.checkoutOrCreate('main')
+
+		// Assert
+		expect(await git.hasLocalBranch('fix/7')).toBe(true)
+		expect(await git.hasRemoteBranch('fix/7')).toBe(false)
+		expect(dirty).toEqual(['?? fix.txt'])
+		expect(changed).toBe(true)
+		expect(changedAfterDiscard).toBe(false)
+		// Read without the client's own `-c user.name`, which would win over the file.
+		expect((await gitClient({ cwd: git.cwd, abortSignal: new AbortController().signal }).config('user.name')).stdout.trim()).toBe('Someone')
+		expect(await git.currentBranch()).toBe('main')
+		expect(await git.conflictedFiles()).toEqual([])
+	})
+
+	test('knows the default branch from what a clone recorded, or by probing main and master', async () => {
+		// Arrange
+		const abortSignal = new AbortController().signal
+		const upstream = await repository(abortSignal)
+		const cloned = path.join(await temporaryDirectory(), 'clone')
+		await gitClient({ cwd: path.dirname(cloned), abortSignal }).clone(upstream.cwd, cloned, { quiet: true })
+		const clone = gitClient({ cwd: cloned, gitConfig: identity, abortSignal })
+		const fetched = gitClient({ cwd: await temporaryDirectory(), gitConfig: identity, abortSignal })
+		await fetched.init({ quiet: true })
+		await fetched.remoteAdd('origin', upstream.cwd)
+		await fetched.fetch('origin', ['+refs/heads/*:refs/remotes/origin/*'], { quiet: true })
+		const empty = gitClient({ cwd: await temporaryDirectory(), abortSignal })
+		await empty.init({ quiet: true })
+
+		// Act
+		await fetched.checkoutOrCreate('fix/8')
+
+		// Assert
+		expect(await clone.defaultBranch()).toBe('main')
+		expect(await fetched.defaultBranch()).toBe('main')
+		expect(await fetched.currentBranch()).toBe('fix/8')
+		await expect(empty.defaultBranch()).rejects.toThrow('no default branch')
+	})
+
+	test('picks up a branch the remote already has, so a rerun goes on from the pushed work', async () => {
+		// Arrange
+		const abortSignal = new AbortController().signal
+		const upstream = await repository(abortSignal)
+		await upstream.checkout('fix/7', { create: true, quiet: true })
+		await writeFile(path.join(upstream.cwd, 'fix.txt'), 'pushed\n')
+		await upstream.add()
+		await upstream.commit({ message: 'Pushed work', quiet: true })
+		const pushed = (await upstream.revParse('HEAD')).stdout.trim()
+		await upstream.checkout('main', { quiet: true })
+		const cloned = path.join(await temporaryDirectory(), 'clone')
+		await gitClient({ cwd: path.dirname(cloned), abortSignal }).clone(upstream.cwd, cloned, { quiet: true })
+		const clone = gitClient({ cwd: cloned, gitConfig: identity, abortSignal })
+
+		// Act
+		await clone.checkoutOrCreate('fix/7')
+
+		// Assert
+		expect(await clone.currentBranch()).toBe('fix/7')
+		expect((await clone.revParse('HEAD')).stdout.trim()).toBe(pushed)
+	})
+
+	test('sees staged changes and reads status paths as git wrote them', async () => {
+		// Arrange
+		const git = await repository()
+		await writeFile(path.join(git.cwd, 'README.md'), '# Staged\n')
+		await git.add('README.md')
+		await writeFile(path.join(git.cwd, 'with space.txt'), 'new\n')
+		await writeFile(path.join(git.cwd, 'café.txt'), 'new\n')
+
+		// Act
+		const staged = await git.hasChanges()
+		const dirty = await git.dirtyFiles()
+		await git.discardChanges()
+		const afterDiscard = await git.hasChanges()
+		await writeFile(path.join(git.cwd, 'README.md'), '# Unstaged\n')
+		const unstaged = await git.dirtyFiles()
+		await git.discardChanges('README.md')
+
+		// Assert
+		expect(staged).toBe(true)
+		expect(dirty).toEqual(['M  README.md', '?? café.txt', '?? with space.txt'])
+		expect(afterDiscard).toBe(false)
+		expect(unstaged).toEqual([' M README.md', '?? café.txt', '?? with space.txt'])
+		expect(await git.hasChanges('README.md')).toBe(false)
+	})
+
+	test('renders every command without a client', () => {
+		// Act
+		const line = rawGit.checkout('fix/8', { create: true, from: 'origin/main' })
+
+		// Assert
+		expect(line).toBe('git checkout -b fix/8 origin/main')
+	})
+
+	test('settles promptly when stopped while the remote never answers', async () => {
+		// Arrange
+		const hanging = await hangingServer()
+		const stop = new AbortController()
+		const git = await repository(stop.signal)
+		const started = Date.now()
+
+		// Act
+		const fetching = git.fetch(`${hanging}/team/app.git`, ['main'])
+		setTimeout(() => {
+			stop.abort(new Error('The run was stopped.'))
+		}, stopAfterMs)
+
+		// Assert
+		await expect(fetching).rejects.toThrow('The run was stopped.')
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
+	})
+
+	test('sends a credential as a header through the environment, never in the arguments', async () => {
+		// Arrange
+		const seen: string[] = []
+		const server = await hangingServer((authorization) => {
+			seen.push(authorization)
+		})
+		const stop = new AbortController()
+		const git = gitClient({
+			cwd: await temporaryDirectory(),
+			env: basicAuthHeaderEnv('x-access-token', 'ghp_test'),
+			abortSignal: stop.signal,
+		})
+		await git.init({ bare: true, quiet: true })
+
+		// Act
+		const command = git.fetch(`${server}/team/app.git`, ['main'])
+		const fetching = command.run().catch(() => undefined)
+		await expect.poll(() => seen.length, { timeout: reachesServerWithinMs }).toBeGreaterThan(0)
+		stop.abort(new Error('Seen enough.'))
+		await fetching
+
+		// Assert
+		expect(seen[0]).toBe(`Basic ${Buffer.from('x-access-token:ghp_test').toString('base64')}`)
+		expect(command.args.join(' ')).not.toContain('ghp_test')
+	})
+})
+
+/** An HTTP server that takes every request and never answers it, reporting the `Authorization` header it saw. */
+async function hangingServer(onRequest: (authorization: string) => void = () => undefined): Promise<string> {
+	const server: Server = createServer((request) => {
+		onRequest(request.headers.authorization ?? '')
+	})
+	await new Promise<void>((resolve) => {
+		server.listen(0, '127.0.0.1', resolve)
+	})
+	onTestFinished(
+		() =>
+			new Promise<void>((resolve) => {
+				server.close(() => {
+					resolve()
+				})
+				server.closeAllConnections()
+			}),
+	)
+	const address = server.address()
+	if (address === null || typeof address === 'string') throw new Error('No port.')
+	return `http://127.0.0.1:${String(address.port)}`
+}

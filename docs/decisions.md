@@ -133,6 +133,12 @@ November 2026. Design section 4 ([Loop limits](design.md#loop-limits), [Context]
 
 ## Engine
 
+- **Review watching on webhook deliveries routed to a waiting run.** The design's shape, and still
+  the goal: the engine has no "deliver this event to the run that waits for it" path yet.
+  `github.review` polls through a host tool with an engine-side wait (`wait`) instead; the event
+  schemas ship in `@mesh-flow/github/hooks` so the webhook-driven version can replace the polling
+  without changing workflow code.
+
 Came out of building `@mesh-flow/engine` in November 2026; its
 [README](../packages/engine/README.md#how-it-works) has what was chosen.
 
@@ -186,6 +192,20 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **Account and permission set inline in workflow code.** Moved to connector settings (static
   config or UI).
 - **Threshold as a `checkSession` argument.** Moved to connector settings.
+- **Connector host tools loaded from the deployed app** (the build records the connector packages
+  the app imports and the engine loads those). Rejected 2026-11-09 (Marvin): the deployed bundle
+  would decide what runs on the host with credentials, so a workflow commit would be a host-side
+  change nobody approved. The engine loads the connector packages the user added
+  (`mesh-flow connector add`), the way providers are the user's; the app only declares which host
+  tools it needs, and deploy and trigger say what is still missing.
+- **A connector flag on every `mesh-flow serve`.** Works, but every start has to repeat it, and
+  the UI's settings page has nothing to write to. The stored list replaces it.
+- **Cloning and pushing from the sandbox over the network** (a credential helper, or a proxy that
+  adds the token). Both put a credential, or a path to one, within reach of the agent's shell.
+  Commits cross as git bundles instead: the host fetches and pushes with the token, the sandbox
+  clones a bundle and bundles what it pushes, and the sandbox needs no network for git at all.
+  The cost is the whole history over the mailbox per checkout, fine for the repositories the MVP
+  targets; shallow bundles can come when a repository is too big.
 - **Refreshing the human session as long as any workflow exists.** Keeps a human identity live and
   unattended for days. Refresh only while runs actively need it and no interaction is needed; for
   truly unattended long work, use a workload identity (IAM role for the gateway) instead of

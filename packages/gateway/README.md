@@ -63,6 +63,15 @@ export const comment = hostTool(commentDefinition, async ({ issue, body }, { cre
 
 The input is checked on the host against the definition's schema, whatever the stub checked.
 
+A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.
+
+```ts
+import { connectorHost } from '@mesh-flow/gateway'
+import { commentTool } from './tools/comment.mts'
+
+export const connector = connectorHost('github', ({ directory }) => [commentTool(directory)])
+```
+
 ## Endpoints and tokens
 
 ```ts
@@ -108,4 +117,3 @@ async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer)
 
 - **The agent's shell as a separate user.** Tokens live in the runtime's memory and the mailbox is the runtime's user's only, which keeps an agent out only once its shell commands run as another user ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)).
 - **Streaming model responses.** A model call's answer comes back whole, because the mailbox carries whole messages. The SDK in the sandbox reads it as the stream it would have read.
-- **Connector host tools in the engine.** The gateway takes host tools as a list; which connector packages an engine loads them from is decided with the first connector.

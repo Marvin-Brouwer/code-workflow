@@ -1,0 +1,21 @@
+/**
+ * The entry file, which `main` in package.json names: the sandbox the app's runs get, and
+ * everything that can start a run. A workflow says what it does and what it starts with; this
+ * file says how it gets started and where it runs.
+ *
+ * The sandbox needs git next to node, which `node:22-bookworm` has. It reaches nothing outside:
+ * GitHub is only spoken to from the host, through the gateway.
+ */
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { github } from '@mesh-flow/github/hooks'
+import { fixIssue } from './workflows/fix-issue.mts'
+
+export default defineMeshFlow({
+	sandbox: image({ name: 'node:22-bookworm' }),
+	workflows: [
+		// A button in the UI, with the issue as its form.
+		userTrigger(fixIssue),
+		// A GitHub webhook: labelling an issue `ai-fix` starts a run for it.
+		github.onIssueLabeled(fixIssue, 'ai-fix'),
+	],
+})

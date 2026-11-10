@@ -31,6 +31,17 @@ function resultOf(answer: CallAnswer): unknown {
 }
 
 describe('openGateway', () => {
+	test("says which of an app's tools it has no host tool for", async () => {
+		// Arrange
+		const { gateway } = await testGateway({ tools: [echo] })
+
+		// Act
+		const missing = gateway.missingTools(['echo', 'githubComment', 'githubComment'])
+
+		// Assert
+		expect(missing).toEqual(['githubComment'])
+	})
+
 	test('runs a host tool with the credential it needs, and hands out the next token', async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ tools: [secretReader] })

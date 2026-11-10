@@ -155,6 +155,8 @@ await planner.loop`Research ${story}. Write your findings to ${research} and fin
 const findings = await research.files()
 ```
 
+A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git.
+
 ### Humans
 
 `input` asks the person running the workflow and waits. The wait is engine-side, so the sandbox can pause meanwhile. The fields are a form: any zod schema, or one of the common kinds, `input.text()`, `input.yesNo()`, `input.choice(options)` and `input.choices(options)`. An answer that doesn't fit the fields is asked again.
@@ -172,6 +174,36 @@ const release = await input('How should the release go?', {
 ```
 
 An agent asks with `requestUserInput`: one question with a text answer, or a form with the same kinds of field.
+
+### Waiting
+
+A workflow waits for the thing itself, never for an amount of time: `await github.review(pullRequest, handlers)` returns when the pull request is merged or closed, `verify(github.checksPass(pullRequest))` when its checks have completed. Days can pass in such an `await`. The run is paused meanwhile and resumes where it was, so a workflow that waits costs nothing and survives an engine restart.
+
+```ts
+const outcome = await github.review(pullRequest, { comments: handleComments })
+if (outcome.state === 'merged') await github.close(issue)
+```
+
+Each of these functions is a connector's, and how it waits is the connector's concern, not the workflow's. Today they look at GitHub at an interval; the engine is to deliver webhook events into waiting runs ([design: Triggers](../../docs/design.md#triggers)), after which they wait for the event instead, without a change to their signature.
+
+A connector waits with `wait`: a pause on the engine's clock, so the sandbox can be paused meanwhile and a timer that disagrees across a pause never matters. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`. It belongs in a connector's function, behind an `await` that names what the workflow waits for, not in workflow code.
+
+```ts
+import { hostToolStub, wait } from '@mesh-flow/core'
+import { z } from 'zod'
+
+const pipeline = hostToolStub({
+	name: 'ciPipeline',
+	description: 'Reads a pipeline of the build server',
+	input: z.object({ id: z.string() }),
+	output: z.object({ done: z.boolean() }),
+})
+
+/** Returns once the pipeline has finished: what a workflow awaits. */
+export async function finished(id: string): Promise<void> {
+	while (!(await pipeline({ id })).done) await wait({ seconds: 30 })
+}
+```
 
 ### Workflows
 

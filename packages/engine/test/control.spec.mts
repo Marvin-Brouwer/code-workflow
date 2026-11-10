@@ -68,7 +68,9 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 
 		// Assert
 		expect(again.version).toBe(deployed.version)
-		expect(listed).toEqual([deployed])
+		const { missing, ...shown } = deployed
+		expect(listed).toEqual([shown])
+		expect(missing).toEqual([])
 		expect(deployed.manifest.description.triggers).toEqual([{ kind: 'user', id: 'ask', workflow: 'ask' }])
 		expect(await client.apps(signal)).toEqual([])
 	})

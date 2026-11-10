@@ -8,14 +8,17 @@ import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
 import { AppName, WebhookName } from '../apps/names.mts'
+import { openConnectorSettings } from '../connectors/connector-settings.mts'
+import { loadConnectors } from '../connectors/load-connectors.mts'
 import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { openEngineGatewayHome } from '../serve/engine-gateway.mts'
-import { defaultWebhookHost, serveEngine, type ServedEngine } from '../serve/serve-engine.mts'
+import { defaultWebhookHost, serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
 import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
 import { appNameOf } from './app-name.mts'
+import { addConnectorCommands, connectorSettingsFile } from './connector-commands.mts'
 import { addCredentialCommands } from './credential-commands.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
@@ -108,7 +111,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				},
 			})
 			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
-			served = await serveEngine({ home: home(), backend, log, keychain: keychain(), abortSignal: startup.signal, ...webhooks }).catch(
+			served = await serveWithConnectors(home(), { backend, log, keychain: keychain(), abortSignal: startup.signal, ...webhooks }).catch(
 				async (error: unknown) => {
 					await backend.close(AbortSignal.timeout(closeTimeoutMs))
 					throw error
@@ -153,6 +156,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				requestSignal(),
 			)
 			console.log(`${deployed.name}  ${deployed.version}`)
+			reportMissing(deployed.missing)
 		})
 
 	program
@@ -177,6 +181,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
 					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.name} ${deployed.version}.`)
+					reportMissing(deployed.missing)
 				} catch (error) {
 					if (!stopping.signal.aborted) log(`Not deployed: ${messageOf(error)}`)
 				}
@@ -258,6 +263,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 
 	addProviderCommands(program, gatewayHome)
 	addCredentialCommands(program, gatewayHome)
+	addConnectorCommands(program, home)
 
 	program
 		.command('list')
@@ -312,6 +318,32 @@ export async function main(argv: readonly string[]): Promise<void> {
 		log(messageOf(error))
 		process.exitCode = 1
 	}
+}
+
+/** Says what the engine still needs before the deployed app can run, so it's known before the first trigger. */
+function reportMissing(missing: readonly string[]): void {
+	if (missing.length === 0) return
+	log(`The app can't run until these settings are in:\n${missing.map((line) => `- ${line}`).join('\n')}`)
+}
+
+/** Where connectors keep what they hold between calls, in an engine's home. */
+function connectorsDirectory(home: string): string {
+	return path.join(home, 'connectors')
+}
+
+/**
+ * Serves an engine with the host tools of the connector packages the user added, resolved from the
+ * directory `mesh-flow serve` runs in.
+ */
+async function serveWithConnectors(home: string, options: Omit<ServeEngineOptions, 'home' | 'tools'>): Promise<ServedEngine> {
+	const connectors = await loadConnectors({
+		connectors: await openConnectorSettings(connectorSettingsFile(home)).list(options.abortSignal),
+		from: process.cwd(),
+		directory: connectorsDirectory(home),
+	})
+	for (const connector of connectors)
+		log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
+	return serveEngine({ home, tools: connectors.flatMap((connector) => connector.tools), ...options })
 }
 
 function parseBackend(value: string): BackendName {

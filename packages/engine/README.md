@@ -18,6 +18,34 @@ It picks the sandbox backend for the machine ([`chooseBackend`](../sandbox/READM
 
 Ctrl+C shuts it down without leaving anything running. It pauses every running sandbox to disk, saves the run records and closes the backend. A second Ctrl+C skips the pauses that haven't finished, and those runs can be restarted later. A third exits right away.
 
+### Load connectors
+
+A connector is a package that gives workflows one outside system, such as GitHub: functions for code, tools for agents, and triggers for its webhooks. It comes in two halves. The sandbox half is what a workflow imports and runs next to the workflow; the host half is loaded by the engine and does every call that needs a credential, such as a GitHub API call or a git push. The sandbox half calls the host half over the gateway, so the credential stays on the host and never reaches the sandbox ([design section 8](../../docs/design.md#8-connectors)).
+
+```mermaid
+flowchart LR
+    subgraph sandbox [Sandbox: one per run, no credentials]
+        workflow[Workflow code] -->|"github.collect(issue)"| stub["@mesh-flow/github<br/>sandbox half: functions, agent tools, stubs"]
+    end
+    subgraph host [Host: mesh-flow serve]
+        gateway[Gateway] --> tools["@mesh-flow/github/host<br/>host half: host tools"]
+        tools --> store[(Credential store<br/>github/token)]
+    end
+    stub -->|"tool call over the run's channel"| gateway
+    tools -->|"API calls, git fetch and push"| github((GitHub))
+```
+
+The host half runs with credentials, so which connectors the engine loads is your setting, never the app's. Install the package where `mesh-flow serve` runs and add it; the engine loads its `host` entry point the next time it starts:
+
+```bash
+pnpm add @mesh-flow/github
+mesh-flow connector add @mesh-flow/github
+mesh-flow credential set github/token < token.txt
+mesh-flow connector list
+```
+
+The settings an app needs follow from what it declares: a provider with a key for each of its models, a loaded connector for each of its host tools. `mesh-flow deploy` and `mesh-flow dev` print what is still missing, and a trigger refuses a run before it makes a sandbox until it's in.
+
 ### Build and deploy an app
 
 An app is a package whose `main` in `package.json` is its entry file, which exports `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)). The engine doesn't take the source: it takes the built app, bundled with its dependencies, so the sandbox has nothing to set up and only runs `node`.

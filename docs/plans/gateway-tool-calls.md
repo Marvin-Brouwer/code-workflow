@@ -10,7 +10,10 @@ plan:
   channel can replace it behind the same messages.
 - The agent's shell doesn't run as a separate user yet (point 5). Rotation catches a stolen
   token; the separate user, which would prevent it, is still to come.
-- Connectors' host tools are passed to `serveEngine`; `mesh-flow serve` loads none yet.
+- `mesh-flow serve` loads connectors' host tools from the packages the user added with
+  `mesh-flow connector add`, each package's `host` entry point, resolved from where the engine
+  runs. Which packages load is the user's setting, never the app's: the app declares the host
+  tools it needs, and deploy and trigger say which are missing.
 
 ## Idea
 

@@ -10,6 +10,7 @@ import {
 	type RuntimeRequest,
 	type TriggerRef,
 	type WakeRequest,
+	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpec, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
 import type { AppStore } from '../apps/app-store.mts'
@@ -201,6 +202,22 @@ export class Engine {
 		return creating
 	}
 
+	/**
+	 * The settings an app needs that this engine doesn't have, each as a line that says what to do:
+	 * a model no provider with a key serves, a host tool no loaded connector brings. Empty when the
+	 * app can run. A trigger refuses a run with them; a deploy reports them.
+	 */
+	async missingSettings(description: WorkflowsDescription, abortSignal: AbortSignal): Promise<string[]> {
+		if (this.#gateway === undefined) return []
+		const models = await this.#gateway.unavailableModels(description.models, abortSignal)
+		const tools = this.#gateway.missingTools(description.tools)
+		if (tools.length === 0) return models
+		return [
+			...models,
+			`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+		]
+	}
+
 	async #create(options: StartRunOptions): Promise<RunRecord> {
 		const waitSignal = this.#withLifetime(options.abortSignal)
 		const deployed = this.#apps.current(options.app)
@@ -217,9 +234,9 @@ export class Engine {
 				`Version ${deployed.version} of ${options.app} asks for a sandbox this engine can't make: deploy it again.`,
 			)
 		}
-		const unavailable = await this.#gateway?.unavailableModels(deployed.manifest.description.models, waitSignal)
-		if (unavailable !== undefined && unavailable.length > 0) {
-			throw new EngineError('unavailable', `${options.app} can't run now, so no run was started:\n${unavailable.join('\n')}`)
+		const missing = await this.missingSettings(deployed.manifest.description, waitSignal)
+		if (missing.length > 0) {
+			throw new EngineError('unavailable', `${options.app} can't run now, so no run was started:\n${missing.join('\n')}`)
 		}
 		const app: RunApp = {
 			name: deployed.name,
