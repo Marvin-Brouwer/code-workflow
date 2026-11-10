@@ -73,12 +73,10 @@ describe('loadConnectors', () => {
 		})
 		const directory = await temporaryDirectory()
 
-		// Act
-		const plain = loadConnectors({ connectors: [{ package: 'plain' }], from, directory })
-		const clashing = loadConnectors({ connectors: [{ package: 'one' }, { package: 'two' }], from, directory })
-
-		// Assert
-		await expect(plain).rejects.toThrow("doesn't export a connector host")
-		await expect(clashing).rejects.toThrow('one and two both bring a host tool shared')
+		// Act, Assert: one at a time, or the second rejects unhandled while the first is awaited
+		await expect(loadConnectors({ connectors: [{ package: 'plain' }], from, directory })).rejects.toThrow("doesn't export a connector host")
+		await expect(loadConnectors({ connectors: [{ package: 'one' }, { package: 'two' }], from, directory })).rejects.toThrow(
+			'one and two both bring a host tool shared',
+		)
 	})
 })
