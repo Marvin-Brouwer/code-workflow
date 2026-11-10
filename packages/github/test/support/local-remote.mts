@@ -4,7 +4,11 @@ import { pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import { temporaryDirectory } from './temporary-directory.mts'
 
-/** Runs git in `cwd` and returns its output. */
+/**
+ * Runs git in `cwd` and returns its output.
+ * Line endings stay as written, whatever the machine's git is configured to do, so the tests
+ * can compare file contents byte for byte.
+ */
 export async function git(cwd: string, ...args: string[]): Promise<string> {
 	const { stdout } = await execa('git', args, {
 		cwd,
@@ -13,6 +17,9 @@ export async function git(cwd: string, ...args: string[]): Promise<string> {
 			GIT_AUTHOR_EMAIL: 'test@example.com',
 			GIT_COMMITTER_NAME: 'Test',
 			GIT_COMMITTER_EMAIL: 'test@example.com',
+			GIT_CONFIG_COUNT: '1',
+			GIT_CONFIG_KEY_0: 'core.autocrlf',
+			GIT_CONFIG_VALUE_0: 'false',
 		},
 	})
 	return stdout
