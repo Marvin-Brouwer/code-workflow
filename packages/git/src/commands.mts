@@ -21,11 +21,18 @@ export const commands = {
 	add(...paths: string[]): string[] {
 		return ['add', ...(paths.length > 0 ? paths : ['--all'])]
 	},
-	commit(options: { readonly message: string; readonly allowEmpty?: boolean; readonly quiet?: boolean }): string[] {
+	/** `git commit` with `message`, or without one (`noEdit`) to keep the message a merge or a rebase left. */
+	commit(options: {
+		readonly message?: string
+		readonly allowEmpty?: boolean
+		readonly noEdit?: boolean
+		readonly quiet?: boolean
+	}): string[] {
 		const args = ['commit']
 		if (options.quiet === true) args.push('--quiet')
 		if (options.allowEmpty === true) args.push('--allow-empty')
-		args.push('--message', options.message)
+		if (options.noEdit === true) args.push('--no-edit')
+		if (options.message !== undefined) args.push('--message', options.message)
 		return args
 	},
 	/** `git fetch` from a remote or a URL, with refspecs when given. */

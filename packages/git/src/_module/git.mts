@@ -1,5 +1,5 @@
 export { basicAuthHeaderEnv } from '../auth.mts'
 export { commands, formatCommand, type CommandName, type Commands } from '../commands.mts'
-export { gitCommand, type GitCommand, type GitCommandOptions } from '../git-command.mts'
-export { gitClient, type ClientCommands, type GitClient, type GitClientOptions } from '../git-client.mts'
+export { gitClient, rawGit, type ClientCommands, type GitClient, type GitClientOptions, type RawGitClient } from '../client.mts'
+export { gitCommand, type GitCommand, type GitCommandOptions } from '../command.mts'
 export { runGit, type GitResult, type RunGitOptions } from '../run-git.mts'

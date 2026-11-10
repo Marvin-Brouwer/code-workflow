@@ -13,18 +13,18 @@ import { gitClient } from '@mesh-flow/git'
 
 const git = gitClient({
 	cwd: '/work/app',
-	config: { 'user.name': 'mesh-flow', 'user.email': 'mesh-flow@users.noreply.github.com' },
+	gitConfig: { 'user.name': 'mesh-flow', 'user.email': 'mesh-flow@users.noreply.github.com' },
 	abortSignal,
 })
 
 await git.fetch('origin', ['main'], { quiet: true })
-await git.checkoutOrCreate('fix/7', 'origin/main')
+await git.checkoutOrCreate('fix/7') // from origin/<default branch>, when there is no fix/7 yet
 await git.add()
 await git.commit({ message: 'Fix the login', quiet: true })
 const { stdout } = await git.revParse('HEAD')
 ```
 
-`config` goes on every command as `-c key=value` and is never written to the repository. `abortSignal` is required: aborting it kills whatever command runs, and the call rejects with the signal's reason.
+`gitConfig` goes on every command as `-c key=value` and is never written to the repository; `setIdentity` is the one that writes `.git/config`. `abortSignal` is required: aborting it kills whatever command runs, and the call rejects with the signal's reason.
 
 ### What a command does depends on how it's used
 
@@ -35,7 +35,7 @@ await git.rebaseAbort().attempt()                         // runs; swallows the 
 const line = String(git.rebase('origin/main'))            // 'git rebase origin/main', nothing runs
 ```
 
-The questions a workflow asks are there as functions: `hasRef`, `hasBranch`, `hasRemoteBranch`, `currentBranch`, `checkoutOrCreate`, `dirtyFiles`, `conflictedFiles`.
+The questions a workflow asks are there as functions: `hasRef`, `hasBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges`, `dirtyFiles`, `conflictedFiles`, `discardChanges`, `setIdentity`.
 
 ### A credential, for the host
 
@@ -50,7 +50,7 @@ The header travels as `GIT_CONFIG_*` environment, so it's neither in a process l
 
 ### The commands
 
-`commands` holds the arguments of every command the client knows, and `formatCommand` renders arguments as a shell line. A new command goes in `commands` once, and the client has it.
+`commands` holds the arguments of every command the client knows, and `formatCommand` renders arguments as a shell line. A new command goes in `commands` once, and the client has it. `rawGit` is every command rendered without a client: `rawGit.rebase('origin/main')` is `'git rebase origin/main'`, for a prompt written where no checkout is at hand.
 
 ## Development
 

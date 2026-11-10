@@ -1,7 +1,8 @@
 /**
  * The environment that makes git send a Basic authorization header to HTTPS remotes. Through
  * `GIT_CONFIG_*`, so the credential is neither in the arguments nor in `.git/config`, and with
- * the credential helper off, so git never asks for or stores anything else.
+ * the credential helper off, so git never asks for or stores anything else. `runGit` sets
+ * `GIT_TERMINAL_PROMPT=0` for every command, so a refused header fails instead of prompting.
  */
 export function basicAuthHeaderEnv(username: string, token: string): Record<string, string> {
 	const authorization = Buffer.from(`${username}:${token}`).toString('base64')

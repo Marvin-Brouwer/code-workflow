@@ -8,5 +8,5 @@ export const committer = { name: 'mesh-flow', email: 'mesh-flow@users.noreply.gi
  * fetching and pushing go through the host. Aborting the signal kills whatever runs.
  */
 export function localGit(directory: string, abortSignal: AbortSignal): GitClient {
-	return gitClient({ cwd: directory, config: { 'user.name': committer.name, 'user.email': committer.email }, abortSignal })
+	return gitClient({ cwd: directory, gitConfig: { 'user.name': committer.name, 'user.email': committer.email }, abortSignal })
 }

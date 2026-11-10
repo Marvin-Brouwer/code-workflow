@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { basicAuthHeaderEnv } from '../src/auth.mts'
-import { gitClient } from '../src/git-client.mts'
+import { gitClient, rawGit } from '../src/client.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const identity = { 'user.name': 'Test', 'user.email': 'test@example.com' }
@@ -17,7 +17,7 @@ const reachesServerWithinMs = 15_000
 /** A repository with one commit on `main`. */
 async function repository(abortSignal = new AbortController().signal) {
 	const directory = await temporaryDirectory()
-	const git = gitClient({ cwd: directory, config: identity, abortSignal })
+	const git = gitClient({ cwd: directory, gitConfig: identity, abortSignal })
 	await git.init({ branch: 'main', quiet: true })
 	await writeFile(path.join(directory, 'README.md'), '# Example\n')
 	await git.add()
@@ -67,14 +67,48 @@ describe('gitClient', () => {
 		await git.checkoutOrCreate('fix/7', 'main')
 		await writeFile(path.join(git.cwd, 'fix.txt'), 'fixed\n')
 		const dirty = await git.dirtyFiles()
+		await writeFile(path.join(git.cwd, 'README.md'), '# Changed\n')
+		const changed = await git.hasChanges()
+		await git.discardChanges()
+		const changedAfterDiscard = await git.hasChanges('README.md')
+		await git.setIdentity('Someone', 'someone@example.com')
 		await git.checkoutOrCreate('main', 'main')
 
 		// Assert
 		expect(await git.hasBranch('fix/7')).toBe(true)
 		expect(await git.hasRemoteBranch('fix/7')).toBe(false)
 		expect(dirty).toEqual(['?? fix.txt'])
+		expect(changed).toBe(true)
+		expect(changedAfterDiscard).toBe(false)
+		// Read without the client's own `-c user.name`, which would win over the file.
+		expect((await gitClient({ cwd: git.cwd, abortSignal: new AbortController().signal }).config('user.name')).stdout.trim()).toBe('Someone')
 		expect(await git.currentBranch()).toBe('main')
 		expect(await git.conflictedFiles()).toEqual([])
+	})
+
+	test('knows the default branch from what a clone recorded, or by probing main and master', async () => {
+		// Arrange
+		const abortSignal = new AbortController().signal
+		const upstream = await repository(abortSignal)
+		const cloned = path.join(await temporaryDirectory(), 'clone')
+		await gitClient({ cwd: path.dirname(cloned), abortSignal }).clone(upstream.cwd, cloned, { quiet: true })
+		const clone = gitClient({ cwd: cloned, gitConfig: identity, abortSignal })
+		const fetched = gitClient({ cwd: await temporaryDirectory(), gitConfig: identity, abortSignal })
+		await fetched.init({ quiet: true })
+		await fetched.remoteAdd('origin', upstream.cwd)
+		await fetched.fetch('origin', ['+refs/heads/*:refs/remotes/origin/*'], { quiet: true })
+		const empty = gitClient({ cwd: await temporaryDirectory(), abortSignal })
+		await empty.init({ quiet: true })
+
+		// Act
+		await fetched.checkoutOrCreate('fix/8')
+
+		// Assert
+		expect(await clone.defaultBranch()).toBe('main')
+		expect(await fetched.defaultBranch()).toBe('main')
+		expect(await fetched.currentBranch()).toBe('fix/8')
+		await expect(empty.defaultBranch()).rejects.toThrow('no default branch')
+		expect(rawGit.checkout('fix/8', { create: true, from: 'origin/main' })).toBe('git checkout -b fix/8 origin/main')
 	})
 
 	test('settles promptly when stopped while the remote never answers', async () => {
