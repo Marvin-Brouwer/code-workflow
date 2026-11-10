@@ -6,11 +6,11 @@ import { describe, expect, onTestFinished, test } from 'vitest'
 import { gitRemote } from '../src/host/git-remote.mts'
 import { git, localRemote } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { testToken as token } from './support/test-run.mts'
+import { testToken } from './support/test-run.mts'
 
 /** A host tool context whose credential store has the token. */
 function context(abortSignal = new AbortController().signal): HostToolContext {
-	return { abortSignal, runId: 'run-1', credentials: { get: (name) => Promise.resolve(name === 'github/token' ? token : undefined) } }
+	return { abortSignal, runId: 'run-1', credentials: { get: (name) => Promise.resolve(name === 'github/token' ? testToken : undefined) } }
 }
 
 /** How long a stopped call may take to settle while git hangs. */
@@ -148,7 +148,7 @@ describe('gitRemote', () => {
 		await fetching.catch(() => undefined)
 
 		// Assert
-		expect(seen[0]).toBe(`Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`)
+		expect(seen[0]).toBe(`Basic ${Buffer.from(`x-access-token:${testToken}`).toString('base64')}`)
 	})
 })
 

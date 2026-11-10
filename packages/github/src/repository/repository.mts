@@ -30,7 +30,8 @@ const defaultBranchConfigKey = 'mesh-flow.defaultBranch'
  * Checks a repository out into the workspace, on `branch`, which is made from the default branch
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the repository that is already there is reused, switched to
- * `branch` when it is on another; a folder left half-cloned is cloned again.
+ * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
+ * workflow's own that is no checkout is left alone, with an error.
  *
  * ```ts
  * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
@@ -44,6 +45,7 @@ export const checkout = tool('githubCheckout', {
 		const folder = workspace.folder(splitRepositoryName(repository).repo)
 		const directory = folder.location()
 		const existing = await existingCheckout(directory, abortSignal)
+		if (existing === 'other') throw new Error(`${folder.path} holds something that isn't a checkout, so ${repository} can't go there.`)
 		if (existing === 'broken') await rm(directory, { recursive: true, force: true })
 		if (existing === 'checkout') {
 			const url = (await localGit(directory, ['remote', 'get-url', origin], abortSignal)).trim()
@@ -71,15 +73,24 @@ function repositoryOf(name: string, branch: string, defaultBranch: string, folde
 	return Object.freeze({ name, branch, defaultBranch, path: folderPath, directory, [toPrompt]: () => folderPath })
 }
 
-/** What is in the folder: nothing, a checkout git can work in, or the remains of one it can't. */
-async function existingCheckout(directory: string, abortSignal: AbortSignal): Promise<'absent' | 'checkout' | 'broken'> {
+/**
+ * What is in the folder: nothing, a checkout git can work in, the remains of a clone it can't, or
+ * something else of the workflow's, which is never touched.
+ */
+async function existingCheckout(directory: string, abortSignal: AbortSignal): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
 	const present = await stat(directory).then(
 		() => true,
 		() => false,
 	)
 	if (!present) return 'absent'
-	const works = await localGit(directory, ['rev-parse', '--is-inside-work-tree'], abortSignal).then(
-		(output) => output.trim() === 'true',
+	const hasGitDirectory = await stat(path.join(directory, '.git')).then(
+		() => true,
+		() => false,
+	)
+	if (!hasGitDirectory) return 'other'
+	// `.git` as git names it: the folder is a repository of its own, not a folder in some other one.
+	const works = await localGit(directory, ['rev-parse', '--git-dir'], abortSignal).then(
+		(output) => output.trim() === '.git',
 		() => false,
 	)
 	return works && (await hasRef(directory, 'HEAD', abortSignal)) ? 'checkout' : 'broken'

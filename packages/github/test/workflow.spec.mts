@@ -1,6 +1,6 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { runCheck, toPrompt } from '@mesh-flow/core'
+import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { describe, expect, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'
@@ -191,7 +191,7 @@ describe('github', () => {
 		})
 	})
 
-	test('reuses a checkout for another branch, clones again over a broken one, and refuses another repository in the folder', async () => {
+	test('reuses a checkout for another branch, clones again over a broken one, and leaves another repository or a plain folder alone', async () => {
 		// Arrange
 		const { gateway } = await connected()
 
@@ -205,14 +205,21 @@ describe('github', () => {
 			const otherFiles = (await git(other.directory, 'ls-files')).split('\n')
 			const back = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			const backHead = (await git(back.directory, 'rev-parse', '--abbrev-ref', 'HEAD')).trim()
-			await rm(path.join(first.directory, '.git'), { recursive: true })
+			await rm(path.join(first.directory, '.git', 'HEAD'))
 			const again = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			const againFiles = (await git(again.directory, 'ls-files')).split('\n')
 			const refused = await checkout({ repository: 'other/app', branch: 'fix/7' }).then(
 				() => undefined,
 				(error: unknown) => (error instanceof Error ? error.message : String(error)),
 			)
-			return { first, other, otherHead, otherFiles, backHead, againFiles, refused }
+			const notes = workspace.folder('notes').location()
+			await mkdir(notes, { recursive: true })
+			await writeFile(path.join(notes, 'todo.md'), 'keep me\n')
+			const kept = await checkout({ repository: 'team/notes', branch: 'fix/7' }).then(
+				() => undefined,
+				(error: unknown) => (error instanceof Error ? error.message : String(error)),
+			)
+			return { first, other, otherHead, otherFiles, backHead, againFiles, refused, kept }
 		})
 		const result = await run.result
 
@@ -223,6 +230,8 @@ describe('github', () => {
 		expect(result.backHead).toBe('fix/7')
 		expect(result.againFiles).toEqual(['README.md', 'fix.txt'])
 		expect(result.refused).toContain('holds a checkout of another repository')
+		expect(result.kept).toContain("holds something that isn't a checkout")
+		expect(await readFile(path.join(run.workspace, 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
 	})
 
 	test("hands a comment from the same second as the last look over once, and never the run's own reply, also when the token can't say who it is", async () => {

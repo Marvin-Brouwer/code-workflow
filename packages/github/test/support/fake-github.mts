@@ -175,18 +175,9 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		tokens.add(authorization.replace(/^(token|Bearer) /, ''))
 		return next()
 	})
-	const fake: FakeGithub = {
-		url: '',
-		self,
-		userHidden: false,
-		tokens,
-		repository,
-		issue: issueOf,
-		pullRequest: pullOf,
-		close: () => Promise.resolve(),
-	}
+	const settings = { userHidden: false }
 	app.get('/user', (context) =>
-		fake.userHidden ? context.json({ message: 'Resource not accessible by integration' }, 403) : context.json({ login: self }),
+		settings.userHidden ? context.json({ message: 'Resource not accessible by integration' }, 403) : context.json({ login: self }),
 	)
 
 	const issues = new Hono().basePath('/repos/:owner/:repo')
@@ -307,7 +298,21 @@ export async function fakeGithub(): Promise<FakeGithub> {
 			server.closeAllConnections()
 		})
 	onTestFinished(close)
-	return Object.assign(fake, { url: `http://127.0.0.1:${String(address.port)}`, close })
+	return {
+		url: `http://127.0.0.1:${String(address.port)}`,
+		self,
+		get userHidden() {
+			return settings.userHidden
+		},
+		set userHidden(hidden: boolean) {
+			settings.userHidden = hidden
+		},
+		tokens,
+		repository,
+		issue: issueOf,
+		pullRequest: pullOf,
+		close,
+	}
 }
 
 /** A commit id for a branch name, the same every time. */

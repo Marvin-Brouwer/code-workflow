@@ -16,6 +16,9 @@ export interface ChecksPassOptions {
 
 const defaultAppearWithin: WaitSpec = { minutes: 10 }
 
+/** A zero interval still counts as one look. */
+const atLeastOneLookMs = 1
+
 /**
  * A check for `verify`: waits for the checks on the pull request's head commit to complete, and
  * reports each one that failed as a finding. Checks take a while to appear after a push, so a
@@ -27,7 +30,9 @@ const defaultAppearWithin: WaitSpec = { minutes: 10 }
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {
 	const every = options.every ?? defaultLookEvery
-	const looksForChecksToAppear = Math.ceil(durationMs(options.appearWithin ?? defaultAppearWithin) / Math.max(durationMs(every), 1))
+	const looksForChecksToAppear = Math.ceil(
+		durationMs(options.appearWithin ?? defaultAppearWithin) / Math.max(durationMs(every), atLeastOneLookMs),
+	)
 	return check('checks', async (context) => {
 		const where = { repository: on.repository, number: on.number }
 		let looksWithoutChecks = 0

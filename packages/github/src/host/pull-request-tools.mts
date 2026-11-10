@@ -55,11 +55,13 @@ const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_
 /** Left in every reply this package posts, so a look at the review never hands it back as a reviewer's. */
 const replyMarker = commentMarker('reply')
 
+const secondMs = 1_000
+
 /** The latest of two moments, either of which may be missing. */
-function later(a: string | undefined, b: string | undefined): string | undefined {
-	if (a === undefined) return b
-	if (b === undefined) return a
-	return a.localeCompare(b) >= 0 ? a : b
+function later(seen: string | undefined, latest: string | undefined): string | undefined {
+	if (seen === undefined) return latest
+	if (latest === undefined) return seen
+	return seen.localeCompare(latest) >= 0 ? seen : latest
 }
 
 /** The host halves of the pull request tools. */
@@ -85,6 +87,8 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const after = since === undefined ? undefined : new Date(since).getTime()
+			// GitHub may take `since` as strictly after, at second precision: ask from a second earlier and filter here.
+			const listSince = after === undefined ? {} : { since: new Date(after - secondMs).toISOString() }
 			// At or after: GitHub keeps seconds, so a comment in the same second as the last one seen would be lost otherwise.
 			const isNew = (at: string | null | undefined): at is string =>
 				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() >= after)
@@ -98,14 +102,14 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 					...where,
 					pull_number: number,
 					per_page: 100,
-					...(since === undefined ? {} : { since }),
+					...listSince,
 				}),
 				client.paginate(client.rest.pulls.listReviews, { ...where, pull_number: number, per_page: 100 }),
 				client.paginate(client.rest.issues.listComments, {
 					...where,
 					issue_number: number,
 					per_page: 100,
-					...(since === undefined ? {} : { since }),
+					...listSince,
 				}),
 			])
 			const items: ReviewItem[] = [

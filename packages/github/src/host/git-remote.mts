@@ -41,7 +41,7 @@ const mirrorRefspec = '+refs/heads/*:refs/heads/*'
 /** Clones on the host for every repository, under `options.directory`. */
 export function gitRemote(options: GitRemoteOptions): GitRemote {
 	const remoteUrl = options.remoteUrl ?? githubRemoteUrl
-	const cloneOf = (repository: string) => {
+	function cloneOf(repository: string): string {
 		const { owner, repo } = splitRepositoryName(repository)
 		return path.join(options.directory, owner, `${repo}.git`)
 	}
@@ -53,10 +53,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	const lastOn = new Map<string, Promise<unknown>>()
 	async function withClone<T>(repository: string, context: HostToolContext, use: (clone: string) => Promise<T>): Promise<T> {
 		const clone = cloneOf(repository)
-		const turn = (lastOn.get(clone) ?? Promise.resolve()).then(
-			() => openClone(clone, repository, context).then(use),
-			() => openClone(clone, repository, context).then(use),
-		)
+		const turn = (lastOn.get(clone) ?? Promise.resolve()).catch(() => undefined).then(() => openClone(clone, repository, context).then(use))
 		lastOn.set(clone, turn)
 		try {
 			return await turn
@@ -66,7 +63,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	}
 
 	/** Makes the clone when missing, and sets the remote to where it clones from. */
-	const openClone = async (clone: string, repository: string, context: HostToolContext): Promise<string> => {
+	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<string> {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
 		await git(clone, ['init', '--bare', '--quiet'], context)
 		const url = remoteUrl(repository)
