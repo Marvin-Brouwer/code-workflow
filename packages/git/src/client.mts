@@ -64,7 +64,9 @@ export interface GitClient extends ClientCommands {
 	readonly conflictedFiles: () => Promise<readonly string[]>
 	/**
 	 * Puts tracked files in `paths` back as they are at HEAD, in the index and the working tree,
-	 * or every tracked file when no paths are given. Untracked files stay.
+	 * or every tracked file when no paths are given. Untracked files stay; a file added since HEAD
+	 * is removed. With paths it needs a commit to go back to. It leaves a rebase or a merge in
+	 * progress as it is: `rebaseAbort` or `mergeAbort` first.
 	 */
 	readonly discardChanges: (...paths: string[]) => Promise<void>
 	/** Writes the committer to `.git/config`; `gitConfig` in the options does it per command instead. */
@@ -78,6 +80,9 @@ const platformConfig: Readonly<Record<string, string>> =
 
 /** The name of the remote a clone gets. */
 const defaultRemote = 'origin'
+
+/** A status entry whose path is followed by the path it came from. */
+const renamedOrCopied = /^[RC]|^.[RC]/
 
 /** The branches a remote usually starts from, probed in this order when it didn't say. */
 const usualDefaultBranches = ['main', 'master'] as const
@@ -98,9 +103,6 @@ function statusEntries(output: string): string[] {
 	}
 	return kept
 }
-
-/** A status entry whose path is followed by the path it came from. */
-const renamedOrCopied = /^[RC]|^.[RC]/
 
 /** Every command as a function of its arguments, each passing its arguments on as they are. */
 function eachCommand<Made>(make: (args: readonly string[]) => Made): {
