@@ -18,7 +18,7 @@ const git = gitClient({
 })
 
 await git.fetch('origin', ['main'], { quiet: true })
-await git.checkoutOrCreate('fix/7') // from origin/<default branch>, when there is no fix/7 yet
+await git.checkoutOrCreate('fix/7') // from origin/fix/7 when the remote has it, else from origin/<default branch>
 await git.add()
 await git.commit({ message: 'Fix the login', quiet: true })
 const { stdout } = await git.revParse('HEAD')
@@ -35,7 +35,7 @@ await git.rebaseAbort().attempt()                         // runs; swallows the 
 const line = String(git.rebase('origin/main'))            // 'git rebase origin/main', nothing runs
 ```
 
-The questions a workflow asks are there as functions: `hasRef`, `hasLocalBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges`, `dirtyFiles`, `conflictedFiles`, `discardChanges`, `setIdentity`.
+The questions a workflow asks are there as functions: `hasRef`, `hasLocalBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges` (staged or not), `dirtyFiles` (`git status --porcelain=v1` entries, paths unquoted), `conflictedFiles`, `discardChanges` (back to HEAD; untracked files stay), `setIdentity`.
 
 ### A credential, for the host
 
@@ -61,3 +61,5 @@ pnpm --filter @mesh-flow/git build
 ```
 
 The tests need `git` on the machine. They cover the stop: a fetch from a server that never answers settles within seconds of the abort.
+
+On Linux and macOS git runs in a process group of its own, so a stop reaches the helpers it started. The other side of that: a process that ends without aborting the signal, such as one that crashes, leaves a running git going until it finishes. Abort the signal on shutdown.

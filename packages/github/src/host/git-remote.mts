@@ -68,7 +68,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 		const git = await hostGit(clone, context)
 		await git.init({ bare: true, quiet: true })
 		const url = remoteUrl(repository)
-		const remotes = (await git.remotes()).stdout
+		const remotes = (await git.remotes()).stdout.split('\n').map((line) => line.trim())
 		await (remotes.includes(origin) ? git.remoteSetUrl(origin, url) : git.remoteAdd(origin, url))
 		return git
 	}
@@ -78,7 +78,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 			withClone(repository, context, async (git) => {
 				await mirror(git)
 				await git.remoteSetHead(origin)
-				const defaultBranch = await defaultBranchOf(git)
+				const defaultBranch = await git.defaultBranch(origin)
 				const exists = branch !== defaultBranch && (await git.hasLocalBranch(branch))
 				const refs = exists ? [defaultBranch, branch] : [defaultBranch]
 				const bundle = await withScratchFile('clone.bundle', async (file) => {
@@ -116,12 +116,6 @@ async function hostGit(clone: string, context: HostToolContext): Promise<GitClie
 /** Makes the clone's branches equal to the remote's. */
 async function mirror(git: GitClient): Promise<void> {
 	await git.fetch(origin, [mirrorRefspec], { prune: true, quiet: true })
-}
-
-/** The remote's default branch, as `remote set-head --auto` recorded it. */
-async function defaultBranchOf(git: GitClient): Promise<string> {
-	const head = await git.symbolicRef(`refs/remotes/${origin}/HEAD`)
-	return head.stdout.trim().replace(`refs/remotes/${origin}/`, '')
 }
 
 /** The commit a bundle says `branch` is at. */

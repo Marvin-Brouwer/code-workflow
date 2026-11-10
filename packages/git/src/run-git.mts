@@ -4,8 +4,11 @@ import { execa, ExecaError } from 'execa'
 export interface GitResult {
 	/** Whether git exited with 0. */
 	readonly ok: boolean
+	/** Git's exit code: 0, or what the command says a non-zero one means. */
 	readonly exitCode: number
+	/** Everything git wrote to stdout. */
 	readonly stdout: string
+	/** Everything git wrote to stderr: progress and errors. */
 	readonly stderr: string
 	/** What ran, starting with `git`, for a log line or an error. */
 	readonly command: readonly string[]
@@ -45,26 +48,30 @@ export async function runGit(args: readonly string[], options: RunGitOptions): P
 		detached: process.platform !== 'win32',
 	})
 	let exited = false
+	let forceKill: NodeJS.Timeout | undefined
+	// Execa settles once the pipes close, so git and the helpers holding them are gone by then.
 	const noteExit = () => {
 		exited = true
+		clearTimeout(forceKill)
 	}
 	subprocess.then(noteExit, noteExit)
 	const stop = () => {
 		// A pid is reused once its process is gone: never signal one that has exited.
 		if (exited) return
 		killTree(subprocess.pid)
-		setTimeout(() => {
-			killTree(subprocess.pid, 'SIGKILL')
+		forceKill = setTimeout(() => {
+			if (!exited) killTree(subprocess.pid, 'SIGKILL')
 		}, forceKillAfterMs).unref()
 	}
 	abortSignal.addEventListener('abort', stop, { once: true })
 	try {
 		const result = await subprocess
 		if (abortSignal.aborted) throw stoppedWith(abortSignal)
-		if (result.failed && result.exitCode === undefined) throw new Error(`git could not run: ${result.message}`, { cause: result })
+		// No exit code means git never ran, or a signal other than our stop ended it.
+		if (result.exitCode === undefined) throw new Error(`git could not run: ${result.message}`, { cause: result })
 		return {
 			ok: result.exitCode === 0,
-			exitCode: result.exitCode ?? 1,
+			exitCode: result.exitCode,
 			stdout: result.stdout,
 			stderr: result.stderr,
 			command: ['git', ...args],

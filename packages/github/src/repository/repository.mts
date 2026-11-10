@@ -46,7 +46,7 @@ export const checkout = tool('githubCheckout', {
 		const folder = workspace.folder(splitRepositoryName(repository).repo)
 		const directory = folder.location()
 		const git = localGit(directory, abortSignal)
-		const existing = await existingCheckout(directory, git)
+		const existing = await existingCheckout(git)
 		if (existing === 'other') throw new Error(`${folder.path} holds something that isn't a checkout, so ${repository} can't go there.`)
 		if (existing === 'broken') await rm(directory, { recursive: true, force: true })
 		if (existing === 'checkout') {
@@ -79,13 +79,13 @@ function repositoryOf(name: string, branch: string, defaultBranch: string, folde
  * What is in the folder: nothing, a checkout git can work in, the remains of a clone it can't, or
  * something else of the workflow's, which is never touched.
  */
-async function existingCheckout(directory: string, git: GitClient): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
-	const present = await stat(directory).then(
+async function existingCheckout(git: GitClient): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
+	const present = await stat(git.cwd).then(
 		() => true,
 		() => false,
 	)
 	if (!present) return 'absent'
-	const hasGitDirectory = await stat(path.join(directory, '.git')).then(
+	const hasGitDirectory = await stat(path.join(git.cwd, '.git')).then(
 		() => true,
 		() => false,
 	)

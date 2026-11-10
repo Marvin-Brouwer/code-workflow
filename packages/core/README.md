@@ -177,7 +177,7 @@ An agent asks with `requestUserInput`: one question with a text answer, or a for
 
 ### Waiting
 
-A workflow waits for the thing itself, never for an amount of time: `await github.review(pullRequest, handlers)` returns when the pull request is merged, `verify(github.checksPass(pullRequest))` when its checks have completed. Days can pass in such an `await`. The run is paused meanwhile and resumes where it was, so a workflow that waits costs nothing and survives an engine restart.
+A workflow waits for the thing itself, never for an amount of time: `await github.review(pullRequest, handlers)` returns when the pull request is merged or closed, `verify(github.checksPass(pullRequest))` when its checks have completed. Days can pass in such an `await`. The run is paused meanwhile and resumes where it was, so a workflow that waits costs nothing and survives an engine restart.
 
 ```ts
 const outcome = await github.review(pullRequest, { comments: handleComments })

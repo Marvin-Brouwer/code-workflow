@@ -70,9 +70,17 @@ export const commands = {
 	diff(...args: string[]): string[] {
 		return ['diff', ...args]
 	},
-	/** `git status --porcelain=v1`: one line per changed or untracked path, none when the tree is clean. */
-	status(): string[] {
-		return ['status', '--porcelain=v1']
+	/**
+	 * `git status --porcelain=v1`: one `XY path` entry per changed or untracked path, none when the
+	 * tree is clean. `untracked: false` leaves untracked files out; `nulTerminated` ends each entry
+	 * with a NUL instead of a newline and leaves paths unquoted, for code that reads the paths.
+	 */
+	status(options: { readonly untracked?: boolean; readonly nulTerminated?: boolean; readonly paths?: readonly string[] } = {}): string[] {
+		const args = ['status', '--porcelain=v1']
+		if (options.untracked === false) args.push('--untracked-files=no')
+		if (options.nulTerminated === true) args.push('-z')
+		if (options.paths !== undefined && options.paths.length > 0) args.push('--', ...options.paths)
+		return args
 	},
 	log(...args: string[]): string[] {
 		return ['log', ...args]
@@ -102,11 +110,24 @@ export const commands = {
 	mergeAbort(): string[] {
 		return ['merge', '--abort']
 	},
-	reset(target: string, options: { readonly hard?: boolean; readonly soft?: boolean } = {}): string[] {
+	/** `git reset [--<mode>] [<to>]`: moves the branch to `to` (default HEAD), and the index and working tree as `mode` says. */
+	reset(options: { readonly to?: string; readonly mode?: 'soft' | 'mixed' | 'hard'; readonly quiet?: boolean } = {}): string[] {
 		const args = ['reset']
-		if (options.hard === true) args.push('--hard')
-		if (options.soft === true) args.push('--soft')
-		args.push(target)
+		if (options.quiet === true) args.push('--quiet')
+		if (options.mode !== undefined) args.push(`--${options.mode}`)
+		if (options.to !== undefined) args.push(options.to)
+		return args
+	},
+	/** `git restore`: puts `paths` back as they are in `source` (default the index), in the working tree, the index, or both. */
+	restore(
+		paths: readonly string[],
+		options: { readonly source?: string; readonly staged?: boolean; readonly worktree?: boolean } = {},
+	): string[] {
+		const args = ['restore']
+		if (options.source !== undefined) args.push(`--source=${options.source}`)
+		if (options.staged === true) args.push('--staged')
+		if (options.worktree === true) args.push('--worktree')
+		args.push('--', ...paths)
 		return args
 	},
 	/** `git config <key> <value>`, or `--get <key>` without a value: exit 1 means it isn't set, so look at `run()`. */
@@ -153,6 +174,7 @@ export const commands = {
 	},
 } as const satisfies Record<string, (...args: never[]) => string[]>
 
+/** The type of {@link commands}: each command's name and its parameters. */
 export type Commands = typeof commands
 
 /** A command's name, as the client has it. */

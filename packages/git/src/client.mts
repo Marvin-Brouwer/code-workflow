@@ -7,7 +7,7 @@ export interface GitClientOptions {
 	readonly cwd: string
 	/** Git config for every command, as `-c key=value`, such as `{ 'user.name': 'mesh-flow' }`. Never written to `.git/config`. */
 	readonly gitConfig?: Readonly<Record<string, string>>
-	/** On top of the process's environment, for every command: an authorization header through `GIT_CONFIG_*`, for one. */
+	/** On top of the process's environment, for every command, such as `basicAuthHeaderEnv(...)` for a credential. */
 	readonly env?: Readonly<Record<string, string>>
 	/**
 	 * When aborted, every git invocation this client spawns is killed, and the call rejects with
@@ -24,12 +24,13 @@ export type ClientCommands = {
 }
 
 /** Each command of {@link commands}, rendered as a shell line. Nothing runs. */
-export type RawGitClient = {
+export type RawGit = {
 	readonly [Name in keyof Commands]: (...args: Parameters<Commands[Name]>) => string
 }
 
 /** A git repository to work in: every command, and the questions a workflow asks about a checkout. */
 export interface GitClient extends ClientCommands {
+	/** The repository the client works in. */
 	readonly cwd: string
 	/** Whether `ref` names a commit: a branch, a tag, `HEAD`, or `refs/remotes/origin/main`. */
 	readonly hasRef: (ref: string) => Promise<boolean>
@@ -45,21 +46,32 @@ export interface GitClient extends ClientCommands {
 	readonly defaultBranch: (remote?: string) => Promise<string>
 	/** The branch the working tree is on, or `HEAD` when it isn't on one. */
 	readonly currentBranch: () => Promise<string>
-	/** Goes to branch `name`: as it is when it's there, made from `from` (default `origin/<default branch>`) otherwise. */
+	/**
+	 * Goes to branch `name`: as it is when there is a local one, else from `from`. Without `from`,
+	 * from `origin/<name>` when the remote has the branch, so a rerun picks up the work already
+	 * pushed, and from `origin/<default branch>` when it doesn't.
+	 */
 	readonly checkoutOrCreate: (name: string, from?: string) => Promise<void>
-	/** Whether the tracked files have changes against HEAD, in `paths` or anywhere. Untracked files don't count. */
+	/** Whether tracked files have changes against HEAD, staged or not, in `paths` or anywhere. Untracked files don't count. */
 	readonly hasChanges: (...paths: string[]) => Promise<boolean>
-	/** The paths that make the working tree dirty, tracked changes and untracked files alike, as `git status --porcelain=v1` lines. */
+	/**
+	 * One `XY path` entry per path that makes the working tree dirty, as `git status --porcelain=v1`
+	 * has it, such as ` M src/app.ts` or `?? notes.txt`: tracked changes and untracked files alike.
+	 * The path is never quoted, whatever characters it has; a rename gives its new path.
+	 */
 	readonly dirtyFiles: () => Promise<readonly string[]>
-	/** The paths with unresolved conflicts. */
+	/** The paths with unresolved conflicts, never quoted. */
 	readonly conflictedFiles: () => Promise<readonly string[]>
-	/** Takes the working tree's changes in `paths` back, all of them when none are given. */
+	/**
+	 * Puts tracked files in `paths` back as they are at HEAD, in the index and the working tree,
+	 * or every tracked file when no paths are given. Untracked files stay.
+	 */
 	readonly discardChanges: (...paths: string[]) => Promise<void>
 	/** Writes the committer to `.git/config`; `gitConfig` in the options does it per command instead. */
 	readonly setIdentity: (name: string, email: string) => Promise<void>
 }
 
-/** The git config that applies on every platform, before the caller's. */
+/** The git config this platform needs, before the caller's. */
 const platformConfig: Readonly<Record<string, string>> =
 	// Windows stops at 260 characters in a path unless git is told otherwise; a deep tree in a checkout gets there.
 	process.platform === 'win32' ? { 'core.longpaths': 'true' } : {}
@@ -70,13 +82,25 @@ const defaultRemote = 'origin'
 /** The branches a remote usually starts from, probed in this order when it didn't say. */
 const usualDefaultBranches = ['main', 'master'] as const
 
-/** Git's output as its non-empty lines. */
-function lines(output: string): string[] {
-	return output
-		.split('\n')
-		.map((line) => line.trim())
-		.filter((line) => line !== '')
+/** The entries of NUL-terminated output, such as `-z` gives. */
+function entries(output: string): string[] {
+	return output.split('\0').filter((entry) => entry !== '')
 }
+
+/** `status -z` entries as `XY path`, without the original path a rename or a copy adds as an entry of its own. */
+function statusEntries(output: string): string[] {
+	const all = entries(output)
+	const kept: string[] = []
+	for (let index = 0; index < all.length; index++) {
+		const entry = all[index] ?? ''
+		kept.push(entry)
+		if (renamedOrCopied.test(entry)) index++
+	}
+	return kept
+}
+
+/** A status entry whose path is followed by the path it came from. */
+const renamedOrCopied = /^[RC]|^.[RC]/
 
 /** Every command as a function of its arguments, each passing its arguments on as they are. */
 function eachCommand<Made>(make: (args: readonly string[]) => Made): {
@@ -98,7 +122,7 @@ function eachCommand<Made>(make: (args: readonly string[]) => Made): {
  * `rawGit.rebase('origin/main')` is `'git rebase origin/main'`. A client renders the same way,
  * `String(git.rebase('origin/main'))`, so this is for code that has no client.
  */
-export const rawGit: RawGitClient = Object.freeze(eachCommand(formatCommand))
+export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
 
 /**
  * A client for the repository at `options.cwd`. Every command on it is a {@link GitCommand}:
@@ -140,14 +164,19 @@ export function gitClient(options: GitClientOptions): GitClient {
 		defaultBranch,
 		currentBranch: async () => (await client.revParse('--abbrev-ref', 'HEAD')).stdout.trim(),
 		checkoutOrCreate: async (name, from) => {
-			if (await hasLocalBranch(name)) await client.checkout(name, { quiet: true })
-			else await client.checkout(name, { create: true, from: from ?? `${defaultRemote}/${await defaultBranch()}`, quiet: true })
+			if (await hasLocalBranch(name)) {
+				await client.checkout(name, { quiet: true })
+				return
+			}
+			const start = from ?? `${defaultRemote}/${(await hasRemoteBranch(name)) ? name : await defaultBranch()}`
+			await client.checkout(name, { create: true, from: start, quiet: true })
 		},
-		hasChanges: async (...paths) => (await client.diff('--name-only', ...(paths.length > 0 ? ['--', ...paths] : []))).stdout.trim() !== '',
-		dirtyFiles: async () => lines((await client.status()).stdout),
-		conflictedFiles: async () => lines((await client.diff('--name-only', '--diff-filter=U')).stdout),
+		hasChanges: async (...paths) => (await client.status({ untracked: false, nulTerminated: true, paths })).stdout !== '',
+		dirtyFiles: async () => statusEntries((await client.status({ nulTerminated: true })).stdout),
+		conflictedFiles: async () => entries((await client.diff('--name-only', '--diff-filter=U', '-z')).stdout),
 		discardChanges: async (...paths) => {
-			await client.checkoutPaths(...paths)
+			if (paths.length === 0) await client.reset({ mode: 'hard', quiet: true })
+			else await client.restore(paths, { source: 'HEAD', staged: true, worktree: true })
 		},
 		setIdentity: async (name, email) => {
 			await client.config('user.name', name)

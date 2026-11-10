@@ -16,8 +16,11 @@ import { runGit, type GitResult, type RunGitOptions } from './run-git.mts'
 export interface GitCommand extends PromiseLike<GitResult> {
 	/** The arguments, without the leading `git`. */
 	readonly args: readonly string[]
+	/** Runs it; a non-zero exit comes back as `ok: false`, not as an error. */
 	readonly run: () => Promise<GitResult>
+	/** Runs it and swallows the result and any error, for cleanup. */
 	readonly attempt: () => Promise<void>
+	/** The shell line, without the client's `-c` config. Nothing runs. */
 	readonly toString: () => string
 }
 

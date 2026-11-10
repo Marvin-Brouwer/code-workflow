@@ -12,6 +12,9 @@ describe('commands', () => {
 			commands.config('user.name'),
 			commands.config('user.name', 'mesh-flow'),
 			commands.add(),
+			commands.status({ untracked: false, nulTerminated: true, paths: ['src'] }),
+			commands.reset({ mode: 'hard', to: 'origin/main', quiet: true }),
+			commands.restore(['README.md'], { source: 'HEAD', staged: true, worktree: true }),
 		]
 
 		// Assert
@@ -23,6 +26,9 @@ describe('commands', () => {
 			['config', '--get', 'user.name'],
 			['config', 'user.name', 'mesh-flow'],
 			['add', '--all'],
+			['status', '--porcelain=v1', '--untracked-files=no', '-z', '--', 'src'],
+			['reset', '--quiet', '--hard', 'origin/main'],
+			['restore', '--source=HEAD', '--staged', '--worktree', '--', 'README.md'],
 		])
 	})
 })
