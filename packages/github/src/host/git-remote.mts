@@ -79,7 +79,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 				await mirror(git)
 				await git.remoteSetHead(origin)
 				const defaultBranch = await defaultBranchOf(git)
-				const exists = branch !== defaultBranch && (await git.hasBranch(branch))
+				const exists = branch !== defaultBranch && (await git.hasLocalBranch(branch))
 				const refs = exists ? [defaultBranch, branch] : [defaultBranch]
 				const bundle = await withScratchFile('clone.bundle', async (file) => {
 					await git.bundleCreate(file, refs, { quiet: true })

@@ -56,7 +56,7 @@ describe('gitClient', () => {
 			/^git (-c \S+ )*-c user\.name=Test -c user\.email=test@example\.com show-ref --verify --quiet refs\/heads\/nowhere$/,
 		)
 		expect(line).toBe('git checkout -b fix/7 main')
-		expect(await git.hasBranch('fix/7')).toBe(false)
+		expect(await git.hasLocalBranch('fix/7')).toBe(false)
 	})
 
 	test('answers the questions a workflow asks about a checkout', async () => {
@@ -75,7 +75,7 @@ describe('gitClient', () => {
 		await git.checkoutOrCreate('main', 'main')
 
 		// Assert
-		expect(await git.hasBranch('fix/7')).toBe(true)
+		expect(await git.hasLocalBranch('fix/7')).toBe(true)
 		expect(await git.hasRemoteBranch('fix/7')).toBe(false)
 		expect(dirty).toEqual(['?? fix.txt'])
 		expect(changed).toBe(true)

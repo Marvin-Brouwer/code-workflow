@@ -34,7 +34,7 @@ export interface GitClient extends ClientCommands {
 	/** Whether `ref` names a commit: a branch, a tag, `HEAD`, or `refs/remotes/origin/main`. */
 	readonly hasRef: (ref: string) => Promise<boolean>
 	/** Whether there is a local branch `name`. */
-	readonly hasBranch: (name: string) => Promise<boolean>
+	readonly hasLocalBranch: (name: string) => Promise<boolean>
 	/** Whether `remote` (default `origin`) has a branch `name` as far as the repository knows. */
 	readonly hasRemoteBranch: (name: string, remote?: string) => Promise<boolean>
 	/**
@@ -122,7 +122,7 @@ export function gitClient(options: GitClientOptions): GitClient {
 	const client = eachCommand((args) => gitCommand(args, commandOptions))
 
 	const hasRef = async (ref: string) => (await client.revParse('--verify', '--quiet', ref).run()).ok
-	const hasBranch = (name: string) => hasRef(`refs/heads/${name}`)
+	const hasLocalBranch = (name: string) => hasRef(`refs/heads/${name}`)
 	const hasRemoteBranch = (name: string, remote = defaultRemote) => hasRef(`refs/remotes/${remote}/${name}`)
 	const defaultBranch = async (remote = defaultRemote) => {
 		const recorded = await client.symbolicRef(`refs/remotes/${remote}/HEAD`).run()
@@ -135,12 +135,12 @@ export function gitClient(options: GitClientOptions): GitClient {
 		...client,
 		cwd: options.cwd,
 		hasRef,
-		hasBranch,
+		hasLocalBranch,
 		hasRemoteBranch,
 		defaultBranch,
 		currentBranch: async () => (await client.revParse('--abbrev-ref', 'HEAD')).stdout.trim(),
 		checkoutOrCreate: async (name, from) => {
-			if (await hasBranch(name)) await client.checkout(name, { quiet: true })
+			if (await hasLocalBranch(name)) await client.checkout(name, { quiet: true })
 			else await client.checkout(name, { create: true, from: from ?? `${defaultRemote}/${await defaultBranch()}`, quiet: true })
 		},
 		hasChanges: async (...paths) => (await client.diff('--name-only', ...(paths.length > 0 ? ['--', ...paths] : []))).stdout.trim() !== '',

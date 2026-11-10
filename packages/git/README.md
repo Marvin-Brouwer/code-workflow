@@ -35,7 +35,7 @@ await git.rebaseAbort().attempt()                         // runs; swallows the 
 const line = String(git.rebase('origin/main'))            // 'git rebase origin/main', nothing runs
 ```
 
-The questions a workflow asks are there as functions: `hasRef`, `hasBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges`, `dirtyFiles`, `conflictedFiles`, `discardChanges`, `setIdentity`.
+The questions a workflow asks are there as functions: `hasRef`, `hasLocalBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges`, `dirtyFiles`, `conflictedFiles`, `discardChanges`, `setIdentity`.
 
 ### A credential, for the host
 
