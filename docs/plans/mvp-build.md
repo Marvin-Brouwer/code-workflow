@@ -6,7 +6,15 @@ and its conformance suite runs on real backends in CI. Package 2,
 [`@mesh-flow/core`](../../packages/core/README.md), is built. Step 4, triggers, is built in core
 ([Triggers](../../packages/core/README.md#triggers)) and the engine
 ([Triggers](../../packages/engine/README.md#triggers)). Step 5,
-[`@mesh-flow/gateway`](../../packages/gateway/README.md), is built, with its engine and core sides. Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
+[`@mesh-flow/gateway`](../../packages/gateway/README.md), is built, with its engine and core sides.
+Step 6, [`@mesh-flow/github`](../../packages/github/README.md) and
+[`examples/github-issue`](../../examples/github-issue), is built; the example builds and describes
+itself in CI, and running it against a real issue is what's left of "done when". Where step 6
+differs from the plan below: `github.review` polls through a host tool with an engine-side `wait`
+instead of the durable external-event primitive, which isn't built yet (see
+[decisions](../decisions.md#engine)); commits cross between host and sandbox as git bundles; and
+the engine loads connector host tools from the packages the user adds with `mesh-flow connector`.
+Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
