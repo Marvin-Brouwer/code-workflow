@@ -72,7 +72,7 @@ export const pullRequestReviewCommentCreated = z.object({
 })
 export type PullRequestReviewCommentCreated = z.infer<typeof pullRequestReviewCommentCreated>
 
-/** A workflow that takes `{ issue }` as `github.issue` gives it, and nothing else that is required. */
+/** A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional. */
 export type TakesIssue<Shape extends z.ZodRawShape> =
 	{ readonly issue: z.input<typeof IssueRef> } extends z.input<z.ZodObject<Shape>> ? Workflow<Shape> : never
 
@@ -82,7 +82,7 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
 /**
  * Starts `workflow` with `{ issue: { repository, number } }` whenever `label` is put on an issue.
  * The webhook is named `<workflow>-labeled-<label>`, signed as GitHub signs, and keyed by GitHub's
- * delivery id. The workflow has to take `github.issue` as its `issue` parameter.
+ * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue` parameter.
  *
  * ```ts
  * export default defineMeshFlow({

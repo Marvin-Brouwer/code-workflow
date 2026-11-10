@@ -1,6 +1,6 @@
 # `@mesh-flow/github`
 
-The GitHub connector for mesh-flow: functions for code, tools for agents, a check for `verify`, and GitHub's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
+The GitHub connector for mesh-flow. A connector gives workflows one outside system; this one gives them GitHub: functions for code, tools for agents, a check for `verify`, and GitHub's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
 ## Setup
 
@@ -18,10 +18,10 @@ The sandbox image needs `git` next to `node`: `node:22-bookworm` has both, `node
 
 ```ts
 import { limit, succeed, workflow } from '@mesh-flow/core'
-import { github } from '@mesh-flow/github'
+import { github, IssueParameters } from '@mesh-flow/github'
 import { developer } from '../agents.mts'
 
-export const fixIssue = workflow('fix-issue', { issue: github.issue }, async ({ parameters }) => {
+export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
 	const issue = await github.collect(parameters.issue)
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
 
@@ -44,7 +44,7 @@ export const fixIssue = workflow('fix-issue', { issue: github.issue }, async ({ 
 
 ### Issues
 
-`github.issue` is the parameter schema, `{ repository: 'owner/name', number }`. `github.collect` reads the issue and writes it as Markdown into `issues/` in the workspace; in a prompt it renders as that file's path, so the agent reads as much of it as it needs. `github.comment(issue, body, { key })` updates its earlier comment with the same key instead of adding one, `github.label(issue, labels)` adds labels, `github.close(issue)` closes it.
+`IssueParameters` is what a workflow on one issue takes, `{ issue }`, where `github.issue` is the issue itself, `{ repository: 'owner/name', number }`; a workflow that takes more declares `{ ...IssueParameters, reviewer: z.string() }`. `github.collect` reads the issue and writes it as Markdown into `issues/` in the workspace; in a prompt it renders as that file's path, so the agent reads as much of it as it needs. `github.comment(issue, body, { key })` updates its earlier comment with the same key instead of adding one, `github.label(issue, labels)` adds labels, `github.close(issue)` closes it.
 
 ### Repositories
 
@@ -75,7 +75,7 @@ export default defineMeshFlow({
 	sandbox: image({ name: 'node:22-bookworm' }),
 	workflows: [
 		userTrigger(fixIssue),
-		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes github.issue.
+		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
 		// Any event schema works with webhook; the filter is in the structure, so other deliveries get a 4xx.
 		webhook(triage, github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })), github.triggerOptions),

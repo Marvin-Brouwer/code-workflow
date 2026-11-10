@@ -7,3 +7,4 @@
  * @module
  */
 export * as github from '../github.mts'
+export { IssueParameters, type Issue, type IssueRef } from '../issue/issue.mts'

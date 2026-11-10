@@ -177,7 +177,16 @@ An agent asks with `requestUserInput`: one question with a text answer, or a for
 
 ### Waiting
 
-`wait` waits for a while on the engine's clock, so the sandbox can be paused meanwhile, and a timer that disagrees across a pause never matters. It's how a workflow polls something outside, such as a pull request, between host tool calls. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`.
+A workflow waits for the thing itself, never for an amount of time: `await github.review(pullRequest, handlers)` returns when the pull request is merged, `verify(github.checksPass(pullRequest))` when its checks have completed. Days can pass in such an `await`. The run is paused meanwhile and resumes where it was, so a workflow that waits costs nothing and survives an engine restart.
+
+```ts
+const outcome = await github.review(pullRequest, { comments: handleComments })
+if (outcome.state === 'merged') await github.close(issue)
+```
+
+Each of these functions is a connector's, and how it waits is the connector's concern, not the workflow's. Today they look at GitHub at an interval; the engine is to deliver webhook events into waiting runs ([design: Triggers](../../docs/design.md#triggers)), after which they wait for the event instead, without a change to their signature.
+
+A connector waits with `wait`: a pause on the engine's clock, so the sandbox can be paused meanwhile and a timer that disagrees across a pause never matters. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`. It belongs in a connector's function, behind an `await` that names what the workflow waits for, not in workflow code.
 
 ```ts
 import { hostToolStub, wait } from '@mesh-flow/core'
@@ -190,8 +199,9 @@ const pipeline = hostToolStub({
 	output: z.object({ done: z.boolean() }),
 })
 
-while (!(await pipeline({ id: 'build-7' })).done) {
-	await wait({ seconds: 30 })
+/** Returns once the pipeline has finished: what a workflow awaits. */
+export async function finished(id: string): Promise<void> {
+	while (!(await pipeline({ id })).done) await wait({ seconds: 30 })
 }
 ```
 

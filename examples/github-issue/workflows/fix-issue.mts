@@ -4,10 +4,10 @@
  * Plain async TypeScript: every `await` is real, and the agent is a call inside it.
  */
 import { limit, succeed, workflow } from '@mesh-flow/core'
-import { github } from '@mesh-flow/github'
+import { github, IssueParameters } from '@mesh-flow/github'
 import { developer } from '../agents.mts'
 
-export const fixIssue = workflow('fix-issue', { issue: github.issue }, async ({ parameters }) => {
+export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
 	const issue = await github.collect(parameters.issue)
 	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })

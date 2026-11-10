@@ -2,9 +2,22 @@ import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
 
-/** Names an issue, `{ repository: 'owner/name', number }`: what a workflow takes as a parameter. */
+/** Names an issue, `{ repository: 'owner/name', number }`: the `issue` parameter of a workflow. */
 export const issue = IssueRef
 export type { IssueRef }
+
+/**
+ * The parameters of a workflow that works on one issue, `{ issue }`, so a workflow declares them
+ * in one word and `github.onIssueLabeled` can start it.
+ *
+ * ```ts
+ * export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
+ * 	const issue = await github.collect(parameters.issue)
+ * })
+ * ```
+ */
+export const IssueParameters = Object.freeze({ issue: IssueRef })
+export type IssueParameters = typeof IssueParameters
 
 /** Where collected issues are dumped, for agents to read. */
 const issuesFolder = workspace.folder('issues', { description: 'the issues this run works on, one Markdown file each' })

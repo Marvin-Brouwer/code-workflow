@@ -20,7 +20,9 @@ Ctrl+C shuts it down without leaving anything running. It pauses every running s
 
 ### Load connectors
 
-A connector package's host tools run on the host with credentials, so which packages the engine loads is your setting, never the app's. Install the package where `mesh-flow serve` runs and add it; the engine loads its `host` entry point the next time it starts:
+A connector is a package that gives workflows one outside system, such as GitHub: functions for code, tools for agents, and triggers for its webhooks. It comes in two halves. The sandbox half is what a workflow imports and runs next to the workflow; the host half is loaded by the engine and does every call that needs a credential, such as a GitHub API call or a git push. The sandbox half calls the host half over the gateway, so the credential stays on the host and never reaches the sandbox ([design section 8](../../docs/design.md#8-connectors)).
+
+The host half runs with credentials, so which connectors the engine loads is your setting, never the app's. Install the package where `mesh-flow serve` runs and add it; the engine loads its `host` entry point the next time it starts:
 
 ```bash
 pnpm add @mesh-flow/github

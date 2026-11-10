@@ -114,8 +114,8 @@ async function hostGit(clone: string, context: HostToolContext): Promise<GitClie
 }
 
 /** Makes the clone's branches equal to the remote's. */
-function mirror(git: GitClient): Promise<unknown> {
-	return git.fetch(origin, [mirrorRefspec], { prune: true, quiet: true })
+async function mirror(git: GitClient): Promise<void> {
+	await git.fetch(origin, [mirrorRefspec], { prune: true, quiet: true })
 }
 
 /** The remote's default branch, as `remote set-head --auto` recorded it. */

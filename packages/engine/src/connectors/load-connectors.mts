@@ -1,3 +1,15 @@
+/**
+ * Loads the host half of every connector the user added (`mesh-flow connector add <package>`).
+ *
+ * A connector is a package that gives workflows one outside system, such as GitHub. Its sandbox
+ * half is what a workflow imports: functions, agent tools and webhook triggers that need no
+ * credential. Its host half, the package's `host` entry point, holds the host tools behind them:
+ * the ones that do the API calls and git pushes with the credential, which only the host has.
+ * The engine gives each run the host tools its app lists, and the sandbox half reaches them
+ * over the gateway.
+ *
+ * @module
+ */
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
