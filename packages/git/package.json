@@ -1,0 +1,54 @@
+{
+	"name": "@mesh-flow/git",
+	"version": "0.0.0",
+	"description": "Git for mesh-flow: a client whose every command runs, says what it would run, or is tried best-effort, with credentials in the environment and a stop that kills the process",
+	"keywords": [
+		"git",
+		"mesh-flow",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/git#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/git"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/git.mts",
+			"types": "./dist/git.d.mts",
+			"import": "./dist/git.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"execa": "^10.2.1"
+	},
+	"devDependencies": {
+		"@types/node": "^22.20.5",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

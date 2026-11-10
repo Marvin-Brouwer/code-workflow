@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { HostToolContext } from '@mesh-flow/gateway'
-import { runGit } from '../git-process.mts'
+import { basicAuthHeaderEnv, gitClient, type GitClient } from '@mesh-flow/git'
 import { githubRemoteUrl, splitRepositoryName } from '../repository-name.mts'
 import { withScratchFile } from '../scratch-file.mts'
 import { requireToken } from './api.mts'
@@ -51,7 +51,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	 * mirror fetch in the middle of a push would reset the branch the push is about to send.
 	 */
 	const lastOn = new Map<string, Promise<unknown>>()
-	async function withClone<T>(repository: string, context: HostToolContext, use: (clone: string) => Promise<T>): Promise<T> {
+	async function withClone<T>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<T>): Promise<T> {
 		const clone = cloneOf(repository)
 		const turn = (lastOn.get(clone) ?? Promise.resolve()).catch(() => undefined).then(() => openClone(clone, repository, context).then(use))
 		lastOn.set(clone, turn)
@@ -63,41 +63,42 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	}
 
 	/** Makes the clone when missing, and sets the remote to where it clones from. */
-	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<string> {
+	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<GitClient> {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
-		await git(clone, ['init', '--bare', '--quiet'], context)
+		const git = await hostGit(clone, context)
+		await git.init({ bare: true, quiet: true })
 		const url = remoteUrl(repository)
-		const remotes = await git(clone, ['remote'], context)
-		await git(clone, remotes.includes(origin) ? ['remote', 'set-url', origin, url] : ['remote', 'add', origin, url], context)
-		return clone
+		const remotes = (await git.remotes()).stdout
+		await (remotes.includes(origin) ? git.remoteSetUrl(origin, url) : git.remoteAdd(origin, url))
+		return git
 	}
 
 	return Object.freeze<GitRemote>({
 		fetchBundle: (repository, branch, context) =>
-			withClone(repository, context, async (clone) => {
-				await mirror(clone, context)
-				await git(clone, ['remote', 'set-head', origin, '--auto'], context)
-				const defaultBranch = await defaultBranchOf(clone, context)
-				const exists = branch !== defaultBranch && (await branchExists(clone, branch, context))
+			withClone(repository, context, async (git) => {
+				await mirror(git)
+				await git.remoteSetHead(origin)
+				const defaultBranch = await defaultBranchOf(git)
+				const exists = branch !== defaultBranch && (await git.hasBranch(branch))
 				const refs = exists ? [defaultBranch, branch] : [defaultBranch]
 				const bundle = await withScratchFile('clone.bundle', async (file) => {
-					await git(clone, ['bundle', 'create', '--quiet', file, ...refs], context)
+					await git.bundleCreate(file, refs, { quiet: true })
 					return readFile(file)
 				})
 				return { bundle, defaultBranch, branchExists: exists || branch === defaultBranch }
 			}),
 		pushBundle: (repository, branch, bundle, context) =>
-			withClone(repository, context, async (clone) => {
+			withClone(repository, context, async (git) => {
 				// The bundle holds only what the sandbox's checkout had not pushed yet, so the clone needs the rest first.
-				await mirror(clone, context)
+				await mirror(git)
 				const head = await withScratchFile('push.bundle', async (file) => {
 					await writeFile(file, bundle)
-					const expected = await bundleHead(clone, file, branch, context)
-					await git(clone, ['fetch', '--quiet', file, `+refs/heads/${branch}:refs/heads/${branch}`], context)
+					const expected = await bundleHead(git, file, branch)
+					await git.fetch(file, [`+refs/heads/${branch}:refs/heads/${branch}`], { quiet: true })
 					return expected
 				})
-				await git(clone, ['push', '--quiet', origin, `refs/heads/${branch}:refs/heads/${branch}`], context)
-				const pushed = (await git(clone, ['rev-parse', `refs/heads/${branch}`], context)).trim()
+				await git.push(origin, [`refs/heads/${branch}:refs/heads/${branch}`], { quiet: true })
+				const pushed = (await git.revParse(`refs/heads/${branch}`)).stdout.trim()
 				if (pushed !== head) throw new Error(`Pushing ${branch} of ${repository} left it at ${pushed}, not at the bundle's ${head}.`)
 				return pushed
 			}),
@@ -105,47 +106,28 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 }
 
 /**
- * Runs git with the token in the request headers, through the environment, so it never shows in
- * a process list. Aborting the context kills the process.
+ * Git on the host's clone, with the token in the request headers through the environment, so it
+ * never shows in a process list. Aborting the context kills whatever runs.
  */
-async function git(clone: string, args: readonly string[], context: HostToolContext): Promise<string> {
-	const authorization = Buffer.from(`x-access-token:${await requireToken(context)}`).toString('base64')
-	return runGit(
-		clone,
-		args,
-		{
-			GIT_CONFIG_COUNT: '2',
-			GIT_CONFIG_KEY_0: 'http.extraHeader',
-			GIT_CONFIG_VALUE_0: `Authorization: Basic ${authorization}`,
-			GIT_CONFIG_KEY_1: 'credential.helper',
-			GIT_CONFIG_VALUE_1: '',
-		},
-		context.abortSignal,
-	)
+async function hostGit(clone: string, context: HostToolContext): Promise<GitClient> {
+	return gitClient({ cwd: clone, env: basicAuthHeaderEnv('x-access-token', await requireToken(context)), abortSignal: context.abortSignal })
 }
 
 /** Makes the clone's branches equal to the remote's. */
-function mirror(clone: string, context: HostToolContext): Promise<string> {
-	return git(clone, ['fetch', '--quiet', '--prune', origin, mirrorRefspec], context)
+function mirror(git: GitClient): Promise<unknown> {
+	return git.fetch(origin, [mirrorRefspec], { prune: true, quiet: true })
 }
 
 /** The remote's default branch, as `remote set-head --auto` recorded it. */
-async function defaultBranchOf(clone: string, context: HostToolContext): Promise<string> {
-	const head = await git(clone, ['symbolic-ref', `refs/remotes/${origin}/HEAD`], context)
-	return head.trim().replace(`refs/remotes/${origin}/`, '')
-}
-
-function branchExists(clone: string, branch: string, context: HostToolContext): Promise<boolean> {
-	return git(clone, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], context).then(
-		() => true,
-		() => false,
-	)
+async function defaultBranchOf(git: GitClient): Promise<string> {
+	const head = await git.symbolicRef(`refs/remotes/${origin}/HEAD`)
+	return head.stdout.trim().replace(`refs/remotes/${origin}/`, '')
 }
 
 /** The commit a bundle says `branch` is at. */
-async function bundleHead(clone: string, file: string, branch: string, context: HostToolContext): Promise<string> {
-	const heads = await git(clone, ['bundle', 'list-heads', file, `refs/heads/${branch}`], context)
-	const [sha] = heads.trim().split(/\s+/)
+async function bundleHead(git: GitClient, file: string, branch: string): Promise<string> {
+	const heads = await git.bundleListHeads(file, `refs/heads/${branch}`)
+	const [sha] = heads.stdout.trim().split(/\s+/)
 	if (sha === undefined || sha === '') throw new Error(`The bundle holds no ${branch}.`)
 	return sha
 }

@@ -1,11 +1,12 @@
 import { rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tool, toPrompt, workspace } from '@mesh-flow/core'
+import type { GitClient } from '@mesh-flow/git'
 import { z } from 'zod'
 import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
 import { withScratchFile } from '../scratch-file.mts'
 import { stubs } from '../stubs.mts'
-import { hasRef, localGit } from './local-git.mts'
+import { localGit } from './local-git.mts'
 
 /** A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as its path. */
 export interface Repository {
@@ -44,27 +45,28 @@ export const checkout = tool('githubCheckout', {
 	action: async ({ repository, branch }, { abortSignal }): Promise<Repository> => {
 		const folder = workspace.folder(splitRepositoryName(repository).repo)
 		const directory = folder.location()
-		const existing = await existingCheckout(directory, abortSignal)
+		const git = localGit(directory, abortSignal)
+		const existing = await existingCheckout(directory, git)
 		if (existing === 'other') throw new Error(`${folder.path} holds something that isn't a checkout, so ${repository} can't go there.`)
 		if (existing === 'broken') await rm(directory, { recursive: true, force: true })
 		if (existing === 'checkout') {
-			const url = (await localGit(directory, ['remote', 'get-url', origin], abortSignal)).trim()
+			const url = (await git.remoteGetUrl(origin)).stdout.trim()
 			if (url !== githubRemoteUrl(repository))
 				throw new Error(`${folder.path} holds a checkout of another repository (${url}), so ${repository} can't go there.`)
-			const defaultBranch = (await localGit(directory, ['config', '--get', defaultBranchConfigKey], abortSignal)).trim()
-			await switchTo(directory, branch, defaultBranch, abortSignal)
+			const defaultBranch = (await git.config(defaultBranchConfigKey)).stdout.trim()
+			await switchTo(git, branch, defaultBranch)
 			return repositoryOf(repository, branch, defaultBranch, folder.path, directory)
 		}
 		const fetched = await stubs.cloneRepository({ repository, branch }, { abortSignal })
 		await withScratchFile('clone.bundle', async (bundle) => {
 			await writeFile(bundle, Buffer.from(fetched.bundle, 'base64'))
 			const from = fetched.branchExists ? branch : fetched.defaultBranch
-			await localGit(path.dirname(directory), ['clone', '--quiet', '--branch', from, bundle, directory], abortSignal)
+			await localGit(path.dirname(directory), abortSignal).clone(bundle, directory, { branch: from, quiet: true })
 		})
-		if (!fetched.branchExists) await localGit(directory, ['checkout', '--quiet', '-b', branch], abortSignal)
+		if (!fetched.branchExists) await git.checkout(branch, { create: true, quiet: true })
 		// The bundle is gone: the remote is only where the pushed state is tracked, under refs/remotes/origin.
-		await localGit(directory, ['remote', 'set-url', origin, githubRemoteUrl(repository)], abortSignal)
-		await localGit(directory, ['config', defaultBranchConfigKey, fetched.defaultBranch], abortSignal)
+		await git.remoteSetUrl(origin, githubRemoteUrl(repository))
+		await git.config(defaultBranchConfigKey, fetched.defaultBranch)
 		return repositoryOf(repository, branch, fetched.defaultBranch, folder.path, directory)
 	},
 })
@@ -77,7 +79,7 @@ function repositoryOf(name: string, branch: string, defaultBranch: string, folde
  * What is in the folder: nothing, a checkout git can work in, the remains of a clone it can't, or
  * something else of the workflow's, which is never touched.
  */
-async function existingCheckout(directory: string, abortSignal: AbortSignal): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
+async function existingCheckout(directory: string, git: GitClient): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
 	const present = await stat(directory).then(
 		() => true,
 		() => false,
@@ -89,22 +91,15 @@ async function existingCheckout(directory: string, abortSignal: AbortSignal): Pr
 	)
 	if (!hasGitDirectory) return 'other'
 	// `.git` as git names it: the folder is a repository of its own, not a folder in some other one.
-	const works = await localGit(directory, ['rev-parse', '--git-dir'], abortSignal).then(
-		(output) => output.trim() === '.git',
-		() => false,
-	)
-	return works && (await hasRef(directory, 'HEAD', abortSignal)) ? 'checkout' : 'broken'
+	const gitDirectory = await git.revParse('--git-dir').run()
+	const works = gitDirectory.ok && gitDirectory.stdout.trim() === '.git'
+	return works && (await git.hasRef('HEAD')) ? 'checkout' : 'broken'
 }
 
 /** Puts the checkout on `branch`: as it is when it's there, made from what the remote has otherwise. */
-async function switchTo(directory: string, branch: string, defaultBranch: string, abortSignal: AbortSignal): Promise<void> {
-	const current = (await localGit(directory, ['rev-parse', '--abbrev-ref', 'HEAD'], abortSignal)).trim()
-	if (current === branch) return
-	if (await hasRef(directory, `refs/heads/${branch}`, abortSignal)) {
-		await localGit(directory, ['checkout', '--quiet', branch], abortSignal)
-		return
-	}
+async function switchTo(git: GitClient, branch: string, defaultBranch: string): Promise<void> {
+	if ((await git.currentBranch()) === branch) return
 	const tracked = `refs/remotes/${origin}/${branch}`
-	const from = (await hasRef(directory, tracked, abortSignal)) ? tracked : `refs/remotes/${origin}/${defaultBranch}`
-	await localGit(directory, ['checkout', '--quiet', '-b', branch, from], abortSignal)
+	const from = (await git.hasRef(tracked)) ? tracked : `refs/remotes/${origin}/${defaultBranch}`
+	await git.checkoutOrCreate(branch, from)
 }

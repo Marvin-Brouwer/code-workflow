@@ -1,6 +1,6 @@
 name: engine
 
-# The engine's, the build's, the protocol's, the gateway's, core's and the GitHub connector's own checks, then one run end to end on each real backend this OS has. Lint and
+# The engine's, the build's, the protocol's, the gateway's, core's, git's and the GitHub connector's own checks, then one run end to end on each real backend this OS has. Lint and
 # format run repo-wide in the sandbox workflow.
 on:
   pull_request:
@@ -32,9 +32,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/github --filter github-issue typecheck
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github --filter github-issue typecheck
       - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... build
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/github test
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github test
       # The example app builds and describes itself with the packages just built. The CLI is run by
       # its file: pnpm linked no `mesh-flow` bin at install time, when the engine wasn't built yet.
       - run: node packages/engine/dist/cli.mjs build -C examples/github-issue

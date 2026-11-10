@@ -3,7 +3,7 @@ import { tool, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
 import { withScratchFile } from '../scratch-file.mts'
 import { stubs } from '../stubs.mts'
-import { hasRef, localGit } from './local-git.mts'
+import { localGit } from './local-git.mts'
 import { origin, type Repository } from './repository.mts'
 
 /** What a push did. */
@@ -30,23 +30,23 @@ export function push(repository: Repository): Tool<{ message: string }, Pushed> 
 		input: z.object({ message: z.string().min(1).describe('The commit message') }),
 		action: async ({ message }, { abortSignal }): Promise<Pushed> => {
 			const { directory, branch, defaultBranch } = repository
-			const status = await localGit(directory, ['status', '--porcelain'], abortSignal)
-			if (status.trim() !== '') {
-				await localGit(directory, ['add', '--all'], abortSignal)
-				await localGit(directory, ['commit', '--quiet', '--message', message], abortSignal)
+			const git = localGit(directory, abortSignal)
+			if ((await git.dirtyFiles()).length > 0) {
+				await git.add()
+				await git.commit({ message, quiet: true })
 			}
-			const head = (await localGit(directory, ['rev-parse', 'HEAD'], abortSignal)).trim()
+			const head = (await git.revParse('HEAD')).stdout.trim()
 			const tracking = `refs/remotes/${origin}/${branch}`
-			const tracked = await hasRef(directory, tracking, abortSignal)
-			if (tracked && (await localGit(directory, ['rev-parse', tracking], abortSignal)).trim() === head) return { pushed: false, head }
+			const tracked = await git.hasRef(tracking)
+			if (tracked && (await git.revParse(tracking)).stdout.trim() === head) return { pushed: false, head }
 			// A new branch is bundled on top of the default branch, which the host has: never the whole history.
 			const base = tracked ? tracking : `refs/remotes/${origin}/${defaultBranch}`
-			const range = (await hasRef(directory, base, abortSignal)) ? `${base}..${branch}` : branch
+			const range = (await git.hasRef(base)) ? `${base}..${branch}` : branch
 			return withScratchFile('push.bundle', async (file) => {
-				await localGit(directory, ['bundle', 'create', '--quiet', file, range], abortSignal)
+				await git.bundleCreate(file, [range], { quiet: true })
 				const bundle = (await readFile(file)).toString('base64')
 				const result = await stubs.pushBundle({ repository: repository.name, branch, bundle }, { abortSignal })
-				await localGit(directory, ['update-ref', tracking, result.head], abortSignal)
+				await git.updateRef(tracking, result.head)
 				return { pushed: true, head: result.head }
 			})
 		},
