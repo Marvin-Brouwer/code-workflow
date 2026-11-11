@@ -70,28 +70,55 @@ export const getPullRequest = {
 
 /**
  * Lists on the host what was said on the pull request at or after `since`, oldest first. Comments
- * this package posted are left out. An item at the same second as `since` comes again, so the
- * caller keeps the ids it has handled.
+ * this package posted are left out by their marker, never by author: the token may well be the
+ * reviewer's own. An item at the same second as `since` comes again, so the caller keeps the ids
+ * it has handled.
  */
 export const reviewActivity = {
 	name: 'githubReviewActivity',
 	description: 'Lists what reviewers said on a pull request since a moment, oldest first',
 	input: PullRequestRef.extend({ since: z.iso.datetime().optional() }),
 	output: z.object({
-		/** Who the credential belongs to, when the token can say; the workflow leaves that author's comments out. */
-		self: z.string().optional(),
 		items: z.array(ReviewItem),
 		/** The moment of the latest item seen so far: the `since` of the next call. Absent until an item was seen. */
 		until: z.iso.datetime().optional(),
 	}),
 }
 
-/** Replies on the host, with a marker in the body so the reply is never listed as a reviewer's item. */
+/**
+ * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
+ * listed as a reviewer's item. The first reply to an item replaces the "👀 Reading..." reply that
+ * showed it was being read, and takes the 👀 reaction off the item. Replies to one item go one at a
+ * time.
+ */
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
 	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1) }),
 	output: PostedComment,
+}
+
+/**
+ * Shows the reviewer on the host that review items are being read: a 👀 reaction on a comment
+ * (GitHub has none for a review), and for every item a "👀 Reading..." reply, in the thread of a
+ * comment on a line and on the conversation otherwise, that the first answer to the item replaces.
+ * Showing an item twice leaves one reply, and an item that was answered already is left alone. An
+ * item GitHub won't take the 👀 on, say a comment deleted since, is left out of `shown`.
+ */
+export const showBeingRead = {
+	name: 'githubShowBeingRead',
+	description: 'Shows the reviewer that review items on a pull request are being read',
+	input: PullRequestRef.extend({
+		items: z.array(
+			z.object({
+				id: ReviewItemId,
+				url: z.url(),
+				/** For a comment on a line that replies to another: the thread's first comment, which replies go to. */
+				thread: ReviewItemId.optional(),
+			}),
+		),
+	}),
+	output: z.object({ shown: z.array(ReviewItemId) }),
 }
 
 /** A check or status on a commit that didn't pass. */

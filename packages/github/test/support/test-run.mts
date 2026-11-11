@@ -79,6 +79,8 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 
 /** A run of `body` as a workflow on `gateway`, in a workspace of its own. */
 export interface TestRun<T> {
+	/** The id the gateway knows the run by, which the connector signs its posts with. */
+	readonly runId: string
 	readonly workspace: string
 	readonly messages: readonly RuntimeMessage[]
 	/** The wake requests the run sent, which the channel answers right away. */
@@ -150,6 +152,7 @@ export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortS
 		})
 		.catch(() => undefined)
 	return {
+		runId,
 		workspace,
 		messages,
 		get wakes() {

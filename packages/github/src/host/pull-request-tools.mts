@@ -1,7 +1,7 @@
-import { hostTool, type HostTool } from '@mesh-flow/gateway'
+import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker, isMarked } from '../tools/issue-tools.mts'
+import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
@@ -9,12 +9,17 @@ import {
 	openPullRequest,
 	replyToReviewItem,
 	reviewActivity,
+	showBeingRead,
 	ReviewItemKind,
 	type CheckFailure,
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
-import type { ApiClient } from './api.mts'
+import { pageSize, type ApiClient } from './api.mts'
+import { oneAtATime } from './one-at-a-time.mts'
+import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
+import { signed } from './signature.mts'
+import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
 interface ApiPullRequest {
@@ -52,9 +57,6 @@ const verdicts: Record<string, ReviewItem['verdict']> = {
 /** Check conclusions and status states that count as failed. */
 const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'error'])
 
-/** Left in every reply this package posts, so a look at the review never hands it back as a reviewer's. */
-const replyMarker = commentMarker('reply')
-
 const secondMs = 1_000
 
 /** The latest of two moments, either of which may be missing. */
@@ -66,6 +68,7 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
+	const perItem = oneAtATime()
 	return [
 		hostTool(openPullRequest, async ({ repository, head, base, title, body }, context) => {
 			const client = await api(context)
@@ -92,23 +95,18 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			// At or after: GitHub keeps seconds, so a comment in the same second as the last one seen would be lost otherwise.
 			const isNew = (at: string | null | undefined): at is string =>
 				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() >= after)
-			// Found on every look, never kept: the token can change hands, and a failed lookup is not an answer.
-			const self = client.rest.users.getAuthenticated().then(
-				({ data }): string | undefined => data.login,
-				() => undefined,
-			)
 			const [lineComments, reviews, comments] = await Promise.all([
 				client.paginate(client.rest.pulls.listReviewComments, {
 					...where,
 					pull_number: number,
-					per_page: 100,
+					per_page: pageSize,
 					...listSince,
 				}),
-				client.paginate(client.rest.pulls.listReviews, { ...where, pull_number: number, per_page: 100 }),
+				client.paginate(client.rest.pulls.listReviews, { ...where, pull_number: number, per_page: pageSize }),
 				client.paginate(client.rest.issues.listComments, {
 					...where,
 					issue_number: number,
-					per_page: 100,
+					per_page: pageSize,
 					...listSince,
 				}),
 			])
@@ -150,33 +148,57 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			].toSorted((a, b) => a.at.localeCompare(b.at))
 			// The clock is GitHub's, never the host's: the two can disagree, and a comment made while the lists were read must come next time.
 			const until = later(since, items.at(-1)?.at)
-			const login = await self
-			return { ...(login === undefined ? {} : { self: login }), items, ...(until === undefined ? {} : { until }) }
+			return { items, ...(until === undefined ? {} : { until }) }
 		}),
 
-		hostTool(replyToReviewItem, async ({ repository, number, item, body }, context) => {
-			const client = await api(context)
-			const where = splitRepositoryName(repository)
-			const { kind, id } = parseItemId(item)
-			const marked = `${body}\n\n${replyMarker}`
-			if (kind === 'review-comment') {
-				const { data } = await client.rest.pulls.createReplyForReviewComment({
-					...where,
-					pull_number: number,
-					comment_id: id,
-					body: marked,
-				})
-				return { id: data.id, url: data.html_url }
+		hostTool(replyToReviewItem, ({ repository, number, item, body }, context) =>
+			// One answer at a time per item: two at once would both find the reading reply, and one would overwrite the other.
+			perItem(`${repository}#${String(number)}#${item}`, context.abortSignal, async () => {
+				const comments = pullRequestComments(await api(context), repository, number)
+				const { kind, id: commentId } = parseItemId(item)
+				const reading = (await comments.ownReplies([kind])).find((reply) => reply.body.includes(commentMarker(seenKey(item))))
+				if (reading === undefined) {
+					const threadId = kind === 'review-comment' ? await comments.threadOf(commentId) : undefined
+					return comments.post(kind, threadId, signed(body, context.runId, [replyKey]))
+				}
+				// Before the edit, so an answer that fails halfway finds the reading reply again when it's tried once more.
+				const reaction = markerValue(reading.body, reactionKeyName)
+				if (reaction !== undefined) await comments.unreact(kind, commentId, Number(reaction))
+				return comments.edit(kind, reading.id, signed(body, context.runId, [replyKey, answeredKey(item)]))
+			}),
+		),
+
+		hostTool(showBeingRead, async ({ repository, number, items }, context) => {
+			const comments = pullRequestComments(await api(context), repository, number)
+			const replies = await comments.ownReplies(items.map((listed) => parseItemId(listed.id).kind))
+			const hasReply = (key: string) => replies.some((reply) => reply.body.includes(commentMarker(key)))
+			const shown: string[] = []
+			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
+			for (const { id: item, url, thread } of items) {
+				const { kind, id: commentId } = parseItemId(item)
+				if (hasReply(answeredKey(item))) continue
+				try {
+					const reaction = await comments.react(kind, commentId)
+					if (!hasReply(seenKey(item))) {
+						const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
+						const reactionKeys = reaction === undefined ? [] : [reactionKey(reaction)]
+						await comments.post(kind, threadId, signed(readingNote(kind, url), context.runId, [replyKey, seenKey(item), ...reactionKeys]))
+					}
+					shown.push(item)
+				} catch (error) {
+					// A deleted comment or a locked conversation just isn't shown. What may pass is tried again, and a
+					// stopped call or a bad token is no reason to say the items were shown.
+					if (isTransient(error) || context.abortSignal.aborted || refusedToken(error)) throw error
+				}
 			}
-			const { data } = await client.rest.issues.createComment({ ...where, issue_number: number, body: marked })
-			return { id: data.id, url: data.html_url }
+			return { shown }
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const [runs, combined] = await Promise.all([
-				client.paginate(client.rest.checks.listForRef, { ...where, ref, per_page: 100 }),
+				client.paginate(client.rest.checks.listForRef, { ...where, ref, per_page: pageSize }),
 				client.rest.repos.getCombinedStatusForRef({ ...where, ref }),
 			])
 			const progress = checksStatus(runs, combined.data.statuses)

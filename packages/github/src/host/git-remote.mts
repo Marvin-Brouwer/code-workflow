@@ -5,6 +5,7 @@ import { basicAuthHeaderEnv, gitClient, type GitClient } from '@mesh-flow/git'
 import { githubRemoteUrl, splitRepositoryName } from '../repository-name.mts'
 import { withScratchFile } from '../scratch-file.mts'
 import { requireToken } from './api.mts'
+import { oneAtATime } from './one-at-a-time.mts'
 
 /** Where the host clones live and how it reaches GitHub over git. */
 export interface GitRemoteOptions {
@@ -50,16 +51,10 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	 * One call at a time per clone: runs from different workflows share a repository's clone, and a
 	 * mirror fetch in the middle of a push would reset the branch the push is about to send.
 	 */
-	const lastOn = new Map<string, Promise<unknown>>()
-	async function withClone<T>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<T>): Promise<T> {
+	const onClone = oneAtATime()
+	function withClone<T>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<T>): Promise<T> {
 		const clone = cloneOf(repository)
-		const turn = (lastOn.get(clone) ?? Promise.resolve()).catch(() => undefined).then(() => openClone(clone, repository, context).then(use))
-		lastOn.set(clone, turn)
-		try {
-			return await turn
-		} finally {
-			if (lastOn.get(clone) === turn) lastOn.delete(clone)
-		}
+		return onClone(clone, context.abortSignal, () => openClone(clone, repository, context).then(use))
 	}
 
 	/** Makes the clone when missing, and sets the remote to where it clones from. */
