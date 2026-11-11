@@ -16,7 +16,8 @@ export interface ChecksFailed {
 export interface ReviewHandlers {
 	/**
 	 * New review comments, reviews and conversation comments, coalesced per look, oldest first. What
-	 * the run posted itself is left out. Each item gets a "👀 Reading..." reply on GitHub before the handler is called.
+	 * the run posted itself is left out. Before the handler is called, each item gets 👀 on GitHub:
+	 * a reaction where GitHub takes one, and a "👀 Reading..." reply.
 	 */
 	readonly comments?: (comments: readonly ReviewItem[]) => Promise<unknown>
 	/** The checks of a commit came out failed. Once per commit. */
@@ -47,11 +48,10 @@ export interface ReviewOutcome {
  * it: review comments come in one list per look, so a reviewer's round is one call, and failed
  * checks come once per commit, once its checks have all completed. An item handed to the handler
  * gets 👀 on GitHub first, so the reviewer sees it is being read: a reaction where GitHub takes
- * one, and a "👀 Reading..." reply that the first answer to the item replaces, taking the
- * reaction off again. Handlers run one at a time. The
- * wait between looks is on the engine's clock, where the run can be paused. A look that fails is
- * tried again on the next one, for up to `toleratedOutage`, so a watch that takes days outlives a
- * dropped connection.
+ * one, and a "👀 Reading..." reply that the first answer to the item replaces, taking the reaction
+ * off again. Handlers run one at a time. The wait between looks is on the engine's clock, where the
+ * run can be paused. A look that fails is tried again on the next one, for up to `toleratedOutage`,
+ * so a watch that takes days outlives a dropped connection.
  *
  * ```ts
  * await github.review(pullRequest, {
@@ -90,7 +90,7 @@ export async function review(
 				url: item.url,
 				...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
 			}))
-			await look(() => stubs.markSeen({ ...where, items }, context))
+			await look(() => stubs.showBeingRead({ ...where, items }, context))
 			await handlers.comments(comments)
 		}
 

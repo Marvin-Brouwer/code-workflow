@@ -1,11 +1,17 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { splitRepositoryName } from '../repository-name.mts'
 import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
-import type { ApiClient } from './api.mts'
+import { pageSize, type ApiClient } from './api.mts'
 import { signed } from './signature.mts'
 
-/** The marker of a comment posted without a key, which is never looked up to update. */
+/**
+ * The marker key of a comment posted without a key, which is never looked up to update. A caller's
+ * key gets its own prefix, `key:`, so it never matches this one or the connector's other markers.
+ */
 const unkeyed = 'comment'
+
+/** The marker key of a comment posted with `key`. */
+const keyed = (key: string) => `key:${key}`
 
 /** The host halves of the issue tools. */
 export function issueHostTools(api: ApiClient): HostTool[] {
@@ -30,16 +36,16 @@ export function issueHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), issue_number: number }
 			// Marked also without a key: the marker is how a look at a review tells the run's own comments from a reviewer's.
-			const marked = signed(body, context.runId, [commentMarker(key ?? unkeyed)])
+			const signedBody = signed(body, context.runId, [key === undefined ? unkeyed : keyed(key)])
 			if (key !== undefined) {
-				const existing = await client.paginate(client.rest.issues.listComments, { ...where, per_page: 100 })
-				const earlier = existing.find((comment) => comment.body?.includes(commentMarker(key)) === true)
+				const existing = await client.paginate(client.rest.issues.listComments, { ...where, per_page: pageSize })
+				const earlier = existing.find((comment) => comment.body?.includes(commentMarker(keyed(key))) === true)
 				if (earlier !== undefined) {
-					const { data } = await client.rest.issues.updateComment({ ...where, comment_id: earlier.id, body: marked })
+					const { data } = await client.rest.issues.updateComment({ ...where, comment_id: earlier.id, body: signedBody })
 					return { id: data.id, url: data.html_url }
 				}
 			}
-			const { data } = await client.rest.issues.createComment({ ...where, body: marked })
+			const { data } = await client.rest.issues.createComment({ ...where, body: signedBody })
 			return { id: data.id, url: data.html_url }
 		}),
 

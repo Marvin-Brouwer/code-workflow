@@ -11,7 +11,7 @@ export interface FakeComment {
 	user: { login: string }
 	html_url: string
 	created_at: string
-	/** The reactions put on it, such as `eyes`. */
+	/** The reactions put on it, such as `eyes`. Absent until one is put on it. */
 	reactions?: { id: number; content: string }[]
 }
 
@@ -79,6 +79,8 @@ export interface FakeGithub {
 	readonly self: string
 	/** How many of the next requests answer 503, as GitHub does while it's down. */
 	unavailableRequests: number
+	/** Holds a request back until the promise it returns settles; one that never settles is never answered, as when GitHub hangs. */
+	hold: (method: string, path: string) => Promise<void> | undefined
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>
 	repository(name: string): FakeRepository
@@ -113,6 +115,7 @@ const pullJson = (pull: FakePullRequest) => ({
 const StateBody = z.object({ state: z.enum(['open', 'closed']).optional() })
 const LabelsBody = z.object({ labels: z.array(z.string()) })
 const CommentBody = z.object({ body: z.string() })
+const ReactionBody = z.object({ content: z.string() })
 const PullBody = z.object({ head: z.string(), base: z.string(), title: z.string(), body: z.string() })
 
 export async function fakeGithub(): Promise<FakeGithub> {
@@ -170,12 +173,13 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return made
 	}
 
-	const settings = { unavailableRequests: 0 }
+	const settings: Pick<FakeGithub, 'unavailableRequests' | 'hold'> = { unavailableRequests: 0, hold: () => undefined }
 	const app = new Hono()
 	app.use(async (context, next) => {
 		const authorization = context.req.header('authorization')
 		if (authorization === undefined) return context.json({ message: 'Requires authentication' }, 401)
 		tokens.add(authorization.replace(/^(token|Bearer) /, ''))
+		await settings.hold(context.req.method, context.req.path)
 		if (settings.unavailableRequests > 0) {
 			settings.unavailableRequests--
 			return context.json({ message: 'Service Unavailable' }, 503)
@@ -219,14 +223,17 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		conversationOf(name, number).push(comment)
 		return context.json(comment, 201)
 	})
+	/** Every comment on the repository's issues and pull request conversations. */
+	const issueCommentsOf = (name: string): FakeComment[] => {
+		const repo = repository(name)
+		return [...[...repo.issues.values()].flatMap((issue) => issue.comments), ...[...repo.pulls.values()].flatMap((pull) => pull.comments)]
+	}
+	/** Every comment on a line of the repository's pull requests. */
+	const reviewCommentsOf = (name: string): FakeReviewComment[] =>
+		[...repository(name).pulls.values()].flatMap((pull) => pull.reviewComments)
 	issues.patch('/issues/comments/:id', async (context) => {
 		const wanted = Number(context.req.param('id'))
-		const repo = repository(nameOf(context))
-		const all = [
-			...[...repo.issues.values()].flatMap((issue) => issue.comments),
-			...[...repo.pulls.values()].flatMap((pull) => pull.comments),
-		]
-		const comment = all.find((known) => known.id === wanted)
+		const comment = issueCommentsOf(nameOf(context)).find((known) => known.id === wanted)
 		if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
 		comment.body = CommentBody.parse(await context.req.json()).body
 		return context.json(comment)
@@ -263,6 +270,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		const pull = pullOf(name, numberOf(context))
 		const parent = pull.reviewComments.find((known) => known.id === Number(context.req.param('id')))
 		if (parent === undefined) return context.json({ message: 'Not Found' }, 404)
+		if (parent.in_reply_to_id !== undefined) return context.json({ message: 'Replies to replies are not supported.' }, 422)
 		const body = CommentBody.parse(await context.req.json())
 		const comment: FakeReviewComment = {
 			id: id(),
@@ -277,33 +285,18 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		pull.reviewComments.push(comment)
 		return context.json(comment, 201)
 	})
+	issues.get('/pulls/comments/:id', (context) => {
+		const comment = reviewCommentsOf(nameOf(context)).find((known) => known.id === Number(context.req.param('id')))
+		return comment === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(comment)
+	})
 	issues.patch('/pulls/comments/:id', async (context) => {
-		const wanted = Number(context.req.param('id'))
-		const comment = [...repository(nameOf(context)).pulls.values()]
-			.flatMap((pull) => pull.reviewComments)
-			.find((known) => known.id === wanted)
+		const comment = reviewCommentsOf(nameOf(context)).find((known) => known.id === Number(context.req.param('id')))
 		if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
 		comment.body = CommentBody.parse(await context.req.json()).body
 		return context.json(comment)
 	})
-	const ReactionBody = z.object({ content: z.string() })
-	const reviewCommentsOf = (name: string) => [...repository(name).pulls.values()].flatMap((pull) => pull.reviewComments)
-	const issueCommentsOf = (name: string): FakeComment[] => {
-		const repo = repository(name)
-		return [...[...repo.issues.values()].flatMap((issue) => issue.comments), ...[...repo.pulls.values()].flatMap((pull) => pull.comments)]
-	}
-	/** Puts a reaction on a comment once, as GitHub does: a second one of the same kind is the first. */
-	const react = async (context: Context, comments: readonly FakeComment[]) => {
-		const comment = comments.find((known) => known.id === Number(context.req.param('id')))
-		if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
-		const { content } = ReactionBody.parse(await context.req.json())
-		comment.reactions ??= []
-		const reaction = comment.reactions.find((known) => known.content === content) ?? { id: id(), content }
-		if (!comment.reactions.includes(reaction)) comment.reactions.push(reaction)
-		return context.json({ ...reaction, user: { login: self } }, 201)
-	}
-	issues.post('/pulls/comments/:id/reactions', (context) => react(context, reviewCommentsOf(nameOf(context))))
-	issues.post('/issues/comments/:id/reactions', (context) => react(context, issueCommentsOf(nameOf(context))))
+	issues.post('/pulls/comments/:id/reactions', (context) => react(context, reviewCommentsOf(nameOf(context)), id, self))
+	issues.post('/issues/comments/:id/reactions', (context) => react(context, issueCommentsOf(nameOf(context)), id, self))
 	issues.delete('/pulls/comments/:id/reactions/:reaction', (context) => unreact(context, reviewCommentsOf(nameOf(context))))
 	issues.delete('/issues/comments/:id/reactions/:reaction', (context) => unreact(context, issueCommentsOf(nameOf(context))))
 	issues.get('/commits/:ref/check-runs', (context) => {
@@ -340,12 +333,31 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		set unavailableRequests(requests: number) {
 			settings.unavailableRequests = requests
 		},
+		get hold() {
+			return settings.hold
+		},
+		set hold(hold: FakeGithub['hold']) {
+			settings.hold = hold
+		},
 		tokens,
 		repository,
 		issue: issueOf,
 		pullRequest: pullOf,
 		close,
 	}
+}
+
+/** Puts a reaction on a comment once, as GitHub does: a second one of the same kind is the first, answered with 200. */
+async function react(context: Context, comments: readonly FakeComment[], newId: () => number, login: string) {
+	const comment = comments.find((known) => known.id === Number(context.req.param('id')))
+	if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
+	const { content } = ReactionBody.parse(await context.req.json())
+	comment.reactions ??= []
+	const existing = comment.reactions.find((known) => known.content === content)
+	if (existing !== undefined) return context.json({ ...existing, user: { login } }, 200)
+	const reaction = { id: newId(), content }
+	comment.reactions.push(reaction)
+	return context.json({ ...reaction, user: { login } }, 201)
 }
 
 /** Takes a reaction off a comment, as GitHub does. */

@@ -71,8 +71,8 @@ export const getPullRequest = {
 /**
  * Lists on the host what was said on the pull request at or after `since`, oldest first. Comments
  * this package posted are left out by their marker, never by author: the token may well be the
- * reviewer's own. An item at the same second as `since` comes again, so the
- * caller keeps the ids it has handled.
+ * reviewer's own. An item at the same second as `since` comes again, so the caller keeps the ids
+ * it has handled.
  */
 export const reviewActivity = {
 	name: 'githubReviewActivity',
@@ -88,7 +88,8 @@ export const reviewActivity = {
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
  * listed as a reviewer's item. The first reply to an item replaces the "👀 Reading..." reply that
- * marked it seen, and takes the 👀 reaction off the item.
+ * showed it was being read, and takes the 👀 reaction off the item. Replies to one item go one at a
+ * time.
  */
 export const replyToReviewItem = {
 	name: 'githubReply',
@@ -101,11 +102,12 @@ export const replyToReviewItem = {
  * Shows the reviewer on the host that review items are being read: a 👀 reaction on a comment
  * (GitHub has none for a review), and for every item a "👀 Reading..." reply, in the thread of a
  * comment on a line and on the conversation otherwise, that the first answer to the item replaces.
- * Marking an item twice leaves it marked once.
+ * Showing an item twice leaves one reply, and an item that was answered already is left alone. An
+ * item GitHub won't take it on, say a comment deleted since, is left out of `shown`.
  */
-export const markSeen = {
-	name: 'githubMarkSeen',
-	description: 'Marks review items on a pull request with eyes, to show they were read',
+export const showBeingRead = {
+	name: 'githubShowBeingRead',
+	description: 'Shows the reviewer that review items on a pull request are being read',
 	input: PullRequestRef.extend({
 		items: z.array(
 			z.object({
@@ -116,7 +118,7 @@ export const markSeen = {
 			}),
 		),
 	}),
-	output: z.object({ marked: z.array(ReviewItemId) }),
+	output: z.object({ shown: z.array(ReviewItemId) }),
 }
 
 /** A check or status on a commit that didn't pass. */

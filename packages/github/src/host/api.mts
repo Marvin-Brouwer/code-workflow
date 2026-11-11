@@ -16,6 +16,9 @@ export interface GithubApiOptions {
 	readonly retry?: FetchRetryOptions
 }
 
+/** The most items GitHub hands back on one page of a list. */
+export const pageSize = 100
+
 /** A client for one call, with the token from the credential store and the call's signal. */
 export type ApiClient = (context: HostToolContext) => Promise<Octokit>
 
