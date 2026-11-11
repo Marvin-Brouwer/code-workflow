@@ -125,11 +125,9 @@ describe('keepAwake', () => {
 		// Act
 		const release = api.holdPowerRequest(powerRequestReason)
 		onTestFinished(release)
-		const optOut = () => {
-			api.optOutOfThrottling()
-		}
+		api.optOutOfThrottling()
 
 		// Assert
-		expect(optOut).not.toThrow()
+		expect(release).not.toThrow()
 	})
 })

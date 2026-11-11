@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { unavailable } from './github-statuses.mts'
 
 /** How a request to GitHub is tried again when the connection drops or GitHub is briefly unavailable. */
 export interface FetchRetryOptions {
@@ -30,12 +31,6 @@ export const defaultFetchRetry: FetchRetryOptions = {
  */
 const readMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-/** Answers that say GitHub couldn't serve the request just now, rather than that the request was wrong. */
-const unavailableStatuses = new Set([500, 502, 503, 504])
-
-/** GitHub's answer to too many requests. */
-const tooManyRequests = 429
-
 /** `retry-after` counts in seconds. */
 const msPerSecond = 1000
 
@@ -53,12 +48,12 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions): t
 		for (let attempt = 1; ; attempt++) {
 			const lastAttempt = attempt >= options.attempts
 			const backoffMs = options.firstDelayMs * 2 ** (attempt - 1)
-			const timeout = AbortSignal.timeout(options.attemptTimeoutMs)
+			const attemptAbortSignal = AbortSignal.timeout(options.attemptTimeoutMs)
 			let delayMs: number
 			try {
 				const response = await send(input, {
 					...init,
-					signal: abortSignal === undefined ? timeout : AbortSignal.any([abortSignal, timeout]),
+					signal: abortSignal === undefined ? attemptAbortSignal : AbortSignal.any([abortSignal, attemptAbortSignal]),
 				})
 				if (lastAttempt || !unavailable(response.status)) return response
 				const retryAfterMs = retryAfterOf(response)
@@ -82,11 +77,6 @@ function readOnly(init: RequestInit | undefined): boolean {
 /** A stream or form body is used up by the first send; no body or a string can be sent again. */
 function resendable(body: RequestInit['body']): boolean {
 	return body === undefined || body === null || typeof body === 'string'
-}
-
-/** Whether GitHub couldn't serve the request just now: a 5xx or a rate limit. */
-function unavailable(status: number): boolean {
-	return status === tooManyRequests || unavailableStatuses.has(status)
 }
 
 /** The `retry-after` header in milliseconds, when it holds a number of seconds. */

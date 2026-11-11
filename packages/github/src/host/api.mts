@@ -1,7 +1,7 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { Octokit } from '@octokit/rest'
 import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from './retrying-fetch.mts'
-import { transientOrAsIs } from './transient-error.mts'
+import { markedTransient } from './transient-error.mts'
 
 /** The name of the GitHub token in the gateway's credential store: `mesh-flow credential set github/token`. */
 export const tokenCredential = 'github/token'
@@ -44,7 +44,7 @@ export function githubApi(options: GithubApiOptions = {}): ApiClient {
 			request: { signal: context.abortSignal, fetch: send },
 		})
 		octokit.hook.error('request', (error) => {
-			throw transientOrAsIs(error)
+			throw markedTransient(error)
 		})
 		return octokit
 	}

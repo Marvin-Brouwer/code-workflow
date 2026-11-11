@@ -47,7 +47,7 @@ export async function keepAwake(options: KeepAwakeOptions): Promise<ReleasePower
 	if (api === undefined || options.abortSignal.aborted) return nothingToRelease
 	let release = nothingToRelease
 	try {
-		release = once(api.holdPowerRequest(powerRequestReason))
+		release = releaseOnce(api.holdPowerRequest(powerRequestReason))
 	} catch (error) {
 		options.log(`Warning: Windows may sleep while the PC is locked, which drops the network for running workflows: ${messageOf(error)}`)
 	}
@@ -74,7 +74,8 @@ async function loadedUnlessAborted(loading: Promise<PowerApi>, abortSignal: Abor
 	}
 }
 
-function once(release: ReleasePower): ReleasePower {
+/** Calls `release` the first time only, so shutdown can give the request back more than once. */
+function releaseOnce(release: ReleasePower): ReleasePower {
 	let released = false
 	return () => {
 		if (released) return

@@ -15,7 +15,7 @@ export interface PowerApi {
 	readonly holdPowerRequest: (reason: string) => () => void
 	/**
 	 * Opts this process out of power throttling (EcoQoS), which slows a background process down.
-	 * Keeping its timer resolution too is tried as well, but only Windows 11 22H2 and later know it.
+	 * It also tries to keep its timer resolution, which only Windows 11 22H2 and later support.
 	 */
 	readonly optOutOfThrottling: () => void
 }

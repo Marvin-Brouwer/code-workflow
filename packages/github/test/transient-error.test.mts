@@ -1,20 +1,23 @@
 import { describe, expect, test } from 'vitest'
-import { transientOrAsIs } from '../src/host/transient-error.mts'
+import { markedTransient } from '../src/host/transient-error.mts'
 
 /** An error shaped like Octokit's `RequestError`. */
 function requestError(status: number, headers: Record<string, string> = {}, name = 'HttpError') {
 	return Object.assign(new Error(`GitHub answered ${String(status)}`), { name, status, response: { headers } })
 }
 
-describe('transientOrAsIs', () => {
+describe('markedTransient', () => {
 	test.each([
-		['a dropped connection, which Octokit reports as 500', requestError(500)],
-		['GitHub being unavailable', requestError(503)],
-		['a rate limit', requestError(429)],
-		['a secondary rate limit', requestError(403, { 'retry-after': '60' })],
-	])('marks %s as transient, keeping the message', (_case, error) => {
+		['a dropped connection, which Octokit reports as 500', 500, {}],
+		['GitHub being unavailable', 503, {}],
+		['a rate limit', 429, {}],
+		['a secondary rate limit', 403, { 'retry-after': '60' }],
+	])('marks %s as transient, keeping the message', (_case, status, headers) => {
+		// Arrange
+		const error = requestError(status, headers)
+
 		// Act
-		const marked = transientOrAsIs(error)
+		const marked = markedTransient(error)
 
 		// Assert
 		expect(marked).toMatchObject({ name: 'HostToolTransientError', transient: true, message: error.message, cause: error })
@@ -26,9 +29,12 @@ describe('transientOrAsIs', () => {
 		['something that is gone', requestError(404)],
 		['an aborted request', requestError(500, {}, 'AbortError')],
 		['an error without a status', new Error('There is no GitHub token.')],
-	])('leaves %s as it is', (_case, error) => {
+	])('leaves %s as it is', (_case, failure) => {
+		// Arrange
+		const error: Error = failure
+
 		// Act
-		const marked = transientOrAsIs(error)
+		const marked = markedTransient(error)
 
 		// Assert
 		expect(marked).toBe(error)

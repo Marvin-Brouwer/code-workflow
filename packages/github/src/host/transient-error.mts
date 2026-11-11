@@ -1,10 +1,5 @@
 import { HostToolTransientError } from '@mesh-flow/gateway'
-
-/** GitHub's answer to too many requests. */
-const tooManyRequests = 429
-
-/** From here up, GitHub couldn't serve the request; Octokit also reports a dropped connection as 500. */
-const firstServerError = 500
+import { unavailable } from './github-statuses.mts'
 
 /** GitHub's answer to a secondary rate limit, which comes with a `retry-after`. */
 const forbidden = 403
@@ -18,17 +13,16 @@ interface RequestFailure {
 }
 
 /**
- * A failure from Octokit as a {@link HostToolTransientError} when it may pass on another try: a
- * dropped connection, a 5xx, a rate limit. Anything else, such as a bad token, a missing permission
- * or a 404, or an aborted request, comes back as it is.
+ * A failure from Octokit, marked as a {@link HostToolTransientError} when it may pass on another
+ * try: a dropped connection, GitHub being unavailable, a rate limit. Anything else, such as a bad
+ * token, a missing permission, a 404 or an aborted request, comes back as it is.
  */
-export function transientOrAsIs(error: unknown): unknown {
-	if (!requestFailure(error) || error.name === 'AbortError') return error
-	const rateLimited =
-		error.status === tooManyRequests || (error.status === forbidden && error.response?.headers?.['retry-after'] !== undefined)
-	return rateLimited || error.status >= firstServerError ? new HostToolTransientError(error.message, { cause: error }) : error
+export function markedTransient(error: unknown): unknown {
+	if (!isRequestFailure(error) || error.name === 'AbortError') return error
+	const secondaryRateLimit = error.status === forbidden && error.response?.headers?.['retry-after'] !== undefined
+	return unavailable(error.status) || secondaryRateLimit ? new HostToolTransientError(error.message, { cause: error }) : error
 }
 
-function requestFailure(error: unknown): error is RequestFailure {
+function isRequestFailure(error: unknown): error is RequestFailure {
 	return error instanceof Error && 'status' in error && typeof error.status === 'number'
 }

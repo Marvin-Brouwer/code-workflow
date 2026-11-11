@@ -63,7 +63,7 @@ export const comment = hostTool(commentDefinition, async ({ issue, body }, { cre
 
 The input is checked on the host against the definition's schema, whatever the stub checked.
 
-A tool retries its own transient failures. When one still fails after that, such as a dropped connection or a service answering 5xx, it throws a `HostToolTransientError`: the answer says `transient`, and the stub's caller gets a `GatewayCallError` with `transient: true`, so code that only reads, such as a watch, can look again later. Any other error, such as a bad token, is final. An engine restart in the middle of a call is answered as transient too, since the call may or may not have run.
+A tool retries its own transient failures. When one still fails after that, such as a dropped connection or a service answering 5xx, it throws a `HostToolTransientError`: the answer says `transient`, and the stub's caller gets a `GatewayCallError` with `transient: true`, so code that only reads, such as a watch, can look again later. Any other error, such as a bad token, is final. `isTransient(error)` says whether an error is marked so, by its `transient` field, so an error from a connector's own copy of this package still counts. An engine restart in the middle of a call is answered as transient too, since the call may or may not have run.
 
 ```ts
 import { hostTool, HostToolTransientError } from '@mesh-flow/gateway'
