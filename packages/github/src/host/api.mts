@@ -43,7 +43,8 @@ export async function requireToken({ credentials, abortSignal }: HostToolContext
  */
 export function githubApi(options: GithubApiOptions = {}): ApiClient {
 	// Outside the retries: a read that GitHub answers 304 is done, and one that fails is tried again with the same ETag.
-	const send = conditionalFetch(retryingFetch(options.fetch ?? fetch, options.retry ?? defaultFetchRetry), defaultConditionalFetch)
+	const retrying = retryingFetch(options.fetch ?? fetch, options.retry ?? defaultFetchRetry)
+	const send = conditionalFetch(retrying, defaultConditionalFetch)
 	return async (context) => {
 		const octokit = new Octokit({
 			auth: await requireToken(context),

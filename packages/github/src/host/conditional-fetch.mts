@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { unavailable } from './github-statuses.mts'
+import { notModified, unavailable } from './github-statuses.mts'
+import { keptAnswers } from './kept-answers.mts'
 
 /** How much of GitHub's answers `conditionalFetch` keeps, the least recently used going first. */
 export interface ConditionalFetchOptions {
@@ -7,25 +8,16 @@ export interface ConditionalFetchOptions {
 	readonly maxCharacters: number
 }
 
-/** Room for every page a busy host looks at again and again, at tens of megabytes at most. */
-export const defaultConditionalFetch: ConditionalFetchOptions = { maxCharacters: 16 * 1024 * 1024 }
+const mebi = 1024 * 1024
 
-/** GitHub's answer when what was asked for didn't change since the ETag it was sent. */
-const notModified = 304
+/** 16 Mi characters of body text, about 32 MB in memory: room for every page a busy host looks at again and again. */
+export const defaultConditionalFetch: ConditionalFetchOptions = { maxCharacters: 16 * mebi }
 
 /** How many items GitHub puts on a page when the request doesn't say. */
 const defaultPerPage = 30
 
 /** Headers about how the body came over the wire, which no longer hold for a body that's kept as text. */
 const transportHeaders = new Set(['content-encoding', 'content-length', 'transfer-encoding'])
-
-/** What is kept of an answer to a read: its ETag, to ask with next time, and what to hand back when it didn't change. */
-interface KeptAnswer {
-	readonly etag: string
-	readonly status: number
-	readonly headers: readonly (readonly [string, string])[]
-	readonly body: string
-}
 
 /**
  * Wraps `send` so that a read GitHub answered with an ETag is asked for next time with that ETag
@@ -39,21 +31,7 @@ interface KeptAnswer {
  * read that brings its own `If-None-Match` is sent as it is.
  */
 export function conditionalFetch(send: typeof fetch, options: ConditionalFetchOptions): typeof fetch {
-	const kept = new Map<string, KeptAnswer>()
-	let keptCharacters = 0
-	const forget = (key: string) => {
-		keptCharacters -= kept.get(key)?.body.length ?? 0
-		kept.delete(key)
-	}
-	const keep = (key: string, answer: KeptAnswer) => {
-		forget(key)
-		kept.set(key, answer)
-		keptCharacters += answer.body.length
-		for (const oldest of kept.keys()) {
-			if (keptCharacters <= options.maxCharacters) break
-			forget(oldest)
-		}
-	}
+	const kept = keptAnswers(options.maxCharacters)
 	return async (input, init) => {
 		const headers = new Headers(init?.headers)
 		if (input instanceof Request || (init?.method ?? 'GET').toUpperCase() !== 'GET' || headers.has('if-none-match'))
@@ -65,7 +43,7 @@ export function conditionalFetch(send: typeof fetch, options: ConditionalFetchOp
 		const response = await send(input, { ...init, headers })
 		if (known !== undefined && response.status === notModified) {
 			await response.body?.cancel()
-			keep(key, known)
+			kept.touch(key)
 			return answeredFrom(
 				response.url,
 				new Response(known.body, { status: known.status, headers: freshened(known.headers, response.headers) }),
@@ -75,13 +53,13 @@ export function conditionalFetch(send: typeof fetch, options: ConditionalFetchOp
 		if (unavailable(response.status)) return response
 		const etag = response.headers.get('etag')
 		if (!response.ok || etag === null) {
-			forget(key)
+			kept.forget(key)
 			return response
 		}
 		const body = await response.text()
 		const answerHeaders = [...response.headers].filter(([name]) => !transportHeaders.has(name))
-		if (fullPage(url, body)) forget(key)
-		else keep(key, { etag, status: response.status, headers: answerHeaders, body })
+		if (fullPage(url, body)) kept.forget(key)
+		else kept.keep(key, { etag, status: response.status, headers: answerHeaders, body })
 		return answeredFrom(
 			response.url,
 			new Response(body, { status: response.status, statusText: response.statusText, headers: answerHeaders }),
@@ -115,8 +93,8 @@ function answerKey(headers: Headers, url: URL): string {
 }
 
 /** The kept answer's headers, with what the 304 says now, such as the rate limit left, on top. */
-function freshened(keptHeaders: readonly (readonly [string, string])[], now: Headers): Headers {
-	const headers = new Headers(keptHeaders.map(([name, value]): [string, string] => [name, value]))
+function freshened(keptHeaders: [string, string][], now: Headers): Headers {
+	const headers = new Headers(keptHeaders)
 	for (const [name, value] of now) if (!transportHeaders.has(name)) headers.set(name, value)
 	return headers
 }

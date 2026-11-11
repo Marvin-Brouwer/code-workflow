@@ -507,7 +507,10 @@ describe('github', () => {
 		const { api, gateway } = await connected()
 		const pull = api.pullRequest(repositoryName, 18)
 		const looksBeforeMerge = 3
+		/** A look reads the pull request and its three lists. */
+		const readsPerLook = 4
 		let looks = 0
+		// Used only to see each read of the pull request, and merge it after a few; nothing is held back.
 		api.hold = (method, requestPath) => {
 			if (method === 'GET' && requestPath.endsWith('/pulls/18') && ++looks > looksBeforeMerge) {
 				pull.merged = true
@@ -521,8 +524,8 @@ describe('github', () => {
 
 		// Assert
 		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
-		// Each of the looks after the first reads the pull request and its three lists unchanged.
-		expect(api.notModified).toBe((looksBeforeMerge - 1) * 4)
+		// Every look after the first finds all it reads unchanged.
+		expect(api.notModified).toBe((looksBeforeMerge - 1) * readsPerLook)
 	})
 
 	test('fails a watch at once on a failure that will not pass, such as a pull request that is gone', async () => {

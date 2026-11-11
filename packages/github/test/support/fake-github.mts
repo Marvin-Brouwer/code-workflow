@@ -198,7 +198,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 			.digest('hex')}"`
 		if (context.req.header('if-none-match') === etag) {
 			notModified++
-			context.res = new Response(null, { status: 304, headers: { etag } })
+			context.res = context.body(null, 304, { etag })
 			return
 		}
 		context.res.headers.set('etag', etag)
