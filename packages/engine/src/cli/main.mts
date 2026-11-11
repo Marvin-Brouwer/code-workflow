@@ -15,6 +15,7 @@ import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { openEngineGatewayHome } from '../serve/engine-gateway.mts'
 import { defaultWebhookHost, serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
+import { keepAwake } from '../serve/keep-awake.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
 import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
 import { appNameOf } from './app-name.mts'
@@ -117,6 +118,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 					throw error
 				},
 			)
+			await keepAwake({ abortSignal: startup.signal, log })
 			log(`Engine ready on ${served.socketPath}.`)
 			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<app>/<webhook>.`)
 		})
