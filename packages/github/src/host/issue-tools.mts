@@ -2,6 +2,7 @@ import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { splitRepositoryName } from '../repository-name.mts'
 import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
 import type { ApiClient } from './api.mts'
+import { signed } from './signature.mts'
 
 /** The marker of a comment posted without a key, which is never looked up to update. */
 const unkeyed = 'comment'
@@ -29,7 +30,7 @@ export function issueHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), issue_number: number }
 			// Marked also without a key: the marker is how a look at a review tells the run's own comments from a reviewer's.
-			const marked = `${body}\n\n${commentMarker(key ?? unkeyed)}`
+			const marked = signed(body, context.runId, [commentMarker(key ?? unkeyed)])
 			if (key !== undefined) {
 				const existing = await client.paginate(client.rest.issues.listComments, { ...where, per_page: 100 })
 				const earlier = existing.find((comment) => comment.body?.includes(commentMarker(key)) === true)

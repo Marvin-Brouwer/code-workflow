@@ -277,6 +277,15 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		pull.reviewComments.push(comment)
 		return context.json(comment, 201)
 	})
+	issues.patch('/pulls/comments/:id', async (context) => {
+		const wanted = Number(context.req.param('id'))
+		const comment = [...repository(nameOf(context)).pulls.values()]
+			.flatMap((pull) => pull.reviewComments)
+			.find((known) => known.id === wanted)
+		if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
+		comment.body = CommentBody.parse(await context.req.json()).body
+		return context.json(comment)
+	})
 	const ReactionBody = z.object({ content: z.string() })
 	/** Puts a reaction on a comment once, as GitHub does: a second one of the same kind is the first. */
 	const react = async (context: RouteContext & { req: { json: () => Promise<unknown> } }, comments: readonly FakeComment[]) => {

@@ -16,7 +16,7 @@ export interface ChecksFailed {
 export interface ReviewHandlers {
 	/**
 	 * New review comments, reviews and conversation comments, coalesced per look, oldest first. What
-	 * the run posted itself is left out. Each item is marked 👀 on GitHub before the handler is called.
+	 * the run posted itself is left out. Each item gets a "👀 Reading..." reply on GitHub before the handler is called.
 	 */
 	readonly comments?: (comments: readonly ReviewItem[]) => Promise<unknown>
 	/** The checks of a commit came out failed. Once per commit. */
@@ -46,8 +46,8 @@ export interface ReviewOutcome {
  * Watches a pull request until it's merged or closed, and calls the handlers as things happen on
  * it: review comments come in one list per look, so a reviewer's round is one call, and failed
  * checks come once per commit, once its checks have all completed. An item handed to the handler
- * is marked 👀 on GitHub first, so the reviewer sees it was read: a reaction on a comment, and a
- * comment on the conversation for a review, which the reply to the review replaces. Handlers run one at a time. The
+ * gets 👀 on GitHub first, so the reviewer sees it is being read: a reaction where GitHub takes
+ * one, and a "👀 Reading..." reply that the first answer to the item replaces. Handlers run one at a time. The
  * wait between looks is on the engine's clock, where the run can be paused. A look that fails is
  * tried again on the next one, for up to `toleratedOutage`, so a watch that takes days outlives a
  * dropped connection.
@@ -84,7 +84,11 @@ export async function review(
 		const comments = activity.items.filter((item) => !handled.has(item.id))
 		for (const item of comments) handled.add(item.id)
 		if (comments.length > 0 && handlers.comments !== undefined) {
-			const items = comments.map((item) => item.id)
+			const items = comments.map((item) => ({
+				id: item.id,
+				url: item.url,
+				...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
+			}))
 			await look(() => stubs.markSeen({ ...where, items }, context))
 			await handlers.comments(comments)
 		}

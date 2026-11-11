@@ -1,7 +1,7 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker, isMarked } from '../tools/issue-tools.mts'
+import { commentMarker, isMarked, type PostedComment } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
@@ -17,6 +17,7 @@ import {
 } from '../tools/pull-request-tools.mts'
 import type { Octokit } from '@octokit/rest'
 import type { ApiClient } from './api.mts'
+import { signed } from './signature.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
 interface ApiPullRequest {
@@ -60,14 +61,11 @@ const replyMarker = commentMarker('reply')
 /** The reaction that says a comment was read. */
 const seenReaction = 'eyes'
 
-/** The body of the comment that says a review was read, until the reply to it replaces it. */
-const seenComment = '👀'
+/** Marks the reply that says `item` is being read, until the answer replaces it. */
+const seenMarker = (item: string) => commentMarker(`seen:${item}`)
 
-/** Marks the comment that says `review` was read, until it's answered. */
-const seenMarker = (review: number) => commentMarker(`seen:review/${String(review)}`)
-
-/** Marks the comment that said `review` was read once the reply replaced it, so the review isn't marked again. */
-const answeredMarker = (review: number) => commentMarker(`answered:review/${String(review)}`)
+/** Marks the answer that replaced the reply that said `item` was being read, so `item` isn't marked again. */
+const answeredMarker = (item: string) => commentMarker(`answered:${item}`)
 
 const secondMs = 1_000
 
@@ -164,48 +162,30 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(replyToReviewItem, async ({ repository, number, item, body }, context) => {
 			const client = await api(context)
-			const where = splitRepositoryName(repository)
+			const thread = threadOf(client, repository, number)
 			const { kind, id } = parseItemId(item)
-			const marked = `${body}\n\n${replyMarker}`
-			if (kind === 'review-comment') {
-				const { data } = await client.rest.pulls.createReplyForReviewComment({
-					...where,
-					pull_number: number,
-					comment_id: id,
-					body: marked,
-				})
-				return { id: data.id, url: data.html_url }
-			}
-			const conversation = { ...where, issue_number: number }
-			const placeholder = kind === 'review' ? await markedComment(client, conversation, seenMarker(id)) : undefined
-			if (placeholder !== undefined) {
-				const { data } = await client.rest.issues.updateComment({
-					...where,
-					comment_id: placeholder.id,
-					body: `${marked}\n${answeredMarker(id)}`,
-				})
-				return { id: data.id, url: data.html_url }
-			}
-			const { data } = await client.rest.issues.createComment({ ...conversation, body: marked })
-			return { id: data.id, url: data.html_url }
+			const placeholder = await thread.find(kind, [seenMarker(item)])
+			if (placeholder !== undefined) return thread.edit(kind, placeholder, signed(body, context.runId, [replyMarker, answeredMarker(item)]))
+			return thread.post(kind === 'review-comment' ? id : undefined, signed(body, context.runId, [replyMarker]))
 		}),
 
 		hostTool(markSeen, async ({ repository, number, items }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const conversation = { ...where, issue_number: number }
-			await Promise.all(
-				items.map(async (item) => {
-					const { kind, id } = parseItemId(item)
-					if (kind === 'review-comment')
-						await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seenReaction })
-					else if (kind === 'comment')
-						await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seenReaction })
-					else if ((await markedComment(client, conversation, seenMarker(id), answeredMarker(id))) === undefined)
-						await client.rest.issues.createComment({ ...conversation, body: `${seenComment}\n\n${seenMarker(id)}` })
-				}),
-			)
-			return { marked: items }
+			const thread = threadOf(client, repository, number)
+			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
+			for (const { id: item, url, thread: root } of items) {
+				const { kind, id } = parseItemId(item)
+				if (kind === 'review-comment')
+					await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seenReaction })
+				if (kind === 'comment') await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seenReaction })
+				if ((await thread.find(kind, [seenMarker(item), answeredMarker(item)])) !== undefined) continue
+				// A thread of line comments only takes replies to its first comment.
+				const replyTo = kind === 'review-comment' ? parseItemId(root ?? item).id : undefined
+				const reading = kind === 'review-comment' ? '👀 Reading...' : `👀 Reading [this ${kind}](${url})...`
+				await thread.post(replyTo, signed(reading, context.runId, [replyMarker, seenMarker(item)]))
+			}
+			return { marked: items.map((item) => item.id) }
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {
@@ -244,14 +224,42 @@ function checksStatus(runs: readonly { status: string }[], commitStatuses: reado
 	return pending ? 'pending' : 'completed'
 }
 
-/** The first comment on the conversation that carries one of `markers`. */
-async function markedComment(
-	client: Octokit,
-	conversation: { owner: string; repo: string; issue_number: number },
-	...markers: readonly string[]
-): Promise<{ id: number } | undefined> {
-	const comments = await client.paginate(client.rest.issues.listComments, { ...conversation, per_page: 100 })
-	return comments.find((comment) => markers.some((marker) => comment.body?.includes(marker) === true))
+/** What the connector says about a comment it posted or edited. */
+function posted(data: { id: number; html_url: string }): PostedComment {
+	return { id: data.id, url: data.html_url }
+}
+
+/**
+ * Where the connector answers a review item: in the thread of a comment on a line, or on the
+ * pull request's conversation for everything else.
+ */
+function threadOf(client: Octokit, repository: string, number: number) {
+	const where = splitRepositoryName(repository)
+	const conversation = { ...where, issue_number: number }
+	return {
+		/** The first comment the connector posted where `kind` is answered that carries one of `markers`. */
+		async find(kind: ReviewItemKind, markers: readonly string[]): Promise<number | undefined> {
+			const hasMarker = (body: string | null | undefined) => markers.some((marker) => body?.includes(marker) === true)
+			const comments =
+				kind === 'review-comment'
+					? await client.paginate(client.rest.pulls.listReviewComments, { ...where, pull_number: number, per_page: 100 })
+					: await client.paginate(client.rest.issues.listComments, { ...conversation, per_page: 100 })
+			return comments.find((comment) => hasMarker(comment.body))?.id
+		},
+		/** Replies in the thread of line comment `replyTo`, or on the conversation without one. */
+		async post(replyTo: number | undefined, body: string) {
+			if (replyTo !== undefined)
+				return posted(
+					(await client.rest.pulls.createReplyForReviewComment({ ...where, pull_number: number, comment_id: replyTo, body })).data,
+				)
+			return posted((await client.rest.issues.createComment({ ...conversation, body })).data)
+		},
+		async edit(kind: ReviewItemKind, comment: number, body: string) {
+			if (kind === 'review-comment')
+				return posted((await client.rest.pulls.updateReviewComment({ ...where, comment_id: comment, body })).data)
+			return posted((await client.rest.issues.updateComment({ ...where, comment_id: comment, body })).data)
+		},
+	}
 }
 
 function itemId(kind: ReviewItemKind, id: number): string {
