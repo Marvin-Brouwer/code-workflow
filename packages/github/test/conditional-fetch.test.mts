@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { conditionalFetch, type ConditionalFetchOptions } from '../src/host/conditional-fetch.mts'
 
 const url = 'https://api.github.example/repos/team/app/pulls/3'
-const keepMany: ConditionalFetchOptions = { maxAnswers: 100 }
+const keepMany: ConditionalFetchOptions = { maxCharacters: 10_000 }
 const asking = (token: string) => ({ headers: { authorization: `token ${token}` } })
 
 /** GitHub answering with `etag`, or 304 when it was sent that ETag. */
@@ -56,10 +56,10 @@ describe('conditionalFetch', () => {
 		expect(etagsSent(withoutEtag)).toEqual([null, null])
 	})
 
-	test('forgets the least recently used answer once it keeps as many as it may', async () => {
+	test('forgets the least recently used answer once it keeps as much as it may', async () => {
 		// Arrange
-		const send = githubWithEtag('"v1"', '{}')
-		const read = conditionalFetch(send, { maxAnswers: 1 })
+		const send = githubWithEtag('"v1"', '{"a":1}')
+		const read = conditionalFetch(send, { maxCharacters: '{"a":1}'.length })
 
 		// Act
 		await read(`${url}/a`, asking('a'))
@@ -68,6 +68,48 @@ describe('conditionalFetch', () => {
 
 		// Assert
 		expect(etagsSent(send)).toEqual([null, null, null])
+	})
+
+	test('never keeps a full page of a list, where a next page may have come since', async () => {
+		// Arrange
+		const fullPage = githubWithEtag('"v1"', '[1,2]')
+		const shortPage = githubWithEtag('"v1"', '[1]')
+		const read = conditionalFetch(fullPage, keepMany)
+		const readShort = conditionalFetch(shortPage, keepMany)
+
+		// Act
+		await read(`${url}/comments?per_page=2`, asking('a'))
+		await read(`${url}/comments?per_page=2`, asking('a'))
+		await readShort(`${url}/comments?per_page=2`, asking('a'))
+		await readShort(`${url}/comments?per_page=2`, asking('a'))
+
+		// Assert
+		expect(etagsSent(fullPage)).toEqual([null, null])
+		expect(etagsSent(shortPage)).toEqual([null, '"v1"'])
+	})
+
+	test('keeps the answer through a moment GitHub is unavailable, and hands back no wire headers for a body it made', async () => {
+		// Arrange
+		const send = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response('{}', { status: 200, headers: { etag: '"v1"', 'content-encoding': 'gzip', 'content-length': '20' } }),
+			)
+			.mockResolvedValueOnce(new Response('{}', { status: 503 }))
+			.mockResolvedValueOnce(new Response(null, { status: 304, headers: { etag: '"v1"' } }))
+		const read = conditionalFetch(send, keepMany)
+
+		// Act
+		const first = await read(url, asking('a'))
+		const unavailable = await read(url, asking('a'))
+		const again = await read(url, asking('a'))
+
+		// Assert
+		expect(unavailable.status).toBe(503)
+		expect(etagsSent(send)).toEqual([null, '"v1"', '"v1"'])
+		expect(first.headers.get('content-encoding')).toBeNull()
+		expect(again.headers.get('content-encoding')).toBeNull()
+		expect(await again.text()).toBe('{}')
 	})
 
 	test('settles promptly when the request is aborted while GitHub never answers', async () => {
