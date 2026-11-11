@@ -1,6 +1,7 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { Octokit } from '@octokit/rest'
 import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from './retrying-fetch.mts'
+import { transientOrAsIs } from './transient-error.mts'
 
 /** The name of the GitHub token in the gateway's credential store: `mesh-flow credential set github/token`. */
 export const tokenCredential = 'github/token'
@@ -30,15 +31,21 @@ export async function requireToken({ credentials, abortSignal }: HostToolContext
 
 /**
  * Opens GitHub's REST API for host tools: every call takes the token from the credential store, so
- * a new token counts at once. Reads and other idempotent requests are tried again when the
- * connection drops or GitHub is briefly unavailable (see {@link retryingFetch}).
+ * a new token counts at once. Reads are tried again when the connection drops or GitHub is briefly
+ * unavailable (see {@link retryingFetch}), and a failure that may still pass after that is thrown
+ * as transient, so a watch looks again later instead of failing.
  */
 export function githubApi(options: GithubApiOptions = {}): ApiClient {
 	const send = retryingFetch(options.fetch ?? fetch, options.retry ?? defaultFetchRetry)
-	return async (context) =>
-		new Octokit({
+	return async (context) => {
+		const octokit = new Octokit({
 			auth: await requireToken(context),
 			baseUrl: options.apiUrl ?? defaultApiUrl,
 			request: { signal: context.abortSignal, fetch: send },
 		})
+		octokit.hook.error('request', (error) => {
+			throw transientOrAsIs(error)
+		})
+		return octokit
+	}
 }

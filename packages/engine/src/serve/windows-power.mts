@@ -13,7 +13,10 @@ export interface PowerApi {
 	 * function that gives it back.
 	 */
 	readonly holdPowerRequest: (reason: string) => () => void
-	/** Opts this process out of power throttling (EcoQoS), which slows a background process down. */
+	/**
+	 * Opts this process out of power throttling (EcoQoS), which slows a background process down.
+	 * Keeping its timer resolution too is tried as well, but only Windows 11 22H2 and later know it.
+	 */
 	readonly optOutOfThrottling: () => void
 }
 
@@ -33,8 +36,10 @@ const currentProcess = -1
 const processPowerThrottling = 4
 /** `PROCESS_POWER_THROTTLING_CURRENT_VERSION`. */
 const throttlingStateVersion = 1
-/** `PROCESS_POWER_THROTTLING_EXECUTION_SPEED | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION`. */
-const throttlingControls = 0x1 | 0x4
+/** `PROCESS_POWER_THROTTLING_EXECUTION_SPEED`: run at full speed in the background. */
+const executionSpeed = 0x1
+/** `PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION`: keep the timer resolution asked for. Windows 11 22H2 and later. */
+const ignoreTimerResolution = 0x4
 /** A state mask without the controls: they are switched off. */
 const throttlingOff = 0
 
@@ -49,7 +54,17 @@ export function windowsPowerApi(): PowerApi {
 
 function bindWindowsPowerApi(): PowerApi {
 	const kernel32 = koffi.load('kernel32.dll')
-	koffi.struct('REASON_CONTEXT', { Version: 'uint32', Flags: 'uint32', SimpleReasonString: 'str16' })
+	const detailedReason = koffi.struct({
+		LocalizedReasonModule: 'void *',
+		LocalizedReasonId: 'uint32',
+		ReasonStringCount: 'uint32',
+		ReasonStrings: 'void *',
+	})
+	koffi.struct('REASON_CONTEXT', {
+		Version: 'uint32',
+		Flags: 'uint32',
+		Reason: koffi.union({ Detailed: detailedReason, SimpleReasonString: 'str16' }),
+	})
 	const throttlingState = koffi.struct('PROCESS_POWER_THROTTLING_STATE', {
 		Version: 'uint32',
 		ControlMask: 'uint32',
@@ -63,11 +78,23 @@ function bindWindowsPowerApi(): PowerApi {
 		'int __stdcall SetProcessInformation(intptr process, int infoClass, PROCESS_POWER_THROTTLING_STATE *info, uint32 size)',
 	)
 	const getLastError = kernel32.func('uint32 __stdcall GetLastError()')
+	/** Switches one throttling control off for this process. False when Windows refuses. */
+	const switchOffThrottling = (control: number) =>
+		setProcessInformation(
+			currentProcess,
+			processPowerThrottling,
+			{ Version: throttlingStateVersion, ControlMask: control, StateMask: throttlingOff },
+			koffi.sizeof(throttlingState),
+		) !== 0
 	const windowsError = (call: string) => new Error(`${call} failed with Windows error ${String(getLastError())}.`)
 
 	return {
 		holdPowerRequest(reason) {
-			const request: unknown = powerCreateRequest({ Version: reasonContextVersion, Flags: simpleReasonString, SimpleReasonString: reason })
+			const request: unknown = powerCreateRequest({
+				Version: reasonContextVersion,
+				Flags: simpleReasonString,
+				Reason: { SimpleReasonString: reason },
+			})
 			if (typeof request !== 'number' || request === invalidHandle || request === 0) throw windowsError('PowerCreateRequest')
 			const requestTypes = [systemRequired, executionRequired]
 			for (const type of requestTypes) {
@@ -83,9 +110,9 @@ function bindWindowsPowerApi(): PowerApi {
 			}
 		},
 		optOutOfThrottling() {
-			const state = { Version: throttlingStateVersion, ControlMask: throttlingControls, StateMask: throttlingOff }
-			if (setProcessInformation(currentProcess, processPowerThrottling, state, koffi.sizeof(throttlingState)) === 0)
-				throw windowsError('SetProcessInformation')
+			if (!switchOffThrottling(executionSpeed)) throw windowsError('SetProcessInformation')
+			// Older Windows refuses the whole call for a control it doesn't know, so this one goes on its own.
+			switchOffThrottling(ignoreTimerResolution)
 		},
 	}
 }

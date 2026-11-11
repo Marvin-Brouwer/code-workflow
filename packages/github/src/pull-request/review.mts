@@ -26,7 +26,9 @@ export interface ReviewOptions {
 	readonly every?: WaitSpec
 	/**
 	 * How long looks at GitHub may keep failing, say while the network is down, before `review`
-	 * gives up with the last error. Default: 10 minutes.
+	 * gives up with the last error. Counted in looks, `toleratedOutage / every` of them, so the time
+	 * the failing calls take comes on top. Only failures that may pass count; a bad token or a missing
+	 * permission fails at once. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
 }

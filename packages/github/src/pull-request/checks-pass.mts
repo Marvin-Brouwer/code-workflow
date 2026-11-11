@@ -15,7 +15,7 @@ export interface ChecksPassOptions {
 	readonly appearWithin?: WaitSpec
 	/**
 	 * How long looks at GitHub may keep failing, say while the network is down, before the check
-	 * fails with the last error. Default: 10 minutes.
+	 * fails with the last error. Counted in looks, as in `review`. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
 }

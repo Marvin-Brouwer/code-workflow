@@ -14,16 +14,21 @@ function fakePowerApi(overrides: Partial<PowerApi> = {}) {
 }
 
 describe('keepAwake', () => {
-	test('on Windows, holds a power request and stops throttling until the engine shuts down', async () => {
+	test('on Windows, holds a power request and stops throttling until it is given back, once', async () => {
 		// Arrange
 		const { api, release } = fakePowerApi()
-		const lifetime = new AbortController()
 		const log = vi.fn()
 
 		// Act
-		await keepAwake({ abortSignal: lifetime.signal, log, platform: 'win32', loadPowerApi: async () => api })
+		const releasePower = await keepAwake({
+			abortSignal: new AbortController().signal,
+			log,
+			platform: 'win32',
+			loadPowerApi: async () => api,
+		})
 		const releasedBeforeShutdown = release.mock.calls.length
-		lifetime.abort(new Error('The engine is shutting down.'))
+		releasePower()
+		releasePower()
 
 		// Assert
 		expect(api.holdPowerRequest).toHaveBeenCalledWith(powerRequestReason)
@@ -31,6 +36,28 @@ describe('keepAwake', () => {
 		expect(releasedBeforeShutdown).toBe(0)
 		expect(release).toHaveBeenCalledOnce()
 		expect(log).not.toHaveBeenCalled()
+	})
+
+	test('settles promptly when the engine shuts down while the power calls never load', async () => {
+		// Arrange
+		const lifetime = new AbortController()
+		const started = performance.now()
+
+		// Act
+		const kept = keepAwake({
+			abortSignal: lifetime.signal,
+			log: vi.fn(),
+			platform: 'win32',
+			loadPowerApi: () => new Promise(() => undefined),
+		})
+		setTimeout(() => {
+			lifetime.abort(new Error('The engine is shutting down.'))
+		}, 10)
+		const releasePower = await kept
+
+		// Assert
+		expect(releasePower).toBeTypeOf('function')
+		expect(performance.now() - started).toBeLessThan(1000)
 	})
 
 	test('does nothing on Linux or macOS', async () => {
@@ -67,8 +94,8 @@ describe('keepAwake', () => {
 		})
 
 		// Assert
-		await expect(kept).resolves.toBeUndefined()
-		await expect(unloadable).resolves.toBeUndefined()
+		await expect(kept).resolves.toBeTypeOf('function')
+		await expect(unloadable).resolves.toBeTypeOf('function')
 		expect(log.mock.calls.map(([message]) => String(message))).toEqual([
 			expect.stringContaining('Windows error 5'),
 			expect.stringContaining('Windows error 87'),
@@ -83,7 +110,8 @@ describe('keepAwake', () => {
 		lifetime.abort(new Error('The engine is shutting down.'))
 
 		// Act
-		await keepAwake({ abortSignal: lifetime.signal, log: vi.fn(), platform: 'win32', loadPowerApi: async () => api })
+		const releasePower = await keepAwake({ abortSignal: lifetime.signal, log: vi.fn(), platform: 'win32', loadPowerApi: async () => api })
+		releasePower()
 
 		// Assert
 		expect(api.holdPowerRequest).not.toHaveBeenCalled()

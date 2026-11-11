@@ -15,9 +15,25 @@ export interface Endpoint {
 	readonly tools: ReadonlySet<string> | undefined
 }
 
-/** A call to the gateway failed on the host: refused, or the host tool or the provider failed. */
+/** What a `GatewayCallError` says beyond its message. */
+export interface GatewayCallErrorOptions {
+	/** The failure may pass on another try. Default: false. */
+	readonly transient?: boolean
+}
+
+/**
+ * A call to the gateway failed on the host: refused, or the host tool or the provider failed.
+ * `transient` says the failure may pass on another try (the network or the service was down, or the
+ * engine stopped mid-call), so code that only reads may look again later.
+ */
 export class GatewayCallError extends Error {
 	override readonly name = 'GatewayCallError'
+	readonly transient: boolean
+
+	constructor(message: string, options: GatewayCallErrorOptions = {}) {
+		super(message)
+		this.transient = options.transient ?? false
+	}
 }
 
 /**
@@ -65,7 +81,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		})
 		try {
 			const { outcome } = await answered
-			if (!outcome.ok) throw new GatewayCallError(outcome.error)
+			if (!outcome.ok) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
 			return outcome.result
 		} catch (error) {
 			if (progress.taken || !abortSignal.aborted || runAbortSignal.aborted) throw error

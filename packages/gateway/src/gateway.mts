@@ -9,7 +9,7 @@ import { providerCredential, type ProviderSettings } from './providers/provider-
 import { chosenModel, resolveModel } from './providers/resolve-model.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
-import type { HostTool } from './tools/host-tool.mts'
+import { isTransient, type HostTool } from './tools/host-tool.mts'
 import { untilAborted } from './until-aborted.mts'
 
 /** What a gateway runs on. */
@@ -213,7 +213,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 					// Read again from where the cursor was saved, after a resume: taken already, maybe run already.
 					// Anything else that comes again is someone replaying a call.
 					if (again?.interrupted === true && again.endpoint === message.endpoint && again.spent === spent)
-						return { state, value: acceptedWith({ next: again.next, outcome: { ok: false, error: interruptedError } }) }
+						return { state, value: acceptedWith({ next: again.next, outcome: { ok: false, error: interruptedError, transient: true } }) }
 					const endpoint = state && ownEntry(state.endpoints, message.endpoint)
 					if (state === undefined || endpoint === undefined || again !== undefined || !endpoint.tokens.includes(spent)) {
 						const reason =
@@ -244,10 +244,9 @@ export function openGateway(options: GatewayOptions): Gateway {
 								} catch (error) {
 									return {
 										next,
-										outcome: {
-											ok: false,
-											error: callSignal.aborted ? `The call was stopped: ${messageOf(callSignal.reason)}` : messageOf(error),
-										},
+										outcome: callSignal.aborted
+											? { ok: false, error: `The call was stopped: ${messageOf(callSignal.reason)}` }
+											: { ok: false, error: messageOf(error), ...(isTransient(error) ? { transient: true } : {}) },
 									}
 								}
 							},
@@ -289,7 +288,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 					const marked = Object.fromEntries(calls.map(([id, call]) => [id, { ...call, interrupted: true }]))
 					return {
 						state: { ...state, inFlight: marked },
-						value: unanswered.map(([id, call]) => ({ id, answer: { next: call.next, outcome: { ok: false, error: interruptedError } } })),
+						value: unanswered.map(([id, call]) => ({
+							id,
+							answer: { next: call.next, outcome: { ok: false, error: interruptedError, transient: true } },
+						})),
 					}
 				},
 				abortSignal,

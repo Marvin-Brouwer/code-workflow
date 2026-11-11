@@ -12,8 +12,9 @@ export interface PatientLookOptions {
 /**
  * Makes a look at GitHub that a watch can survive failing: when the host can't do a call, because
  * the network or GitHub is down for longer than the host's own retries cover, the look is tried
- * again after `every`, until looks have failed for `toleratedOutage` in a row. Only errors from the
- * gateway are tolerated; anything else, such as a stop, is thrown at once.
+ * again after `every`. It gives up once `toleratedOutage / every` looks in a row have failed; the
+ * time the failing calls take comes on top. Only transient gateway errors are tolerated; a bad
+ * token, a missing permission or a stop is thrown at once.
  */
 export function patientLook(options: PatientLookOptions): <T>(attempt: () => Promise<T>) => Promise<T> {
 	const failedLooksTolerated = looksWithin(options.toleratedOutage, options.every)
@@ -22,7 +23,7 @@ export function patientLook(options: PatientLookOptions): <T>(attempt: () => Pro
 			try {
 				return await attempt()
 			} catch (error) {
-				if (!(error instanceof GatewayCallError) || failedLooks >= failedLooksTolerated) throw error
+				if (!(error instanceof GatewayCallError && error.transient) || failedLooks >= failedLooksTolerated) throw error
 			}
 			await wait(options.every)
 		}

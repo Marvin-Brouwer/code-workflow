@@ -23,6 +23,8 @@ export {
 	ConnectorName,
 	hostTool,
 	HostToolInputError,
+	HostToolTransientError,
+	isTransient,
 	type ConnectorHost,
 	type ConnectorHostOptions,
 	type HostTool,

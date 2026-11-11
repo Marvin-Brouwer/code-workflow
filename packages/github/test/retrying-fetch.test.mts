@@ -3,7 +3,7 @@ import { retryingFetch, type FetchRetryOptions } from '../src/host/retrying-fetc
 
 const url = 'https://api.github.example/repos/team/app'
 /** Host retries that are over in a moment. */
-const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000 }
+const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000, attemptTimeoutMs: 1000 }
 
 /** A GitHub response with `status`. */
 const answer = (status: number, headers: Record<string, string> = {}) => new Response(status === 204 ? null : '{}', { status, headers })
@@ -45,18 +45,68 @@ describe('retryingFetch', () => {
 		expect(unreachable).toHaveBeenCalledTimes(3)
 	})
 
-	test('sends a POST once, since a dropped one may have reached GitHub all the same', async () => {
+	test.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
+		'sends a %s once, since a dropped write may have reached GitHub all the same',
+		async (method) => {
+			// Arrange
+			const send = vi.fn<typeof fetch>(async () => {
+				throw dropped()
+			})
+
+			// Act
+			const sent = retryingFetch(send, quickRetry)(url, { method, body: '{"body":"On it."}' })
+
+			// Assert
+			await expect(sent).rejects.toThrow('fetch failed')
+			expect(send).toHaveBeenCalledTimes(1)
+		},
+	)
+
+	test('sends a Request object once, since its body may be used up', async () => {
 		// Arrange
-		const send = vi.fn<typeof fetch>(async () => {
-			throw dropped()
-		})
+		const send = vi.fn<typeof fetch>(async () => answer(503))
 
 		// Act
-		const sent = retryingFetch(send, quickRetry)(url, { method: 'POST', body: '{"body":"On it."}' })
+		const response = await retryingFetch(send, quickRetry)(new Request(url, { method: 'POST', body: '{}' }))
 
 		// Assert
-		await expect(sent).rejects.toThrow('fetch failed')
+		expect(response.status).toBe(503)
 		expect(send).toHaveBeenCalledTimes(1)
+	})
+
+	test('counts an attempt that gets no answer as dropped, and sends it again', async () => {
+		// Arrange
+		const send = vi
+			.fn<typeof fetch>()
+			.mockImplementationOnce(
+				(_input, init) =>
+					new Promise((_resolve, reject) => {
+						init?.signal?.addEventListener('abort', () => {
+							reject(init.signal?.reason)
+						})
+					}),
+			)
+			.mockResolvedValueOnce(answer(200))
+
+		// Act
+		const response = await retryingFetch(send, { ...quickRetry, attemptTimeoutMs: 10 })(url)
+
+		// Assert
+		expect(response.status).toBe(200)
+		expect(send).toHaveBeenCalledTimes(2)
+	})
+
+	test('cancels the body of an unavailable answer before it waits out its retry-after', async () => {
+		// Arrange
+		const unavailable = answer(503, { 'retry-after': '0' })
+		const send = vi.fn<typeof fetch>().mockResolvedValueOnce(unavailable).mockResolvedValueOnce(answer(200))
+
+		// Act
+		const response = await retryingFetch(send, quickRetry)(url)
+
+		// Assert
+		expect(response.status).toBe(200)
+		await expect(unavailable.text()).rejects.toThrow()
 	})
 
 	test('leaves an answer that says the request was wrong alone', async () => {
