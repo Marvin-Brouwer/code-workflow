@@ -103,7 +103,7 @@ export const replyToReviewItem = {
  * (GitHub has none for a review), and for every item a "👀 Reading..." reply, in the thread of a
  * comment on a line and on the conversation otherwise, that the first answer to the item replaces.
  * Showing an item twice leaves one reply, and an item that was answered already is left alone. An
- * item GitHub won't take it on, say a comment deleted since, is left out of `shown`.
+ * item GitHub won't take the 👀 on, say a comment deleted since, is left out of `shown`.
  */
 export const showBeingRead = {
 	name: 'githubShowBeingRead',

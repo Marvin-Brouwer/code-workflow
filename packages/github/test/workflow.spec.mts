@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
 import { defaultFetchRetry, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
 import { signed } from '../src/host/signature.mts'
@@ -11,8 +11,8 @@ import { openPullRequest } from '../src/pull-request/pull-request.mts'
 import { reply } from '../src/pull-request/reply.mts'
 import { review } from '../src/pull-request/review.mts'
 import { push } from '../src/repository/push.mts'
-import { stubs } from '../src/stubs.mts'
 import { checkout } from '../src/repository/repository.mts'
+import { stubs } from '../src/stubs.mts'
 import { fakeGithub, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -35,6 +35,12 @@ const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRet
 
 /** No host retries, so every request GitHub doesn't answer fails its call. */
 const noRetry: FetchRetryOptions = { ...quickRetry, attempts: 1 }
+
+/** How soon a run that stopped has to settle. */
+const promptlyMs = 1000
+
+/** Long enough for a second answer that didn't wait its turn to have listed the comments. */
+const secondLookMs = 300
 
 /** The reactions on a comment, by content. */
 const reactionsOf = (item: FakeComment | undefined) => item?.reactions?.map((reaction) => reaction.content) ?? []
@@ -303,7 +309,7 @@ describe('github', () => {
 		expect(pull.reviewComments.at(-1)).toMatchObject({ body: signed('Both done.', run.runId, ['reply']), in_reply_to_id: 1 })
 	})
 
-	test('leaves out an item GitHub will not take the 👀 on, such as a comment deleted since, and keeps both of two answers given at once', async () => {
+	test('leaves out an item GitHub will not take the 👀 on, such as a comment deleted since', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const pull = api.pullRequest(repositoryName, 14)
@@ -314,35 +320,52 @@ describe('github', () => {
 			html_url: `${pull.html_url}#c1`,
 			created_at: new Date().toISOString(),
 		})
-		const where = { repository: repositoryName, number: 14 }
-		// The first answer's edit waits until the second answer has had time to look for the reading reply too.
+		const items = [
+			{ id: 'comment/99', url: `${pull.html_url}#c99` },
+			{ id: 'comment/1', url: `${pull.html_url}#c1` },
+		]
+
+		// Act
+		const run = await runOnGateway(gateway, () => stubs.showBeingRead({ repository: repositoryName, number: 14, items }))
+
+		// Assert
+		await expect(run.result).resolves.toEqual({ shown: ['comment/1'] })
+		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
+	})
+
+	test('keeps both of two answers given to one item at once', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 16)
+		pull.comments.push({
+			id: 1,
+			body: 'Why?',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const where = { repository: repositoryName, number: 16 }
+		// The first answer's edit waits until a second answer that didn't wait its turn would have looked for the reading reply too.
 		const { promise: secondLooked, resolve: secondHasLooked } = Promise.withResolvers<undefined>()
 		let edits = 0
-		api.hold = (method, requestPath) => {
-			if (method === 'PATCH' && requestPath.includes('/issues/comments/') && ++edits === 1) return secondLooked.then(() => undefined)
-			return undefined
-		}
-		setTimeout(() => {
+		api.hold = (method, requestPath) =>
+			method === 'PATCH' && requestPath.includes('/issues/comments/') && ++edits === 1 ? secondLooked : undefined
+		const timer = setTimeout(() => {
 			secondHasLooked(undefined)
-		}, 300)
+		}, secondLookMs)
+		onTestFinished(() => {
+			clearTimeout(timer)
+		})
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const shown = await stubs.showBeingRead({
-				...where,
-				items: [
-					{ id: 'comment/99', url: `${pull.html_url}#c99` },
-					{ id: 'comment/1', url: `${pull.html_url}#c1` },
-				],
-			})
+			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
 			const answer = reply(where)
 			await Promise.all([answer({ item: 'comment/1', text: 'Because.' }), answer({ item: 'comment/1', text: 'Also, tests.' })])
-			return shown
 		})
-		const shown = await run.result
+		await run.result
 
 		// Assert
-		expect(shown.shown).toEqual(['comment/1'])
 		expect(pull.comments.map((posted) => posted.body).toSorted()).toEqual(
 			[signed('Because.', run.runId, ['reply', 'answered:comment/1']), signed('Also, tests.', run.runId, ['reply']), 'Why?'].toSorted(),
 		)
@@ -375,7 +398,7 @@ describe('github', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(1000)
+		expect(performance.now() - started).toBeLessThan(promptlyMs)
 		expect(comments).not.toHaveBeenCalled()
 	})
 

@@ -79,7 +79,10 @@ export interface FakeGithub {
 	readonly self: string
 	/** How many of the next requests answer 503, as GitHub does while it's down. */
 	unavailableRequests: number
-	/** Holds a request back until the promise it returns settles; one that never settles is never answered, as when GitHub hangs. */
+	/**
+	 * Called for every request; when it returns a promise, the request waits until it settles. One
+	 * that never settles is never answered, as when GitHub hangs. Answers every request at once by default.
+	 */
 	hold: (method: string, path: string) => Promise<void> | undefined
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>

@@ -54,7 +54,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	const onClone = oneAtATime()
 	function withClone<T>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<T>): Promise<T> {
 		const clone = cloneOf(repository)
-		return onClone(clone, () => openClone(clone, repository, context).then(use))
+		return onClone(clone, context.abortSignal, () => openClone(clone, repository, context).then(use))
 	}
 
 	/** Makes the clone when missing, and sets the remote to where it clones from. */

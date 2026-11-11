@@ -13,11 +13,14 @@ export const seenKey = (item: string) => `seen:${item}`
 /** The marker key of the answer that replaced the reply that said `item` was being read, so `item` isn't shown again. */
 export const answeredKey = (item: string) => `answered:${item}`
 
-/** The marker key, `reaction:<id>`, of the 👀 reaction the reply that says an item is being read put on it. */
-export const reactionKey = 'reaction'
+/** The name of the marker that holds the 👀 reaction the reply that says an item is being read put on it. */
+export const reactionKeyName = 'reaction'
+
+/** The marker key, `reaction:<id>`, of 👀 reaction `reaction`. */
+export const reactionKey = (reaction: number) => `${reactionKeyName}:${String(reaction)}`
 
 /** The reaction that says a comment is being read. */
-const beingRead = 'eyes'
+const beingReadReaction = 'eyes'
 
 /** What the reply that says an item is being read says: a link on the conversation, where it isn't next to the item. */
 export function readingNote(kind: ReviewItemKind, url: string): string {
@@ -67,7 +70,7 @@ export function pullRequestComments(client: Octokit, repository: string, number:
 			]
 		},
 		async react(kind, commentId) {
-			const reaction = { ...where, comment_id: commentId, content: beingRead } as const
+			const reaction = { ...where, comment_id: commentId, content: beingReadReaction } as const
 			if (kind === 'review-comment') return (await client.rest.reactions.createForPullRequestReviewComment(reaction)).data.id
 			if (kind === 'comment') return (await client.rest.reactions.createForIssueComment(reaction)).data.id
 			return undefined

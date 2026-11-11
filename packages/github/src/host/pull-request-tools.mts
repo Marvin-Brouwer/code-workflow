@@ -6,10 +6,10 @@ import {
 	checksOnRef,
 	type ChecksStatus,
 	getPullRequest,
-	showBeingRead,
 	openPullRequest,
 	replyToReviewItem,
 	reviewActivity,
+	showBeingRead,
 	ReviewItemKind,
 	type CheckFailure,
 	type PullRequestData,
@@ -17,7 +17,7 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
-import { answeredKey, pullRequestComments, reactionKey, readingNote, replyKey, seenKey } from './review-replies.mts'
+import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
 import { signed } from './signature.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -152,7 +152,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(replyToReviewItem, ({ repository, number, item, body }, context) =>
 			// One answer at a time per item: two at once would both find the reading reply, and one would overwrite the other.
-			perItem(`${repository}#${String(number)}#${item}`, async () => {
+			perItem(`${repository}#${String(number)}#${item}`, context.abortSignal, async () => {
 				const comments = pullRequestComments(await api(context), repository, number)
 				const { kind, id: commentId } = parseItemId(item)
 				const reading = (await comments.ownReplies([kind])).find((reply) => reply.body.includes(commentMarker(seenKey(item))))
@@ -161,7 +161,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 					return comments.post(kind, threadId, signed(body, context.runId, [replyKey]))
 				}
 				// Before the edit, so an answer that fails halfway finds the reading reply again when it's tried once more.
-				const reaction = markerValue(reading.body, reactionKey)
+				const reaction = markerValue(reading.body, reactionKeyName)
 				if (reaction !== undefined) await comments.unreact(kind, commentId, Number(reaction))
 				return comments.edit(kind, reading.id, signed(body, context.runId, [replyKey, answeredKey(item)]))
 			}),
@@ -180,13 +180,14 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 					const reaction = await comments.react(kind, commentId)
 					if (!hasReply(seenKey(item))) {
 						const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
-						const reactionKeys = reaction === undefined ? [] : [`${reactionKey}:${String(reaction)}`]
+						const reactionKeys = reaction === undefined ? [] : [reactionKey(reaction)]
 						await comments.post(kind, threadId, signed(readingNote(kind, url), context.runId, [replyKey, seenKey(item), ...reactionKeys]))
 					}
 					shown.push(item)
 				} catch (error) {
-					// Only a failure that may pass is worth trying again; a deleted comment or a locked conversation just isn't shown.
-					if (isTransient(error)) throw error
+					// A deleted comment or a locked conversation just isn't shown. What may pass is tried again, and a
+					// stopped call or a bad token is no reason to say the items were shown.
+					if (isTransient(error) || context.abortSignal.aborted || statusOf(error) === unauthorized) throw error
 				}
 			}
 			return { shown }
@@ -226,6 +227,14 @@ function checksStatus(runs: readonly { status: string }[], commitStatuses: reado
 	if (runs.length === 0 && commitStatuses.length === 0) return 'none'
 	const pending = runs.some((run) => run.status !== 'completed') || commitStatuses.some((commitStatus) => commitStatus.state === 'pending')
 	return pending ? 'pending' : 'completed'
+}
+
+/** GitHub's answer to a token it doesn't take. A 403 is not one: a locked conversation answers that too. */
+const unauthorized = 401
+
+/** The HTTP status a failed GitHub call answered with, if it got that far. */
+function statusOf(error: unknown): number | undefined {
+	return error instanceof Error && 'status' in error && typeof error.status === 'number' ? error.status : undefined
 }
 
 function itemId(kind: ReviewItemKind, id: number): string {
