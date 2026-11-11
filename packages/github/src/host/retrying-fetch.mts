@@ -48,13 +48,11 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions): t
 		for (let attempt = 1; ; attempt++) {
 			const lastAttempt = attempt >= options.attempts
 			const backoffMs = options.firstDelayMs * 2 ** (attempt - 1)
-			const attemptAbortSignal = AbortSignal.timeout(options.attemptTimeoutMs)
 			let delayMs: number
 			try {
-				const response = await send(input, {
-					...init,
-					signal: abortSignal === undefined ? attemptAbortSignal : AbortSignal.any([abortSignal, attemptAbortSignal]),
-				})
+				const response = await answeredWithin(options.attemptTimeoutMs, abortSignal, (attemptAbortSignal) =>
+					send(input, { ...init, signal: attemptAbortSignal }),
+				)
 				if (lastAttempt || !unavailable(response.status)) return response
 				const retryAfterMs = retryAfterOf(response)
 				if (retryAfterMs !== undefined && retryAfterMs > options.longestRetryAfterMs) return response
@@ -66,6 +64,27 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions): t
 			}
 			await sleep(delayMs, undefined, abortSignal === undefined ? {} : { signal: abortSignal })
 		}
+	}
+}
+
+/**
+ * Sends with a signal that also aborts when no answer came within `timeoutMs`. Only the wait for
+ * the answer is timed: once it's in, the timer is cleared, so a slow body is read to the end, under
+ * the caller's signal alone.
+ */
+async function answeredWithin(
+	timeoutMs: number,
+	abortSignal: AbortSignal | undefined,
+	sendWith: (attemptAbortSignal: AbortSignal) => Promise<Response>,
+): Promise<Response> {
+	const noAnswer = new AbortController()
+	const timer = setTimeout(() => {
+		noAnswer.abort(new DOMException(`GitHub didn't answer within ${String(timeoutMs)} ms.`, 'TimeoutError'))
+	}, timeoutMs)
+	try {
+		return await sendWith(abortSignal === undefined ? noAnswer.signal : AbortSignal.any([abortSignal, noAnswer.signal]))
+	} finally {
+		clearTimeout(timer)
 	}
 }
 

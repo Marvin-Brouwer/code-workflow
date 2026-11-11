@@ -1,4 +1,5 @@
-import { describe, expect, test, vi } from 'vitest'
+import { createServer } from 'node:http'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { retryingFetch, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
 
 const url = 'https://api.github.example/repos/team/app'
@@ -94,6 +95,33 @@ describe('retryingFetch', () => {
 		// Assert
 		expect(response.status).toBe(200)
 		expect(send).toHaveBeenCalledTimes(2)
+	})
+
+	test('times only the wait for the answer, so a slow body is read to the end', async () => {
+		// Arrange
+		const server = createServer((_request, response) => {
+			response.writeHead(200, { 'content-type': 'application/json' })
+			response.flushHeaders()
+			setTimeout(() => {
+				response.end('{"login":"mesh-flow-bot"}')
+			}, 100)
+		})
+		await new Promise<void>((resolve) => {
+			server.listen(0, '127.0.0.1', resolve)
+		})
+		onTestFinished(() => {
+			server.closeAllConnections()
+			server.close()
+		})
+		const address = server.address()
+		if (address === null || typeof address === 'string') throw new Error('The server has no port.')
+
+		// Act
+		const response = await retryingFetch(fetch, { ...quickRetry, attemptTimeoutMs: 20 })(`http://127.0.0.1:${String(address.port)}/user`)
+		const body: unknown = await response.json()
+
+		// Assert
+		expect(body).toEqual({ login: 'mesh-flow-bot' })
 	})
 
 	test('cancels the body of an unavailable answer before it waits out its retry-after', async () => {

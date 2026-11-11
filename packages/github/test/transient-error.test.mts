@@ -12,6 +12,7 @@ describe('markedTransient', () => {
 		['GitHub being unavailable', 503, {}],
 		['a rate limit', 429, {}],
 		['a secondary rate limit', 403, { 'retry-after': '60' }],
+		['a primary rate limit', 403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1767225600' }],
 	])('marks %s as transient, keeping the message', (_case, status, headers) => {
 		// Arrange
 		const error = requestError(status, headers)
