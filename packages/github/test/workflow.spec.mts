@@ -40,6 +40,12 @@ const signedBy = (text: string, runId: string, ...markers: string[]) =>
 		markers.map((marker) => `<!-- mesh-flow:${marker} -->`),
 	)
 
+/** The reactions on a comment, by content. */
+const reactionsOf = (item: { reactions?: { content: string }[] } | undefined) => item?.reactions?.map((reaction) => reaction.content)
+
+/** The marker of the 👀 reaction on a comment, as the reply that says it's being read carries it. */
+const eyesOn = (item: { reactions?: { id: number }[] } | undefined) => `reaction:${String(item?.reactions?.[0]?.id)}`
+
 /** No host retries, so every request GitHub doesn't answer fails its call. */
 const noRetry: FetchRetryOptions = { ...quickRetry, attempts: 1 }
 
@@ -191,19 +197,23 @@ describe('github', () => {
 			{ id: 'review/5', kind: 'review', verdict: 'changes_requested' },
 			{ id: 'comment/4', kind: 'comment', author: api.self, body: 'Also the README.' },
 		])
-		expect(pull.reviewComments.map((posted) => posted.reactions)).toEqual([['eyes'], ['eyes'], undefined, undefined])
-		expect(pull.comments.map((posted) => [posted.body, posted.reactions])).toEqual([
+		// The answered comment's 👀 came off again; the others are still being read.
+		expect(pull.reviewComments.map(reactionsOf)).toEqual([[], ['eyes'], undefined, undefined])
+		expect(pull.comments.map((posted) => [posted.body, reactionsOf(posted)])).toEqual([
 			['Working on it.\n\n<!-- mesh-flow:status -->', undefined],
 			['Also the README.', ['eyes']],
 			[signedBy(`👀 Reading [this review](${pull.html_url}#v5)...`, run.runId, 'reply', 'seen:review/5'), undefined],
-			[signedBy(`👀 Reading [this comment](${pull.html_url}#c4)...`, run.runId, 'reply', 'seen:comment/4'), undefined],
+			[
+				signedBy(`👀 Reading [this comment](${pull.html_url}#c4)...`, run.runId, 'reply', 'seen:comment/4', eyesOn(pull.comments[1])),
+				undefined,
+			],
 		])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
 			['And this one.', 1],
 			[signedBy('Renamed.', run.runId, 'reply', 'answered:review-comment/1'), 1],
 			// A thread only takes replies to its first comment.
-			[signedBy('👀 Reading...', run.runId, 'reply', 'seen:review-comment/6'), 1],
+			[signedBy('👀 Reading...', run.runId, 'reply', 'seen:review-comment/6', eyesOn(pull.reviewComments[1])), 1],
 		])
 		expect(run.wakes).toBeGreaterThanOrEqual(1)
 	})
@@ -439,8 +449,9 @@ describe('github', () => {
 			'Is this covered by a test?',
 			signedBy('Yes, in fix.spec.mts.', run.runId, 'reply', 'answered:comment/1'),
 			'And documented?',
-			signedBy(`👀 Reading [this comment](${pull.html_url}#c2)...`, run.runId, 'reply', 'seen:comment/2'),
+			signedBy(`👀 Reading [this comment](${pull.html_url}#c2)...`, run.runId, 'reply', 'seen:comment/2', eyesOn(pull.comments[2])),
 		])
+		expect(pull.comments.map(reactionsOf)).toEqual([[], undefined, ['eyes'], undefined])
 	})
 
 	test('waits for the checks of a fresh commit to appear before judging them, and passes a repository without checks once they had time to', async () => {

@@ -88,7 +88,7 @@ export const reviewActivity = {
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
  * listed as a reviewer's item. The first reply to an item replaces the "👀 Reading..." reply that
- * marked it seen.
+ * marked it seen, and takes the 👀 reaction off the item.
  */
 export const replyToReviewItem = {
 	name: 'githubReply',

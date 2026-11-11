@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { getRequestListener } from '@hono/node-server'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
 
@@ -11,8 +11,8 @@ export interface FakeComment {
 	user: { login: string }
 	html_url: string
 	created_at: string
-	/** The reactions put on it, by their content, such as `eyes`. */
-	reactions?: string[]
+	/** The reactions put on it, such as `eyes`. */
+	reactions?: { id: number; content: string }[]
 }
 
 export interface FakeReviewComment extends FakeComment {
@@ -287,31 +287,25 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return context.json(comment)
 	})
 	const ReactionBody = z.object({ content: z.string() })
+	const reviewCommentsOf = (name: string) => [...repository(name).pulls.values()].flatMap((pull) => pull.reviewComments)
+	const issueCommentsOf = (name: string): FakeComment[] => {
+		const repo = repository(name)
+		return [...[...repo.issues.values()].flatMap((issue) => issue.comments), ...[...repo.pulls.values()].flatMap((pull) => pull.comments)]
+	}
 	/** Puts a reaction on a comment once, as GitHub does: a second one of the same kind is the first. */
-	const react = async (context: RouteContext & { req: { json: () => Promise<unknown> } }, comments: readonly FakeComment[]) => {
+	const react = async (context: Context, comments: readonly FakeComment[]) => {
 		const comment = comments.find((known) => known.id === Number(context.req.param('id')))
-		if (comment === undefined) return undefined
+		if (comment === undefined) return context.json({ message: 'Not Found' }, 404)
 		const { content } = ReactionBody.parse(await context.req.json())
 		comment.reactions ??= []
-		if (!comment.reactions.includes(content)) comment.reactions.push(content)
-		return { id: id(), content, user: { login: self } }
+		const reaction = comment.reactions.find((known) => known.content === content) ?? { id: id(), content }
+		if (!comment.reactions.includes(reaction)) comment.reactions.push(reaction)
+		return context.json({ ...reaction, user: { login: self } }, 201)
 	}
-	issues.post('/pulls/comments/:id/reactions', async (context) => {
-		const reaction = await react(
-			context,
-			[...repository(nameOf(context)).pulls.values()].flatMap((pull) => pull.reviewComments),
-		)
-		return reaction === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(reaction, 201)
-	})
-	issues.post('/issues/comments/:id/reactions', async (context) => {
-		const repo = repository(nameOf(context))
-		const all = [
-			...[...repo.issues.values()].flatMap((issue) => issue.comments),
-			...[...repo.pulls.values()].flatMap((pull) => pull.comments),
-		]
-		const reaction = await react(context, all)
-		return reaction === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(reaction, 201)
-	})
+	issues.post('/pulls/comments/:id/reactions', (context) => react(context, reviewCommentsOf(nameOf(context))))
+	issues.post('/issues/comments/:id/reactions', (context) => react(context, issueCommentsOf(nameOf(context))))
+	issues.delete('/pulls/comments/:id/reactions/:reaction', (context) => unreact(context, reviewCommentsOf(nameOf(context))))
+	issues.delete('/issues/comments/:id/reactions/:reaction', (context) => unreact(context, issueCommentsOf(nameOf(context))))
 	issues.get('/commits/:ref/check-runs', (context) => {
 		const runs = repository(nameOf(context)).checks.get(context.req.param('ref')) ?? []
 		return context.json({ total_count: runs.length, check_runs: runs })
@@ -352,6 +346,15 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		pullRequest: pullOf,
 		close,
 	}
+}
+
+/** Takes a reaction off a comment, as GitHub does. */
+function unreact(context: Context, comments: readonly FakeComment[]) {
+	const comment = comments.find((known) => known.id === Number(context.req.param('id')))
+	const wanted = Number(context.req.param('reaction'))
+	if (comment?.reactions?.some((known) => known.id === wanted) !== true) return context.json({ message: 'Not Found' }, 404)
+	comment.reactions = comment.reactions.filter((known) => known.id !== wanted)
+	return context.body(null, 204)
 }
 
 /** A commit id for a branch name, the same every time. */

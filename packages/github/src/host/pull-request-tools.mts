@@ -64,6 +64,12 @@ const seenReaction = 'eyes'
 /** Marks the reply that says `item` is being read, until the answer replaces it. */
 const seenMarker = (item: string) => commentMarker(`seen:${item}`)
 
+/** Marks the reply that says an item is being read with the 👀 reaction it put on the item, which the answer takes off. */
+const reactionMarker = (reaction: number) => commentMarker(`reaction:${String(reaction)}`)
+
+/** Finds the reaction in a reply that says an item is being read. */
+const reactionInMarker = /<!-- mesh-flow:reaction:(\d+) -->/
+
 /** Marks the answer that replaced the reply that said `item` was being read, so `item` isn't marked again. */
 const answeredMarker = (item: string) => commentMarker(`answered:${item}`)
 
@@ -165,25 +171,28 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const thread = threadOf(client, repository, number)
 			const { kind, id } = parseItemId(item)
 			const placeholder = await thread.find(kind, [seenMarker(item)])
-			if (placeholder !== undefined) return thread.edit(kind, placeholder, signed(body, context.runId, [replyMarker, answeredMarker(item)]))
-			return thread.post(kind === 'review-comment' ? id : undefined, signed(body, context.runId, [replyMarker]))
+			if (placeholder === undefined)
+				return thread.post(kind === 'review-comment' ? id : undefined, signed(body, context.runId, [replyMarker]))
+			const answer = await thread.edit(kind, placeholder.id, signed(body, context.runId, [replyMarker, answeredMarker(item)]))
+			// Answered: the 👀 the item got when it was read comes off again.
+			const reaction = reactionInMarker.exec(placeholder.body)?.[1]
+			if (reaction !== undefined) await thread.unreact(kind, id, Number(reaction))
+			return answer
 		}),
 
 		hostTool(markSeen, async ({ repository, number, items }, context) => {
 			const client = await api(context)
-			const where = splitRepositoryName(repository)
 			const thread = threadOf(client, repository, number)
 			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
 			for (const { id: item, url, thread: root } of items) {
 				const { kind, id } = parseItemId(item)
-				if (kind === 'review-comment')
-					await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seenReaction })
-				if (kind === 'comment') await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seenReaction })
+				const reaction = await thread.react(kind, id)
 				if ((await thread.find(kind, [seenMarker(item), answeredMarker(item)])) !== undefined) continue
 				// A thread of line comments only takes replies to its first comment.
 				const replyTo = kind === 'review-comment' ? parseItemId(root ?? item).id : undefined
 				const reading = kind === 'review-comment' ? '👀 Reading...' : `👀 Reading [this ${kind}](${url})...`
-				await thread.post(replyTo, signed(reading, context.runId, [replyMarker, seenMarker(item)]))
+				const reactionMarkers = reaction === undefined ? [] : [reactionMarker(reaction)]
+				await thread.post(replyTo, signed(reading, context.runId, [replyMarker, seenMarker(item), ...reactionMarkers]))
 			}
 			return { marked: items.map((item) => item.id) }
 		}),
@@ -238,13 +247,26 @@ function threadOf(client: Octokit, repository: string, number: number) {
 	const conversation = { ...where, issue_number: number }
 	return {
 		/** The first comment the connector posted where `kind` is answered that carries one of `markers`. */
-		async find(kind: ReviewItemKind, markers: readonly string[]): Promise<number | undefined> {
+		async find(kind: ReviewItemKind, markers: readonly string[]): Promise<{ id: number; body: string } | undefined> {
 			const hasMarker = (body: string | null | undefined) => markers.some((marker) => body?.includes(marker) === true)
 			const comments =
 				kind === 'review-comment'
 					? await client.paginate(client.rest.pulls.listReviewComments, { ...where, pull_number: number, per_page: 100 })
 					: await client.paginate(client.rest.issues.listComments, { ...conversation, per_page: 100 })
-			return comments.find((comment) => hasMarker(comment.body))?.id
+			const found = comments.find((comment) => hasMarker(comment.body))
+			return found === undefined ? undefined : { id: found.id, body: found.body ?? '' }
+		},
+		/** Puts 👀 on item `id` and returns the reaction's id; GitHub takes no reactions on a review. */
+		async react(kind: ReviewItemKind, id: number): Promise<number | undefined> {
+			const reaction = { ...where, comment_id: id, content: seenReaction } as const
+			if (kind === 'review-comment') return (await client.rest.reactions.createForPullRequestReviewComment(reaction)).data.id
+			if (kind === 'comment') return (await client.rest.reactions.createForIssueComment(reaction)).data.id
+			return undefined
+		},
+		async unreact(kind: ReviewItemKind, id: number, reaction: number): Promise<void> {
+			if (kind === 'review-comment')
+				await client.rest.reactions.deleteForPullRequestComment({ ...where, comment_id: id, reaction_id: reaction })
+			if (kind === 'comment') await client.rest.reactions.deleteForIssueComment({ ...where, comment_id: id, reaction_id: reaction })
 		},
 		/** Replies in the thread of line comment `replyTo`, or on the conversation without one. */
 		async post(replyTo: number | undefined, body: string) {
