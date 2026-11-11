@@ -502,6 +502,29 @@ describe('github', () => {
 		expect(outlasted.wakes).toBe(3)
 	})
 
+	test('looks at a pull request that has not changed with conditional reads, which GitHub does not count against the rate limit', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 18)
+		const looksBeforeMerge = 3
+		let looks = 0
+		api.hold = (method, requestPath) => {
+			if (method === 'GET' && requestPath.endsWith('/pulls/18') && ++looks > looksBeforeMerge) {
+				pull.merged = true
+				pull.state = 'closed'
+			}
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 18 }, {}, { every: { seconds: 1 } }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
+		// Each of the looks after the first reads the pull request and its three lists unchanged.
+		expect(api.notModified).toBe((looksBeforeMerge - 1) * 4)
+	})
+
 	test('fails a watch at once on a failure that will not pass, such as a pull request that is gone', async () => {
 		// Arrange
 		const { gateway } = await connected(noRetry)

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { getRequestListener } from '@hono/node-server'
 import { Hono, type Context } from 'hono'
@@ -87,6 +88,8 @@ export interface FakeGithub {
 	hold: (method: string, path: string) => Promise<void> | undefined
 	/** Called for every request; when it returns a status, the request is answered with that status instead. Never by default. */
 	failWith: (method: string, path: string) => ContentfulStatusCode | undefined
+	/** How many reads it answered 304, as GitHub does when the ETag sent still matches; those don't count against the rate limit. */
+	readonly notModified: number
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>
 	repository(name: string): FakeRepository
@@ -185,6 +188,21 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		failWith: () => undefined,
 	}
 	const app = new Hono()
+	let notModified = 0
+	// Every read answers with an ETag of its body, and 304 when it was asked with that ETag.
+	app.use(async (context, next) => {
+		await next()
+		if (context.req.method !== 'GET' || context.res.status !== 200) return
+		const etag = `"${createHash('sha1')
+			.update(await context.res.clone().text())
+			.digest('hex')}"`
+		if (context.req.header('if-none-match') === etag) {
+			notModified++
+			context.res = new Response(null, { status: 304, headers: { etag } })
+			return
+		}
+		context.res.headers.set('etag', etag)
+	})
 	app.use(async (context, next) => {
 		const authorization = context.req.header('authorization')
 		if (authorization === undefined) return context.json({ message: 'Requires authentication' }, 401)
@@ -356,6 +374,9 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		},
 		set failWith(failWith: FakeGithub['failWith']) {
 			settings.failWith = failWith
+		},
+		get notModified() {
+			return notModified
 		},
 		tokens,
 		repository,
