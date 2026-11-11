@@ -17,9 +17,9 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
-import { refusedToken } from './transient-error.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
 import { signed } from './signature.mts'
+import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
 interface ApiPullRequest {
