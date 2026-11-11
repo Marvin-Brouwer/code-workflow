@@ -63,6 +63,18 @@ export const comment = hostTool(commentDefinition, async ({ issue, body }, { cre
 
 The input is checked on the host against the definition's schema, whatever the stub checked.
 
+A tool retries its own transient failures. When one still fails after that, such as a dropped connection or a service answering 5xx, it throws a `HostToolTransientError`: the answer says `transient`, and the stub's caller gets a `GatewayCallError` with `transient: true`, so code that only reads, such as a watch, can look again later. Any other error, such as a bad token, is final. An engine restart in the middle of a call is answered as transient too, since the call may or may not have run.
+
+```ts
+import { hostTool, HostToolTransientError } from '@mesh-flow/gateway'
+
+export const status = hostTool({ name: 'serviceStatus', input: z.object({}) }, async (_input, { abortSignal }) => {
+	const response = await fetch('https://status.example/api', { signal: abortSignal })
+	if (response.status >= 500) throw new HostToolTransientError(`The status page answered ${String(response.status)}.`)
+	return response.json()
+})
+```
+
 A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.
 
 ```ts

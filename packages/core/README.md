@@ -120,7 +120,7 @@ await comment({ issue: 12, body: 'On it.' })
 await agent({ model: 'claude-opus-5-5' }).loop`Tell the reporter what you found with ${comment}.`
 ```
 
-The input is checked by the stub and again on the host, and the result against `output`. When the host says no, the stub throws a `GatewayCallError`. The app's build lists every stub its modules make, and a run's gateway takes only those.
+The input is checked by the stub and again on the host, and the result against `output`. When the host says no, the stub throws a `GatewayCallError`; its `transient` says the failure may pass on another try (a dropped connection, a service that was down, an engine restart mid-call). The app's build lists every stub its modules make, and a run's gateway takes only those.
 
 ### Models
 
