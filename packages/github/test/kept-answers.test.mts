@@ -19,17 +19,28 @@ describe('keptAnswers', () => {
 		expect(['first', 'second', 'third'].map((key) => kept.get(key)?.body)).toEqual(['aa', undefined, 'cc'])
 	})
 
-	test('keeps nothing of an answer larger than all it may keep, and counts a forgotten one out', () => {
+	test('keeps nothing of an answer larger than all it may keep', () => {
 		// Arrange
 		const kept = keptAnswers('aa'.length)
-		kept.keep('small', answer('aa'))
 
 		// Act
 		kept.keep('large', answer('bbb'))
-		kept.forget('small')
-		kept.keep('again', answer('cc'))
 
 		// Assert
-		expect(['small', 'large', 'again'].map((key) => kept.get(key)?.body)).toEqual([undefined, undefined, 'cc'])
+		expect(kept.get('large')).toBeUndefined()
+	})
+
+	test('makes room when an answer is forgotten', () => {
+		// Arrange
+		const kept = keptAnswers('aa'.length)
+		kept.keep('first', answer('aa'))
+
+		// Act
+		kept.forget('first')
+		kept.keep('second', answer('b'))
+		kept.keep('third', answer('c'))
+
+		// Assert
+		expect(['first', 'second', 'third'].map((key) => kept.get(key)?.body)).toEqual([undefined, 'b', 'c'])
 	})
 })

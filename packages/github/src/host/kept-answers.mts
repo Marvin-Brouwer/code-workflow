@@ -8,11 +8,13 @@ export interface KeptAnswer {
 
 /** Answers kept in memory up to a total body size, the least recently used going first. */
 export interface KeptAnswers {
+	/** The answer kept for `key`, without counting as a use. */
 	get(key: string): KeptAnswer | undefined
 	/** Keeps `answer` as the most recently used, forgetting the least recently used ones until all fit. */
 	keep(key: string, answer: KeptAnswer): void
 	/** Marks the answer as used again, so it's forgotten last. */
 	touch(key: string): void
+	/** Forgets the answer kept for `key`, if any. */
 	forget(key: string): void
 }
 

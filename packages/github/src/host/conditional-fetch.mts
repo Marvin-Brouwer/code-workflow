@@ -8,6 +8,7 @@ export interface ConditionalFetchOptions {
 	readonly maxCharacters: number
 }
 
+/** Characters in a mebi-unit. */
 const mebi = 1024 * 1024
 
 /** 16 Mi characters of body text, about 32 MB in memory: room for every page a busy host looks at again and again. */
