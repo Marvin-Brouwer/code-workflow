@@ -85,7 +85,10 @@ export const reviewActivity = {
 	}),
 }
 
-/** Replies on the host, with a marker in the body so the reply is never listed as a reviewer's item. */
+/**
+ * Replies on the host, with a marker in the body so the reply is never listed as a reviewer's item.
+ * The first reply to a review replaces the 👀 comment that marked it seen.
+ */
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
@@ -94,12 +97,13 @@ export const replyToReviewItem = {
 }
 
 /**
- * Puts 👀 on review items on the host, to show the reviewer they were read. GitHub has no reactions
- * on a review itself, so a review item is left as it is. A reaction that's already there stays one.
+ * Shows the reviewer on the host that review items were read: a 👀 reaction on a comment, and on a
+ * review, which GitHub has no reactions for, a 👀 comment on the conversation that the reply to the
+ * review then replaces. Marking an item twice leaves it marked once.
  */
 export const markSeen = {
 	name: 'githubMarkSeen',
-	description: 'Reacts with eyes to review items on a pull request, to show they were read',
+	description: 'Marks review items on a pull request with eyes, to show they were read',
 	input: PullRequestRef.extend({ items: z.array(ReviewItemId) }),
 	output: z.object({ marked: z.array(ReviewItemId) }),
 }

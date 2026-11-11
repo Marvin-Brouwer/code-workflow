@@ -172,12 +172,50 @@ describe('github', () => {
 			{ id: 'comment/4', kind: 'comment', author: api.self, body: 'Also the README.' },
 		])
 		expect(pull.reviewComments[0]?.reactions).toEqual(['eyes'])
-		expect(pull.comments.map((posted) => posted.reactions)).toEqual([undefined, ['eyes']])
+		expect(pull.comments.map((posted) => [posted.body, posted.reactions])).toEqual([
+			['Working on it.\n\n<!-- mesh-flow:status -->', undefined],
+			['Also the README.', ['eyes']],
+			['👀\n\n<!-- mesh-flow:seen:review/5 -->', undefined],
+		])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
 			['Renamed.\n\n<!-- mesh-flow:reply -->', 1],
 		])
 		expect(run.wakes).toBeGreaterThanOrEqual(1)
+	})
+
+	test('marks a review seen with a comment on the conversation, which the first reply to the review replaces', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 8, { head: { ref: 'fix/7', sha: shaOf('fix/7') } })
+		pull.reviews.push({
+			id: 5,
+			body: 'Please add a test.',
+			state: 'CHANGES_REQUESTED',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#v5`,
+			submitted_at: new Date().toISOString(),
+		})
+		const seen: string[] = []
+		const comments = vi.fn<(items: readonly { id: string }[]) => Promise<void>>(async (items) => {
+			seen.push(...pull.comments.map((posted) => posted.body))
+			const answer = reply({ repository: repositoryName, number: 8 })
+			await answer({ item: items[0]?.id ?? '', text: 'Added one.' })
+			await answer({ item: items[0]?.id ?? '', text: 'And another.' })
+			pull.merged = true
+			pull.state = 'closed'
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 8 }, { comments }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
+		expect(seen).toEqual(['👀\n\n<!-- mesh-flow:seen:review/5 -->'])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Added one.\n\n<!-- mesh-flow:reply -->\n<!-- mesh-flow:answered:review/5 -->',
+			'And another.\n\n<!-- mesh-flow:reply -->',
+		])
 	})
 
 	test('reports failed checks once per commit, and checksPass waits for them as findings', async () => {

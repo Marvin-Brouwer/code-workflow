@@ -15,6 +15,7 @@ import {
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
+import type { Octokit } from '@octokit/rest'
 import type { ApiClient } from './api.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -55,6 +56,18 @@ const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_
 
 /** Left in every reply this package posts, so a look at the review never hands it back as a reviewer's. */
 const replyMarker = commentMarker('reply')
+
+/** The reaction that says a comment was read. */
+const seenReaction = 'eyes'
+
+/** The body of the comment that says a review was read, until the reply to it replaces it. */
+const seenComment = '👀'
+
+/** Marks the comment that says `review` was read, until it's answered. */
+const seenMarker = (review: number) => commentMarker(`seen:review/${String(review)}`)
+
+/** Marks the comment that said `review` was read once the reply replaced it, so the review isn't marked again. */
+const answeredMarker = (review: number) => commentMarker(`answered:review/${String(review)}`)
 
 const secondMs = 1_000
 
@@ -163,25 +176,36 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				})
 				return { id: data.id, url: data.html_url }
 			}
-			const { data } = await client.rest.issues.createComment({ ...where, issue_number: number, body: marked })
+			const conversation = { ...where, issue_number: number }
+			const placeholder = kind === 'review' ? await markedComment(client, conversation, seenMarker(id)) : undefined
+			if (placeholder !== undefined) {
+				const { data } = await client.rest.issues.updateComment({
+					...where,
+					comment_id: placeholder.id,
+					body: `${marked}\n${answeredMarker(id)}`,
+				})
+				return { id: data.id, url: data.html_url }
+			}
+			const { data } = await client.rest.issues.createComment({ ...conversation, body: marked })
 			return { id: data.id, url: data.html_url }
 		}),
 
-		hostTool(markSeen, async ({ repository, items }, context) => {
+		hostTool(markSeen, async ({ repository, number, items }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const seen = 'eyes'
-			const marked = await Promise.all(
+			const conversation = { ...where, issue_number: number }
+			await Promise.all(
 				items.map(async (item) => {
 					const { kind, id } = parseItemId(item)
-					if (kind === 'review') return undefined
 					if (kind === 'review-comment')
-						await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seen })
-					else await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seen })
-					return item
+						await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seenReaction })
+					else if (kind === 'comment')
+						await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seenReaction })
+					else if ((await markedComment(client, conversation, seenMarker(id), answeredMarker(id))) === undefined)
+						await client.rest.issues.createComment({ ...conversation, body: `${seenComment}\n\n${seenMarker(id)}` })
 				}),
 			)
-			return { marked: marked.filter((item) => item !== undefined) }
+			return { marked: items }
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {
@@ -218,6 +242,16 @@ function checksStatus(runs: readonly { status: string }[], commitStatuses: reado
 	if (runs.length === 0 && commitStatuses.length === 0) return 'none'
 	const pending = runs.some((run) => run.status !== 'completed') || commitStatuses.some((commitStatus) => commitStatus.state === 'pending')
 	return pending ? 'pending' : 'completed'
+}
+
+/** The first comment on the conversation that carries one of `markers`. */
+async function markedComment(
+	client: Octokit,
+	conversation: { owner: string; repo: string; issue_number: number },
+	...markers: readonly string[]
+): Promise<{ id: number } | undefined> {
+	const comments = await client.paginate(client.rest.issues.listComments, { ...conversation, per_page: 100 })
+	return comments.find((comment) => markers.some((marker) => comment.body?.includes(marker) === true))
 }
 
 function itemId(kind: ReviewItemKind, id: number): string {

@@ -16,7 +16,7 @@ export interface ChecksFailed {
 export interface ReviewHandlers {
 	/**
 	 * New review comments, reviews and conversation comments, coalesced per look, oldest first. What
-	 * the run posted itself is left out. Each comment gets 👀 on GitHub before the handler is called.
+	 * the run posted itself is left out. Each item is marked 👀 on GitHub before the handler is called.
 	 */
 	readonly comments?: (comments: readonly ReviewItem[]) => Promise<unknown>
 	/** The checks of a commit came out failed. Once per commit. */
@@ -45,8 +45,9 @@ export interface ReviewOutcome {
 /**
  * Watches a pull request until it's merged or closed, and calls the handlers as things happen on
  * it: review comments come in one list per look, so a reviewer's round is one call, and failed
- * checks come once per commit, once its checks have all completed. A comment handed to the handler
- * gets 👀 on GitHub first, so the reviewer sees it was read. Handlers run one at a time. The
+ * checks come once per commit, once its checks have all completed. An item handed to the handler
+ * is marked 👀 on GitHub first, so the reviewer sees it was read: a reaction on a comment, and a
+ * comment on the conversation for a review, which the reply to the review replaces. Handlers run one at a time. The
  * wait between looks is on the engine's clock, where the run can be paused. A look that fails is
  * tried again on the next one, for up to `toleratedOutage`, so a watch that takes days outlives a
  * dropped connection.
