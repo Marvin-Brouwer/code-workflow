@@ -77,6 +77,8 @@ export interface FakeGithub {
 	readonly self: string
 	/** When set, `/user` answers 403, as it does for a GitHub App's installation token. */
 	userHidden: boolean
+	/** How many of the next requests answer 503, as GitHub does while it's down. */
+	unavailableFor: number
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>
 	repository(name: string): FakeRepository
@@ -168,14 +170,18 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return made
 	}
 
+	const settings = { userHidden: false, unavailableFor: 0 }
 	const app = new Hono()
 	app.use(async (context, next) => {
 		const authorization = context.req.header('authorization')
 		if (authorization === undefined) return context.json({ message: 'Requires authentication' }, 401)
 		tokens.add(authorization.replace(/^(token|Bearer) /, ''))
+		if (settings.unavailableFor > 0) {
+			settings.unavailableFor--
+			return context.json({ message: 'Service Unavailable' }, 503)
+		}
 		return next()
 	})
-	const settings = { userHidden: false }
 	app.get('/user', (context) =>
 		settings.userHidden ? context.json({ message: 'Resource not accessible by integration' }, 403) : context.json({ login: self }),
 	)
@@ -306,6 +312,12 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		},
 		set userHidden(hidden: boolean) {
 			settings.userHidden = hidden
+		},
+		get unavailableFor() {
+			return settings.unavailableFor
+		},
+		set unavailableFor(requests: number) {
+			settings.unavailableFor = requests
 		},
 		tokens,
 		repository,
