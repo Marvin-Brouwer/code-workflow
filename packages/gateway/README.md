@@ -67,6 +67,7 @@ A tool retries its own transient failures. When one still fails after that, such
 
 ```ts
 import { hostTool, HostToolTransientError } from '@mesh-flow/gateway'
+import { z } from 'zod'
 
 export const status = hostTool({ name: 'serviceStatus', input: z.object({}) }, async (_input, { abortSignal }) => {
 	const response = await fetch('https://status.example/api', { signal: abortSignal })
