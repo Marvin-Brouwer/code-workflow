@@ -1,4 +1,7 @@
-/** Answers that say GitHub couldn't serve the request just now, rather than that it was wrong. Octokit reports a dropped connection as 500 too. */
+/**
+ * Answers that say GitHub couldn't serve the request just now, rather than that it was wrong.
+ * Octokit reports a dropped connection as 500 too.
+ */
 const unavailableStatuses = new Set([500, 502, 503, 504])
 
 /** GitHub's answer to too many requests. */

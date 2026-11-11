@@ -25,14 +25,24 @@ describe('markedTransient', () => {
 	})
 
 	test.each([
-		['a bad token', requestError(401)],
-		['a missing permission', requestError(403)],
-		['something that is gone', requestError(404)],
-		['an aborted request', requestError(500, {}, 'AbortError')],
-		['an error without a status', new Error('There is no GitHub token.')],
-	])('leaves %s as it is', (_case, failure) => {
+		['a bad token', 401, 'HttpError'],
+		['a missing permission', 403, 'HttpError'],
+		['something that is gone', 404, 'HttpError'],
+		['an aborted request', 500, 'AbortError'],
+	])('leaves %s as it is', (_case, status, name) => {
 		// Arrange
-		const error: Error = failure
+		const error = requestError(status, {}, name)
+
+		// Act
+		const marked = markedTransient(error)
+
+		// Assert
+		expect(marked).toBe(error)
+	})
+
+	test('leaves an error without a status as it is', () => {
+		// Arrange
+		const error = new Error('There is no GitHub token.')
 
 		// Act
 		const marked = markedTransient(error)

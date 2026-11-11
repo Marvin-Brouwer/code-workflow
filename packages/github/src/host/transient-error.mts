@@ -14,14 +14,18 @@ interface RequestFailure {
 
 /**
  * A failure from Octokit, marked as a {@link HostToolTransientError} when it may pass on another
- * try: a dropped connection, GitHub being unavailable, a rate limit (429, or a 403 that says so). Anything else, such as a bad
- * token, a missing permission, a 404 or an aborted request, comes back as it is.
+ * try: a dropped connection, GitHub being unavailable, a rate limit (429, or a 403 that says so).
+ * Anything else, such as a bad token, a missing permission, a 404 or an aborted request, comes back
+ * as it is.
  */
 export function markedTransient(error: unknown): unknown {
 	if (!isRequestFailure(error) || error.name === 'AbortError') return error
 	const headers = error.response?.headers
-	// A 403 is a rate limit too: a secondary one with `retry-after`, a primary one with no requests left until the reset.
-	const rateLimited = error.status === forbidden && (headers?.['retry-after'] !== undefined || headers?.['x-ratelimit-remaining'] === '0')
+	// A 403 is a rate limit too: a secondary one with `retry-after`, a primary one with no requests
+	// left until the reset.
+	const secondaryRateLimit = headers?.['retry-after'] !== undefined
+	const primaryRateLimit = headers?.['x-ratelimit-remaining'] === '0'
+	const rateLimited = error.status === forbidden && (secondaryRateLimit || primaryRateLimit)
 	return unavailable(error.status) || rateLimited ? new HostToolTransientError(error.message, { cause: error }) : error
 }
 

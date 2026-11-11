@@ -10,7 +10,7 @@ export interface PowerApi {
 	/**
 	 * Takes a power request with `reason`, which `powercfg /requests` shows: the system stays out of
 	 * idle sleep and this process keeps running, also with the screen locked or off. Returns a
-	 * function that gives it back.
+	 * function that gives it back; calling it again does nothing.
 	 */
 	readonly holdPowerRequest: (reason: string) => () => void
 	/**
@@ -104,7 +104,11 @@ function bindWindowsPowerApi(): PowerApi {
 					throw error
 				}
 			}
+			let held = true
 			return () => {
+				// A handle closed twice could close another one that got its number since.
+				if (!held) return
+				held = false
 				for (const type of requestTypes) powerClearRequest(request, type)
 				closeHandle(request)
 			}

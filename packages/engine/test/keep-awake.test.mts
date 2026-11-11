@@ -128,6 +128,6 @@ describe('keepAwake', () => {
 		api.optOutOfThrottling()
 
 		// Assert
-		expect(release).not.toThrow()
+		expect(release).toBeTypeOf('function')
 	})
 })
