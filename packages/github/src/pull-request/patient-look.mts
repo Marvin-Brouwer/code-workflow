@@ -1,10 +1,5 @@
-import { durationMs, GatewayCallError, wait, type WaitSpec } from '@mesh-flow/core'
-
-/** How long looks at GitHub may keep failing before a watch gives up, when no duration is given. */
-export const defaultToleratedOutage: WaitSpec = { minutes: 10 }
-
-/** A zero interval still counts as one look. */
-const atLeastOneLookMs = 1
+import { GatewayCallError, wait, type WaitSpec } from '@mesh-flow/core'
+import { looksWithin } from './look-interval.mts'
 
 /** What `patientLook` takes. */
 export interface PatientLookOptions {
@@ -20,12 +15,12 @@ export interface PatientLookOptions {
  * again after `every`, until looks have failed for `toleratedOutage` in a row. Only errors from the
  * gateway are tolerated; anything else, such as a stop, is thrown at once.
  */
-export function patientLook(options: PatientLookOptions): <T>(look: () => Promise<T>) => Promise<T> {
-	const failedLooksTolerated = Math.ceil(durationMs(options.toleratedOutage) / Math.max(durationMs(options.every), atLeastOneLookMs))
-	return async (look) => {
+export function patientLook(options: PatientLookOptions): <T>(attempt: () => Promise<T>) => Promise<T> {
+	const failedLooksTolerated = looksWithin(options.toleratedOutage, options.every)
+	return async (attempt) => {
 		for (let failedLooks = 0; ; failedLooks++) {
 			try {
-				return await look()
+				return await attempt()
 			} catch (error) {
 				if (!(error instanceof GatewayCallError) || failedLooks >= failedLooksTolerated) throw error
 			}

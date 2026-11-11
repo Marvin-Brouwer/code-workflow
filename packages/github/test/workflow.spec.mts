@@ -202,14 +202,14 @@ describe('github', () => {
 		// Arrange
 		const { api, gateway } = await connected(quickRetry)
 		api.issue(repositoryName, 8, { title: 'Flaky network' })
-		api.unavailableFor = 2
+		api.unavailableRequests = 2
 
 		// Act
 		const run = await runOnGateway(gateway, () => collect({ repository: repositoryName, number: 8 }))
 
 		// Assert
 		await expect(run.result).resolves.toMatchObject({ number: 8, title: 'Flaky network' })
-		expect(api.unavailableFor).toBe(0)
+		expect(api.unavailableRequests).toBe(0)
 	})
 
 	test('keeps watching a pull request through an outage, and gives up once looks have failed for longer than it tolerates', async () => {
@@ -220,10 +220,10 @@ describe('github', () => {
 		const options = { every: { seconds: 1 }, toleratedOutage: { seconds: 3 } }
 
 		// Act
-		api.unavailableFor = 3
+		api.unavailableRequests = 3
 		const outlived = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 9 }, {}, options))
 		const outcome = await outlived.result
-		api.unavailableFor = 100
+		api.unavailableRequests = 100
 		const outlasted = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 10 }, {}, options))
 
 		// Assert

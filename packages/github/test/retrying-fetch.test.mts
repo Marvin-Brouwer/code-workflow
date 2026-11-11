@@ -2,9 +2,12 @@ import { describe, expect, test, vi } from 'vitest'
 import { retryingFetch, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
 
 const url = 'https://api.github.example/repos/team/app'
-const quickly: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000 }
+/** Host retries that are over in a moment. */
+const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000 }
 
+/** A GitHub response with `status`. */
 const answer = (status: number, headers: Record<string, string> = {}) => new Response(status === 204 ? null : '{}', { status, headers })
+/** The error `fetch` throws when the connection drops. */
 const dropped = () => new TypeError('fetch failed', { cause: new Error('write ECONNABORTED') })
 
 describe('retryingFetch', () => {
@@ -17,7 +20,7 @@ describe('retryingFetch', () => {
 			.mockResolvedValueOnce(answer(200))
 
 		// Act
-		const response = await retryingFetch(send, quickly)(url, { method: 'GET' })
+		const response = await retryingFetch(send, quickRetry)(url, { method: 'GET' })
 
 		// Assert
 		expect(response.status).toBe(200)
@@ -32,8 +35,8 @@ describe('retryingFetch', () => {
 		})
 
 		// Act
-		const response = await retryingFetch(unavailable, quickly)(url)
-		const failed = retryingFetch(unreachable, quickly)(url)
+		const response = await retryingFetch(unavailable, quickRetry)(url)
+		const failed = retryingFetch(unreachable, quickRetry)(url)
 
 		// Assert
 		expect(response.status).toBe(502)
@@ -49,7 +52,7 @@ describe('retryingFetch', () => {
 		})
 
 		// Act
-		const sent = retryingFetch(send, quickly)(url, { method: 'POST', body: '{"body":"On it."}' })
+		const sent = retryingFetch(send, quickRetry)(url, { method: 'POST', body: '{"body":"On it."}' })
 
 		// Assert
 		await expect(sent).rejects.toThrow('fetch failed')
@@ -61,7 +64,7 @@ describe('retryingFetch', () => {
 		const send = vi.fn<typeof fetch>(async () => answer(404))
 
 		// Act
-		const response = await retryingFetch(send, quickly)(url)
+		const response = await retryingFetch(send, quickRetry)(url)
 
 		// Assert
 		expect(response.status).toBe(404)
@@ -77,8 +80,8 @@ describe('retryingFetch', () => {
 		const long = vi.fn<typeof fetch>(async () => answer(429, { 'retry-after': '3600' }))
 
 		// Act
-		const waited = await retryingFetch(short, quickly)(url)
-		const handedBack = await retryingFetch(long, quickly)(url)
+		const waited = await retryingFetch(short, quickRetry)(url)
+		const handedBack = await retryingFetch(long, quickRetry)(url)
 
 		// Assert
 		expect(waited.status).toBe(200)
@@ -97,7 +100,7 @@ describe('retryingFetch', () => {
 		const started = performance.now()
 
 		// Act
-		const sent = retryingFetch(send, { ...quickly, firstDelayMs: 60_000 })(url, { signal: controller.signal })
+		const sent = retryingFetch(send, { ...quickRetry, firstDelayMs: 60_000 })(url, { signal: controller.signal })
 
 		// Assert
 		await expect(sent).rejects.toThrow('fetch failed')
@@ -112,7 +115,7 @@ describe('retryingFetch', () => {
 		const started = performance.now()
 
 		// Act
-		const sent = retryingFetch(send, { ...quickly, firstDelayMs: 60_000 })(url, { signal: controller.signal })
+		const sent = retryingFetch(send, { ...quickRetry, firstDelayMs: 60_000 })(url, { signal: controller.signal })
 		setTimeout(() => {
 			controller.abort(new Error('The run stopped.'))
 		}, 10)

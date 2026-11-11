@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { keepAwake, powerRequestReason } from '../src/serve/keep-awake.mts'
 import type { PowerApi } from '../src/serve/windows-power.mts'
 
@@ -6,8 +6,8 @@ import type { PowerApi } from '../src/serve/windows-power.mts'
 function fakePowerApi(overrides: Partial<PowerApi> = {}) {
 	const release = vi.fn()
 	const api: PowerApi = {
-		requestPower: vi.fn(() => release),
-		stopThrottling: vi.fn(),
+		holdPowerRequest: vi.fn(() => release),
+		optOutOfThrottling: vi.fn(),
 		...overrides,
 	}
 	return { api, release }
@@ -21,13 +21,13 @@ describe('keepAwake', () => {
 		const log = vi.fn()
 
 		// Act
-		await keepAwake({ abortSignal: lifetime.signal, log, platform: 'win32', powerApi: async () => api })
+		await keepAwake({ abortSignal: lifetime.signal, log, platform: 'win32', loadPowerApi: async () => api })
 		const releasedBeforeShutdown = release.mock.calls.length
 		lifetime.abort(new Error('The engine is shutting down.'))
 
 		// Assert
-		expect(api.requestPower).toHaveBeenCalledWith(powerRequestReason)
-		expect(api.stopThrottling).toHaveBeenCalledOnce()
+		expect(api.holdPowerRequest).toHaveBeenCalledWith(powerRequestReason)
+		expect(api.optOutOfThrottling).toHaveBeenCalledOnce()
 		expect(releasedBeforeShutdown).toBe(0)
 		expect(release).toHaveBeenCalledOnce()
 		expect(log).not.toHaveBeenCalled()
@@ -35,35 +35,35 @@ describe('keepAwake', () => {
 
 	test('does nothing on Linux or macOS', async () => {
 		// Arrange
-		const powerApi = vi.fn(async () => fakePowerApi().api)
+		const loadPowerApi = vi.fn(async () => fakePowerApi().api)
 
 		// Act
-		await keepAwake({ abortSignal: new AbortController().signal, log: vi.fn(), platform: 'linux', powerApi })
-		await keepAwake({ abortSignal: new AbortController().signal, log: vi.fn(), platform: 'darwin', powerApi })
+		await keepAwake({ abortSignal: new AbortController().signal, log: vi.fn(), platform: 'linux', loadPowerApi })
+		await keepAwake({ abortSignal: new AbortController().signal, log: vi.fn(), platform: 'darwin', loadPowerApi })
 
 		// Assert
-		expect(powerApi).not.toHaveBeenCalled()
+		expect(loadPowerApi).not.toHaveBeenCalled()
 	})
 
 	test('warns and lets the engine start when Windows says no', async () => {
 		// Arrange
 		const { api } = fakePowerApi({
-			requestPower: () => {
+			holdPowerRequest: () => {
 				throw new Error('PowerCreateRequest failed with Windows error 5.')
 			},
-			stopThrottling: () => {
+			optOutOfThrottling: () => {
 				throw new Error('SetProcessInformation failed with Windows error 87.')
 			},
 		})
 		const log = vi.fn()
 
 		// Act
-		const kept = keepAwake({ abortSignal: new AbortController().signal, log, platform: 'win32', powerApi: async () => api })
+		const kept = keepAwake({ abortSignal: new AbortController().signal, log, platform: 'win32', loadPowerApi: async () => api })
 		const unloadable = keepAwake({
 			abortSignal: new AbortController().signal,
 			log,
 			platform: 'win32',
-			powerApi: () => Promise.reject(new Error('koffi has no build for this machine')),
+			loadPowerApi: () => Promise.reject(new Error('koffi has no build for this machine')),
 		})
 
 		// Assert
@@ -83,10 +83,10 @@ describe('keepAwake', () => {
 		lifetime.abort(new Error('The engine is shutting down.'))
 
 		// Act
-		await keepAwake({ abortSignal: lifetime.signal, log: vi.fn(), platform: 'win32', powerApi: async () => api })
+		await keepAwake({ abortSignal: lifetime.signal, log: vi.fn(), platform: 'win32', loadPowerApi: async () => api })
 
 		// Assert
-		expect(api.requestPower).not.toHaveBeenCalled()
+		expect(api.holdPowerRequest).not.toHaveBeenCalled()
 	})
 
 	test.runIf(process.platform === 'win32')('takes and gives back a real power request on Windows', async () => {
@@ -95,11 +95,13 @@ describe('keepAwake', () => {
 		const api = windowsPowerApi()
 
 		// Act
-		const release = api.requestPower(powerRequestReason)
-		api.stopThrottling()
-		release()
+		const release = api.holdPowerRequest(powerRequestReason)
+		onTestFinished(release)
+		const optOut = () => {
+			api.optOutOfThrottling()
+		}
 
 		// Assert
-		expect(release).toBeTypeOf('function')
+		expect(optOut).not.toThrow()
 	})
 })

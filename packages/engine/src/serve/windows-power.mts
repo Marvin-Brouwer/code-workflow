@@ -12,9 +12,9 @@ export interface PowerApi {
 	 * idle sleep and this process keeps running, also with the screen locked or off. Returns a
 	 * function that gives it back.
 	 */
-	readonly requestPower: (reason: string) => () => void
+	readonly holdPowerRequest: (reason: string) => () => void
 	/** Opts this process out of power throttling (EcoQoS), which slows a background process down. */
-	readonly stopThrottling: () => void
+	readonly optOutOfThrottling: () => void
 }
 
 /** `POWER_REQUEST_CONTEXT_VERSION`. */
@@ -38,8 +38,16 @@ const throttlingControls = 0x1 | 0x4
 /** A state mask without the controls: they are switched off. */
 const throttlingOff = 0
 
-/** Binds the kernel32 functions. Throws when they can't be loaded, which only happens off Windows. */
+/** The bound functions: koffi registers struct names process-wide, so they're bound once. */
+let bound: PowerApi | undefined
+
+/** The kernel32 functions, bound on the first call. Throws when they can't be loaded, which only happens off Windows. */
 export function windowsPowerApi(): PowerApi {
+	bound ??= bindWindowsPowerApi()
+	return bound
+}
+
+function bindWindowsPowerApi(): PowerApi {
 	const kernel32 = koffi.load('kernel32.dll')
 	koffi.struct('REASON_CONTEXT', { Version: 'uint32', Flags: 'uint32', SimpleReasonString: 'str16' })
 	const throttlingState = koffi.struct('PROCESS_POWER_THROTTLING_STATE', {
@@ -55,29 +63,29 @@ export function windowsPowerApi(): PowerApi {
 		'int __stdcall SetProcessInformation(intptr process, int infoClass, PROCESS_POWER_THROTTLING_STATE *info, uint32 size)',
 	)
 	const getLastError = kernel32.func('uint32 __stdcall GetLastError()')
-	const failed = (call: string) => new Error(`${call} failed with Windows error ${String(getLastError())}.`)
+	const windowsError = (call: string) => new Error(`${call} failed with Windows error ${String(getLastError())}.`)
 
 	return {
-		requestPower(reason) {
+		holdPowerRequest(reason) {
 			const request: unknown = powerCreateRequest({ Version: reasonContextVersion, Flags: simpleReasonString, SimpleReasonString: reason })
-			if (typeof request !== 'number' || request === invalidHandle || request === 0) throw failed('PowerCreateRequest')
-			const types = [systemRequired, executionRequired]
-			for (const type of types) {
+			if (typeof request !== 'number' || request === invalidHandle || request === 0) throw windowsError('PowerCreateRequest')
+			const requestTypes = [systemRequired, executionRequired]
+			for (const type of requestTypes) {
 				if (powerSetRequest(request, type) === 0) {
-					const error = failed('PowerSetRequest')
+					const error = windowsError('PowerSetRequest')
 					closeHandle(request)
 					throw error
 				}
 			}
 			return () => {
-				for (const type of types) powerClearRequest(request, type)
+				for (const type of requestTypes) powerClearRequest(request, type)
 				closeHandle(request)
 			}
 		},
-		stopThrottling() {
+		optOutOfThrottling() {
 			const state = { Version: throttlingStateVersion, ControlMask: throttlingControls, StateMask: throttlingOff }
 			if (setProcessInformation(currentProcess, processPowerThrottling, state, koffi.sizeof(throttlingState)) === 0)
-				throw failed('SetProcessInformation')
+				throw windowsError('SetProcessInformation')
 		},
 	}
 }

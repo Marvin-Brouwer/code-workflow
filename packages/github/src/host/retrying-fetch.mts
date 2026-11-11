@@ -28,7 +28,8 @@ const unavailableStatuses = new Set([500, 502, 503, 504])
 /** GitHub's answer to too many requests. */
 const tooManyRequests = 429
 
-const secondMs = 1000
+/** `retry-after` counts in seconds. */
+const msPerSecond = 1000
 
 /**
  * Wraps `send` so that idempotent requests are sent again, with a doubling wait in between, when
@@ -36,26 +37,24 @@ const secondMs = 1000
  * is one. The last answer or error is what the caller gets. Aborting the request's signal stops the
  * waiting at once.
  */
-export function retryingFetch(send: typeof fetch, options: FetchRetryOptions = defaultFetchRetry): typeof fetch {
+export function retryingFetch(send: typeof fetch, options: FetchRetryOptions): typeof fetch {
 	return async (input, init) => {
-		const method = (init?.method ?? 'GET').toUpperCase()
-		const repeatable = idempotentMethods.has(method) && (init?.body === undefined || init.body === null || typeof init.body === 'string')
-		if (!repeatable) return send(input, init)
+		if (!idempotent(init)) return send(input, init)
 		const abortSignal = init?.signal ?? undefined
 
 		for (let attempt = 1; ; attempt++) {
-			const last = attempt >= options.attempts
+			const lastAttempt = attempt >= options.attempts
 			const backoffMs = options.firstDelayMs * 2 ** (attempt - 1)
 			let delayMs: number
 			try {
 				const response = await send(input, init)
-				if (last || !retriable(response.status)) return response
+				if (lastAttempt || !unavailable(response.status)) return response
 				const retryAfterMs = retryAfterOf(response)
 				if (retryAfterMs !== undefined && retryAfterMs > options.longestRetryAfterMs) return response
 				delayMs = retryAfterMs ?? backoffMs
 				await response.body?.cancel()
 			} catch (error) {
-				if (last || abortSignal?.aborted === true) throw error
+				if (lastAttempt || abortSignal?.aborted === true) throw error
 				delayMs = backoffMs
 			}
 			await sleep(delayMs, undefined, abortSignal === undefined ? {} : { signal: abortSignal })
@@ -63,7 +62,18 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions = d
 	}
 }
 
-function retriable(status: number): boolean {
+/** Whether a request may be sent again: its method is idempotent and its body can be sent twice. */
+function idempotent(init: RequestInit | undefined): boolean {
+	return idempotentMethods.has((init?.method ?? 'GET').toUpperCase()) && resendable(init?.body)
+}
+
+/** A stream or form body is used up by the first send; no body or a string can be sent again. */
+function resendable(body: RequestInit['body']): boolean {
+	return body === undefined || body === null || typeof body === 'string'
+}
+
+/** Whether GitHub couldn't serve the request just now: a 5xx or a rate limit. */
+function unavailable(status: number): boolean {
 	return status === tooManyRequests || unavailableStatuses.has(status)
 }
 
@@ -72,5 +82,5 @@ function retryAfterOf(response: Response): number | undefined {
 	const header = response.headers.get('retry-after')
 	if (header === null) return undefined
 	const seconds = Number(header)
-	return Number.isFinite(seconds) && seconds >= 0 ? seconds * secondMs : undefined
+	return Number.isFinite(seconds) && seconds >= 0 ? seconds * msPerSecond : undefined
 }

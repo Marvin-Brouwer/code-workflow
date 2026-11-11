@@ -12,8 +12,8 @@ export interface KeepAwakeOptions {
 	readonly log: (message: string) => void
 	/** Default: this process's platform. */
 	readonly platform?: NodeJS.Platform
-	/** Default: kernel32, loaded only on Windows. */
-	readonly powerApi?: () => Promise<PowerApi>
+	/** Loads the Windows power calls. Default: kernel32, loaded only on Windows. */
+	readonly loadPowerApi?: () => Promise<PowerApi>
 }
 
 /**
@@ -27,10 +27,10 @@ export interface KeepAwakeOptions {
  */
 export async function keepAwake(options: KeepAwakeOptions): Promise<void> {
 	if ((options.platform ?? process.platform) !== 'win32') return
-	const powerApi = options.powerApi ?? loadWindowsPowerApi
+	const loadPowerApi = options.loadPowerApi ?? loadWindowsPowerApi
 	let api: PowerApi
 	try {
-		api = await powerApi()
+		api = await loadPowerApi()
 	} catch (error) {
 		options.log(`Warning: can't keep Windows awake while the PC is locked: ${messageOf(error)}`)
 		return
@@ -38,13 +38,13 @@ export async function keepAwake(options: KeepAwakeOptions): Promise<void> {
 	// Loading kernel32 takes a moment, and the engine may have started shutting down meanwhile.
 	if (options.abortSignal.aborted) return
 	try {
-		const release = api.requestPower(powerRequestReason)
+		const release = api.holdPowerRequest(powerRequestReason)
 		options.abortSignal.addEventListener('abort', release, { once: true })
 	} catch (error) {
 		options.log(`Warning: Windows may sleep while the PC is locked, which drops the network for running workflows: ${messageOf(error)}`)
 	}
 	try {
-		api.stopThrottling()
+		api.optOutOfThrottling()
 	} catch (error) {
 		options.log(`Warning: Windows may throttle the engine in the background: ${messageOf(error)}`)
 	}
