@@ -1,11 +1,13 @@
 /**
  * The smallest workflow that runs end to end: one issue, one repository, no separate plan or code
  * review. Pick up the issue, fix it, open a pull request, handle review comments until it's merged.
+ * The pull request's text is written in a loop of its own, and written again when a round of review
+ * or a check fix changed the code.
  * Plain async TypeScript: every `await` is real, and the agent is a call inside it.
  */
 import { limit, succeed, workflow } from '@mesh-flow/core'
 import { github, IssueParameters } from '@mesh-flow/github'
-import { developer } from '../agents.mts'
+import { developer, writer } from '../agents.mts'
 
 export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
 	const issue = await github.collect(parameters.issue)
@@ -17,26 +19,30 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 		${limit({ minutes: 30 })}
 	`
 
-	const pullRequest = await github.openPullRequest(repository, {
-		title: issue.title,
-		description: `Fixes #${String(issue.number)}.`,
-	})
+	const text = await github.describe(writer, repository, { issue })
+	const pullRequest = await github.openPullRequest(repository, { ...text, closes: issue })
 	await github.comment(issue, `Pull request opened: ${pullRequest.url}`, { key: 'status' })
 
 	// Returns once the pull request is merged or closed. Each round of review comments is one loop.
 	const outcome = await github.review(pullRequest, {
-		comments: (comments) => developer.loop`
-			Handle these review comments on ${pullRequest}: ${comments}.
-			Change the code in ${repository} where a comment asks for it, push with ${github.push(repository)},
-			and reply to every comment with ${github.reply(pullRequest)}.
-			When every comment is handled, ${succeed()}.
-			${limit({ minutes: 30 })}
-		`,
-		checksFailed: (failed) => developer.loop`
-			The checks on ${pullRequest} failed: ${failed.failures}.
-			Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
-			${limit({ minutes: 20 })}
-		`,
+		comments: async (comments) => {
+			await developer.loop`
+				Handle these review comments on ${pullRequest}: ${comments}.
+				Change the code in ${repository} where a comment asks for it, push with ${github.push(repository)},
+				and reply to every comment with ${github.reply(pullRequest)}.
+				When every comment is handled, ${succeed()}.
+				${limit({ minutes: 30 })}
+			`
+			await github.redescribe(writer, pullRequest, repository, { issue })
+		},
+		checksFailed: async (failed) => {
+			await developer.loop`
+				The checks on ${pullRequest} failed: ${failed.failures}.
+				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
+				${limit({ minutes: 20 })}
+			`
+			await github.redescribe(writer, pullRequest, repository, { issue })
+		},
 	})
 
 	if (outcome.state === 'merged') await github.close(issue)

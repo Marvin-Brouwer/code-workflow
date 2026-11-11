@@ -126,6 +126,7 @@ const LabelsBody = z.object({ labels: z.array(z.string()) })
 const CommentBody = z.object({ body: z.string() })
 const ReactionBody = z.object({ content: z.string() })
 const PullBody = z.object({ head: z.string(), base: z.string(), title: z.string(), body: z.string() })
+const PullUpdate = z.object({ title: z.string().optional(), body: z.string().optional() })
 
 export async function fakeGithub(): Promise<FakeGithub> {
 	const repositories = new Map<string, FakeRepository>()
@@ -292,6 +293,14 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	issues.get('/pulls/:number', (context) => {
 		const pull = repository(nameOf(context)).pulls.get(numberOf(context))
 		return pull === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(pullJson(pull))
+	})
+	issues.patch('/pulls/:number', async (context) => {
+		const pull = repository(nameOf(context)).pulls.get(numberOf(context))
+		if (pull === undefined) return context.json({ message: 'Not Found' }, 404)
+		const update = PullUpdate.parse(await context.req.json())
+		if (update.title !== undefined) pull.title = update.title
+		if (update.body !== undefined) pull.body = update.body
+		return context.json(pullJson(pull))
 	})
 	issues.get('/pulls/:number/comments', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviewComments))
 	issues.get('/pulls/:number/reviews', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviews))

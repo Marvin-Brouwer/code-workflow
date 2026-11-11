@@ -10,6 +10,7 @@ import {
 	replyToReviewItem,
 	reviewActivity,
 	showBeingRead,
+	updatePullRequest,
 	ReviewItemKind,
 	type CheckFailure,
 	type PullRequestData,
@@ -25,6 +26,7 @@ import { refusedToken } from './transient-error.mts'
 interface ApiPullRequest {
 	readonly number: number
 	readonly title: string
+	readonly body?: string | null
 	readonly html_url: string
 	readonly state: string
 	readonly merged_at?: string | null
@@ -43,7 +45,22 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		merged: data.merged ?? (data.merged_at !== null && data.merged_at !== undefined),
 		head: { branch: data.head.ref, sha: data.head.sha },
 		base: data.base.ref,
+		...described(data.body),
 	}
+}
+
+/** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
+const describedKeyName = 'described'
+
+/** The commit a description was written for, by its marker, if this package wrote it. */
+function described(body: string | null | undefined): { described?: string } {
+	const sha = body === null || body === undefined ? undefined : markerValue(body, describedKeyName)
+	return sha === undefined ? {} : { described: sha }
+}
+
+/** A description as the connector writes it: signed, and marked with the commit it describes. */
+function signedDescription(body: string, runId: string, sha: string | undefined): string {
+	return signed(body, runId, sha === undefined ? [] : [`${describedKeyName}:${sha}`])
 }
 
 /** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
@@ -70,13 +87,29 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
 	return [
-		hostTool(openPullRequest, async ({ repository, head, base, title, body }, context) => {
+		hostTool(openPullRequest, async ({ repository, head, base, title, body, described: sha }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
+			const signedBody = signedDescription(body, context.runId, sha)
 			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
 			const [existing] = open
-			if (existing !== undefined) return pullRequestData(repository, existing)
-			const { data } = await client.rest.pulls.create({ ...where, head, base, title, body })
+			if (existing === undefined) {
+				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
+				return pullRequestData(repository, data)
+			}
+			if (existing.title === title && existing.body === signedBody) return pullRequestData(repository, existing)
+			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
+			return pullRequestData(repository, data)
+		}),
+
+		hostTool(updatePullRequest, async ({ repository, number, title, body, described: sha }, context) => {
+			const client = await api(context)
+			const { data } = await client.rest.pulls.update({
+				...splitRepositoryName(repository),
+				pull_number: number,
+				title,
+				body: signedDescription(body, context.runId, sha),
+			})
 			return pullRequestData(repository, data)
 		}),
 

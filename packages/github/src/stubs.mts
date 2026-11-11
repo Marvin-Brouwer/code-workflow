@@ -8,6 +8,7 @@ import {
 	replyToReviewItem,
 	reviewActivity,
 	showBeingRead,
+	updatePullRequest,
 } from './tools/pull-request-tools.mts'
 
 /**
@@ -22,6 +23,7 @@ export const stubs = Object.freeze({
 	cloneRepository: hostToolStub(cloneRepository),
 	pushBundle: hostToolStub(pushBundle),
 	openPullRequest: hostToolStub(openPullRequest),
+	updatePullRequest: hostToolStub(updatePullRequest),
 	getPullRequest: hostToolStub(getPullRequest),
 	reviewActivity: hostToolStub(reviewActivity),
 	replyToReviewItem: hostToolStub(replyToReviewItem),

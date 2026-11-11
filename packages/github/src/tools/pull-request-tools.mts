@@ -18,6 +18,8 @@ export const PullRequestData = PullRequestRef.extend({
 	merged: z.boolean(),
 	head: z.object({ branch: BranchName, sha: Sha }),
 	base: BranchName,
+	/** The commit the description was written for, when this package wrote it. */
+	described: Sha.optional(),
 })
 export type PullRequestData = z.infer<typeof PullRequestData>
 
@@ -56,7 +58,22 @@ export type ReviewItem = z.infer<typeof ReviewItem>
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
 	description: 'Opens a pull request on GitHub, or returns the open one for the branch',
-	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName, title: z.string().min(1), body: z.string() }),
+	input: z.object({
+		repository: RepositoryName,
+		head: BranchName,
+		base: BranchName,
+		title: z.string().min(1),
+		body: z.string(),
+		described: Sha.optional(),
+	}),
+	output: PullRequestData,
+}
+
+/** Gives a pull request on the host a new title and description. */
+export const updatePullRequest = {
+	name: 'githubUpdatePullRequest',
+	description: "Changes a pull request's title and description on GitHub",
+	input: PullRequestRef.extend({ title: z.string().min(1), body: z.string(), described: Sha.optional() }),
 	output: PullRequestData,
 }
 
