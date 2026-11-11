@@ -16,6 +16,8 @@ mesh-flow serve
 
 It picks the sandbox backend for the machine ([`chooseBackend`](../sandbox/README.md#pick-a-backend)): microsandbox when there's a hypervisor, gVisor on Linux without one. `--backend gvisor` forces one, and `--runsc 'sudo /usr/bin/runsc'` says how to call runsc when the engine isn't root. Its records, socket and backend state live in the user's data directory (`~/.local/share/mesh-flow` on Linux). `--home` points it somewhere else.
 
+On Windows, `serve` holds a power request while it runs (`powercfg /requests` lists it), so a locked PC doesn't idle-sleep and drop the network under runs that wait for hours, and it opts out of power throttling. Choosing Sleep or closing the lid still puts the machine to sleep.
+
 Ctrl+C shuts it down without leaving anything running. It pauses every running sandbox to disk, saves the run records and closes the backend. A second Ctrl+C skips the pauses that haven't finished, and those runs can be restarted later. A third exits right away.
 
 ### Load connectors

@@ -1,7 +1,7 @@
 import { EndpointGrant, type CallAnswer, ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
-import { hostTool } from '../src/tools/host-tool.mts'
+import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -59,6 +59,30 @@ describe('openGateway', () => {
 		expect(resultOf(answer)).toBe('host-only')
 		expect(answer.next).toMatch(/^[\w-]{16,}$/)
 		expect(grant.tokens).not.toContain(answer.next)
+	})
+
+	test('marks a failure the host tool says may pass as transient, and no other', async () => {
+		// Arrange
+		const flaky = hostTool({ name: 'flaky', input: z.object({}) }, () => Promise.reject(new HostToolTransientError('write ECONNABORTED')))
+		const broken = hostTool({ name: 'broken', input: z.object({}) }, () => Promise.reject(new Error('Bad credentials')))
+		const { gateway } = await testGateway({ tools: [flaky, broken] })
+		const grant = await gateway.openRun(runId, ['flaky', 'broken'], abortSignal)
+
+		// Act
+		const transient = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant, 0), { type: 'tool', tool: 'flaky', input: {} }),
+		)
+		const permanent = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant, 1), { type: 'tool', tool: 'broken', input: {} }),
+		)
+
+		// Assert
+		expect(transient.answer.outcome).toEqual({ ok: false, error: 'write ECONNABORTED', transient: true })
+		expect(permanent.answer.outcome).toEqual({ ok: false, error: 'Bad credentials' })
 	})
 
 	test('closes every endpoint of the run when a spent token comes again', async () => {
@@ -211,6 +235,7 @@ describe('openGateway', () => {
 		// Assert
 		expect(interrupted.map((call) => call.id)).toEqual([message.id])
 		expect(errorOf(interrupted[0]?.answer)).toContain('engine stopped')
+		expect(interrupted[0]?.answer.outcome).toMatchObject({ transient: true })
 		expect(readAgain.compromised).toBeUndefined()
 		expect(readAgain.answer.next).toBe(interrupted[0]?.answer.next)
 		expect(resultOf(goesOn.answer)).toEqual({ echoed: 'again' })

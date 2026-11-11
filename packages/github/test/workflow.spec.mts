@@ -3,6 +3,7 @@ import path from 'node:path'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { describe, expect, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
+import { defaultFetchRetry, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { checksPass } from '../src/pull-request/checks-pass.mts'
 import { openPullRequest } from '../src/pull-request/pull-request.mts'
@@ -18,14 +19,20 @@ import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
 const repositoryName = 'team/app'
 
 /** A fake GitHub, a local remote standing in for its git side, and a gateway with the connector's host tools on them. */
-async function connected() {
+async function connected(retry: FetchRetryOptions = defaultFetchRetry) {
 	const api = await fakeGithub()
 	const remote = await localRemote()
 	const gateway = await testGateway(
-		githubHostTools({ directory: await temporaryDirectory(), apiUrl: api.url, remoteUrl: () => remote.url }),
+		githubHostTools({ directory: await temporaryDirectory(), apiUrl: api.url, remoteUrl: () => remote.url, retry }),
 	)
 	return { api, remote, gateway }
 }
+
+/** Host retries that are over in a moment. */
+const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 }
+
+/** No host retries, so every request GitHub doesn't answer fails its call. */
+const noRetry: FetchRetryOptions = { ...quickRetry, attempts: 1 }
 
 describe('github', () => {
 	test('collects an issue into the workspace, renders it as the dump, and comments, labels and closes it on the host', async () => {
@@ -189,6 +196,82 @@ describe('github', () => {
 			sha,
 			failures: [{ name: 'tests', summary: '2 failed', url: 'https://ci.example/1' }],
 		})
+	})
+
+	test('reads an issue on the host after GitHub was unavailable for a moment', async () => {
+		// Arrange
+		const { api, gateway } = await connected(quickRetry)
+		api.issue(repositoryName, 8, { title: 'Flaky network' })
+		api.unavailableRequests = 2
+
+		// Act
+		const run = await runOnGateway(gateway, () => collect({ repository: repositoryName, number: 8 }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ number: 8, title: 'Flaky network' })
+		expect(api.unavailableRequests).toBe(0)
+	})
+
+	test('keeps watching a pull request through an outage, and gives up once looks have failed for longer than it tolerates', async () => {
+		// Arrange
+		const { api, gateway } = await connected(noRetry)
+		api.pullRequest(repositoryName, 9, { state: 'closed', merged: true })
+		api.pullRequest(repositoryName, 10)
+		const options = { every: { seconds: 1 }, toleratedOutage: { seconds: 3 } }
+
+		// Act
+		api.unavailableRequests = 3
+		const outlived = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 9 }, {}, options))
+		const outcome = await outlived.result
+		api.unavailableRequests = 100
+		const outlasted = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 10 }, {}, options))
+
+		// Assert
+		expect(outcome).toMatchObject({ state: 'merged' })
+		expect(outlived.wakes).toBe(3)
+		await expect(outlasted.result).rejects.toThrow('Service Unavailable')
+		expect(outlasted.wakes).toBe(3)
+	})
+
+	test('fails a watch at once on a failure that will not pass, such as a pull request that is gone', async () => {
+		// Arrange
+		const { gateway } = await connected(noRetry)
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 404 }, {}, { every: { seconds: 1 } }))
+
+		// Assert
+		await expect(run.result).rejects.toMatchObject({ name: 'GatewayCallError', transient: false })
+		expect(run.wakes).toBe(0)
+	})
+
+	test('waits for checks through an outage, and fails the check once looks have failed for longer than it tolerates', async () => {
+		// Arrange
+		const { api, gateway } = await connected(noRetry)
+		const sha = shaOf('fix/11')
+		api.pullRequest(repositoryName, 11, { head: { ref: 'fix/11', sha } })
+		api
+			.repository(repositoryName)
+			.checks.set(sha, [
+				{ name: 'tests', status: 'completed', conclusion: 'success', html_url: null, output: { title: null, summary: null } },
+			])
+		const options = { every: { seconds: 1 }, toleratedOutage: { seconds: 3 } }
+
+		// Act
+		api.unavailableRequests = 3
+		const outlived = await runOnGateway(gateway, ({ abortSignal }) =>
+			runCheck(checksPass({ repository: repositoryName, number: 11 }, options), { abortSignal }),
+		)
+		const findings = await outlived.result
+		api.unavailableRequests = 100
+		const outlasted = await runOnGateway(gateway, ({ abortSignal }) =>
+			runCheck(checksPass({ repository: repositoryName, number: 11 }, options), { abortSignal }),
+		)
+
+		// Assert
+		expect(findings).toEqual([])
+		expect(outlived.wakes).toBe(3)
+		await expect(outlasted.result).rejects.toThrow('Service Unavailable')
 	})
 
 	test('reuses a checkout for another branch, clones again over a broken one, and leaves another repository or a plain folder alone', async () => {

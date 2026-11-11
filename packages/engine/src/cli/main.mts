@@ -14,6 +14,7 @@ import { controlClient, type ControlClient, type DeployedApp } from '../control/
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
 import { openEngineGatewayHome } from '../serve/engine-gateway.mts'
+import { keepAwake, type ReleasePower } from '../serve/keep-awake.mts'
 import { defaultWebhookHost, serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
 import { handleShutdown } from '../shutdown/handle-shutdown.mts'
 import { openWebhookSecrets } from '../triggers/webhook-secrets.mts'
@@ -103,11 +104,17 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const { webhookPort, webhookHost, ...backendOptions } = options
 			const backend = await openBackend({ home: home(), log, ...backendOptions })
 			let served: ServedEngine | undefined
+			let releasePower: ReleasePower | undefined
 			handleShutdown({
 				log,
 				shutdown: async (deadlines) => {
 					startup.abort(new Error('The engine is shutting down.'))
-					await (served ? served.close(deadlines) : backend.close(deadlines.backend))
+					try {
+						await (served ? served.close(deadlines) : backend.close(deadlines.backend))
+					} finally {
+						// Only once the sandboxes are paused: the machine mustn't sleep while that runs.
+						releasePower?.()
+					}
 				},
 			})
 			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
@@ -117,6 +124,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 					throw error
 				},
 			)
+			releasePower = await keepAwake({ abortSignal: startup.signal, log })
 			log(`Engine ready on ${served.socketPath}.`)
 			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<app>/<webhook>.`)
 		})

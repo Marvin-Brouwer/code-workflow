@@ -37,6 +37,24 @@ export class HostToolInputError extends Error {
 }
 
 /**
+ * A host tool failed on something that may pass on another try, such as a dropped connection or
+ * a service that answered 5xx: the stub's caller gets a `GatewayCallError` marked `transient`, so a
+ * watch can look again later instead of failing. A tool throws it only after its own retries.
+ */
+export class HostToolTransientError extends Error {
+	override readonly name = 'HostToolTransientError'
+	readonly transient = true
+}
+
+/**
+ * Whether `error` says it may pass on another try. Checked by its `transient` field, not by class,
+ * since a connector package may bring its own copy of this package.
+ */
+export function isTransient(error: unknown): boolean {
+	return error instanceof Error && 'transient' in error && error.transient === true
+}
+
+/**
  * The host half of a credentialed tool. Its code is the only limit on what the credential can do,
  * so it does one thing: there is no raw API for an agent to misuse.
  *

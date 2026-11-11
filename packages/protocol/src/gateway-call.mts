@@ -91,7 +91,12 @@ export const CallAnswer = z.object({
 	next: EndpointToken.optional(),
 	outcome: z.discriminatedUnion('ok', [
 		z.object({ ok: z.literal(true), result: z.unknown() }),
-		z.object({ ok: z.literal(false), error: z.string() }),
+		z.object({
+			ok: z.literal(false),
+			error: z.string(),
+			/** The failure may pass on another try: the network or the service was down, or the engine stopped mid-call. */
+			transient: z.boolean().optional(),
+		}),
 	]),
 })
 export type CallAnswer = z.infer<typeof CallAnswer>
