@@ -88,6 +88,14 @@ export const commands = {
 	lsFiles(...args: string[]): string[] {
 		return ['ls-files', ...args]
 	},
+	/** `git ls-tree`: the files of a commit's tree, such as `lsTree('-r', '-z', '--name-only', 'origin/main')`. */
+	lsTree(...args: string[]): string[] {
+		return ['ls-tree', ...args]
+	},
+	/** `git show`: a commit, or a file as a commit has it with `show('origin/main:README.md')`. */
+	show(...args: string[]): string[] {
+		return ['show', ...args]
+	},
 	revParse(...args: string[]): string[] {
 		return ['rev-parse', ...args]
 	},
