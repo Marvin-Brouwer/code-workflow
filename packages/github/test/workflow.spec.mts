@@ -333,6 +333,29 @@ describe('github', () => {
 		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
 	})
 
+	test('fails showing items as being read when GitHub refuses the token, rather than say none was shown', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 17)
+		pull.comments.push({
+			id: 1,
+			body: 'Why?',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		api.failWith = (_method, requestPath) => (requestPath.endsWith('/reactions') ? 401 : undefined)
+
+		// Act
+		const run = await runOnGateway(gateway, () =>
+			stubs.showBeingRead({ repository: repositoryName, number: 17, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] }),
+		)
+
+		// Assert
+		await expect(run.result).rejects.toMatchObject({ name: 'GatewayCallError', transient: false })
+		expect(pull.comments).toHaveLength(1)
+	})
+
 	test('keeps both of two answers given to one item at once', async () => {
 		// Arrange
 		const { api, gateway } = await connected()

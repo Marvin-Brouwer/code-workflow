@@ -17,6 +17,7 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
+import { refusedToken } from './transient-error.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
 import { signed } from './signature.mts'
 
@@ -187,7 +188,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				} catch (error) {
 					// A deleted comment or a locked conversation just isn't shown. What may pass is tried again, and a
 					// stopped call or a bad token is no reason to say the items were shown.
-					if (isTransient(error) || context.abortSignal.aborted || statusOf(error) === unauthorized) throw error
+					if (isTransient(error) || context.abortSignal.aborted || refusedToken(error)) throw error
 				}
 			}
 			return { shown }
@@ -227,14 +228,6 @@ function checksStatus(runs: readonly { status: string }[], commitStatuses: reado
 	if (runs.length === 0 && commitStatuses.length === 0) return 'none'
 	const pending = runs.some((run) => run.status !== 'completed') || commitStatuses.some((commitStatus) => commitStatus.state === 'pending')
 	return pending ? 'pending' : 'completed'
-}
-
-/** GitHub's answer to a token it doesn't take. A 403 is not one: a locked conversation answers that too. */
-const unauthorized = 401
-
-/** The HTTP status a failed GitHub call answered with, if it got that far. */
-function statusOf(error: unknown): number | undefined {
-	return error instanceof Error && 'status' in error && typeof error.status === 'number' ? error.status : undefined
 }
 
 function itemId(kind: ReviewItemKind, id: number): string {

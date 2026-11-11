@@ -1,5 +1,5 @@
 import { HostToolTransientError } from '@mesh-flow/gateway'
-import { unavailable } from './github-statuses.mts'
+import { unauthorized, unavailable } from './github-statuses.mts'
 
 /** GitHub's answer to a missing permission, and to a rate limit, told apart by the headers. */
 const forbidden = 403
@@ -27,6 +27,11 @@ export function markedTransient(error: unknown): unknown {
 	const primaryRateLimit = headers?.['x-ratelimit-remaining'] === '0'
 	const rateLimited = error.status === forbidden && (secondaryRateLimit || primaryRateLimit)
 	return unavailable(error.status) || rateLimited ? new HostToolTransientError(error.message, { cause: error }) : error
+}
+
+/** Whether GitHub refused the token: one that's wrong, expired or revoked. */
+export function refusedToken(error: unknown): boolean {
+	return isRequestFailure(error) && error.status === unauthorized
 }
 
 function isRequestFailure(error: unknown): error is RequestFailure {

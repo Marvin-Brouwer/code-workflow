@@ -1,5 +1,9 @@
+import { setTimeout } from 'node:timers/promises'
 import { describe, expect, test } from 'vitest'
 import { oneAtATime } from '../src/host/one-at-a-time.mts'
+
+/** Long enough for a call that didn't wait its turn to have started. */
+const waitMs = 20
 
 /** How soon a call that stopped has to settle. */
 const promptlyMs = 1000
@@ -50,5 +54,37 @@ describe('oneAtATime', () => {
 		await expect(waiting).rejects.toThrow('The run stopped.')
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
 		expect(ran).toBe(false)
+	})
+
+	test('keeps a later call waiting for the one before, also when a call queued between them stops', async () => {
+		// Arrange
+		const queue = oneAtATime()
+		const ran: string[] = []
+		const abortSignal = new AbortController().signal
+		const stop = new AbortController()
+		const { promise: firstMayEnd, resolve: endFirst } = Promise.withResolvers<undefined>()
+		const first = queue('a', abortSignal, async () => {
+			ran.push('first started')
+			await firstMayEnd
+			ran.push('first ended')
+		})
+		const stopped = queue('a', stop.signal, async () => {
+			ran.push('stopped')
+		})
+
+		// Act
+		stop.abort(new Error('The run stopped.'))
+		await expect(stopped).rejects.toThrow('The run stopped.')
+		const later = queue('a', abortSignal, async () => {
+			ran.push('later')
+		})
+		await setTimeout(waitMs)
+		const whileFirstRuns = [...ran]
+		endFirst(undefined)
+		await Promise.all([first, later])
+
+		// Assert
+		expect(whileFirstRuns).toEqual(['first started'])
+		expect(ran).toEqual(['first started', 'first ended', 'later'])
 	})
 })

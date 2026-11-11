@@ -8,7 +8,7 @@ export type OneAtATime = <T>(key: string, abortSignal: AbortSignal, call: () => 
  */
 export function oneAtATime(): OneAtATime {
 	const lastOn = new Map<string, Promise<unknown>>()
-	return async (key, abortSignal, call) => {
+	return (key, abortSignal, call) => {
 		const turn = (lastOn.get(key) ?? Promise.resolve())
 			.catch(() => undefined)
 			.then(() => {
@@ -16,31 +16,30 @@ export function oneAtATime(): OneAtATime {
 				return call()
 			})
 		lastOn.set(key, turn)
-		try {
-			return await untilAborted(turn, abortSignal)
-		} finally {
-			if (lastOn.get(key) === turn) lastOn.delete(key)
-		}
+		// Forgotten once the turn is really over, not when its caller stops waiting: the call before it may still run.
+		void turn
+			.catch(() => undefined)
+			.finally(() => {
+				if (lastOn.get(key) === turn) lastOn.delete(key)
+			})
+		return untilAborted(turn, abortSignal)
 	}
 }
 
-/** `work`, or a rejection with the signal's reason as soon as `abortSignal` aborts. */
-function untilAborted<T>(work: Promise<T>, abortSignal: AbortSignal): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const onAbort = () => {
-			reject(abortSignal.reason)
-		}
-		if (abortSignal.aborted) onAbort()
-		abortSignal.addEventListener('abort', onAbort, { once: true })
-		work.then(
-			(value) => {
-				abortSignal.removeEventListener('abort', onAbort)
-				resolve(value)
-			},
-			(error: unknown) => {
-				abortSignal.removeEventListener('abort', onAbort)
-				reject(error)
-			},
-		)
-	})
+/**
+ * Waits for `promise`, or rejects with the signal's reason as soon as it aborts. The same as core's
+ * own `untilAborted`, which core doesn't export.
+ */
+async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
+	abortSignal.throwIfAborted()
+	const { promise: aborted, reject } = Promise.withResolvers<never>()
+	const onAbort = () => {
+		reject(abortSignal.reason)
+	}
+	abortSignal.addEventListener('abort', onAbort, { once: true })
+	try {
+		return await Promise.race([promise, aborted])
+	} finally {
+		abortSignal.removeEventListener('abort', onAbort)
+	}
 }

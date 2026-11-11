@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { getRequestListener } from '@hono/node-server'
 import { Hono, type Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
 
@@ -84,6 +85,8 @@ export interface FakeGithub {
 	 * that never settles is never answered, as when GitHub hangs. Answers every request at once by default.
 	 */
 	hold: (method: string, path: string) => Promise<void> | undefined
+	/** Called for every request; when it returns a status, the request is answered with that status instead. Never by default. */
+	failWith: (method: string, path: string) => ContentfulStatusCode | undefined
 	/** The tokens that were sent in `Authorization` headers. */
 	readonly tokens: Set<string>
 	repository(name: string): FakeRepository
@@ -176,13 +179,19 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return made
 	}
 
-	const settings: Pick<FakeGithub, 'unavailableRequests' | 'hold'> = { unavailableRequests: 0, hold: () => undefined }
+	const settings: Pick<FakeGithub, 'unavailableRequests' | 'hold' | 'failWith'> = {
+		unavailableRequests: 0,
+		hold: () => undefined,
+		failWith: () => undefined,
+	}
 	const app = new Hono()
 	app.use(async (context, next) => {
 		const authorization = context.req.header('authorization')
 		if (authorization === undefined) return context.json({ message: 'Requires authentication' }, 401)
 		tokens.add(authorization.replace(/^(token|Bearer) /, ''))
 		await settings.hold(context.req.method, context.req.path)
+		const failure = settings.failWith(context.req.method, context.req.path)
+		if (failure !== undefined) return context.json({ message: 'Failed as the test asked' }, failure)
 		if (settings.unavailableRequests > 0) {
 			settings.unavailableRequests--
 			return context.json({ message: 'Service Unavailable' }, 503)
@@ -341,6 +350,12 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		},
 		set hold(hold: FakeGithub['hold']) {
 			settings.hold = hold
+		},
+		get failWith() {
+			return settings.failWith
+		},
+		set failWith(failWith: FakeGithub['failWith']) {
+			settings.failWith = failWith
 		},
 		tokens,
 		repository,
