@@ -1,7 +1,7 @@
 import { durationMs, type WaitSpec } from '@mesh-flow/core'
 
 /** How long `review` and `checksPass` wait between looks at GitHub when no interval is given. */
-export const defaultLookEvery: WaitSpec = { seconds: 30 }
+export const defaultLookEvery: WaitSpec = { seconds: 10 }
 
 /** How long looks at GitHub may keep failing before a watch gives up, when no duration is given. */
 export const defaultToleratedOutage: WaitSpec = { minutes: 10 }

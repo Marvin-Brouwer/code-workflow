@@ -6,7 +6,7 @@ import { patientLook } from './patient-look.mts'
 
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {
-	/** How long to wait between looks while checks run. Default: 30 seconds. */
+	/** How long to wait between looks while checks run. Default: 10 seconds. */
 	readonly every?: WaitSpec
 	/**
 	 * How long to wait for the first check to appear on a fresh commit before taking a repository

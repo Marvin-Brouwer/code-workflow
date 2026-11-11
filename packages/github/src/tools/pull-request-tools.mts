@@ -70,7 +70,8 @@ export const getPullRequest = {
 
 /**
  * Lists on the host what was said on the pull request at or after `since`, oldest first. Comments
- * this package posted are left out. An item at the same second as `since` comes again, so the
+ * this package posted are left out by their marker, never by author: the token may well be the
+ * reviewer's own. An item at the same second as `since` comes again, so the
  * caller keeps the ids it has handled.
  */
 export const reviewActivity = {
@@ -78,8 +79,6 @@ export const reviewActivity = {
 	description: 'Lists what reviewers said on a pull request since a moment, oldest first',
 	input: PullRequestRef.extend({ since: z.iso.datetime().optional() }),
 	output: z.object({
-		/** Who the credential belongs to, when the token can say; the workflow leaves that author's comments out. */
-		self: z.string().optional(),
 		items: z.array(ReviewItem),
 		/** The moment of the latest item seen so far: the `since` of the next call. Absent until an item was seen. */
 		until: z.iso.datetime().optional(),
@@ -92,6 +91,17 @@ export const replyToReviewItem = {
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
 	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1) }),
 	output: PostedComment,
+}
+
+/**
+ * Puts 👀 on review items on the host, to show the reviewer they were read. GitHub has no reactions
+ * on a review itself, so a review item is left as it is. A reaction that's already there stays one.
+ */
+export const markSeen = {
+	name: 'githubMarkSeen',
+	description: 'Reacts with eyes to review items on a pull request, to show they were read',
+	input: PullRequestRef.extend({ items: z.array(ReviewItemId) }),
+	output: z.object({ marked: z.array(ReviewItemId) }),
 }
 
 /** A check or status on a commit that didn't pass. */

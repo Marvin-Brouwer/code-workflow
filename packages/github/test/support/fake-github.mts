@@ -11,6 +11,8 @@ export interface FakeComment {
 	user: { login: string }
 	html_url: string
 	created_at: string
+	/** The reactions put on it, by their content, such as `eyes`. */
+	reactions?: string[]
 }
 
 export interface FakeReviewComment extends FakeComment {
@@ -75,8 +77,6 @@ export interface FakeGithub {
 	readonly url: string
 	/** The login the token belongs to. */
 	readonly self: string
-	/** When set, `/user` answers 403, as it does for a GitHub App's installation token. */
-	userHidden: boolean
 	/** How many of the next requests answer 503, as GitHub does while it's down. */
 	unavailableRequests: number
 	/** The tokens that were sent in `Authorization` headers. */
@@ -170,7 +170,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return made
 	}
 
-	const settings = { userHidden: false, unavailableRequests: 0 }
+	const settings = { unavailableRequests: 0 }
 	const app = new Hono()
 	app.use(async (context, next) => {
 		const authorization = context.req.header('authorization')
@@ -182,9 +182,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		}
 		return next()
 	})
-	app.get('/user', (context) =>
-		settings.userHidden ? context.json({ message: 'Resource not accessible by integration' }, 403) : context.json({ login: self }),
-	)
+	app.get('/user', (context) => context.json({ login: self }))
 
 	const issues = new Hono().basePath('/repos/:owner/:repo')
 	issues.get('/issues/:number', (context) => {
@@ -279,6 +277,32 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		pull.reviewComments.push(comment)
 		return context.json(comment, 201)
 	})
+	const ReactionBody = z.object({ content: z.string() })
+	/** Puts a reaction on a comment once, as GitHub does: a second one of the same kind is the first. */
+	const react = async (context: RouteContext & { req: { json: () => Promise<unknown> } }, comments: readonly FakeComment[]) => {
+		const comment = comments.find((known) => known.id === Number(context.req.param('id')))
+		if (comment === undefined) return undefined
+		const { content } = ReactionBody.parse(await context.req.json())
+		comment.reactions ??= []
+		if (!comment.reactions.includes(content)) comment.reactions.push(content)
+		return { id: id(), content, user: { login: self } }
+	}
+	issues.post('/pulls/comments/:id/reactions', async (context) => {
+		const reaction = await react(
+			context,
+			[...repository(nameOf(context)).pulls.values()].flatMap((pull) => pull.reviewComments),
+		)
+		return reaction === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(reaction, 201)
+	})
+	issues.post('/issues/comments/:id/reactions', async (context) => {
+		const repo = repository(nameOf(context))
+		const all = [
+			...[...repo.issues.values()].flatMap((issue) => issue.comments),
+			...[...repo.pulls.values()].flatMap((pull) => pull.comments),
+		]
+		const reaction = await react(context, all)
+		return reaction === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(reaction, 201)
+	})
 	issues.get('/commits/:ref/check-runs', (context) => {
 		const runs = repository(nameOf(context)).checks.get(context.req.param('ref')) ?? []
 		return context.json({ total_count: runs.length, check_runs: runs })
@@ -307,12 +331,6 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	return {
 		url: `http://127.0.0.1:${String(address.port)}`,
 		self,
-		get userHidden() {
-			return settings.userHidden
-		},
-		set userHidden(hidden: boolean) {
-			settings.userHidden = hidden
-		},
 		get unavailableRequests() {
 			return settings.unavailableRequests
 		},

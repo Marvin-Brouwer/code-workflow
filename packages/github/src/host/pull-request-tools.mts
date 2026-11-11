@@ -6,6 +6,7 @@ import {
 	checksOnRef,
 	type ChecksStatus,
 	getPullRequest,
+	markSeen,
 	openPullRequest,
 	replyToReviewItem,
 	reviewActivity,
@@ -92,11 +93,6 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			// At or after: GitHub keeps seconds, so a comment in the same second as the last one seen would be lost otherwise.
 			const isNew = (at: string | null | undefined): at is string =>
 				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() >= after)
-			// Found on every look, never kept: the token can change hands, and a failed lookup is not an answer.
-			const self = client.rest.users.getAuthenticated().then(
-				({ data }): string | undefined => data.login,
-				() => undefined,
-			)
 			const [lineComments, reviews, comments] = await Promise.all([
 				client.paginate(client.rest.pulls.listReviewComments, {
 					...where,
@@ -150,8 +146,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			].toSorted((a, b) => a.at.localeCompare(b.at))
 			// The clock is GitHub's, never the host's: the two can disagree, and a comment made while the lists were read must come next time.
 			const until = later(since, items.at(-1)?.at)
-			const login = await self
-			return { ...(login === undefined ? {} : { self: login }), items, ...(until === undefined ? {} : { until }) }
+			return { items, ...(until === undefined ? {} : { until }) }
 		}),
 
 		hostTool(replyToReviewItem, async ({ repository, number, item, body }, context) => {
@@ -170,6 +165,23 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			}
 			const { data } = await client.rest.issues.createComment({ ...where, issue_number: number, body: marked })
 			return { id: data.id, url: data.html_url }
+		}),
+
+		hostTool(markSeen, async ({ repository, items }, context) => {
+			const client = await api(context)
+			const where = splitRepositoryName(repository)
+			const seen = 'eyes'
+			const marked = await Promise.all(
+				items.map(async (item) => {
+					const { kind, id } = parseItemId(item)
+					if (kind === 'review') return undefined
+					if (kind === 'review-comment')
+						await client.rest.reactions.createForPullRequestReviewComment({ ...where, comment_id: id, content: seen })
+					else await client.rest.reactions.createForIssueComment({ ...where, comment_id: id, content: seen })
+					return item
+				}),
+			)
+			return { marked: marked.filter((item) => item !== undefined) }
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {

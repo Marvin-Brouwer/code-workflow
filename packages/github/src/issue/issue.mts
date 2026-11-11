@@ -26,13 +26,14 @@ const issuesFolder = workspace.folder('issues', { description: 'the issues this 
 export interface Issue extends IssueData {
 	/** The dump, relative to the workspace. */
 	readonly path: string
+	/** The dump's absolute path, which is how it renders in a prompt. */
 	[toPrompt](): string
 }
 
 /**
  * Collects an issue: reads it from GitHub and writes it as Markdown into `issues/` in the
- * workspace. In a prompt it renders as that file's path, so the agent reads as much of it as it
- * needs ([design: Context](https://github.com/Marvin-Brouwer/code-workflow/blob/main/docs/design.md#context)).
+ * workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it
+ * as it needs, also after it changed directory into a checkout ([design: Context](https://github.com/Marvin-Brouwer/code-workflow/blob/main/docs/design.md#context)).
  *
  * ```ts
  * const issue = await github.collect(parameters.issue)
@@ -46,7 +47,8 @@ export const collect = tool('githubCollect', {
 		const data = await stubs.getIssue(ref, context)
 		const file = workspace.file(`${issuesFolder.path}/${fileName(data)}`)
 		await file.write(markdownOf(data))
-		return Object.freeze({ ...data, path: file.path, [toPrompt]: () => file.path })
+		const location = file.location()
+		return Object.freeze({ ...data, path: file.path, [toPrompt]: () => location })
 	},
 })
 

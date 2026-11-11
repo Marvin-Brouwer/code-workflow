@@ -49,6 +49,7 @@ describe('github', () => {
 			const issue = await collect({ repository: repositoryName, number: 7 })
 			await comment(issue, 'On it.', { key: 'status' })
 			await comment(issue, 'Still on it.', { key: 'status' })
+			await comment(issue, 'Found it.')
 			await label(issue, ['ai-fix'])
 			await close(issue)
 			return { issue, rendered: issue[toPrompt]() }
@@ -56,14 +57,17 @@ describe('github', () => {
 		const { issue, rendered } = await run.result
 
 		// Assert
-		expect(rendered).toBe('issues/team--app-7.md')
+		expect(rendered).toBe(path.join(run.workspace, 'issues/team--app-7.md'))
 		expect(issue.title).toBe('Login fails on Safari')
 		const dump = await readFile(path.join(run.workspace, issue.path), 'utf8')
 		expect(dump).toContain('# #7: Login fails on Safari')
 		expect(dump).toContain('- Labels: bug')
 		expect(dump).toContain('Steps: open the login page in Safari.')
 		const stored = api.issue(repositoryName, 7)
-		expect(stored.comments.map((posted) => posted.body)).toEqual(['Still on it.\n\n<!-- mesh-flow:status -->'])
+		expect(stored.comments.map((posted) => posted.body)).toEqual([
+			'Still on it.\n\n<!-- mesh-flow:status -->',
+			'Found it.\n\n<!-- mesh-flow:comment -->',
+		])
 		expect(stored.labels.map((known) => known.name)).toEqual(['bug', 'ai-fix'])
 		expect(stored.state).toBe('closed')
 		expect(api.tokens).toEqual(new Set([testToken]))
@@ -119,7 +123,7 @@ describe('github', () => {
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'earlier.txt', 'later.txt'])
 	})
 
-	test('watches a pull request: hands new review items to the handler, leaves its own out, and ends when it is merged', async () => {
+	test("watches a pull request: hands new review items to the handler with eyes on them, leaves the run's own out, and ends when it is merged", async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const pull = api.pullRequest(repositoryName, 3, { head: { ref: 'fix/7', sha: shaOf('fix/7') } })
@@ -133,7 +137,23 @@ describe('github', () => {
 			path: 'fix.txt',
 			line: 1,
 		})
-		pull.comments.push({ id: 2, body: 'Working on it.', user: { login: api.self }, html_url: `${pull.html_url}#c2`, created_at: at })
+		pull.comments.push({
+			id: 2,
+			body: 'Working on it.\n\n<!-- mesh-flow:status -->',
+			user: { login: api.self },
+			html_url: `${pull.html_url}#c2`,
+			created_at: at,
+		})
+		// The token is often the reviewer's own: what they write is still a reviewer's.
+		pull.comments.push({ id: 4, body: 'Also the README.', user: { login: api.self }, html_url: `${pull.html_url}#c4`, created_at: at })
+		pull.reviews.push({
+			id: 5,
+			body: 'Close.',
+			state: 'CHANGES_REQUESTED',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#v5`,
+			submitted_at: at,
+		})
 		const comments = vi.fn<(items: readonly { id: string; body: string }[]) => Promise<void>>(async (items) => {
 			await reply({ repository: repositoryName, number: 3 })({ item: items[0]?.id ?? '', text: 'Renamed.' })
 			pull.merged = true
@@ -148,7 +168,11 @@ describe('github', () => {
 		expect(comments).toHaveBeenCalledTimes(1)
 		expect(comments.mock.calls[0]?.[0]).toMatchObject([
 			{ id: 'review-comment/1', kind: 'review-comment', author: 'reviewer', body: 'Rename this.', path: 'fix.txt', line: 1 },
+			{ id: 'review/5', kind: 'review', verdict: 'changes_requested' },
+			{ id: 'comment/4', kind: 'comment', author: api.self, body: 'Also the README.' },
 		])
+		expect(pull.reviewComments[0]?.reactions).toEqual(['eyes'])
+		expect(pull.comments.map((posted) => posted.reactions)).toEqual([undefined, ['eyes']])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
 			['Renamed.\n\n<!-- mesh-flow:reply -->', 1],
@@ -317,10 +341,9 @@ describe('github', () => {
 		expect(await readFile(path.join(run.workspace, 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
 	})
 
-	test("hands a comment from the same second as the last look over once, and never the run's own reply, also when the token can't say who it is", async () => {
+	test("hands a comment from the same second as the last look over once, and never the run's own reply", async () => {
 		// Arrange
 		const { api, gateway } = await connected()
-		api.userHidden = true
 		const pull = api.pullRequest(repositoryName, 5, { head: { ref: 'fix/7', sha: shaOf('fix/7') } })
 		const at = new Date().toISOString()
 		pull.comments.push({

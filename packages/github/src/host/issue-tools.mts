@@ -3,6 +3,9 @@ import { splitRepositoryName } from '../repository-name.mts'
 import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
 import type { ApiClient } from './api.mts'
 
+/** The marker of a comment posted without a key, which is never looked up to update. */
+const unkeyed = 'comment'
+
 /** The host halves of the issue tools. */
 export function issueHostTools(api: ApiClient): HostTool[] {
 	return [
@@ -25,7 +28,8 @@ export function issueHostTools(api: ApiClient): HostTool[] {
 		hostTool(commentOnIssue, async ({ repository, number, body, key }, context) => {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), issue_number: number }
-			const marked = key === undefined ? body : `${body}\n\n${commentMarker(key)}`
+			// Marked also without a key: the marker is how a look at a review tells the run's own comments from a reviewer's.
+			const marked = `${body}\n\n${commentMarker(key ?? unkeyed)}`
 			if (key !== undefined) {
 				const existing = await client.paginate(client.rest.issues.listComments, { ...where, per_page: 100 })
 				const earlier = existing.find((comment) => comment.body?.includes(commentMarker(key)) === true)

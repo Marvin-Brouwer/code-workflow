@@ -1,7 +1,7 @@
 import { hostToolStub } from '@mesh-flow/core'
 import { cloneRepository, pushBundle } from './tools/git-tools.mts'
 import { closeIssue, commentOnIssue, getIssue, labelIssue } from './tools/issue-tools.mts'
-import { checksOnRef, getPullRequest, openPullRequest, replyToReviewItem, reviewActivity } from './tools/pull-request-tools.mts'
+import { checksOnRef, getPullRequest, markSeen, openPullRequest, replyToReviewItem, reviewActivity } from './tools/pull-request-tools.mts'
 
 /**
  * The sandbox's stubs of the host tools: what the connector's functions and tools call. Each runs
@@ -18,5 +18,6 @@ export const stubs = Object.freeze({
 	getPullRequest: hostToolStub(getPullRequest),
 	reviewActivity: hostToolStub(reviewActivity),
 	replyToReviewItem: hostToolStub(replyToReviewItem),
+	markSeen: hostToolStub(markSeen),
 	checksOnRef: hostToolStub(checksOnRef),
 })
