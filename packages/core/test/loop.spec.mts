@@ -290,9 +290,9 @@ describe('loop', () => {
 		// Assert
 		expect(await run.result).toBe(Research)
 		// Absolute, so the agent still finds it after it has changed into a checkout.
-		const listed = `${path.join(run.workspace, 'research')}${path.sep}, empty so far`
-		expect(textOf(model.requests[0])).toContain(asInRequest(listed))
-		expect(textOf(model.requests[1])).toContain(asInRequest(`${path.join(run.workspace, 'research')}${path.sep} has 0 of the 1 files`))
+		const research = `${path.join(run.workspace, 'research')}${path.sep}`
+		expect(textOf(model.requests[0])).toContain(asInRequest(`${research}, empty so far`))
+		expect(textOf(model.requests[1])).toContain(asInRequest(`${research} has 0 of the 1 files`))
 	})
 
 	test('renders a workspace file as where it is on disk, so it is found from inside a checkout too', async () => {
