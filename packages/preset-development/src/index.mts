@@ -1,6 +1,7 @@
 /**
  * Development preset: schemas, the code review check and plan deviations. Ships no agents.
  */
+import path from 'node:path'
 import { type Agent, check, succeed, tool, workspace } from '@mesh-flow/core'
 import { z } from 'zod'
 
@@ -15,7 +16,10 @@ export const Research = workspace.folder('research', {
 })
 
 export const Plan = z.object({
-	path: z.string().describe('Absolute path of plan.md, so agents find it from inside a checkout'),
+	path: z
+		.string()
+		.refine((value) => path.isAbsolute(value), 'Give the absolute path, so agents find it from inside a checkout.')
+		.describe('Absolute path of plan.md'),
 	repositories: z.array(
 		z.object({
 			name: z.string().describe('Project path on the source host, e.g. group/project'),
