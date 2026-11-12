@@ -20,7 +20,8 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 	await developer.loop`
 		Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
-		${dependencies} After changing them, install them again with ${installDependencies}.
+		${dependencies}
+		After changing package.json or its lockfile, install again with ${installDependencies}.
 		${limit({ minutes: 30 })}
 	`
 

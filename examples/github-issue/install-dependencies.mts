@@ -5,7 +5,7 @@
  * developer can call again after changing the dependencies.
  */
 import { execFile } from 'node:child_process'
-import { appendFile, readFile, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { tool, toPrompt, workspace } from '@mesh-flow/core'
@@ -20,23 +20,30 @@ const maxOutputBytes = 16 * 1024 * 1024
 const installTimeoutMs = 10 * 60_000
 
 /**
- * Where a failed install's output goes. The prompt names the file rather than holding the output,
- * which has timestamps in it: the prompt stays the same on a rerun, so the developer's loop resumes.
+ * Where a failed install's output goes, one file per repository. The prompt names the file rather
+ * than holding the output, which has timestamps in it: the prompt stays the same on a rerun, so the
+ * developer's loop resumes.
  */
-const installLog = '/var/tmp/install-dependencies.log'
+const installLogDirectory = '/var/tmp/install-dependencies'
 
 /** How the install went, and in a prompt, a sentence that says so. */
-export interface Installed {
+export interface InstallResult {
 	readonly state: 'installed' | 'nothing to install' | 'failed' | 'not handled'
 	readonly detail: string
 	[toPrompt](): string
 }
 
-/** The command for each lockfile, in the order they're looked for. Corepack fetches pnpm from the npm registry. */
+/** Lets corepack fetch pnpm from the npm registry without asking first. */
+const corepackEnv = { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
+
+/** The command for each lockfile, in the order they're looked for. */
 const installers = [
-	{ lockfile: 'package-lock.json', command: ['npm', 'ci', '--no-audit', '--no-fund'] },
-	{ lockfile: 'pnpm-lock.yaml', command: ['corepack', 'pnpm', 'install', '--frozen-lockfile'] },
+	{ lockfile: 'package-lock.json', command: ['npm', 'ci', '--no-audit', '--no-fund'], env: {} },
+	{ lockfile: 'pnpm-lock.yaml', command: ['corepack', 'pnpm', 'install', '--frozen-lockfile'], env: corepackEnv },
 ] as const
+
+/** Without a lockfile: install, but don't write one into the checkout. */
+const withoutLockfile = { command: ['npm', 'install', '--no-package-lock', '--no-audit', '--no-fund'], env: {} } as const
 
 /** Lockfiles of package managers this doesn't run: installing with npm instead would ignore them. */
 const notHandled = ['yarn.lock', 'bun.lock', 'bun.lockb'] as const
@@ -55,46 +62,44 @@ const notHandled = ['yarn.lock', 'bun.lock', 'bun.lockb'] as const
 export const installDependencies = tool('installDependencies', {
 	description: "Installs a repository's npm dependencies, as its lockfile says. Run it again after changing them.",
 	input: z.object({ repository: z.string().describe("The repository's path in the workspace") }),
-	action: async ({ repository }, { abortSignal }): Promise<Installed> => {
+	action: async ({ repository }, { abortSignal }): Promise<InstallResult> => {
 		const directory = workspace.folder(repository).location()
 		if (!(await exists(directory, 'package.json')))
-			return installed('nothing to install', `${repository} has no package.json, so it has no npm dependencies.`)
+			return result('nothing to install', `${repository} has no package.json, so it has no npm dependencies.`)
 		const unhandled = await firstPresent(directory, notHandled)
 		if (unhandled !== undefined)
-			return installed(
+			return result(
 				'not handled',
-				`${repository} has a ${unhandled}, which this install doesn't handle: install its dependencies yourself.`,
+				`${repository} has a ${unhandled}, which this sandbox can't install from, so its dependencies aren't installed.`,
 			)
-		const installer =
-			(await firstPresent(
-				directory,
-				installers.map(({ lockfile }) => lockfile),
-			)) ?? 'none'
-		const [program, ...args] = installers.find(({ lockfile }) => lockfile === installer)?.command ?? [
-			'npm',
-			'install',
-			'--no-package-lock',
-			'--no-audit',
-			'--no-fund',
-		]
-		await excludeFromGit(directory, 'node_modules')
+		const lockfile = await firstPresent(
+			directory,
+			installers.map((installer) => installer.lockfile),
+		)
+		const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
+		const [program, ...args] = command
+		await excludeFromGit(directory, 'node_modules', abortSignal)
+		const timeout = AbortSignal.timeout(installTimeoutMs)
 		try {
 			await execFileAsync(program, args, {
 				cwd: directory,
-				signal: AbortSignal.any([abortSignal, AbortSignal.timeout(installTimeoutMs)]),
+				signal: AbortSignal.any([abortSignal, timeout]),
 				maxBuffer: maxOutputBytes,
-				env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' },
+				env: { ...process.env, ...env },
 			})
-			return installed('installed', `The npm dependencies of ${repository} are installed (${[program, ...args].join(' ')}).`)
+			return result('installed', `The npm dependencies of ${repository} are installed (${command.join(' ')}).`)
 		} catch (error) {
 			if (abortSignal.aborted) throw error
-			await writeFile(installLog, outputOf(error))
-			return installed('failed', `Installing the npm dependencies of ${repository} failed; the output is in ${installLog}.`)
+			const log = path.join(installLogDirectory, `${path.basename(directory)}.log`)
+			const stopped = timeout.aborted ? `Stopped after ${String(installTimeoutMs / 60_000)} minutes.\n` : ''
+			await mkdir(installLogDirectory, { recursive: true })
+			await writeFile(log, `${stopped}${outputOf(error)}`)
+			return result('failed', `Installing the npm dependencies of ${repository} failed; the output is in ${log}.`)
 		}
 	},
 })
 
-function installed(state: Installed['state'], detail: string): Installed {
+function result(state: InstallResult['state'], detail: string): InstallResult {
 	return Object.freeze({ state, detail, [toPrompt]: () => detail })
 }
 
@@ -111,11 +116,16 @@ function exists(directory: string, file: string): Promise<boolean> {
 	)
 }
 
-/** Adds `pattern` to the checkout's own ignore list, which isn't committed, unless it's there. */
-async function excludeFromGit(directory: string, pattern: string): Promise<void> {
-	const exclude = path.join(directory, '.git', 'info', 'exclude')
+/**
+ * Adds `pattern` to the checkout's own ignore list, which isn't committed, unless it's there. Git
+ * says where that list is, since `.git` can be a file (a worktree) and `info/` can be missing.
+ */
+async function excludeFromGit(directory: string, pattern: string, abortSignal: AbortSignal): Promise<void> {
+	const { stdout } = await execFileAsync('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd: directory, signal: abortSignal })
+	const exclude = path.resolve(directory, stdout.trim())
 	const current = await readFile(exclude, 'utf8').catch(() => '')
 	if (current.split('\n').includes(pattern)) return
+	await mkdir(path.dirname(exclude), { recursive: true })
 	await appendFile(exclude, `${current === '' || current.endsWith('\n') ? '' : '\n'}${pattern}\n`)
 }
 

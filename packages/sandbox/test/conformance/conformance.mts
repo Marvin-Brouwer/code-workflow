@@ -16,12 +16,15 @@ const stubLog = '/var/tmp/stub.log'
 const npmProject = '/var/tmp/npm-check'
 const npmPackage = { name: 'is-number', version: '7.0.0' }
 const npmInstallSeconds = 180
+/** What a test spends besides its main command: create, which may pull the image, and writing files. */
+const setupSeconds = 120
 
 const dotnetProject = '/var/tmp/dotnet-check'
 const nugetPackage = { name: 'Newtonsoft.Json', version: '13.0.3' }
 const dotnetInstallScriptUrl = 'https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh'
 const dotnetInstallScript = '/var/tmp/dotnet-install.sh'
 const dotnetInstallDirectory = '/var/tmp/dotnet'
+const dotnetChannel = '8.0'
 const dotnetInstallSeconds = 420
 const dotnetRestoreSeconds = 180
 /** The SDK unpacks to about 700 MB, which gVisor keeps in memory. */
@@ -44,12 +47,12 @@ export function conformanceEnabled(backend: BackendName): boolean {
 	return (process.env.MESH_FLOW_SANDBOX_TESTS ?? '').split(',').includes(backend)
 }
 
-function secondsMs(seconds: number): number {
+function msFromSeconds(seconds: number): number {
 	return seconds * 1000
 }
 
 function timeout(seconds = 60): AbortSignal {
-	return AbortSignal.timeout(secondsMs(seconds))
+	return AbortSignal.timeout(msFromSeconds(seconds))
 }
 
 /**
@@ -58,7 +61,7 @@ function timeout(seconds = 60): AbortSignal {
  */
 async function installDotnetSdk(sandbox: Sandbox): Promise<string> {
 	const download = `curl -fsS -o ${dotnetInstallScript} ${dotnetInstallScriptUrl}`
-	const install = `bash ${dotnetInstallScript} --channel 8.0 --install-dir ${dotnetInstallDirectory}`
+	const install = `bash ${dotnetInstallScript} --channel ${dotnetChannel} --install-dir ${dotnetInstallDirectory}`
 	const result = await sandbox.exec(['sh', '-c', `${download} && ${install}`], { signal: timeout(dotnetInstallSeconds), env: dotnetEnv })
 	if (result.exitCode !== 0) throw new Error(`Installing the .NET SDK failed: ${result.stdout}${result.stderr}`)
 	return `${dotnetInstallDirectory}/dotnet`
@@ -68,7 +71,7 @@ async function installDotnetSdk(sandbox: Sandbox): Promise<string> {
 function csproj(reference: { name: string; version: string }): string {
 	return [
 		'<Project Sdk="Microsoft.NET.Sdk">',
-		'<PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>',
+		`<PropertyGroup><TargetFramework>net${dotnetChannel}</TargetFramework></PropertyGroup>`,
 		`<ItemGroup><PackageReference Include="${reference.name}" Version="${reference.version}" /></ItemGroup>`,
 		'</Project>',
 	].join('\n')
@@ -178,7 +181,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test(
 			'npm installs a package from an allowed registry, with no proxy or certificate settings',
-			{ timeout: secondsMs(npmInstallSeconds) },
+			{ timeout: msFromSeconds(setupSeconds + npmInstallSeconds) },
 			async () => {
 				// Arrange
 				const sandbox = await backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
@@ -202,7 +205,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 		// The SDK comes from Microsoft's install script, so the test shows curl gets through too.
 		test(
 			'dotnet restores a package from an allowed feed, with no proxy or certificate settings',
-			{ timeout: secondsMs(dotnetInstallSeconds + dotnetRestoreSeconds) },
+			{ timeout: msFromSeconds(setupSeconds + dotnetInstallSeconds + dotnetRestoreSeconds) },
 			async () => {
 				// Arrange
 				const egress = { allow: ['builds.dotnet.microsoft.com', 'api.nuget.org'] }

@@ -52,7 +52,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 		if (existsSync(stateFile(id))) {
 			for (const pid of (await readState(id)).pids) signalGroup(pid, 'SIGKILL')
 		}
-		await rm(path.join(root, id), { recursive: true, force: true })
+		// A killed process can still write a file while it goes, which fails one rm with ENOTEMPTY.
+		await rm(path.join(root, id), { recursive: true, force: true, maxRetries: 5 })
 		running.delete(id)
 	}
 
