@@ -410,16 +410,25 @@ describe('an edit while the text was written', () => {
 	test('settles promptly when the run stops while the person never answers', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
+		const { promise: asked, resolve } = Promise.withResolvers<undefined>()
 
 		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch })
-			await changeLogin(repository, 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, sameSite)
-			api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
-			return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
-		})
-		await expect.poll(() => askedForInput(run.messages)).toBe(true)
+		const run = await runOnGateway(
+			gateway,
+			async () => {
+				const repository = await checkout({ repository: repositoryName, branch })
+				await changeLogin(repository, 'SameSite=None\n')
+				const pullRequest = await openPullRequest(repository, sameSite)
+				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
+			},
+			{
+				onInput: () => {
+					resolve(undefined)
+				},
+			},
+		)
+		await asked
 		const started = performance.now()
 		run.controller.abort(new Error('The run stopped.'))
 		await run.outcome
