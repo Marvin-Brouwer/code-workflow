@@ -1,12 +1,26 @@
-import { toPrompt, type RendersInPrompt } from '@mesh-flow/core'
 import { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
 import { fenced } from './fenced.mts'
 
-/** What a pull request says: its title and its description, as the agent of `describe` writes them. */
+/** GitHub's longest pull request title. */
+const maxTitleCharacters = 256
+
+/** GitHub's longest pull request body, less room for the footer the connector adds. */
+const maxDescriptionCharacters = 60_000
+
+/**
+ * What a pull request says: its title and its description, as the agent of `describe` writes them.
+ * Within GitHub's limits, so a text that is too long goes back to the agent rather than failing
+ * the run on GitHub, and on every rerun after, since the loop keeps its result.
+ */
 export const PullRequestText = z.object({
-	title: z.string().min(1).describe("The pull request's title, one line"),
-	description: z.string().min(1).describe("The pull request's description, in Markdown"),
+	title: z
+		.string()
+		.min(1)
+		.max(maxTitleCharacters)
+		.regex(/^[^\r\n]+$/, 'Write the title on one line.')
+		.describe("The pull request's title, one line"),
+	description: z.string().min(1).max(maxDescriptionCharacters).describe("The pull request's description, in Markdown"),
 })
 export type PullRequestText = z.infer<typeof PullRequestText>
 
@@ -22,6 +36,6 @@ export interface PullRequestContent extends PullRequestText {
 }
 
 /** A pull request's title and description as a prompt takes them, the description fenced. */
-export function textInPrompt(text: PullRequestText): RendersInPrompt {
-	return Object.freeze({ [toPrompt]: () => `Title: ${text.title}\nDescription:\n${fenced(text.description)}` })
+export function textInPrompt(text: PullRequestText): string {
+	return `Title: ${text.title}\nDescription:\n${fenced(text.description)}`
 }

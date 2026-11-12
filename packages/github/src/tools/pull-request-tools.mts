@@ -60,20 +60,20 @@ export type ReviewItem = z.infer<typeof ReviewItem>
 const IssueReference = z.string().regex(/^([\w.-]+\/[\w.-]+)?#\d+$/)
 
 /**
- * Opens the pull request on the host, or gives the open one for the branch this title and
- * description, unless it was already described for this commit.
+ * Opens the pull request on the host. When the branch already has an open one, updates its title
+ * and description, unless it was already described for this commit.
  */
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
 	description:
-		'Opens a pull request on GitHub, or gives the open one for the branch this title and description, unless it was already described for this commit',
+		'Opens a pull request on GitHub; when the branch already has an open one, updates its title and description, unless it was already described for this commit',
 	input: z.object({
 		repository: RepositoryName,
 		head: BranchName,
 		base: BranchName,
 		title: z.string().min(1),
 		body: z.string(),
-		describedSha: Sha.optional(),
+		describedSha: Sha,
 		closes: IssueReference.optional(),
 	}),
 	output: PullRequestData,

@@ -20,7 +20,7 @@ import {
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
-import { signed, unsigned } from './signature.mts'
+import { runIdLine, signed, unsigned } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -46,7 +46,7 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		merged: data.merged ?? (data.merged_at !== null && data.merged_at !== undefined),
 		head: { branch: data.head.ref, sha: data.head.sha },
 		base: data.base.ref,
-		...describedFields(data.body),
+		...descriptionOf(data.body),
 	}
 }
 
@@ -54,22 +54,33 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 const describedKeyName = 'described'
 
 /** A pull request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
-function describedFields(body: string | null | undefined): { description: string; describedSha?: string } {
+function descriptionOf(body: string | null | undefined): { description: string; describedSha?: string } {
 	if (body === null || body === undefined) return { description: '' }
 	const sha = markerValue(body, describedKeyName)
 	// A marker someone edited is no marker: the commit it names is unknown.
 	return { description: unsigned(body), ...(sha !== undefined && Sha.safeParse(sha).success ? { describedSha: sha } : {}) }
 }
 
+/** What a description is signed with besides the run id: the commit it describes and the issue it closes. */
+interface DescriptionNotes {
+	readonly describedSha?: string | undefined
+	readonly closes?: string | undefined
+}
+
 /** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
-function signedDescription(body: string, runId: string, sha: string | undefined, closes: string | undefined): string {
+function signedDescription(body: string, runId: string, { describedSha, closes }: DescriptionNotes): string {
 	// Without trailing line breaks, as `unsigned` gives a description back, so a text that didn't change signs the same.
 	return signed(
 		body.trimEnd(),
 		runId,
-		sha === undefined ? [] : [`${describedKeyName}:${sha}`],
+		describedSha === undefined ? [] : [`${describedKeyName}:${describedSha}`],
 		closes === undefined ? [] : [fixesNote(closes)],
 	)
+}
+
+/** Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with. */
+function sameBody(stored: string | null | undefined, signedBody: string): boolean {
+	return (stored ?? '').replaceAll('\r\n', '\n') === signedBody
 }
 
 /** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
@@ -77,10 +88,12 @@ function fixesNote(closes: string): string {
 	return `Fixes ${closes}`
 }
 
-/** Whether a description's footer already closes the issue: a line that ends in its note, so `Fixes #70` isn't `Fixes #7`. */
+/**
+ * Whether a description's footer already closes the issue: the run id line of the last footer ends
+ * in its note, so `Fixes #70` isn't `Fixes #7`, and a sentence of a person's isn't the footer.
+ */
 function footerCloses(body: string | null | undefined, closes: string): boolean {
-	const note = ` ${fixesNote(closes)}`
-	return (body ?? '').split(/\r?\n/).some((line) => line.endsWith(note))
+	return runIdLine(body ?? '')?.endsWith(` ${fixesNote(closes)}`) ?? false
 }
 
 /** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
@@ -107,10 +120,10 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
 	return [
-		hostTool(openPullRequest, async ({ repository, head, base, title, body, describedSha: sha, closes }, context) => {
+		hostTool(openPullRequest, async ({ repository, head, base, title, body, describedSha, closes }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const signedBody = signedDescription(body, context.runId, sha, closes)
+			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
 			const [existing] = open
 			if (existing === undefined) {
@@ -118,22 +131,20 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				return pullRequestData(repository, data)
 			}
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
-			const unchanged = existing.title === title && existing.body === signedBody
 			const closesAlready = closes === undefined || footerCloses(existing.body, closes)
-			const describedAlready = sha !== undefined && describedFields(existing.body).describedSha === sha && closesAlready
-			if (unchanged || describedAlready) return pullRequestData(repository, existing)
+			if (descriptionOf(existing.body).describedSha === describedSha && closesAlready) return pullRequestData(repository, existing)
 			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
 			return pullRequestData(repository, data)
 		}),
 
-		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha: sha, closes }, context) => {
+		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha, closes }, context) => {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), pull_number: number }
 			const { data: current } = await client.rest.pulls.get(where)
 			// A closed pull request keeps the text it was reviewed with.
 			if (current.state === 'closed') return { ...pullRequestData(repository, current), skipped: 'closed' as const }
-			const signedBody = signedDescription(body, context.runId, sha, closes)
-			if (current.title === title && current.body === signedBody)
+			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
+			if (current.title === title && sameBody(current.body, signedBody))
 				return { ...pullRequestData(repository, current), skipped: 'unchanged' as const }
 			const { data } = await client.rest.pulls.update({ ...where, title, body: signedBody })
 			return pullRequestData(repository, data)

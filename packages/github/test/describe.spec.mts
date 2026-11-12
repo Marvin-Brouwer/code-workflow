@@ -2,59 +2,51 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
-import { githubHostTools } from '../src/host/connector.mts'
-import { signed } from '../src/host/signature.mts'
 import { collect } from '../src/issue/issue.mts'
 import { describe as describeBranch } from '../src/pull-request/describe.mts'
-import { openPullRequest, pullRequest as getPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
+import { openPullRequest, pullRequest as getPullRequest } from '../src/pull-request/pull-request.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
-import { fakeGithub } from './support/fake-github.mts'
-import { localRemote } from './support/local-remote.mts'
+import {
+	branch,
+	changeLogin,
+	connectedGithub,
+	firstPullRequest,
+	issueRef,
+	promptlyMs,
+	repositoryName,
+} from './support/connected-github.mts'
+import { git } from './support/local-remote.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
-import { temporaryDirectory } from './support/temporary-directory.mts'
-import { runOnGateway, testGateway } from './support/test-run.mts'
+import { runOnGateway } from './support/test-run.mts'
 
-const repositoryName = 'team/app'
-
-/** A fake GitHub with issue #7, a local remote standing in for its git side, and a gateway with the connector's host tools on them. */
-async function connected() {
-	const api = await fakeGithub()
-	const remote = await localRemote()
-	const gateway = await testGateway(
-		githubHostTools({ directory: await temporaryDirectory(), apiUrl: api.url, remoteUrl: () => remote.url }),
-	)
-	api.issue(repositoryName, 7, { title: 'Login fails on Safari', body: 'Safari drops the session cookie.' })
-	return { api, remote, gateway }
-}
-
-/** How soon a run that stopped has to settle. */
-const promptlyMs = 1000
+const sameSite = { title: 'Keep the session on Safari', description: 'Sets SameSite.' }
 
 describe('describe', () => {
-	test("describes a branch from its commits, its diff and the repository's template and lint settings, and opens the pull request with it", async () => {
+	test('asks the agent about the commits, the diff, the issue, the template and the lint settings', async () => {
 		// Arrange
-		const { api, remote, gateway } = await connected()
+		const { remote, gateway } = await connectedGithub()
 		await remote.commit('main', '.github/PULL_REQUEST_TEMPLATE.md', '## Summary\n\n- [ ] Tests added\n')
 		await remote.commit('main', 'commitlint.config.mjs', "export default { extends: ['@commitlint/config-conventional'] }\n")
 		await remote.commit('main', '.github/workflows/pr-title.yml', 'steps:\n  - uses: amannn/action-semantic-pull-request@v5\n')
 		await remote.commit('main', '.github/workflows/build.yml', 'steps:\n  - run: pnpm test\n')
-		const { writer, prompts } = scriptedWriter([{ title: 'fix: keep the session on Safari', description: '## Summary\n\nKeeps it.' }])
+		const { writer, prompts } = scriptedWriter([sameSite])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const issue = await collect({ repository: repositoryName, number: 7 })
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
+			const issue = await collect(issueRef)
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
 			const { head } = await push(repository)({ message: 'Set SameSite on the session cookie\n\nSafari drops it otherwise.' })
-			const pullRequest = await openPullRequest(repository, await describeBranch(writer, repository, { issue }))
-			return { issue, head, pullRequest }
+			const content = await describeBranch(writer, repository, { issue })
+			return { issue, head, content }
 		})
-		const { issue, head, pullRequest } = await run.result
+		const { issue, head, content } = await run.result
 
 		// Assert
 		const [asked] = prompts
 		expect(asked).toContain('merges branch `fix/7` of\nteam/app into `main`')
+		expect(asked).toContain(`at commit ${head}`)
 		expect(asked).toContain(issue[toPrompt]())
 		expect(asked).toContain('- Set SameSite on the session cookie\nSafari drops it otherwise.')
 		expect(asked).toContain('login.txt | 1 +')
@@ -63,27 +55,38 @@ describe('describe', () => {
 		expect(asked).toContain("commitlint.config.mjs:\n`````\nexport default { extends: ['@commitlint/config-conventional'] }\n`````")
 		expect(asked).toContain('.github/workflows/pr-title.yml:')
 		expect(asked).not.toContain('build.yml')
+		expect(content).toEqual({ ...sameSite, describedSha: head, closes: issue })
+	})
+
+	test('writes the whole diff into a file in the workspace, which the prompt names', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await push(repository)({ message: 'Set SameSite' })
+			return describeBranch(writer, repository)
+		})
+		await run.result
+
+		// Assert
 		const diffFile = path.join(run.workspace, 'pull-requests/app/fix/7.diff')
-		expect(asked).toContain(diffFile)
+		expect(prompts[0]).toContain(diffFile)
 		expect(await readFile(diffFile, 'utf8')).toContain('+SameSite=None')
-		const stored = api.repository(repositoryName).pulls.get(pullRequest.number)
-		expect(stored?.title).toBe('fix: keep the session on Safari')
-		// Spelled out once, so a change to the footer shows here.
-		expect(stored?.body).toBe(
-			`## Summary\n\nKeeps it.\n\n---\nGenerated by [\`@mesh-flow/*\`](https://github.com/Marvin-Brouwer/code-workflow)\n\`${run.runId}\` Fixes #7\n<!-- mesh-flow:described:${head} -->`,
-		)
-		expect(pullRequest).toMatchObject({ describedSha: head, description: '## Summary\n\nKeeps it.' })
 	})
 
 	test('asks for a default shape without a template, and for a short title without lint settings', async () => {
 		// Arrange
-		const { gateway } = await connected()
-		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Keeps it.' }])
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
 			await push(repository)({ message: 'Set SameSite' })
 			return describeBranch(writer, repository)
 		})
@@ -99,12 +102,12 @@ describe('describe', () => {
 
 	test('reads the template and the lint settings as the default branch has them, not as the branch changed them', async () => {
 		// Arrange
-		const { gateway } = await connected()
+		const { gateway } = await connectedGithub()
 		const { writer, prompts } = scriptedWriter([{ title: 'Change the template', description: 'Changes it.' }])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			const repository = await checkout({ repository: repositoryName, branch })
 			await writeFile(path.join(repository.directory, 'pull_request_template.md'), '## Made on the branch\n')
 			await push(repository)({ message: 'Add a template' })
 			return describeBranch(writer, repository)
@@ -116,157 +119,121 @@ describe('describe', () => {
 		expect(prompts[0]).not.toContain('## Made on the branch')
 	})
 
-	test('describes again from the current text, and only once the branch has commits it does not cover', async () => {
+	test('describes what is committed, without what is left uncommitted or untracked', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await push(repository)({ message: 'Set SameSite' })
+			await writeFile(path.join(repository.directory, 'README.md'), '# Changed\n')
+			await writeFile(path.join(repository.directory, 'coverage.json'), '{}\n')
+			return describeBranch(writer, repository)
+		})
+		await run.result
+
+		// Assert
+		expect(prompts[0]).toContain('login.txt | 1 +')
+		expect(prompts[0]).not.toContain('README.md')
+		expect(prompts[0]).not.toContain('coverage.json')
+	})
+
+	test('refuses a branch without commits of its own, before the agent spends a loop on it', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => describeBranch(writer, await checkout({ repository: repositoryName, branch })))
+
+		// Assert
+		await expect(run.result).rejects.toThrow('fix/7 has no commits on top of main')
+		expect(prompts).toHaveLength(0)
+	})
+
+	test('describes a pull request again from its current text, for the branch as it was pushed', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
 		const { writer, prompts } = scriptedWriter([
-			{ title: 'Keep the session on Safari', description: 'Sets SameSite.' },
 			{ title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' },
 		])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const issue = await collect({ repository: repositoryName, number: 7 })
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			await push(repository)({ message: 'Set SameSite' })
-			const pullRequest = await openPullRequest(repository, await describeBranch(writer, repository, { issue }))
-			const describeAgain = async () => updatePullRequest(pullRequest, await describeBranch(writer, repository, { issue, pullRequest }))
-			const unchanged = await describeAgain()
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			await changeLogin(repository, 'SameSite=None; Secure\n')
 			const { head } = await push(repository)({ message: 'Set Secure too' })
-			const changed = await describeAgain()
-			const again = await describeAgain()
-			return { head, unchanged, changed, again }
+			// Committed in the checkout, but never pushed: the pull request doesn't show it.
+			await changeLogin(repository, 'SameSite=Lax\n')
+			await git(repository.directory, 'commit', '--quiet', '-am', 'Unpushed')
+			const content = await describeBranch(writer, repository, { pullRequest })
+			return { head, content }
 		})
-		const result = await run.result
+		const { head, content } = await run.result
 
 		// Assert
-		expect(prompts).toHaveLength(2)
-		expect(prompts[1]).toContain('Start from them')
-		expect(prompts[1]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
-		expect(result.unchanged).toMatchObject({ title: 'Keep the session on Safari', skipped: 'unchanged' })
-		expect(result.changed).toMatchObject({ title: 'Keep the session on Safari and Firefox', describedSha: result.head })
-		expect(result.changed.skipped).toBeUndefined()
-		expect(result.again).toMatchObject({ describedSha: result.head, skipped: 'unchanged' })
-		const stored = api.repository(repositoryName).pulls.get(1)
-		expect(stored?.body).toBe(signed('Sets SameSite and Secure.', run.runId, [`described:${result.head}`], ['Fixes #7']))
+		expect(prompts[0]).toContain('Start from them')
+		expect(prompts[0]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
+		expect(content).toMatchObject({ title: 'Keep the session on Safari and Firefox', describedSha: head })
 	})
 
-	test('leaves a closed pull request as it is: no loop, and nothing written', async () => {
+	test('runs no loop when the pull request already describes the pushed commit', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
-		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
-			await push(repository)({ message: 'Set Secure too' })
-			api.pullRequest(repositoryName, pullRequest.number, { state: 'closed' })
-			const text = await describeBranch(writer, repository, { pullRequest })
-			const updated = await updatePullRequest(pullRequest, { title: 'Something else', description: 'Else.' })
-			return { text, updated }
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, { ...sameSite, closes: issueRef })
+			return describeBranch(writer, repository, { pullRequest })
 		})
-		const { text, updated } = await run.result
+		const content = await run.result
 
 		// Assert
 		expect(prompts).toHaveLength(0)
-		expect(text).toMatchObject({ title: 'Keep the session', description: 'Sets it.' })
-		expect(updated).toMatchObject({ state: 'closed', skipped: 'closed', title: 'Keep the session' })
-		expect(api.repository(repositoryName).pulls.get(1)?.title).toBe('Keep the session')
+		expect(content).toMatchObject(sameSite)
 	})
 
-	test('settles promptly when the run stops while GitHub never answers the new description', async () => {
+	test('runs no loop for a closed pull request, and gives its text back', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
-		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
-		api.hold = (method, requestPath) => {
-			if (method !== 'PATCH' || !requestPath.endsWith('/pulls/1')) return undefined
-			resolve(undefined)
-			return new Promise(() => undefined)
-		}
+		const { api, gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			return updatePullRequest(pullRequest, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			await changeLogin(repository, 'SameSite=None; Secure\n')
+			await push(repository)({ message: 'Set Secure too' })
+			api.pullRequest(repositoryName, pullRequest.number, { state: 'closed' })
+			return describeBranch(writer, repository, { pullRequest })
 		})
-		await stalled
-		const started = performance.now()
-		run.controller.abort(new Error('The run stopped.'))
-		await run.outcome
+		const content = await run.result
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
-	})
-
-	test('keeps the text of the open pull request when it is opened again for the same commit, unless it should close an issue it does not', async () => {
-		// Arrange
-		const { api, gateway } = await connected()
-		const closes = { repository: repositoryName, number: 7 }
-		api.issue(repositoryName, 70)
-
-		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			await openPullRequest(repository, {
-				title: 'Keep the session',
-				description: 'Sets it.',
-				closes: { repository: repositoryName, number: 70 },
-			})
-			const rerun = await openPullRequest(repository, {
-				title: 'Keep the session, written again',
-				description: 'Sets it, again.',
-				closes: { repository: repositoryName, number: 70 },
-			})
-			const withCloses = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.', closes })
-			return { rerun, withCloses }
-		})
-		const { rerun, withCloses } = await run.result
-
-		// Assert
-		expect(rerun).toMatchObject({ title: 'Keep the session', description: 'Sets it.' })
-		expect(withCloses.description).toBe('Sets it.')
-		expect(api.repository(repositoryName).pulls.get(1)?.body).toContain(`\`${run.runId}\` Fixes #7\n`)
-	})
-
-	test('gives the open pull request the new text when it is opened again for a new commit', async () => {
-		// Arrange
-		const { api, gateway } = await connected()
-
-		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
-			return openPullRequest(repository, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
-		})
-		const moved = await run.result
-
-		// Assert
-		expect(api.repository(repositoryName).pulls.size).toBe(1)
-		expect(moved).toMatchObject({ title: 'Keep the session on Safari', description: 'Sets SameSite.' })
+		expect(prompts).toHaveLength(0)
+		expect(content).toMatchObject(sameSite)
 	})
 
 	test('starts from the text of a pull request a person wrote, without cutting at its own `---` rule', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
-		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
-		const written = 'Sets the cookie.\r\n\r\n---\r\nNotes of my own.'
+		const { api, gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			api.pullRequest(repositoryName, pullRequest.number, { body: written })
+			api.pullRequest(repositoryName, pullRequest.number, { body: 'Sets the cookie.\r\n\r\n---\r\nNotes of my own.' })
 			return describeBranch(writer, repository, { pullRequest })
 		})
 		await run.result
@@ -275,90 +242,40 @@ describe('describe', () => {
 		expect(prompts[0]).toContain('Description:\n`````\nSets the cookie.\n\n---\nNotes of my own.\n`````')
 	})
 
-	test('takes the footer and markers out of a description saved with CRLF, keeps what a person added under it, and takes an edited marker as none', async () => {
+	test('refuses a pull request of another branch', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
-		const sha = 'a'.repeat(40)
+		const { gateway } = await connectedGithub()
+		const { writer } = scriptedWriter([])
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			api.pullRequest(repositoryName, pullRequest.number, {
-				body: `${signed('Sets it.', run.runId, [`described:${sha}`])}\nAdded later.`.replaceAll('\n', '\r\n'),
-			})
-			const saved = await getPullRequest(pullRequest)
-			api.pullRequest(repositoryName, pullRequest.number, { body: signed('Sets it.', run.runId, ['described:not-a-sha']) })
-			const edited = await getPullRequest(pullRequest)
-			return { saved, edited }
-		})
-		const { saved, edited } = await run.result
-
-		// Assert
-		expect(saved).toMatchObject({ description: 'Sets it.\n\nAdded later.', describedSha: sha })
-		expect(edited.description).toBe('Sets it.')
-		expect(edited.describedSha).toBeUndefined()
-	})
-
-	test('refuses to describe a checkout with changes to tracked files that are not committed', async () => {
-		// Arrange
-		const { gateway } = await connected()
-		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
-
-		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'README.md'), '# Changed\n')
-			return describeBranch(writer, repository)
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			const other = await checkout({ repository: repositoryName, branch: 'fix/8' })
+			return describeBranch(writer, other, { pullRequest })
 		})
 
 		// Assert
-		await expect(run.result).rejects.toThrow("app has changes that aren't committed")
-		expect(prompts).toHaveLength(0)
-	})
-
-	test('describes a checkout with untracked files left behind, as it is committed', async () => {
-		// Arrange
-		const { gateway } = await connected()
-		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
-
-		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			await push(repository)({ message: 'Set SameSite' })
-			await writeFile(path.join(repository.directory, 'coverage.json'), '{}\n')
-			return describeBranch(writer, repository)
-		})
-		await run.result
-
-		// Assert
-		expect(prompts[0]).toContain('login.txt | 1 +')
-		expect(prompts[0]).not.toContain('coverage.json')
+		await expect(run.result).rejects.toThrow('is the pull request of fix/7, not of team/app fix/8')
 	})
 
 	test('settles promptly when the run stops while GitHub never answers the read of the pull request', async () => {
 		// Arrange
-		const { api, gateway } = await connected()
+		const { api, gateway } = await connectedGithub()
 		const { writer } = scriptedWriter([])
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
-		let reads = 0
 		api.hold = (method, requestPath) => {
-			if (method !== 'GET' || !requestPath.endsWith('/pulls/1')) return undefined
-			reads++
-			// The first read is the test's own, to see that reads go through; the second, describe's, never comes back.
-			if (reads === 1) return undefined
+			if (method !== 'GET' || !requestPath.endsWith(`/pulls/${firstPullRequest}`)) return undefined
 			resolve(undefined)
 			return new Promise(() => undefined)
 		}
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			await getPullRequest(pullRequest)
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
 			return describeBranch(writer, repository, { pullRequest })
 		})
 		await stalled
@@ -368,5 +285,27 @@ describe('describe', () => {
 
 		// Assert
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
+	})
+})
+
+describe('pullRequest', () => {
+	test('reads a description without the footer and markers, and a marker someone edited as none', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			const stored = api.pullRequest(repositoryName, pullRequest.number)
+			api.pullRequest(repositoryName, pullRequest.number, { body: stored.body.replace(/described:[0-9a-f]+/, 'described:not-a-sha') })
+			return getPullRequest(pullRequest)
+		})
+		const edited = await run.result
+
+		// Assert
+		expect(edited.description).toBe('Sets SameSite.')
+		expect(edited.describedSha).toBeUndefined()
 	})
 })

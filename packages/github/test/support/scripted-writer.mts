@@ -35,11 +35,12 @@ function shown(value: unknown): string {
 }
 
 /** An agent whose loops answer with `texts`, one each, and keep the prompts they got. */
-export function scriptedWriter(texts: PullRequestText[]) {
+export function scriptedWriter(texts: readonly PullRequestText[]) {
+	const queue = [...texts]
 	const prompts: string[] = []
 	const loop = (strings: TemplateStringsArray, ...values: unknown[]) => {
 		prompts.push(rendered(strings, values).replace(/^[ \t]+/gm, ''))
-		const text = texts.shift()
+		const text = queue.shift()
 		return text === undefined ? Promise.reject(new Error('The writer has nothing more to write.')) : Promise.resolve(text)
 	}
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a stand-in for a model: `loop` answers whatever its template asks for
