@@ -11,7 +11,7 @@ import type { Sandbox } from '../sandbox.mts'
 import { allowsEgress, SandboxSpec } from '../sandbox-spec.mts'
 import { writeBundle } from './bundle.mts'
 import { hasCheckpoint, isCheckpointName } from './checkpoint.mts'
-import { forwarderEnv, forwarderReady, forwarderService } from './egress-forwarder.mts'
+import { forwarderEnv, forwarderReadyCheck, forwarderService } from './egress-forwarder.mts'
 import { EgressProxies } from './egress-proxies.mts'
 import type { GvisorContext } from './gvisor.context.mts'
 import { GvisorSandbox } from './gvisor.sandbox.mts'
@@ -107,7 +107,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				})
 				await proxies.start(id, spec.egress, bound)
 				await runscOrThrow(config, ['run', '--detach', `--bundle=${paths.bundle}`, id], { signal: bound, logFile: paths.log })
-				if (egress) await runscOrThrow(config, ['exec', id, ...forwarderReady], { signal: bound })
+				if (egress) await runscOrThrow(config, ['exec', id, ...forwarderReadyCheck], { signal: bound })
 			} catch (error) {
 				await cleanUp((cleanupSignal) => removeFromDisk(id, cleanupSignal))
 				throw error

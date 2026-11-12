@@ -167,6 +167,34 @@ describe('gVisor backend, on a fake runsc', () => {
 		expect(await sandboxDirectories(directory)).toEqual([])
 	})
 
+	test('closes while a create waits for the egress forwarder, and leaves nothing behind', async () => {
+		// Arrange
+		const { backend, directory, reopen } = await backendOnFakeRunsc({ hangOn: 'exec' })
+		const creating = backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, new AbortController().signal)
+		creating.catch(() => undefined)
+
+		// Act
+		await backend.close(timeout())
+
+		// Assert
+		await expect(creating).rejects.toThrow()
+		expect(await reopen().list(timeout())).toEqual([])
+		expect(await sandboxDirectories(directory)).toEqual([])
+	})
+
+	test('fails a create whose egress forwarder never listens, and leaves nothing behind', async () => {
+		// Arrange
+		const { backend, directory } = await backendOnFakeRunsc({ forwarder: 'never' })
+
+		// Act
+		const creating = backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
+
+		// Assert
+		await expect(creating).rejects.toThrow('runsc exec')
+		expect(await backend.list(timeout())).toEqual([])
+		expect(await sandboxDirectories(directory)).toEqual([])
+	})
+
 	test('keeps paused sandboxes on close, for the next start to find', async () => {
 		// Arrange
 		const { backend, reopen } = await backendOnFakeRunsc()

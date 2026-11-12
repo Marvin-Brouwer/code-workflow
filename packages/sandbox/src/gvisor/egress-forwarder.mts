@@ -1,14 +1,16 @@
 import { egressMountPoint } from './layout.mts'
 
 const port = 3128
+/** Where the forwarder listens, inside the sandbox. */
+const listenHost = '127.0.0.1'
 const egressSocket = `${egressMountPoint}/egress.sock`
 
 /**
- * Forwards every connection to `127.0.0.1:<port>` to the egress socket. It runs inside the sandbox
+ * Forwards every connection to `host:listenPort` to the egress socket. It runs inside the sandbox
  * as the source of `node -e`, so nothing outside this function is in scope there: no imports and
  * no helpers, which a bundler could rename. It only uses its arguments and Node's globals.
  */
-function forward(socketPath: string, listenPort: number): void {
+function forward(socketPath: string, host: string, listenPort: number): void {
 	const net = process.getBuiltinModule('node:net')
 	net
 		.createServer((client) => {
@@ -17,7 +19,7 @@ function forward(socketPath: string, listenPort: number): void {
 			upstream.on('error', () => client.destroy())
 			client.pipe(upstream).pipe(client)
 		})
-		.listen(listenPort, '127.0.0.1')
+		.listen(listenPort, host)
 }
 
 /**
@@ -27,41 +29,58 @@ function forward(socketPath: string, listenPort: number): void {
 export const forwarderService: readonly string[] = [
 	'node',
 	'-e',
-	`(${forward.toString()})(${JSON.stringify(egressSocket)}, ${String(port)})`,
+	`(${forward.toString()})(${JSON.stringify(egressSocket)}, ${JSON.stringify(listenHost)}, ${String(port)})`,
 ]
 
 /**
- * Waits in the sandbox, up to `timeoutMs`, until the forwarder takes connections, then exits 0;
- * exits 1 when it never does. Like {@link forward}, it runs as the source of `node -e`.
+ * How long create waits for the forwarder to listen. Init starts it in the background, and a
+ * cold start of node on a loaded machine can take seconds; create's own signal still bounds it.
  */
-function waitForForwarder(listenPort: number, timeoutMs: number): void {
+const forwarderStartTimeoutMs = 30_000
+
+/** How often the wait tries to connect. */
+const forwarderRetryMs = 20
+
+/**
+ * Exits 0 once something listens on `host:listenPort`, or 1 with a message after `timeoutMs`.
+ * Like {@link forward}, it runs as the source of `node -e`.
+ */
+function waitForForwarder(host: string, listenPort: number, timeoutMs: number, retryMs: number): void {
 	const net = process.getBuiltinModule('node:net')
 	const deadline = Date.now() + timeoutMs
 	const attempt = () => {
-		const socket = net.connect(listenPort, '127.0.0.1', () => {
+		const socket = net.connect(listenPort, host, () => {
 			socket.destroy()
 			process.exit(0)
 		})
 		socket.on('error', () => {
-			if (Date.now() > deadline) process.exit(1)
-			setTimeout(attempt, 20)
+			if (Date.now() < deadline) {
+				setTimeout(attempt, retryMs)
+				return
+			}
+			process.stderr.write(`The egress forwarder did not listen on ${host}:${String(listenPort)} within ${String(timeoutMs)} ms.\n`)
+			process.exit(1)
 		})
 	}
 	attempt()
 }
 
 /**
- * Exits 0 once the forwarder listens. Init starts the forwarder in the background, so without this
- * a command run straight after create can find nothing on the port, which a tool without retries,
- * such as curl, gives up on.
+ * The command create runs once the sandbox is up: it returns when the forwarder listens. Without
+ * it, a command run straight after create can find nothing on the port, which a tool without
+ * retries, such as curl, gives up on.
  */
-export const forwarderReady: readonly string[] = ['node', '-e', `(${waitForForwarder.toString()})(${String(port)}, 10000)`]
+export const forwarderReadyCheck: readonly string[] = [
+	'node',
+	'-e',
+	`(${waitForForwarder.toString()})(${[JSON.stringify(listenHost), port, forwarderStartTimeoutMs, forwarderRetryMs].map(String).join(', ')})`,
+]
 
 /** What the sandbox's processes need to find the forwarder. Plain HTTP stays blocked. */
 export const forwarderEnv: Readonly<Record<string, string>> = {
-	HTTPS_PROXY: `http://127.0.0.1:${String(port)}`,
-	https_proxy: `http://127.0.0.1:${String(port)}`,
-	NO_PROXY: 'localhost,127.0.0.1',
-	no_proxy: 'localhost,127.0.0.1',
+	HTTPS_PROXY: `http://${listenHost}:${String(port)}`,
+	https_proxy: `http://${listenHost}:${String(port)}`,
+	NO_PROXY: `localhost,${listenHost}`,
+	no_proxy: `localhost,${listenHost}`,
 	NODE_USE_ENV_PROXY: '1',
 }

@@ -542,7 +542,7 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     Public package sources by hostname mean either interception or a gateway-side package proxy.
     npm and NuGet installs from their public registries pass the conformance suite on gVisor and on
     microsandbox (Linux and Windows) without settings in the sandbox: microsandbox puts its
-    interception CA in the guest's trust store and CA variables itself.
+    interception CA in the guest's trust store and CA variables itself. On E2B they are untested.
 12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) passes the conformance
     suite on GitHub's hosted Windows runners in CI. Not yet tried on a developer machine.
 
@@ -567,9 +567,10 @@ Out of scope for now: token and cost budgets.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. `inDependencyOrder` with concurrency.
 5. GitLab review watching; AWS and CodeArtifact through the gateway; `checkSession`; package
-   managers beyond npm and NuGet, each with a conformance test that installs through egress, one per way of trusting
-   certificates and proxies: pip (its own certifi bundle), Maven and Gradle (the JVM's keystore,
-   and proxy settings as system properties instead of `HTTPS_PROXY`), Go and Cargo.
+   managers beyond npm and NuGet, each with a conformance test that installs through egress, one
+   per way of trusting certificates and proxies: pip (its own certifi bundle), Maven and Gradle
+   (the JVM's keystore, and proxy settings as system properties instead of `HTTPS_PROXY`), Go and
+   Cargo.
 6. UI, settings wizard, credential store.
 7. Hosted, multi-user.
 

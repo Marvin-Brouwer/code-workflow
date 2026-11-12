@@ -1,19 +1,23 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { forwarderReadyCheck } from '../../src/gvisor/egress-forwarder.mts'
 import { Layout } from '../../src/gvisor/layout.mts'
 import { imageMarker, rootfsDirectory } from '../../src/gvisor/rootfs.mts'
 
 export interface FakeRunscOptions {
 	/** A runsc command that never finishes, such as `run`, for tests of abort and close. */
 	readonly hangOn?: string
+	/** What the wait for the egress forwarder gets: no init runs here, so nothing really listens. Default `listens`. */
+	readonly forwarder?: 'listens' | 'never'
 }
 
 /**
  * A stand-in for runsc, for tests on machines without it. It keeps a file per container under
  * `--root` that holds its status, and `exec` runs the command on the host, so a command that never
- * ends really never ends. It runs no init, so the wait for the egress forwarder passes at once.
+ * ends really never ends. The wait for the egress forwarder, the command in `readyCheckFile`, is
+ * answered as `options.forwarder` says.
  */
-function script(options: FakeRunscOptions): string {
+function script(options: FakeRunscOptions, readyCheckFile: string): string {
 	return `#!/bin/sh
 root=
 while [ $# -gt 0 ]; do
@@ -36,8 +40,7 @@ case "$command" in
     exec)
         while [ $# -gt 0 ]; do case "$1" in --*) shift ;; *) break ;; esac; done
         shift
-        # No init runs here, so there is no egress forwarder to wait for.
-        case "$*" in *waitForForwarder*) exit 0 ;; esac
+        [ "$*" = "$(cat '${readyCheckFile}')" ] && exit ${options.forwarder === 'never' ? '1' : '0'}
         exec "$@" ;;
     list)
         printf '['; separator=
@@ -58,7 +61,9 @@ export function fakeContainerFile(directory: string, id: string): string {
 /** Writes the fake runsc and an already unpacked image into `directory`. Returns the command. */
 export async function fakeRunsc(directory: string, image: string, options: FakeRunscOptions = {}): Promise<string[]> {
 	const file = path.join(directory, 'fake-runsc')
-	await writeFile(file, script(options))
+	const readyCheckFile = path.join(directory, 'forwarder-ready-check')
+	await writeFile(readyCheckFile, forwarderReadyCheck.join(' '))
+	await writeFile(file, script(options, readyCheckFile))
 	await chmod(file, 0o755)
 	const rootfs = rootfsDirectory(path.join(directory, 'images'), image)
 	await mkdir(rootfs, { recursive: true })
