@@ -4,8 +4,8 @@
  * file says how it gets started and where it runs.
  *
  * The sandbox needs git next to node, which `node:22-bookworm` has. It reaches the npm registry,
- * so dependencies install and the agent can run the tests, and nothing else: GitHub is only spoken
- * to from the host, through the gateway.
+ * so the checkout's npm dependencies install and the agent can run the tests, and nothing else:
+ * GitHub is only spoken to from the host, through the gateway.
  */
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
