@@ -45,8 +45,8 @@ export interface InstallOptions {
 	readonly abortSignal: AbortSignal
 	/**
 	 * Gives up after this long and reports the install as failed, for a lifecycle script that hangs,
-	 * such as one waiting for input. An hour when left out, and at most 596 hours (about 24.8 days), or it throws;
-	 * `'indefinite'` sets no limit.
+	 * such as one waiting for input. An hour when left out, and at most 596 hours (about 24.8 days),
+	 * or it throws; `'indefinite'` sets no limit.
 	 */
 	readonly timeout?: WaitSpec | 'indefinite'
 }
