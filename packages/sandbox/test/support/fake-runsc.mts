@@ -11,7 +11,7 @@ export interface FakeRunscOptions {
 /**
  * A stand-in for runsc, for tests on machines without it. It keeps a file per container under
  * `--root` that holds its status, and `exec` runs the command on the host, so a command that never
- * ends really never ends.
+ * ends really never ends. It runs no init, so the wait for the egress forwarder passes at once.
  */
 function script(options: FakeRunscOptions): string {
 	return `#!/bin/sh
@@ -36,6 +36,8 @@ case "$command" in
     exec)
         while [ $# -gt 0 ]; do case "$1" in --*) shift ;; *) break ;; esac; done
         shift
+        # No init runs here, so there is no egress forwarder to wait for.
+        case "$*" in *waitForForwarder*) exit 0 ;; esac
         exec "$@" ;;
     list)
         printf '['; separator=
