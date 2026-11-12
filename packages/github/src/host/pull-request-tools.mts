@@ -3,7 +3,7 @@ import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
 import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
+import { commentMarker, isMarked } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
@@ -21,9 +21,10 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
-import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
+import { answeredKey, pullRequestComments, reactionKey, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
 import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
 import { signed } from './signature.mts'
+import { replyToItem } from './review-reply.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -198,20 +199,12 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			return { items, ...(until === undefined ? {} : { until }) }
 		}),
 
-		hostTool(replyToReviewItem, ({ repository, number, item, body }, context) =>
+		hostTool(replyToReviewItem, ({ repository, number, item, body, stage }, context) =>
 			// One answer at a time per item: two at once would both find the reading reply, and one would overwrite the other.
 			perItem(`${repository}#${String(number)}#${item}`, context.abortSignal, async () => {
-				const comments = pullRequestComments(await api(context), repository, number)
 				const { kind, id: commentId } = parseItemId(item)
-				const reading = (await comments.ownReplies([kind])).find((reply) => reply.body.includes(commentMarker(seenKey(item))))
-				if (reading === undefined) {
-					const threadId = kind === 'review-comment' ? await comments.threadOf(commentId) : undefined
-					return comments.post(kind, threadId, signed(body, context.runId, [replyKey]))
-				}
-				// Before the edit, so an answer that fails halfway finds the reading reply again when it's tried once more.
-				const reaction = markerValue(reading.body, reactionKeyName)
-				if (reaction !== undefined) await comments.unreact(kind, commentId, Number(reaction))
-				return comments.edit(kind, reading.id, signed(body, context.runId, [replyKey, answeredKey(item)]))
+				const comments = pullRequestComments(await api(context), repository, number)
+				return replyToItem(comments, { item, kind, commentId, body, stage: stage ?? 'answer', runId: context.runId })
 			}),
 		),
 

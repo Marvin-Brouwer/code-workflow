@@ -136,15 +136,23 @@ export const reviewActivity = {
 }
 
 /**
+ * What a reply to a review item is. `plan`: what will be done about it, before it's done. `answer`
+ * (the default): the answer to a question, or what was done.
+ */
+export const ReplyStage = z.enum(['plan', 'answer'])
+export type ReplyStage = z.infer<typeof ReplyStage>
+
+/**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
- * listed as a reviewer's item. The first reply to an item replaces the "👀 Reading..." reply that
- * showed it was being read, and takes the 👀 reaction off the item. Replies to one item go one at a
- * time.
+ * listed as a reviewer's item. The first answer to an item replaces the "👀 Reading..." reply that
+ * showed it was being read, and takes the 👀 reaction off the item. A plan replaces the reading reply
+ * too but leaves the 👀 on, and the answer after a plan is a reply of its own under it, so the
+ * reviewer is notified of it. Replies to one item go one at a time.
  */
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
-	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1) }),
+	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
 	output: PostedComment,
 }
 

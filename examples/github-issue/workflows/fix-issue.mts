@@ -2,7 +2,8 @@
  * The smallest workflow that runs end to end: one issue, one repository, no separate plan or code
  * review. Pick up the issue, fix it, open a pull request, handle review comments until it's merged.
  * The pull request's text is written in a loop of its own, and written again when a round of review
- * or a check fix changed the code.
+ * or a check fix changed the code. Each round of review is sorted first: questions are answered
+ * right away, and what asks for a change gets a plan as its reply before the work is done.
  * Plain async TypeScript: every `await` is real, and the agent is a call inside it.
  */
 import { limit, succeed, workflow } from '@mesh-flow/core'
@@ -30,11 +31,13 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	// Returns once the pull request is merged or closed. Each round of review comments is one loop.
 	const outcome = await github.review(pullRequest, {
 		async comments(comments) {
+			// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
+			const changes = await github.triage(developer, repository, { pullRequest, comments })
+			if (changes.length === 0) return
 			await developer.loop`
-				Handle these review comments on ${pullRequest}: ${comments}.
-				Change the code in ${repository} where a comment asks for it, push with ${github.push(repository)},
-				and reply to every comment with ${github.reply(pullRequest)}.
-				When every comment is handled, ${succeed()}.
+				Make these changes in ${repository}, as you planned them: ${changes}.
+				Push with ${github.push(repository)}, then reply to every item with what you did, using ${github.reply(pullRequest)}.
+				When every item is done, ${succeed()}.
 				${limit({ minutes: 30 })}
 			`
 			// `describe` runs no writer loop when the pushed commit is already described.
