@@ -57,7 +57,7 @@ function diffFilePath(repository: Repository): string {
  */
 export function readBrief(repository: Repository): Tool<{ head: string }, PullRequestBrief> {
 	return tool('githubPullRequestBrief', {
-		description: `Reads what the branch of ${repository.path} changes and how the repository wants a pull request written`,
+		description: `Reads what the branch of ${repository.directory} changes and how the repository wants a pull request written`,
 		input: z.object({ head: Sha }),
 		action: async ({ head }, { abortSignal }): Promise<PullRequestBrief> => {
 			const git = localGit(repository.directory, abortSignal)

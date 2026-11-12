@@ -131,8 +131,8 @@ exit tool. What an interpolated value becomes:
 | a tool | registered for this loop, referenced by name |
 | an exit (`succeed`, `propose`, `verify`, `fail`) | registered as an exit tool, referenced by name |
 | `limit(...)` | the loop's limit, as a line the agent can read (see [Loop limits](#loop-limits)) |
-| a workspace file | its path |
-| a workspace folder | its path plus a listing of its files |
+| a workspace file | its absolute path |
+| a workspace folder | its absolute path plus a listing of its files |
 | anything else | rendered as text |
 
 ### Exit tools: gates on "may this agent finish?"
@@ -183,7 +183,8 @@ There is **no context compaction**. Workflows are shaped so a loop's context nev
   loop gets interpolated, and big things are `workspace.file` or `workspace.folder` paths the
   agent reads when it needs them.
 - **Values control their own rendering.** An interpolated value decides how much of itself ends
-  up in the prompt (a story renders as the path of its Markdown dump, a folder as its path plus a listing).
+  up in the prompt (a story renders as the path of its Markdown dump, a folder as its path plus a listing). Paths
+  render absolute, so they still work after the agent has changed into a checkout.
 - **Tools cap their own output.** A tool that can produce a lot (test runs, logs, search) writes
   the full output to a file in the workspace and returns a summary plus the path. That is part of
   the tool, not an engine feature.

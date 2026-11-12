@@ -9,7 +9,7 @@ import { trackingRef, type Repository } from '../repository/repository.mts'
  */
 export function branchHead(repository: Repository): Tool<{ pushed: boolean }, string> {
 	return tool('githubBranchHead', {
-		description: `Reads which commit the branch of ${repository.path} is at`,
+		description: `Reads which commit the branch of ${repository.directory} is at`,
 		input: z.object({ pushed: z.boolean() }),
 		action: async ({ pushed }, { abortSignal }) => {
 			const git = localGit(repository.directory, abortSignal)

@@ -155,7 +155,7 @@ await planner.loop`Research ${story}. Write your findings to ${research} and fin
 const findings = await research.files()
 ```
 
-A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git.
+A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git. In a prompt it renders as that absolute path, so the agent still finds it after it has changed into a checkout.
 
 ### Humans
 
@@ -329,7 +329,7 @@ Parameters that don't fit fail the run before the body starts. Under the engine 
 
 ## Reruns
 
-When a run starts again on the same agents' store, as after a crash, a loop is the same loop when its call site, the dependency nodes around it, its count there and what the agent gets (model, reasoning, system prompt and template, as rendered) are the same. The call site is the place in the source. That holds in a built app too, because `mesh-flow build` ships a source map with it: rebuilding doesn't change the call site, but an edit above the call in the same file does. Then:
+When a run starts again on the same agents' store, as after a crash, a loop is the same loop when its call site, the dependency nodes around it, its count there and what the agent gets (model, reasoning, system prompt and template, as rendered) are the same. The call site is the place in the source. That holds in a built app too, because `mesh-flow build` ships a source map with it: rebuilding doesn't change the call site, but an edit above the call in the same file does. Workspace files and folders render as absolute paths, so a rerun has to use the same workspace directory; under the engine it always does. Then:
 - a loop that finished returns the result it finished with, without asking the model or a human again. Results are kept as JSON: one that JSON would change, such as a `Date` or a `bigint` from a schema's transform, isn't kept, and that loop runs again;
 - a loop that didn't finish goes on from its conversation, with what the agent did so far, and its `turns` limit counts from 0 again;
 - work the earlier attempt left running, such as a model request cut off by the crash, is stopped first, so it never runs outside its loop.

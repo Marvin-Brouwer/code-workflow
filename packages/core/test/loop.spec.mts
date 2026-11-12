@@ -17,7 +17,7 @@ import { toPrompt } from '../src/render/to-prompt.mts'
 import { tool } from '../src/tool/tool.mts'
 import { workspace } from '../src/workspace/workspace.mts'
 import { runBody } from './support/run-body.mts'
-import { callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
+import { asInRequest, callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
 
 const Answer = z.object({ answer: z.number() })
 
@@ -289,8 +289,44 @@ describe('loop', () => {
 
 		// Assert
 		expect(await run.result).toBe(Research)
-		expect(textOf(model.requests[0])).toContain('research/, empty so far')
-		expect(textOf(model.requests[1])).toContain('has 0 of the 1 files')
+		// Absolute, so the agent still finds it after it has changed into a checkout.
+		const research = `${path.join(run.workspace, 'research')}${path.sep}`
+		expect(textOf(model.requests[0])).toContain(asInRequest(`${research}, empty so far`))
+		expect(textOf(model.requests[1])).toContain(asInRequest(`${research} has 0 of the 1 files`))
+	})
+
+	test('renders a folder with a description as where it is on disk, what it holds and its files', async () => {
+		// Arrange
+		const notes = workspace.folder('notes', { description: 'one file per finding' })
+		const model = scriptedModel([callsTool('succeed')])
+		const helper = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(async () => {
+			await workspace.file('notes/overview.md').write('# Overview')
+			await workspace.file('notes/risks.md').write('# Risks')
+			return helper.loop`Read ${notes}, then ${succeed()}.`
+		}, model)
+		await run.result
+
+		// Assert
+		const directory = `${path.join(run.workspace, 'notes')}${path.sep}`
+		expect(textOf(model.requests[0])).toContain(asInRequest(`Read ${directory} (one file per finding), with overview.md, risks.md, then`))
+	})
+
+	test('renders a workspace file as where it is on disk, so it is found from inside a checkout too', async () => {
+		// Arrange
+		const notes = workspace.file('notes/issue.md')
+		const model = scriptedModel([callsTool('succeed')])
+		const helper = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(() => helper.loop`Read ${notes}, then ${succeed()}.`, model)
+		await run.result
+
+		// Assert
+		const located = path.join(run.workspace, 'notes', 'issue.md')
+		expect(textOf(model.requests[0])).toContain(asInRequest(`Read ${located}, then`))
 	})
 
 	test('reminds the agent to call an exit, and fails after the reminders', async () => {

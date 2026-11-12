@@ -8,7 +8,10 @@ import { withScratchFile } from '../scratch-file.mts'
 import { stubs } from '../stubs.mts'
 import { localGit } from './local-git.mts'
 
-/** A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as its path. */
+/**
+ * A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as where it
+ * is on disk, so the agent finds it from any directory, including inside another checkout.
+ */
 export interface Repository {
 	/** `owner/name`. */
 	readonly name: RepositoryName
@@ -77,7 +80,7 @@ export const checkout = tool('githubCheckout', {
 })
 
 function repositoryOf(name: string, branch: string, defaultBranch: string, folderPath: string, directory: string): Repository {
-	return Object.freeze({ name, branch, defaultBranch, path: folderPath, directory, [toPrompt]: () => folderPath })
+	return Object.freeze({ name, branch, defaultBranch, path: folderPath, directory, [toPrompt]: () => directory })
 }
 
 /**

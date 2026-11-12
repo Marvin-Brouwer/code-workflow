@@ -26,7 +26,7 @@ export interface Pushed {
  */
 export function push(repository: Repository): Tool<{ message: string }, Pushed> {
 	return tool('push', {
-		description: `Commits every change in ${repository.path} with the message and pushes the branch to GitHub`,
+		description: `Commits every change in ${repository.directory} with the message and pushes the branch to GitHub`,
 		input: z.object({ message: z.string().min(1).describe('The commit message: what changed, and why') }),
 		action: async ({ message }, { abortSignal }): Promise<Pushed> => {
 			const { directory, branch, defaultBranch } = repository

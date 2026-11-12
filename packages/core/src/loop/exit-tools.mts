@@ -6,6 +6,7 @@ import { renderValue } from '../render/to-prompt.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { toolParameters } from '../tool/json-schema.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
+import { asDirectory } from '../workspace/workspace-path.mts'
 import { input } from '../workflow/input.mts'
 import { AgentGaveUp } from './loop-errors.mts'
 import type { LoopSession } from './loop-session.mts'
@@ -49,15 +50,16 @@ function succeedTool(schema: z.ZodType | undefined, gate: RunGate, session: Loop
 
 function folderTool(folder: WorkspaceFolder, gate: RunGate, session: LoopSession): ToolRegistration {
 	const minFiles = folder.options.minFiles ?? 0
+	const directory = asDirectory(folder.location())
 	return exitTool(
 		'succeed',
-		`Finish the task, once ${folder.path}/ holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,
+		`Finish the task, once ${directory} holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,
 		{ type: 'object', properties: {} },
 		session,
 		async () => {
 			const files = await folder.files()
 			if (files.length < minFiles)
-				return errorResult(`${folder.path}/ has ${files.length} of the ${minFiles} files it needs. Write them, then call succeed again.`)
+				return errorResult(`${directory} has ${files.length} of the ${minFiles} files it needs. Write them, then call succeed again.`)
 			return handIn(gate, session, async () => folder)
 		},
 	)
