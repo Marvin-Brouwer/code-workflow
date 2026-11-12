@@ -1,9 +1,12 @@
-import { tool } from '@mesh-flow/core'
-import { z } from 'zod'
-import { api } from './jira-api.mts'
+import { stubs } from './stubs.mts'
 
-export const search = tool('jiraSearch', {
-	description: 'Search Jira issues with JQL. Returns keys and summaries.',
-	input: z.object({ jql: z.string() }),
-	action: ({ jql }) => api.search(jql),
-})
+/**
+ * Searches Jira with JQL: a tool for agents, and a function for code. Returns keys, summaries,
+ * statuses and types, and whether more issues match; `jira.dump` reads one.
+ *
+ * ```ts
+ * const related = await jira.search({ jql: `text ~ "${story.summary}"` })
+ * await planner.loop`Research ${story}. Find related issues with ${jira.search} and read them with ${jira.dump}.`
+ * ```
+ */
+export const search = stubs.searchIssues

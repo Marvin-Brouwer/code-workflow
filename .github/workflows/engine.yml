@@ -32,9 +32,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github --filter github-issue typecheck
-      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... build
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github test
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github --filter @mesh-flow/atlassian --filter github-issue typecheck
+      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... --filter @mesh-flow/atlassian... build
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github --filter @mesh-flow/atlassian test
       # The github-issue app builds and describes itself with the packages just built.
       - run: pnpm --filter github-issue build
 

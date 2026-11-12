@@ -1,0 +1,55 @@
+import { hostTool, type HostTool } from '@mesh-flow/gateway'
+import { defaultPageSearchLimit, getPage, searchPages } from '../../tools/page-tools.mts'
+import { htmlToMarkdown } from '../html-to-markdown.mts'
+import { markingTransient } from '../transient-error.mts'
+import { linksOf, type ConfluenceApi, type RawPage } from './confluence-api.mts'
+
+/** What Confluence wraps the words a search matched in, in an excerpt. */
+const highlightMarkers = /@@@(?:end)?hl@@@/g
+
+/** The host halves of the Confluence tools. */
+export function confluenceHostTools(api: ConfluenceApi): HostTool[] {
+	return [
+		hostTool(getPage, async ({ id }, context) => {
+			const site = await api(context)
+			const page = await markingTransient(() => site.page(id, context.abortSignal))
+			return {
+				id: page.id,
+				title: page.title,
+				space: page.space?.key ?? '',
+				url: pageUrl(site.url, page),
+				version: page.version?.number ?? 0,
+				updated: page.version?.when ?? '',
+				body: htmlToMarkdown(page.body?.view?.value),
+			}
+		}),
+
+		hostTool(searchPages, async ({ text, space, limit = defaultPageSearchLimit }, context) => {
+			const site = await api(context)
+			const cql = [`type = page`, `text ~ ${cqlString(text)}`, ...(space === undefined ? [] : [`space = ${cqlString(space)}`])].join(
+				' AND ',
+			)
+			const found = await markingTransient(() => site.search(cql, limit, context.abortSignal))
+			return {
+				pages: found.results.map((page) => ({
+					id: page.id,
+					title: page.title,
+					space: page.space?.key ?? '',
+					url: pageUrl(site.url, page),
+					excerpt: (page.excerpt ?? '').replaceAll(highlightMarkers, '').trim(),
+				})),
+				more: linksOf(found).next !== undefined,
+			}
+		}),
+	]
+}
+
+/** Where a person opens a page: the link Confluence gives, or the page's id when it gives none. */
+function pageUrl(siteUrl: string, page: RawPage): string {
+	return `${siteUrl}${linksOf(page).webui ?? `/pages/viewpage.action?pageId=${page.id}`}`
+}
+
+/** A string as CQL takes it: in double quotes, with quotes and backslashes in it escaped. */
+export function cqlString(value: string): string {
+	return `"${value.replaceAll(/["\\]/g, '\\$&')}"`
+}
