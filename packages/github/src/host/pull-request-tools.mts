@@ -61,7 +61,7 @@ function described(body: string | null | undefined): { described?: string; descr
 	return sha === undefined || body === null || body === undefined ? {} : { described: sha, description: unsigned(body) }
 }
 
-/** A description as the connector writes it: signed, with the `Fixes` line in the footer, and marked with the commit it describes. */
+/** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
 function signedDescription(body: string, runId: string, sha: string | undefined, closes: string | undefined): string {
 	return signed(body, runId, sha === undefined ? [] : [`${describedKeyName}:${sha}`], closes === undefined ? [] : [`Fixes ${closes}`])
 }

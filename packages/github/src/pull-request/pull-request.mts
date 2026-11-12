@@ -16,7 +16,7 @@ export interface PullRequestTextOptions {
 	readonly description: string
 	/** The commit the description was written for; `describe` sets it. Default for `openPullRequest`: the pushed head. */
 	readonly describes?: string
-	/** The issue the pull request closes when it merges: a `Fixes` line goes in the footer. */
+	/** The issue the pull request closes when it merges: `Fixes` goes in the footer, next to the run id. */
 	readonly closes?: IssueRef
 }
 

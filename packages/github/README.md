@@ -65,7 +65,7 @@ The clone comes from the host as a git bundle, and what the agent pushes goes ba
 
 With `pullRequest`, it describes that pull request again: the agent starts from its current title and description and rewrites them for the branch as it is now. When they already cover the checkout's `HEAD`, or the pull request is closed, no loop runs and the current text comes back, so calling it after every round of review costs a look.
 
-`github.openPullRequest(repository, { title, description, describes, closes })` pushes, then opens a pull request from the branch onto the default branch, or gives the open one for the branch the title and description. With `closes`, a `Fixes #7` line goes in the footer. The description is signed like every post, and marked with the commit it describes (`describes`, else the pushed head). In a prompt it renders as its URL. `github.pullRequest(ref)` reads one as it is now.
+`github.openPullRequest(repository, { title, description, describes, closes })` pushes, then opens a pull request from the branch onto the default branch, or gives the open one for the branch the title and description. With `closes`, `Fixes #7` goes in the footer, next to the run id. The description is signed like every post, and marked with the commit it describes (`describes`, else the pushed head). In a prompt it renders as its URL. `github.pullRequest(ref)` reads one as it is now.
 
 `github.updatePullRequest(pullRequest, { title, description, describes, closes })` gives a pull request new text. It writes nothing when the pull request already says this, or when it's closed, since a merged pull request keeps the text it was reviewed with; `skipped` on the result says which. GitHub doesn't notify on an edit of the description.
 
