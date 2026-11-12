@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { openPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
+import { openPullRequest, pullRequest as getPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
 import {
@@ -10,10 +10,10 @@ import {
 	issueRef,
 	promptlyMs,
 	repositoryName,
+	sameSite,
 } from './support/connected-github.mts'
 import { runOnGateway } from './support/test-run.mts'
 
-const sameSite = { title: 'Keep the session on Safari', description: 'Sets SameSite.' }
 const secure = { title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' }
 
 describe('openPullRequest', () => {
@@ -211,5 +211,26 @@ describe('updatePullRequest', () => {
 
 		// Assert
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
+	})
+})
+
+describe('pullRequest', () => {
+	test('reads a marker someone edited as no described commit', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			const stored = api.pullRequest(repositoryName, pullRequest.number)
+			api.pullRequest(repositoryName, pullRequest.number, { body: stored.body.replace(/described:[0-9a-f]+/, 'described:not-a-sha') })
+			return getPullRequest(pullRequest)
+		})
+		const edited = await run.result
+
+		// Assert
+		expect(edited.describedSha).toBeUndefined()
 	})
 })

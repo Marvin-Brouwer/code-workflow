@@ -16,6 +16,9 @@ export const branch = 'fix/7'
 /** The issue the branch fixes, which {@link connectedGithub} files. */
 export const issueRef = Object.freeze({ repository: repositoryName, number: 7 })
 
+/** The text the tests' agent writes for the fix of `login.txt`. */
+export const sameSite = Object.freeze({ title: 'Keep the session on Safari', description: 'Sets SameSite.' })
+
 /** The number of the first pull request the fake opens. */
 export const firstPullRequest = 1
 

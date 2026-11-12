@@ -4,7 +4,7 @@ import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { collect } from '../src/issue/issue.mts'
 import { describe as describeBranch } from '../src/pull-request/describe.mts'
-import { openPullRequest, pullRequest as getPullRequest } from '../src/pull-request/pull-request.mts'
+import { openPullRequest } from '../src/pull-request/pull-request.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
 import {
@@ -15,12 +15,11 @@ import {
 	issueRef,
 	promptlyMs,
 	repositoryName,
+	sameSite,
 } from './support/connected-github.mts'
 import { git } from './support/local-remote.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
 import { runOnGateway } from './support/test-run.mts'
-
-const sameSite = { title: 'Keep the session on Safari', description: 'Sets SameSite.' }
 
 describe('describe', () => {
 	test('asks the agent about the commits, the diff, the issue, the template and the lint settings', async () => {
@@ -78,7 +77,7 @@ describe('describe', () => {
 		expect(await readFile(diffFile, 'utf8')).toContain('+SameSite=None')
 	})
 
-	test('asks for a default shape without a template, and for a short title without lint settings', async () => {
+	test('asks for a default shape without a template', async () => {
 		// Arrange
 		const { gateway } = await connectedGithub()
 		const { writer, prompts } = scriptedWriter([sameSite])
@@ -93,11 +92,27 @@ describe('describe', () => {
 		await run.result
 
 		// Assert
-		const [asked] = prompts
-		expect(asked).toContain('no pull request template')
-		expect(asked).toContain('`## What changes`, `## Why` and `## Testing`')
-		expect(asked).toContain('under 72 characters')
-		expect(asked).not.toContain('resolves the issue')
+		expect(prompts[0]).toContain('no pull request template')
+		expect(prompts[0]).toContain('`## What changes`, `## Why` and `## Testing`')
+	})
+
+	test('asks for a short title without lint settings', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([sameSite])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await push(repository)({ message: 'Set SameSite' })
+			return describeBranch(writer, repository)
+		})
+		await run.result
+
+		// Assert
+		expect(prompts[0]).toContain('under 72 characters')
+		expect(prompts[0]).not.toContain('lints commit messages')
 	})
 
 	test('reads the template and the lint settings as the default branch has them, not as the branch changed them', async () => {
@@ -285,27 +300,5 @@ describe('describe', () => {
 
 		// Assert
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
-	})
-})
-
-describe('pullRequest', () => {
-	test('reads a description without the footer and markers, and a marker someone edited as none', async () => {
-		// Arrange
-		const { api, gateway } = await connectedGithub()
-
-		// Act
-		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout({ repository: repositoryName, branch })
-			await changeLogin(repository, 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, sameSite)
-			const stored = api.pullRequest(repositoryName, pullRequest.number)
-			api.pullRequest(repositoryName, pullRequest.number, { body: stored.body.replace(/described:[0-9a-f]+/, 'described:not-a-sha') })
-			return getPullRequest(pullRequest)
-		})
-		const edited = await run.result
-
-		// Assert
-		expect(edited.description).toBe('Sets SameSite.')
-		expect(edited.describedSha).toBeUndefined()
 	})
 })

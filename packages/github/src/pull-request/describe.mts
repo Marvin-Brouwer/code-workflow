@@ -37,8 +37,8 @@ const customaryTitleCharacters = 72
  * pull request titles; the agent fills the template in, or a default shape when there is none, and
  * keeps to those settings. The description says what the branch changes and why, as it is now:
  * never what happened on the way there. The package ships no agent: the workflow passes its own.
- * What is described is what is committed, at the checkout's `HEAD`; a branch without commits of
- * its own is refused.
+ * Without `pullRequest`, what is described is what is committed, at the checkout's `HEAD`; a
+ * branch without commits of its own is refused.
  *
  * With `pullRequest`, it describes that pull request again, for after a round of review: the agent
  * rewrites the current text for the branch as it was last pushed. When the text already covers
@@ -58,28 +58,37 @@ export async function describe(
 	options: DescribeOptions = {},
 	context?: ToolContext,
 ): Promise<PullRequestContent> {
-	const closes = options.issue
 	const current = options.pullRequest === undefined ? undefined : await pullRequestOf(options.pullRequest, repository, context)
-	if (current?.state === 'closed') return currentContent(current, closes)
+	if (current?.state === 'closed') return currentContent(current, options.issue)
 	// For a pull request that is open, what it shows: the branch as it was pushed.
 	const brief = await readBrief(repository)({ pushed: current !== undefined }, context)
-	if (current !== undefined && current.describedSha === brief.headSha) return currentContent(current, closes)
+	if (current !== undefined && current.describedSha === brief.headSha) return currentContent(current, options.issue)
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: brief.headSha, ...(closes === undefined ? {} : { closes }) }
+	return { ...text, describedSha: brief.headSha, ...closesField(options.issue) }
 }
 
 /** The pull request `ref` names, which has to be the one of the checkout's branch. */
 async function pullRequestOf(ref: PullRequestRef, repository: Repository, context: ToolContext | undefined): Promise<PullRequest> {
 	const current = await pullRequest(ref, context)
-	if (current.repository !== repository.name || current.head.branch !== repository.branch)
+	if (!sameName(current.repository, repository.name) || current.head.branch !== repository.branch)
 		throw new Error(`${current.url} is the pull request of ${current.head.branch}, not of ${repository.name} ${repository.branch}.`)
 	return current
+}
+
+/** Whether two repository names are the same: GitHub ignores case in them. */
+function sameName(one: string, other: string): boolean {
+	return one.toLowerCase() === other.toLowerCase()
 }
 
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */
 function currentContent(current: PullRequest, closes: Issue | undefined): PullRequestContent {
 	const { title, description, describedSha } = current
-	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...(closes === undefined ? {} : { closes }) }
+	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesField(closes) }
+}
+
+/** The `closes` field of the content, for when it closes an issue. */
+function closesField(issue: Issue | undefined): { closes?: Issue } {
+	return issue === undefined ? {} : { closes: issue }
 }
 
 /** The loop itself: the agent writes the text from the brief, and from the current text when there is one. */

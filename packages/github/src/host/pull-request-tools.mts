@@ -20,7 +20,7 @@ import {
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
-import { runIdLine, signed, unsigned } from './signature.mts'
+import { runIdLine, signed, unsigned, withUnixLineBreaks } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -80,7 +80,7 @@ function signedDescription(body: string, runId: string, { describedSha, closes }
 
 /** Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with. */
 function sameBody(stored: string | null | undefined, signedBody: string): boolean {
-	return (stored ?? '').replaceAll('\r\n', '\n') === signedBody
+	return withUnixLineBreaks(stored ?? '') === signedBody
 }
 
 /** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
