@@ -24,6 +24,11 @@ export interface Repository {
 /** The remote the sandbox's checkout knows: a ref under it tracks what the host has pushed. */
 export const origin = 'origin'
 
+/** Where a checkout tracks a branch as the remote has it. */
+export function trackingRef(branch: string): string {
+	return `refs/remotes/${origin}/${branch}`
+}
+
 /** Where the checkout remembers the remote's default branch, so a reused checkout needs no host call. */
 const defaultBranchConfigKey = 'mesh-flow.defaultBranch'
 
@@ -99,7 +104,7 @@ async function existingCheckout(git: GitClient): Promise<'absent' | 'checkout' |
 /** Puts the checkout on `branch`: as it is when it's there, made from what the remote has otherwise. */
 async function switchTo(git: GitClient, branch: string, defaultBranch: string): Promise<void> {
 	if ((await git.currentBranch()) === branch) return
-	const tracked = `refs/remotes/${origin}/${branch}`
-	const from = (await git.hasRef(tracked)) ? tracked : `refs/remotes/${origin}/${defaultBranch}`
+	const tracked = trackingRef(branch)
+	const from = (await git.hasRef(tracked)) ? tracked : trackingRef(defaultBranch)
 	await git.checkoutOrCreate(branch, from)
 }

@@ -18,6 +18,10 @@ export const PullRequestData = PullRequestRef.extend({
 	merged: z.boolean(),
 	head: z.object({ branch: BranchName, sha: Sha }),
 	base: BranchName,
+	/** The description, without the footer when this package wrote it. */
+	description: z.string(),
+	/** The commit the description was written for, when this package wrote it. */
+	describedSha: Sha.optional(),
 })
 export type PullRequestData = z.infer<typeof PullRequestData>
 
@@ -52,12 +56,58 @@ export const ReviewItem = z.object({
 })
 export type ReviewItem = z.infer<typeof ReviewItem>
 
-/** Opens the pull request on the host, or finds the open one for the branch. */
+/** How a pull request names the issue it closes: `#7` in its own repository, `owner/name#7` in another. */
+const IssueReference = z.string().regex(/^([\w.-]+\/[\w.-]+)?#\d+$/)
+
+/**
+ * Opens the pull request on the host. When the branch already has an open one, updates its title
+ * and description, unless it was already described for this commit.
+ */
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
-	description: 'Opens a pull request on GitHub, or returns the open one for the branch',
-	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName, title: z.string().min(1), body: z.string() }),
+	description:
+		'Opens a pull request on GitHub; when the branch already has an open one, updates its title and description, unless it was already described for this commit',
+	input: z.object({
+		repository: RepositoryName,
+		head: BranchName,
+		base: BranchName,
+		title: z.string().min(1),
+		body: z.string(),
+		describedSha: Sha,
+		closes: IssueReference.optional(),
+	}),
 	output: PullRequestData,
+}
+
+/**
+ * Why `updatePullRequest` wrote nothing. `closed`: a closed pull request keeps its text.
+ * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
+ */
+export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
+export type UpdateSkip = z.infer<typeof UpdateSkip>
+
+/** Gives an open pull request on the host a new title and description; a closed one is left as it is. */
+export const updatePullRequest = {
+	name: 'githubUpdatePullRequest',
+	description: "Changes a pull request's title and description on GitHub",
+	input: PullRequestRef.extend({
+		title: z.string().min(1),
+		body: z.string(),
+		describedSha: Sha.optional(),
+		closes: IssueReference.optional(),
+		/** What the pull request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		seen: z.object({ title: z.string(), description: z.string() }).optional(),
+	}),
+	/** With `skipped` when nothing was written. */
+	output: PullRequestData.extend({ skipped: UpdateSkip.optional() }),
+}
+
+/** Finds on the host the open pull request of a branch onto a base, when it has one. */
+export const findPullRequest = {
+	name: 'githubFindPullRequest',
+	description: 'Finds the open pull request of a branch on GitHub',
+	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName }),
+	output: PullRequestData.nullable(),
 }
 
 /** Reads the pull request on the host. */

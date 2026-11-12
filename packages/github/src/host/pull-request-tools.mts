@@ -1,15 +1,19 @@
 import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
+import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
+import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
 import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
+	findPullRequest,
 	getPullRequest,
 	openPullRequest,
 	replyToReviewItem,
 	reviewActivity,
 	showBeingRead,
+	updatePullRequest,
 	ReviewItemKind,
 	type CheckFailure,
 	type PullRequestData,
@@ -18,6 +22,7 @@ import {
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
+import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
 import { signed } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
@@ -25,6 +30,7 @@ import { refusedToken } from './transient-error.mts'
 interface ApiPullRequest {
 	readonly number: number
 	readonly title: string
+	readonly body?: string | null
 	readonly html_url: string
 	readonly state: string
 	readonly merged_at?: string | null
@@ -43,6 +49,7 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		merged: data.merged ?? (data.merged_at !== null && data.merged_at !== undefined),
 		head: { branch: data.head.ref, sha: data.head.sha },
 		base: data.base.ref,
+		...descriptionOf(data.body),
 	}
 }
 
@@ -66,18 +73,58 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 	return seen.localeCompare(latest) >= 0 ? seen : latest
 }
 
+/** The open pull request of branch `head` onto `base`, when there is one. */
+async function openOnBranch(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	head: string,
+	base: string,
+): Promise<ApiPullRequest | undefined> {
+	const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
+	return open[0]
+}
+
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
 	return [
-		hostTool(openPullRequest, async ({ repository, head, base, title, body }, context) => {
+		hostTool(openPullRequest, async ({ repository, head, base, title, body, describedSha, closes }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
-			const [existing] = open
-			if (existing !== undefined) return pullRequestData(repository, existing)
-			const { data } = await client.rest.pulls.create({ ...where, head, base, title, body })
+			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
+			const existing = await openOnBranch(client, where, head, base)
+			if (existing === undefined) {
+				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
+				return pullRequestData(repository, data)
+			}
+			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
+			const closesAlready = closes === undefined || footerCloses(existing.body, closes)
+			if (descriptionOf(existing.body).describedSha === describedSha && closesAlready) return pullRequestData(repository, existing)
+			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
 			return pullRequestData(repository, data)
+		}),
+
+		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha, closes, seen }, context) => {
+			const client = await api(context)
+			const where = { ...splitRepositoryName(repository), pull_number: number }
+			const { data: current } = await client.rest.pulls.get(where)
+			// A closed pull request keeps the text it was reviewed with.
+			if (current.state === 'closed') return { ...pullRequestData(repository, current), skipped: 'closed' as const }
+			// Edited since the caller looked: the caller asks the person again rather than write over it.
+			const now = { title: current.title, description: descriptionOf(current.body).description }
+			if (seen !== undefined && !sameText(now, seen) && !sameText(now, { title, description: body }))
+				return { ...pullRequestData(repository, current), skipped: 'edited' as const }
+			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
+			if (current.title === title && sameBody(current.body, signedBody))
+				return { ...pullRequestData(repository, current), skipped: 'unchanged' as const }
+			const { data } = await client.rest.pulls.update({ ...where, title, body: signedBody })
+			return pullRequestData(repository, data)
+		}),
+
+		hostTool(findPullRequest, async ({ repository, head, base }, context) => {
+			const client = await api(context)
+			const found = await openOnBranch(client, splitRepositoryName(repository), head, base)
+			return found === undefined ? null : pullRequestData(repository, found)
 		}),
 
 		hostTool(getPullRequest, async ({ repository, number }, context) => {

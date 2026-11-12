@@ -27,17 +27,17 @@ export const PostedComment = z.object({ id: z.int(), url: z.url() })
 export type PostedComment = z.infer<typeof PostedComment>
 
 /** What every marker this package leaves in a comment starts with. */
-const markerStart = '<!-- mesh-flow:'
+export const markerStart = '<!-- mesh-flow:'
 
 /** Mixed into a comment's body to find it again, so posting it twice updates it instead. */
 export function commentMarker(key: string): string {
 	return `${markerStart}${key} -->`
 }
 
-/** What marker `name:<value>` in a comment's body holds, if the body has one. */
+/** What marker `name:<value>` in a comment's body holds, if the body has one: the last one, which the connector wrote last. */
 export function markerValue(body: string, name: string): string | undefined {
 	const start = `${markerStart}${name}:`
-	const from = body.indexOf(start)
+	const from = body.lastIndexOf(start)
 	if (from === -1) return undefined
 	const end = body.indexOf(' -->', from + start.length)
 	return end === -1 ? undefined : body.slice(from + start.length, end)

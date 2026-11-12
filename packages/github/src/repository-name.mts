@@ -37,3 +37,8 @@ export const BranchName = z
 		"A branch name doesn't start with '-' or end with '/', '.' or '.lock'.",
 	)
 export type BranchName = z.infer<typeof BranchName>
+
+/** Whether two repository names name the same repository: GitHub ignores case in them. */
+export function sameRepositoryName(one: string, other: string): boolean {
+	return one.toLowerCase() === other.toLowerCase()
+}

@@ -91,11 +91,31 @@ export interface TestRun<T> {
 	readonly result: Promise<T>
 }
 
+/** How a test run answers what it asks a person. */
+export interface TestRunOptions {
+	/** The answers to the run's `input` requests, in the order it asks; a request past them stays unanswered. */
+	readonly inputs?: readonly unknown[]
+	/** Called as the run asks its `index`th `input`, before the answer goes back: a change a person makes while they answer. */
+	readonly onInput?: (index: number) => void
+}
+
+/** Whether the run asked a person for input. */
+export function askedForInput(messages: readonly RuntimeMessage[]): boolean {
+	return messages.some((message) => message.type === 'request' && message.request.kind === 'input')
+}
+
 /**
  * Runs `body` as a workflow with its host tools on `gateway`, on a channel that answers every
- * wake at once, so a polling loop runs on. The run is stopped when the test ends.
+ * wake at once, so a polling loop runs on, and every `input` request with the next of `inputs`.
+ * The run is stopped when the test ends.
  */
-export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortSignal: AbortSignal }) => Promise<T>): Promise<TestRun<T>> {
+export async function runOnGateway<T>(
+	gateway: Gateway,
+	body: (context: { abortSignal: AbortSignal }) => Promise<T>,
+	{ inputs = [], onInput }: TestRunOptions = {},
+): Promise<TestRun<T>> {
+	const inputQueue = [...inputs]
+	let asked = 0
 	const workspace = path.join(await temporaryDirectory(), 'workspace')
 	const controller = new AbortController()
 	onTestFinished(() => {
@@ -117,6 +137,10 @@ export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortS
 			if (message.type === 'request' && message.request.kind === 'wake') {
 				wakes++
 				slot(message.request.id).resolve({})
+			}
+			if (message.type === 'request' && message.request.kind === 'input') {
+				onInput?.(asked++)
+				if (inputQueue.length > 0) slot(message.request.id).resolve({ value: inputQueue.shift() })
 			}
 		},
 		answer(requestId, abortSignal) {
