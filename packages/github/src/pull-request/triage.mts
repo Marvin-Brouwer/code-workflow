@@ -23,19 +23,19 @@ export interface PlannedChange {
 /** How long the loop may take when the caller sets no limit. */
 const defaultLimit = limit({ minutes: 10 })
 
-/** What the agent sorts each item into: what it asks for. */
-const ItemAsks = z.enum(['question', 'change'])
+/** What the agent sorts each item into: a question, a change it will make, or a change it won't make. */
+const ItemAsks = z.enum(['question', 'change', 'declined'])
 
 /**
  * Has `agent` sort review items into questions and requests for a change, in one loop that changes
- * nothing. A question gets its answer as the reply, in place of the "👀 Reading..." reply. A request
- * for a change gets a plan as the reply, what the agent will do about it, and comes back to the
- * caller, which has the work done in a loop of its own and has its answer say what was done. So the
- * reviewer sees each item go from being read, to the plan, to what was done, and a question go from
- * being read to its answer.
+ * nothing. A question, and a change the agent won't make, get the answer as the reply, in place of
+ * the "👀 Reading..." reply. A request for a change gets a plan as the reply, what the agent will do
+ * about it, and comes back to the caller, which has the work done in a loop of its own and has its
+ * answer say what was done. So the reviewer sees each item go from being read, to the plan, to what
+ * was done, and a question go from being read to its answer.
  *
- * Code posts the replies, not the agent, once the loop is done. Stopping the run stops the loop and
- * any reply still in flight.
+ * Code posts the replies, not the agent, once the loop is done. A line comment deleted since it was
+ * read is left out. Stopping the run stops the loop and any reply still in flight.
  *
  * ```ts
  * const changes = await github.triage(developer, repository, { pullRequest, comments })
@@ -51,7 +51,7 @@ export async function triage(agent: Agent, repository: Repository, options: Tria
 		Sort every item: a question, or a request to change something, such as the code, its tests or its docs.
 		Read the checkout as much as you need to, and change nothing: the changes are made afterwards.
 		For a question, write the answer to it. For a request to change something, write in a few sentences
-		what you will change, or why you won't. Write it to the reviewer.
+		what you will change; when you won't change it, sort it as declined and say why. Write it to the reviewer.
 		When every item is sorted, ${succeed(triageResult(comments))}.
 		${options.limit ?? defaultLimit}
 	`
@@ -60,10 +60,11 @@ export async function triage(agent: Agent, repository: Repository, options: Tria
 	// One at a time and in the reviewer's order: GitHub limits bursts of writes.
 	for (const item of comments) {
 		const sortedItem = sortedById.get(item.id)
-		if (sortedItem === undefined) continue
-		const stage = sortedItem.asks === 'question' ? 'answer' : 'plan'
-		await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body: sortedItem.reply, stage })
-		if (sortedItem.asks === 'change') changes.push({ item, plan: sortedItem.reply })
+		if (sortedItem === undefined) throw new Error(`The agent left ${item.id} unsorted.`)
+		const stage = sortedItem.asks === 'change' ? 'plan' : 'answer'
+		const outcome = await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body: sortedItem.reply, stage })
+		// A comment deleted since it was read asks for nothing any more.
+		if (sortedItem.asks === 'change' && !('gone' in outcome)) changes.push({ item, plan: sortedItem.reply })
 	}
 	return changes
 }

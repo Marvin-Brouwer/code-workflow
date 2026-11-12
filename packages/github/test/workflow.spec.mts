@@ -329,7 +329,7 @@ describe('github', () => {
 		const run = await runOnGateway(gateway, () => stubs.showBeingRead({ repository: repositoryName, number: 14, items }))
 
 		// Assert
-		await expect(run.result).resolves.toEqual({ shown: ['comment/1'] })
+		await expect(run.result).resolves.toEqual({ shown: ['comment/1'], answered: [] })
 		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
 	})
 
@@ -457,6 +457,140 @@ describe('github', () => {
 
 		// Assert
 		expect(pull.comments.map((posted) => posted.body)).toEqual(['Why?', signed('Because.', run.runId, ['reply', 'replied:comment/1'])])
+	})
+
+	test('answers once after a plan, when the answer is tried again after the plan was marked answered', async () => {
+		// Arrange
+		const { api, gateway } = await connected(noRetry)
+		const pull = api.pullRequest(repositoryName, 19)
+		pull.comments.push({
+			id: 1,
+			body: 'Add a test.',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const where = { repository: repositoryName, number: 19 }
+		// The answer's own reply fails once, after the plan was marked answered.
+		let posts = 0
+		api.hold = (method, requestPath) =>
+			method === 'POST' && requestPath.endsWith('/comments') && ++posts === 2 ? Promise.reject(new Error('Connection reset.')) : undefined
+		const answer = reply(where)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
+			const failed = await answer({ item: 'comment/1', text: 'Added one.' }).then(
+				() => false,
+				() => true,
+			)
+			await answer({ item: 'comment/1', text: 'Added one.' })
+			return failed
+		})
+		const failed = await run.result
+
+		// Assert
+		expect(failed).toBe(true)
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Add a test.',
+			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+		])
+	})
+
+	test('edits nothing when a plan is given again in the same words, and edits it in place in other words', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 20)
+		pull.comments.push({
+			id: 1,
+			body: 'Add a test.',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const where = { repository: repositoryName, number: 20 }
+		let edits = 0
+		api.hold = (method) => {
+			if (method === 'PATCH') edits += 1
+			return undefined
+		}
+		const answer = reply(where)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
+			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
+			const editsAfterSameWords = edits
+			await answer({ item: 'comment/1', text: 'I will add two.', stage: 'plan' })
+			return editsAfterSameWords
+		})
+		const editsAfterSameWords = await run.result
+
+		// Assert
+		expect(editsAfterSameWords).toBe(1)
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Add a test.',
+			signed('I will add two.', run.runId, ['reply', 'seen:comment/1', 'planned:comment/1', eyesKeyOf(pull.comments[0])]),
+		])
+		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
+	})
+
+	test('posts a plan of its own when the item was never shown as being read', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 21)
+		pull.comments.push({
+			id: 1,
+			body: 'Add a test.',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const answer = reply({ repository: repositoryName, number: 21 })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
+			await answer({ item: 'comment/1', text: 'Added one.' })
+		})
+		await run.result
+
+		// Assert
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Add a test.',
+			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+		])
+	})
+
+	test('hands no item over again that was answered before the run started over', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 22)
+		const at = new Date().toISOString()
+		pull.comments.push({ id: 1, body: 'Why?', user: { login: 'reviewer' }, html_url: `${pull.html_url}#c1`, created_at: at })
+		pull.comments.push({
+			id: 2,
+			body: signed('Because.', 'run-before', ['reply', 'answered:comment/1']),
+			user: { login: api.self },
+			html_url: `${pull.html_url}#c2`,
+			created_at: at,
+		})
+		pull.comments.push({ id: 3, body: 'And the README?', user: { login: 'reviewer' }, html_url: `${pull.html_url}#c3`, created_at: at })
+		const comments = vi.fn<(items: readonly { id: string }[]) => Promise<void>>(async () => {
+			pull.merged = true
+			pull.state = 'closed'
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 22 }, { comments }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
+		expect(comments.mock.calls.map(([items]) => items.map((item) => item.id))).toEqual([['comment/3']])
 	})
 
 	test('stops promptly when the run stops while GitHub never answers the 👀', async () => {

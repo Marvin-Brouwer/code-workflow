@@ -214,10 +214,14 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const replies = await comments.ownReplies(items.map((listed) => parseItemId(listed.id).kind))
 			const hasReply = (key: string) => replies.some((reply) => reply.body.includes(commentMarker(key)))
 			const shown: string[] = []
+			const answered: string[] = []
 			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
 			for (const { id: item, url, thread } of items) {
 				const { kind, id: commentId } = parseItemId(item)
-				if (hasReply(answeredKey(item))) continue
+				if (hasReply(answeredKey(item))) {
+					answered.push(item)
+					continue
+				}
 				try {
 					const reaction = await comments.react(kind, commentId)
 					if (!hasReply(seenKey(item))) {
@@ -232,7 +236,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 					if (isTransient(error) || context.abortSignal.aborted || refusedToken(error)) throw error
 				}
 			}
-			return { shown }
+			return { shown, answered }
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {

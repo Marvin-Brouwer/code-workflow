@@ -152,11 +152,15 @@ export const defaultReplyStage: ReplyStage = 'answer'
  * too but leaves the 👀 on, and the answer after a plan is a reply of its own under it, so the
  * reviewer is notified of it. Replies to one item go one at a time.
  */
+/** What came of a reply: the comment posted or edited, or that the item is gone, say deleted since it was read. */
+export const ReplyOutcome = z.union([PostedComment, z.object({ gone: z.literal(true) })])
+export type ReplyOutcome = z.infer<typeof ReplyOutcome>
+
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
 	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
-	output: PostedComment,
+	output: ReplyOutcome,
 }
 
 /**
@@ -179,7 +183,11 @@ export const showBeingRead = {
 			}),
 		),
 	}),
-	output: z.object({ shown: z.array(ReviewItemId) }),
+	output: z.object({
+		shown: z.array(ReviewItemId),
+		/** The items the run answered already, say before it started over: `review` doesn't hand them over again. */
+		answered: z.array(ReviewItemId),
+	}),
 }
 
 /** A check or status on a commit that didn't pass. */

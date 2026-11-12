@@ -1,6 +1,6 @@
 import { normalizedBody } from '../pull-request/pull-request-text.mts'
-import { commentMarker, markerValue, type PostedComment } from '../tools/issue-tools.mts'
-import type { ReplyStage, ReviewItemKind } from '../tools/pull-request-tools.mts'
+import { commentMarker, markerValue } from '../tools/issue-tools.mts'
+import type { ReplyOutcome, ReplyStage, ReviewItemKind } from '../tools/pull-request-tools.mts'
 import {
 	answeredKey,
 	plannedKey,
@@ -13,6 +13,7 @@ import {
 	type PullRequestComments,
 } from './pull-request-comments.mts'
 import { signed, unsigned } from './signature.mts'
+import { isGone } from './transient-error.mts'
 
 /** A reply to review item `item`, the comment `commentId` of `kind`, as `replyToReviewItem` posts it. */
 export interface ReviewReply {
@@ -29,9 +30,10 @@ export interface ReviewReply {
  * the item. An answer takes the place of the reading reply too and takes the 👀 off, unless a plan
  * took that place already: then it's a reply of its own under the plan, since GitHub notifies the
  * reviewer of a new comment and not of an edit. A reply that says what one of the item's replies
- * says already is that reply, so a run that starts over doesn't say it twice.
+ * says already is that reply, so a run that starts over doesn't say it twice. A line comment deleted
+ * since it was read takes no new reply in its thread: the item is gone.
  */
-export async function replyToItem(comments: PullRequestComments, reply: ReviewReply): Promise<PostedComment> {
+export async function replyToItem(comments: PullRequestComments, reply: ReviewReply): Promise<ReplyOutcome> {
 	const { item, kind, commentId, body, stage, runId } = reply
 	const replies = await comments.ownReplies([kind])
 	const withKey = (key: string) => replies.filter((own) => own.body.includes(commentMarker(key)))
@@ -41,9 +43,14 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 	if (said !== undefined) return { id: said.id, url: said.url }
 
 	const reading = withKey(seenKey(item)).at(0)
-	const newReply = async (markerKeys: readonly string[]) => {
-		const threadId = kind === 'review-comment' ? await comments.threadOf(commentId) : undefined
-		return comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
+	const newReply = async (markerKeys: readonly string[]): Promise<ReplyOutcome> => {
+		try {
+			const threadId = kind === 'review-comment' ? await comments.threadOf(commentId) : undefined
+			return await comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
+		} catch (error) {
+			if (isGone(error)) return { gone: true }
+			throw error
+		}
 	}
 	const reaction = reading === undefined ? undefined : markerValue(reading.body, reactionKeyName)
 	const reactionKeys = reaction === undefined ? [] : [reactionKey(Number(reaction))]

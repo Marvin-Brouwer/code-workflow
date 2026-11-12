@@ -1,8 +1,7 @@
 import { tool, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
-import type { PostedComment } from '../tools/issue-tools.mts'
-import { ReplyStage, ReviewItemId, type PullRequestRef } from '../tools/pull-request-tools.mts'
+import { ReplyStage, ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/pull-request-tools.mts'
 
 /** What the agent replies with: the item, the text, and whether it's a plan or the answer. */
 export interface ReplyInput {
@@ -18,13 +17,14 @@ export interface ReplyInput {
  *
  * With `stage: 'plan'` the reply says what will be done, in place of the "👀 Reading..." reply. The
  * answer that follows, what was done, is then a reply of its own, so the reviewer is notified of it.
- * A question needs no plan: its answer replaces the reading reply right away.
+ * A question needs no plan: its answer replaces the reading reply right away. A line comment deleted
+ * since it was read comes back as `{ gone: true }`.
  *
  * ```ts
  * await reviewer.loop`Handle ${comments} on ${pullRequest}. Reply to each with ${github.reply(pullRequest)}.`
  * ```
  */
-export function reply(on: PullRequestRef): Tool<ReplyInput, PostedComment> {
+export function reply(on: PullRequestRef): Tool<ReplyInput, ReplyOutcome> {
 	return tool('reply', {
 		description: `Replies to a review item on pull request ${on.repository}#${String(on.number)}`,
 		input: z.object({

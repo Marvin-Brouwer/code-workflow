@@ -34,6 +34,14 @@ export function refusedToken(error: unknown): boolean {
 	return isRequestFailure(error) && error.status === unauthorized
 }
 
+/** GitHub's answers for something that is gone: never there, or deleted. */
+const goneStatuses = new Set([404, 410])
+
+/** Whether GitHub answered that what was asked for is gone, such as a comment deleted since. */
+export function isGone(error: unknown): boolean {
+	return isRequestFailure(error) && goneStatuses.has(error.status)
+}
+
 function isRequestFailure(error: unknown): error is RequestFailure {
 	return error instanceof Error && 'status' in error && typeof error.status === 'number'
 }

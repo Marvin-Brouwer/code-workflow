@@ -65,6 +65,53 @@ describe('triage', () => {
 		expect(pull.comments.slice(0, 2).map(reactionsOf)).toEqual([[], ['eyes']])
 	})
 
+	test('answers a change the agent declines, and hands it back no more than a question', async () => {
+		// Arrange
+		const { pull, comments, gateway } = await reviewed()
+		const { writer } = scriptedWriter([
+			{
+				items: [
+					{ id: 'comment/1', asks: 'question', reply: 'Safari drops it otherwise.' },
+					{ id: 'comment/2', asks: 'declined', reply: 'The e2e suite covers Safari already.' },
+				],
+			},
+		])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			return triage(writer, repository, { pullRequest: where, comments })
+		})
+		const changes = await run.result
+
+		// Assert
+		expect(changes).toEqual([])
+		expect(pull.comments.at(-1)?.body).toBe(signed('The e2e suite covers Safari already.', run.runId, ['reply', 'replied:comment/2']))
+	})
+
+	test('leaves out a line comment deleted since it was read', async () => {
+		// Arrange
+		const { gateway } = await reviewed()
+		const deleted: ReviewItem = {
+			id: 'review-comment/9',
+			kind: 'review-comment',
+			author: 'reviewer',
+			body: 'Rename this.',
+			url: 'https://github.com/team/app/pull/4#r9',
+			at: new Date().toISOString(),
+		}
+		const { writer } = scriptedWriter([{ items: [{ id: deleted.id, asks: 'change', reply: 'I will rename it.' }] }])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			return triage(writer, repository, { pullRequest: where, comments: [deleted] })
+		})
+
+		// Assert
+		await expect(run.result).resolves.toEqual([])
+	})
+
 	test('runs no loop for no items', async () => {
 		// Arrange
 		const { gateway } = await reviewed()
