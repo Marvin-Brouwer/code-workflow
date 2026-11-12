@@ -68,8 +68,19 @@ function signedDescription(body: string, runId: string, sha: string | undefined,
 		body.trimEnd(),
 		runId,
 		sha === undefined ? [] : [`${describedKeyName}:${sha}`],
-		closes === undefined ? [] : [`Fixes ${closes}`],
+		closes === undefined ? [] : [fixesNote(closes)],
 	)
+}
+
+/** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
+function fixesNote(closes: string): string {
+	return `Fixes ${closes}`
+}
+
+/** Whether a description's footer already closes the issue: a line that ends in its note, so `Fixes #70` isn't `Fixes #7`. */
+function footerCloses(body: string | null | undefined, closes: string): boolean {
+	const note = ` ${fixesNote(closes)}`
+	return (body ?? '').split(/\r?\n/).some((line) => line.endsWith(note))
 }
 
 /** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
@@ -107,10 +118,10 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				return pullRequestData(repository, data)
 			}
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
-			const same = existing.title === title && existing.body === signedBody
-			const closesAlready = closes === undefined || (existing.body?.includes(`Fixes ${closes}`) ?? false)
+			const unchanged = existing.title === title && existing.body === signedBody
+			const closesAlready = closes === undefined || footerCloses(existing.body, closes)
 			const describedAlready = sha !== undefined && describedFields(existing.body).describedSha === sha && closesAlready
-			if (same || describedAlready) return pullRequestData(repository, existing)
+			if (unchanged || describedAlready) return pullRequestData(repository, existing)
 			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
 			return pullRequestData(repository, data)
 		}),

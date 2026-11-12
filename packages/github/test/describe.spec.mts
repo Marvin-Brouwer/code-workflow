@@ -205,7 +205,38 @@ describe('describe', () => {
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
 	})
 
-	test('keeps the text of the open pull request when it is opened again for the same commit, unless it should close an issue it does not, and gives it the text for a new commit', async () => {
+	test('keeps the text of the open pull request when it is opened again for the same commit, unless it should close an issue it does not', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const closes = { repository: repositoryName, number: 7 }
+		api.issue(repositoryName, 70)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
+			await openPullRequest(repository, {
+				title: 'Keep the session',
+				description: 'Sets it.',
+				closes: { repository: repositoryName, number: 70 },
+			})
+			const rerun = await openPullRequest(repository, {
+				title: 'Keep the session, written again',
+				description: 'Sets it, again.',
+				closes: { repository: repositoryName, number: 70 },
+			})
+			const withCloses = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.', closes })
+			return { rerun, withCloses }
+		})
+		const { rerun, withCloses } = await run.result
+
+		// Assert
+		expect(rerun).toMatchObject({ title: 'Keep the session', description: 'Sets it.' })
+		expect(withCloses.description).toBe('Sets it.')
+		expect(api.repository(repositoryName).pulls.get(1)?.body).toContain(`\`${run.runId}\` Fixes #7\n`)
+	})
+
+	test('gives the open pull request the new text when it is opened again for a new commit', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 
@@ -214,22 +245,13 @@ describe('describe', () => {
 			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			const rerun = await openPullRequest(repository, { title: 'Keep the session, written again', description: 'Sets it, again.' })
-			const closes = { repository: repositoryName, number: 7 }
-			const withCloses = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.', closes })
-			const closesBody = api.repository(repositoryName).pulls.get(1)?.body
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
-			const moved = await openPullRequest(repository, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
-			return { rerun, withCloses, closesBody, moved }
+			return openPullRequest(repository, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
 		})
-		const { rerun, withCloses, closesBody, moved } = await run.result
+		const moved = await run.result
 
 		// Assert
-		const pulls = api.repository(repositoryName).pulls
-		expect(pulls.size).toBe(1)
-		expect(rerun.title).toBe('Keep the session')
-		expect(withCloses.description).toBe('Sets it.')
-		expect(closesBody).toContain('Fixes #7')
+		expect(api.repository(repositoryName).pulls.size).toBe(1)
 		expect(moved).toMatchObject({ title: 'Keep the session on Safari', description: 'Sets SameSite.' })
 	})
 
@@ -264,7 +286,7 @@ describe('describe', () => {
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
 			api.pullRequest(repositoryName, pullRequest.number, {
-				body: `${signed('Sets it.', run.runId, [`described:${sha}`])}\n\n---\nAdded later.`.replaceAll('\n', '\r\n'),
+				body: `${signed('Sets it.', run.runId, [`described:${sha}`])}\nAdded later.`.replaceAll('\n', '\r\n'),
 			})
 			const saved = await getPullRequest(pullRequest)
 			api.pullRequest(repositoryName, pullRequest.number, { body: signed('Sets it.', run.runId, ['described:not-a-sha']) })
@@ -274,7 +296,7 @@ describe('describe', () => {
 		const { saved, edited } = await run.result
 
 		// Assert
-		expect(saved).toMatchObject({ description: 'Sets it.\n\n---\nAdded later.', describedSha: sha })
+		expect(saved).toMatchObject({ description: 'Sets it.\n\nAdded later.', describedSha: sha })
 		expect(edited.description).toBe('Sets it.')
 		expect(edited.describedSha).toBeUndefined()
 	})
