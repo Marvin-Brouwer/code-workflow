@@ -10,7 +10,7 @@ import { fail, inDependencyOrder, propose, succeed, verify, workflow } from '@me
 import { jira } from '@mesh-flow/atlassian'
 import { gitlab } from '@mesh-flow/gitlab'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
-import { Plan, Research, codeReview, deliveryOrder, deviations } from '@mesh-flow/preset-development'
+import { Plan, Research, codeReview, deliveryOrder, deviations, planFile } from '@mesh-flow/preset-development'
 import { developer, planner, reviewer } from '../agents.mts'
 
 export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
@@ -29,7 +29,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
         List every repository that needs changes. When a repository needs something from another one
         first (a new package version, an API contract, a migration), add it to the dependency graph
         with the reason; repositories are delivered in that order.
-        Write the plan to plan.md, then propose it with ${propose(Plan)}.
+        Write the plan to ${planFile}, then propose it with ${propose(Plan)}.
         When the proposal is rejected, revise the plan with the feedback and propose it again.
         If the story can't be planned with the information available, ${fail}.
     `

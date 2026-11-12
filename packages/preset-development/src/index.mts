@@ -63,6 +63,9 @@ export function codeReview(reviewer: Agent, repository: { name: string }, plan: 
 	})
 }
 
+/** Where the planner writes the plan. In a prompt it renders as its absolute path, which `Plan.path` takes. */
+export const planFile = workspace.file('plan.md')
+
 /**
  * Plan deviations: the approved plan.md stays as approved; later findings are recorded next to it.
  * Interpolated in a prompt, it renders as the file; `deviations.record` is the tool to add one.
