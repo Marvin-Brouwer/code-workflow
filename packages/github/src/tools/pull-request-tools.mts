@@ -93,6 +93,14 @@ export const updatePullRequest = {
 	output: PullRequestData.extend({ skipped: z.enum(['closed', 'unchanged']).optional() }),
 }
 
+/** Finds on the host the open pull request of a branch onto a base, when it has one. */
+export const findPullRequest = {
+	name: 'githubFindPullRequest',
+	description: 'Finds the open pull request of a branch on GitHub',
+	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName }),
+	output: PullRequestData.nullable(),
+}
+
 /** Reads the pull request on the host. */
 export const getPullRequest = {
 	name: 'githubPullRequest',

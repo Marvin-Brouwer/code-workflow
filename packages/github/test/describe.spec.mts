@@ -218,6 +218,48 @@ describe('describe', () => {
 		await expect(access(path.join(run.workspace, 'pull-requests'))).rejects.toThrow()
 	})
 
+	test('starts from the text of the open pull request of the branch when none is named, as a run that starts over does', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([
+			{ title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' },
+		])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await openPullRequest(repository, sameSite)
+			await changeLogin(repository, 'SameSite=None; Secure\n')
+			await push(repository)({ message: 'Set Secure too' })
+			return describeBranch(writer, repository)
+		})
+		const content = await run.result
+
+		// Assert
+		expect(prompts[0]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
+		expect(content.basedOn).toEqual(sameSite)
+	})
+
+	test('runs no loop when the open pull request of the branch already describes its head, and none is named', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+		const { writer, prompts } = scriptedWriter([])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await openPullRequest(repository, sameSite)
+			return describeBranch(writer, repository)
+		})
+		const content = await run.result
+
+		// Assert
+		expect(prompts).toHaveLength(0)
+		expect(content).toMatchObject(sameSite)
+	})
+
 	test('runs no loop for a closed pull request, and gives its text back', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()

@@ -14,6 +14,9 @@ import {
 } from './support/connected-github.mts'
 import { runOnGateway } from './support/test-run.mts'
 
+/** What a person wrote over the description while a new one was written. */
+const personsEdit = { title: 'Keep the session', description: 'Do not merge before Friday.' }
+
 /** The text after the second fix, which adds Secure to the cookie. */
 const secure = { title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' }
 
@@ -242,6 +245,97 @@ describe('updatePullRequest', () => {
 
 		// Assert
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
+	})
+})
+
+describe('an edit while the text was written', () => {
+	test('asks before updating over it, and keeps it when the person says no', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(
+			gateway,
+			async () => {
+				const repository = await checkout({ repository: repositoryName, branch })
+				await changeLogin(repository, 'SameSite=None\n')
+				const pullRequest = await openPullRequest(repository, sameSite)
+				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: sameSite })
+			},
+			{ inputs: [{ overwrite: false }] },
+		)
+		const updated = await run.result
+
+		// Assert
+		expect(run.messages.some((message) => message.type === 'request' && message.request.kind === 'input')).toBe(true)
+		expect(updated).toMatchObject({ ...personsEdit, skipped: 'edited' })
+		expect(api.pullRequest(repositoryName, firstPullRequest).body).toBe(personsEdit.description)
+	})
+
+	test('updates over it when the person says yes', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(
+			gateway,
+			async () => {
+				const repository = await checkout({ repository: repositoryName, branch })
+				await changeLogin(repository, 'SameSite=None\n')
+				const pullRequest = await openPullRequest(repository, sameSite)
+				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: sameSite })
+			},
+			{ inputs: [{ overwrite: true }] },
+		)
+		const updated = await run.result
+
+		// Assert
+		expect(updated).toMatchObject(secure)
+		expect(api.pullRequest(repositoryName, firstPullRequest).title).toBe(secure.title)
+	})
+
+	test('asks before opening over it, and keeps it when the person says no', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(
+			gateway,
+			async () => {
+				const repository = await checkout({ repository: repositoryName, branch })
+				await changeLogin(repository, 'SameSite=None\n')
+				const pullRequest = await openPullRequest(repository, sameSite)
+				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
+				await changeLogin(repository, 'SameSite=None; Secure\n')
+				return openPullRequest(repository, { ...secure, basedOn: sameSite })
+			},
+			{ inputs: [{ overwrite: false }] },
+		)
+		const reopened = await run.result
+
+		// Assert
+		expect(reopened).toMatchObject(personsEdit)
+		expect(api.pullRequest(repositoryName, firstPullRequest).title).toBe(personsEdit.title)
+	})
+
+	test('asks nothing when the pull request still says what the new text was written from', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			return updatePullRequest(pullRequest, { ...secure, basedOn: sameSite })
+		})
+		const updated = await run.result
+
+		// Assert
+		expect(run.messages.some((message) => message.type === 'request' && message.request.kind === 'input')).toBe(false)
+		expect(updated).toMatchObject(secure)
 	})
 })
 

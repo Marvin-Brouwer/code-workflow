@@ -5,6 +5,7 @@ import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
+	findPullRequest,
 	getPullRequest,
 	openPullRequest,
 	replyToReviewItem,
@@ -102,6 +103,14 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				return { ...pullRequestData(repository, current), skipped: 'unchanged' as const }
 			const { data } = await client.rest.pulls.update({ ...where, title, body: signedBody })
 			return pullRequestData(repository, data)
+		}),
+
+		hostTool(findPullRequest, async ({ repository, head, base }, context) => {
+			const client = await api(context)
+			const where = splitRepositoryName(repository)
+			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
+			const [found] = open
+			return found === undefined ? null : pullRequestData(repository, found)
 		}),
 
 		hostTool(getPullRequest, async ({ repository, number }, context) => {

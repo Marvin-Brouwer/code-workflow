@@ -6,7 +6,7 @@ import type { PullRequestRef } from '../tools/pull-request-tools.mts'
 import { branchHead } from './branch-head.mts'
 import { readBrief, type PullRequestBrief } from './brief.mts'
 import { fenced } from './fenced.mts'
-import { pullRequest, type PullRequest } from './pull-request.mts'
+import { openPullRequestOf, pullRequest, type PullRequest } from './pull-request.mts'
 import { PullRequestText, textInPrompt, type PullRequestContent } from './pull-request-text.mts'
 import { filesInPrompt } from './repository-files.mts'
 
@@ -41,13 +41,17 @@ const customaryTitleCharacters = 72
  * keeps to those settings. The description says what the branch changes and why, as it is now:
  * never what happened on the way there. The package ships no agent: the workflow passes its own.
  * Without `pullRequest`, what is described is what is committed, at the checkout's `HEAD`; a
- * branch without commits of its own is refused.
+ * branch without commits of its own is refused. When the branch has an open pull request all the
+ * same, as when a run starts over after a round of review, the agent starts from its text, and no
+ * loop runs when that text already covers `HEAD`.
  *
  * With `pullRequest`, it describes that pull request again, for after a round of review: the agent
  * rewrites the current text for the branch as it was last pushed. When the text already covers
  * that commit, or the pull request is closed, no loop runs and the current text comes back,
  * so calling it after every round costs a read of the pull request and of the branch's commit. Writing the text is up to the caller: the result,
- * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is. A pull request
+ * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is; it names the text
+ * it was written from, so a person who edited the pull request meanwhile is asked before their edit
+ * is overwritten. A pull request
  * of another branch, or onto another branch than the default one, is refused.
  *
  * It stops with the run, as the loop does: an agent's loop follows the run's signal, not one of
@@ -60,14 +64,22 @@ const customaryTitleCharacters = 72
  * ```
  */
 export async function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
-	const current = options.pullRequest === undefined ? undefined : await branchPullRequest(options.pullRequest, repository)
+	// Without one named, the branch's open pull request all the same: a run that starts over after a
+	// round of review starts from the text that was reviewed, not from nothing.
+	const current =
+		options.pullRequest === undefined ? await openPullRequestOf(repository) : await branchPullRequest(options.pullRequest, repository)
 	if (current?.state === 'closed') return currentContent(current, options.issue)
-	// For a pull request that is open, what it shows: the branch as it was pushed.
-	const head = await branchHead(repository)({ pushed: current !== undefined })
+	// For a pull request named, what it shows: the branch as it was pushed. Else what `openPullRequest` will push.
+	const head = await branchHead(repository)({ pushed: options.pullRequest !== undefined })
 	if (current?.describedSha === head) return currentContent(current, options.issue)
 	const brief = await readBrief(repository)({ head })
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: head, ...closesIssue(options.issue) }
+	return { ...text, describedSha: head, ...closesIssue(options.issue), ...basedOnText(current) }
+}
+
+/** The `basedOn` field of the content: the text of the pull request it was written from, when there is one. */
+function basedOnText(current: PullRequest | undefined): { basedOn?: PullRequestText } {
+	return current === undefined ? {} : { basedOn: { title: current.title, description: current.description } }
 }
 
 /** The pull request `ref` names, which has to be the one of the checkout's branch onto the default branch. */
@@ -85,7 +97,7 @@ async function branchPullRequest(ref: PullRequestRef, repository: Repository): P
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */
 function currentContent(current: PullRequest, closes: Issue | undefined): PullRequestContent {
 	const { title, description, describedSha } = current
-	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes) }
+	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes), ...basedOnText(current) }
 }
 
 /** The `closes` field of the content, for when it closes an issue. */

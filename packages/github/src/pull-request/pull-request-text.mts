@@ -33,6 +33,17 @@ export interface PullRequestContent extends PullRequestText {
 	readonly describedSha?: string
 	/** The issue the pull request closes when it merges: `Fixes` goes in the footer, next to the run id. */
 	readonly closes?: IssueRef
+	/**
+	 * The text of the pull request the new text was written from. When the pull request says
+	 * something else by the time it's written, someone edited it meanwhile, and the person is asked
+	 * before the edit is overwritten.
+	 */
+	readonly basedOn?: PullRequestText
+}
+
+/** Whether two texts say the same. */
+export function sameText(one: PullRequestText, other: PullRequestText): boolean {
+	return one.title === other.title && one.description === other.description
 }
 
 /** A pull request's title and description as a prompt takes them, the description fenced. */

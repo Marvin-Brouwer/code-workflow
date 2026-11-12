@@ -3,6 +3,7 @@ import { cloneRepository, pushBundle } from './tools/git-tools.mts'
 import { closeIssue, commentOnIssue, getIssue, labelIssue } from './tools/issue-tools.mts'
 import {
 	checksOnRef,
+	findPullRequest,
 	getPullRequest,
 	openPullRequest,
 	replyToReviewItem,
@@ -24,6 +25,7 @@ export const stubs = Object.freeze({
 	pushBundle: hostToolStub(pushBundle),
 	openPullRequest: hostToolStub(openPullRequest),
 	updatePullRequest: hostToolStub(updatePullRequest),
+	findPullRequest: hostToolStub(findPullRequest),
 	getPullRequest: hostToolStub(getPullRequest),
 	reviewActivity: hostToolStub(reviewActivity),
 	replyToReviewItem: hostToolStub(replyToReviewItem),

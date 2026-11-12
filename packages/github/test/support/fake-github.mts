@@ -273,8 +273,12 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	issues.get('/pulls', (context) => {
 		const head = context.req.query('head')?.split(':')[1]
 		const state = context.req.query('state') ?? 'open'
+		const base = context.req.query('base')
 		const found = [...repository(nameOf(context)).pulls.values()].filter(
-			(pull) => (state === 'all' || pull.state === state) && (head === undefined || pull.head.ref === head),
+			(pull) =>
+				(state === 'all' || pull.state === state) &&
+				(head === undefined || pull.head.ref === head) &&
+				(base === undefined || pull.base.ref === base),
 		)
 		return context.json(found.map(pullJson))
 	})
