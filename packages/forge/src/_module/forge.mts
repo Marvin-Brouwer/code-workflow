@@ -58,3 +58,4 @@ export {
 	type WatchOptions,
 	type WatchOutcome,
 } from '../review/watch-review.mts'
+export { BranchName } from '../checkout/branch-name.mts'
