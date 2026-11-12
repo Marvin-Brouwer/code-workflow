@@ -1,3 +1,4 @@
+import { sameRepositoryName } from '../repository-name.mts'
 import { limit, prompt, succeed, type Agent, type Limit, type Prompt, type ToolContext } from '@mesh-flow/core'
 import type { Issue } from '../issue/issue.mts'
 import type { Repository } from '../repository/repository.mts'
@@ -70,14 +71,9 @@ export async function describe(
 /** The pull request `ref` names, which has to be the one of the checkout's branch. */
 async function pullRequestOf(ref: PullRequestRef, repository: Repository, context: ToolContext | undefined): Promise<PullRequest> {
 	const current = await pullRequest(ref, context)
-	if (!sameName(current.repository, repository.name) || current.head.branch !== repository.branch)
+	if (!sameRepositoryName(current.repository, repository.name) || current.head.branch !== repository.branch)
 		throw new Error(`${current.url} is the pull request of ${current.head.branch}, not of ${repository.name} ${repository.branch}.`)
 	return current
-}
-
-/** Whether two repository names are the same: GitHub ignores case in them. */
-function sameName(one: string, other: string): boolean {
-	return one.toLowerCase() === other.toLowerCase()
 }
 
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */

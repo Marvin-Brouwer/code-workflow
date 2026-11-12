@@ -10,4 +10,12 @@ describe('closingReference', () => {
 		// Assert
 		expect([same, other]).toEqual(['#7', 'team/web#3'])
 	})
+
+	test('names an issue of the same repository by number, whatever the case of its name', () => {
+		// Act
+		const reference = closingReference({ repository: 'Team/App', number: 7 }, 'team/app')
+
+		// Assert
+		expect(reference).toBe('#7')
+	})
 })
