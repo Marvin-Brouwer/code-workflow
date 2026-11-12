@@ -13,3 +13,29 @@ export { commentMarker, isMarked, markerStart, markerValue } from '../markers.mt
 export { defaultLookEvery, defaultToleratedOutage, looksWithin } from '../review/look-interval.mts'
 export { patientLook, type PatientLookOptions } from '../review/patient-look.mts'
 export { withScratchFile } from '../scratch-file.mts'
+export { Bundle, Sha } from '../checkout/bundle-schemas.mts'
+export { checkoutRepository, type Checkout, type CheckoutOptions, type ClonedBundle } from '../checkout/checkout.mts'
+export { branchHeadOf, pushCheckout, type PushBundle, type Pushed } from '../checkout/push.mts'
+export { origin, trackingRef } from '../checkout/tracking.mts'
+export {
+	filesAt,
+	filesInPrompt,
+	lintSettingsAt,
+	templatesAt,
+	type ChangeRequestLayout,
+	type RepositoryFile,
+} from '../describe/repository-files.mts'
+export { readBrief, type ChangeBrief } from '../describe/brief.mts'
+export { pascalCase, type ChangeRequest, type ChangeRequestRef, type ForgeTerms } from '../describe/change-request.mts'
+export {
+	changeTextSchema,
+	normalizedBody,
+	sameText,
+	textInPrompt,
+	type BasedOn,
+	type ChangeContent,
+	type ChangeText,
+	type ChangeTextLimits,
+} from '../describe/change-text.mts'
+export { decideOnEdit, type EditDecision } from '../describe/decide-on-edit.mts'
+export { describeChange, type DescribeChangeOptions, type DescribeForge } from '../describe/describe-change.mts'
