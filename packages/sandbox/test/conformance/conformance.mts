@@ -160,8 +160,9 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			cleanUp(sandbox.id)
 			const project = '/var/tmp/dotnet-check'
 			const env = { DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1' }
-			const install =
-				'curl -fsSL https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh | bash -s -- --channel 8.0 --install-dir /var/tmp/dotnet'
+			// Downloaded first: piped into bash, a failed download is an empty script that succeeds.
+			const script = '/var/tmp/dotnet-install.sh'
+			const install = `curl -fsS -o ${script} https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh && bash ${script} --channel 8.0 --install-dir /var/tmp/dotnet`
 			const installed = await sandbox.exec(['sh', '-c', install], { signal: timeout(420), env })
 			expect(installed, installed.stdout + installed.stderr).toMatchObject({ exitCode: 0 })
 			await sandbox.exec(['mkdir', '-p', project], { signal: timeout() })
@@ -174,9 +175,6 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			await sandbox.writeFile(`${project}/check.csproj`, csproj, timeout())
 
 			// Act
-			const diagnose =
-				'id; echo HOME=$HOME; ulimit -a; free -m; df -h /var/tmp; /var/tmp/dotnet/dotnet --info 2>&1 | head -30; echo info-exit=$?; /var/tmp/dotnet/dotnet restore -v n 2>&1 | tail -60; echo restore-exit=$?'
-			console.log((await sandbox.exec(['sh', '-c', diagnose], { signal: timeout(180), cwd: project, env })).stdout)
 			const result = await sandbox.exec(['/var/tmp/dotnet/dotnet', 'restore'], { signal: timeout(180), cwd: project, env })
 
 			// Assert
