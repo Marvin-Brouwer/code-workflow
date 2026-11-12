@@ -9,14 +9,18 @@
 import { limit, succeed, workflow } from '@mesh-flow/core'
 import { github, IssueParameters } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
+import { installDependencies } from './install-dependencies.mts'
 
-export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
+export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)
 	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
 
+	const installed = await installDependencies(repository, abortSignal)
+	const installNote = installed.state === 'failed' ? `Installing its npm dependencies failed:\n${installed.output}\n` : ''
+
 	await developer.loop`
-		Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
+		${installNote}Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
 		${limit({ minutes: 30 })}
 	`
 
