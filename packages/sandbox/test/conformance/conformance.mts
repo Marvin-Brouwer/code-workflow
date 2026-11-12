@@ -174,6 +174,9 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			await sandbox.writeFile(`${project}/check.csproj`, csproj, timeout())
 
 			// Act
+			const diagnose =
+				'id; echo HOME=$HOME; ulimit -a; free -m; df -h /var/tmp; /var/tmp/dotnet/dotnet --info 2>&1 | head -30; echo info-exit=$?; /var/tmp/dotnet/dotnet restore -v n 2>&1 | tail -60; echo restore-exit=$?'
+			console.log((await sandbox.exec(['sh', '-c', diagnose], { signal: timeout(180), cwd: project, env })).stdout)
 			const result = await sandbox.exec(['/var/tmp/dotnet/dotnet', 'restore'], { signal: timeout(180), cwd: project, env })
 
 			// Assert
