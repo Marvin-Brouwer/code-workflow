@@ -18,3 +18,8 @@ export function workspacePath(value: string): string {
 export function onDisk(relative: string, what: string): string {
 	return path.join(currentScope(what).run.workspace, relative)
 }
+
+/** A folder's location as a prompt shows it: with a trailing separator, so it reads as a folder. */
+export function asDirectory(location: string): string {
+	return `${location}${path.sep}`
+}

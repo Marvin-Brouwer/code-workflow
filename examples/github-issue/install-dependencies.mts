@@ -82,12 +82,12 @@ export async function installDependencies(repository: github.Repository, options
 	const limitMs = installLimitMs(options.timeout ?? defaultTimeout)
 	const { directory } = repository
 	if (!(await exists(directory, 'package.json')))
-		return result('nothing to install', `${repository.path} has no package.json, so it has no npm dependencies.`)
+		return result('nothing to install', `${directory} has no package.json, so it has no npm dependencies.`)
 	const unhandled = await firstPresent(directory, notHandled)
 	if (unhandled !== undefined)
 		return result(
 			'not handled',
-			`${repository.path} has a ${unhandled}, which this sandbox can't install from, so its dependencies aren't installed.`,
+			`${directory} has a ${unhandled}, which this sandbox can't install from, so its dependencies aren't installed.`,
 		)
 	const lockfile = await firstPresent(
 		directory,
@@ -106,7 +106,7 @@ export async function installDependencies(repository: github.Repository, options
 			maxBuffer: maxOutputBytes,
 			env: { ...process.env, ...env },
 		})
-		return result('installed', `The npm dependencies of ${repository.path} are installed (${command.join(' ')}).`)
+		return result('installed', `The npm dependencies of ${directory} are installed (${command.join(' ')}).`)
 	} catch (error) {
 		if (options.abortSignal.aborted) throw options.abortSignal.reason
 		const log = path.join(installLogDirectory, `${repository.path.replaceAll('/', '_')}.log`)
@@ -116,7 +116,7 @@ export async function installDependencies(repository: github.Repository, options
 				: ''
 		await mkdir(installLogDirectory, { recursive: true })
 		await writeFile(log, `${stopped}${outputOf(error)}`)
-		return result('failed', `Installing the npm dependencies of ${repository.path} failed; the output is in ${log}.`)
+		return result('failed', `Installing the npm dependencies of ${directory} failed; the output is in ${log}.`)
 	}
 }
 

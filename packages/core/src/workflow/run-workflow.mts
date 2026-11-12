@@ -32,7 +32,10 @@ export interface RunOptions<Parameters = unknown> {
 	readonly models?: Models
 	/** The run's side of the gateway, for host tools and model calls. Under the engine, the entry file makes it. */
 	readonly gateway?: GatewayClient
-	/** The run's workspace directory, made when missing. Default `./workspace`. */
+	/**
+	 * The run's workspace directory, made when missing. Default `./workspace`. Prompts render its
+	 * absolute path, so a rerun with a kept `agentStore` only finds its loops from the same workspace.
+	 */
 	readonly workspace?: string
 	/** A SQLite file for the agents' conversations. Default: in memory. */
 	readonly agentStore?: string

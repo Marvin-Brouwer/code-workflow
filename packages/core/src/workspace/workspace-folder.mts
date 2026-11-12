@@ -3,7 +3,7 @@ import path from 'node:path'
 import { toPrompt } from '../render/to-prompt.mts'
 import { workspaceFile, type WorkspaceFile } from './workspace-file.mts'
 import { toPosix } from '../run/to-posix.mts'
-import { onDisk, workspacePath } from './workspace-path.mts'
+import { asDirectory, onDisk, workspacePath } from './workspace-path.mts'
 
 export interface WorkspaceFolderOptions {
 	/** What the folder holds, for the agent. */
@@ -52,7 +52,7 @@ export function workspaceFolder(relative: string, options: WorkspaceFolderOption
 		location: () => located('Locating'),
 		files,
 		[toPrompt]: async () => {
-			const directory = `${located('Rendering')}${path.sep}`
+			const directory = asDirectory(located('Rendering'))
 			const names = (await files()).map((file) => path.posix.relative(folderPath, file.path))
 			const label = options.description === undefined ? directory : `${directory} (${options.description})`
 			return names.length === 0 ? `${label}, empty so far` : `${label}, with ${names.join(', ')}`

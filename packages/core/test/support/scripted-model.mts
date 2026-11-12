@@ -62,6 +62,12 @@ export const neverAnswers: FauxResponseFactory = (_context, options) =>
 		})
 	})
 
+/** `text` as it appears in what `textOf` returns, which is JSON: quotes and backslashes escaped. */
+export function asInRequest(text: string): string {
+	const quoted = JSON.stringify(text)
+	return quoted.slice('"'.length, -'"'.length)
+}
+
 /** All text the model was sent in a request, for asserting on prompts. */
 export function textOf(request: Context | undefined): string {
 	return JSON.stringify(request?.messages ?? [])

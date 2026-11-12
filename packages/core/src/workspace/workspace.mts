@@ -12,7 +12,7 @@ import { workspaceFolder } from './workspace-folder.mts'
  *
  * In a prompt, a file renders as where it is on disk and a folder as where it is and its files, such
  * as `/home/user/workspace/research/ (Research notes), with overview.md, repositories.md`. The paths
- * are absolute, so they still work once the agent changed into a checkout.
+ * are absolute, so they still work once the agent has changed into a checkout.
  */
 export const workspace = Object.freeze({
 	file: workspaceFile,

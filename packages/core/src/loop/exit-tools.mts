@@ -1,5 +1,4 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
-import path from 'node:path'
 import { z } from 'zod'
 import type { ExitSpec } from '../exits/exit.mts'
 import { counted } from '../render/counted.mts'
@@ -7,6 +6,7 @@ import { renderValue } from '../render/to-prompt.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { toolParameters } from '../tool/json-schema.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
+import { asDirectory } from '../workspace/workspace-path.mts'
 import { input } from '../workflow/input.mts'
 import { AgentGaveUp } from './loop-errors.mts'
 import type { LoopSession } from './loop-session.mts'
@@ -50,7 +50,7 @@ function succeedTool(schema: z.ZodType | undefined, gate: RunGate, session: Loop
 
 function folderTool(folder: WorkspaceFolder, gate: RunGate, session: LoopSession): ToolRegistration {
 	const minFiles = folder.options.minFiles ?? 0
-	const directory = `${folder.location()}${path.sep}`
+	const directory = asDirectory(folder.location())
 	return exitTool(
 		'succeed',
 		`Finish the task, once ${directory} holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,

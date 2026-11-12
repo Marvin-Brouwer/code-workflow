@@ -10,7 +10,7 @@ import { localGit } from './local-git.mts'
 
 /**
  * A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as where it
- * is on disk, so the agent finds it from any directory, also from inside another checkout.
+ * is on disk, so the agent finds it from any directory, including inside another checkout.
  */
 export interface Repository {
 	/** `owner/name`. */

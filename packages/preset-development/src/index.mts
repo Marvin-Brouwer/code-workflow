@@ -15,7 +15,7 @@ export const Research = workspace.folder('research', {
 })
 
 export const Plan = z.object({
-	path: z.string().describe('Path of plan.md'),
+	path: z.string().describe('Absolute path of plan.md, so agents find it from inside a checkout'),
 	repositories: z.array(
 		z.object({
 			name: z.string().describe('Project path on the source host, e.g. group/project'),

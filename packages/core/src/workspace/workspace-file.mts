@@ -5,7 +5,7 @@ import { onDisk, workspacePath } from './workspace-path.mts'
 
 /**
  * A file in the run's workspace. In a prompt it renders as where it is on disk, so the agent finds
- * it from any directory, also after it changed into a checkout.
+ * it from any directory, even after it has changed into a checkout.
  */
 export interface WorkspaceFile {
 	readonly kind: 'file'
@@ -27,7 +27,7 @@ export interface WorkspaceFile {
  */
 export function workspaceFile(relative: string): WorkspaceFile {
 	const filePath = workspacePath(relative)
-	const located = (what: string) => onDisk(filePath, `${what} of workspace file ${filePath}`)
+	const located = (what: string) => onDisk(filePath, `${what} workspace file ${filePath}`)
 	return Object.freeze({
 		kind: 'file' as const,
 		path: filePath,

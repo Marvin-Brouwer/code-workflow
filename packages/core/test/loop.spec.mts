@@ -17,7 +17,7 @@ import { toPrompt } from '../src/render/to-prompt.mts'
 import { tool } from '../src/tool/tool.mts'
 import { workspace } from '../src/workspace/workspace.mts'
 import { runBody } from './support/run-body.mts'
-import { callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
+import { asInRequest, callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
 
 const Answer = z.object({ answer: z.number() })
 
@@ -289,10 +289,10 @@ describe('loop', () => {
 
 		// Assert
 		expect(await run.result).toBe(Research)
-		// Absolute, so the agent still finds it after it changed into a checkout; escaped as the request JSON has it.
-		const listed = JSON.stringify(`${path.join(run.workspace, 'research')}${path.sep}, empty so far`).slice(1, -1)
-		expect(textOf(model.requests[0])).toContain(listed)
-		expect(textOf(model.requests[1])).toContain('has 0 of the 1 files')
+		// Absolute, so the agent still finds it after it has changed into a checkout.
+		const listed = `${path.join(run.workspace, 'research')}${path.sep}, empty so far`
+		expect(textOf(model.requests[0])).toContain(asInRequest(listed))
+		expect(textOf(model.requests[1])).toContain(asInRequest(`${path.join(run.workspace, 'research')}${path.sep} has 0 of the 1 files`))
 	})
 
 	test('renders a workspace file as where it is on disk, so it is found from inside a checkout too', async () => {
@@ -306,8 +306,8 @@ describe('loop', () => {
 		await run.result
 
 		// Assert
-		const located = JSON.stringify(path.join(run.workspace, 'notes', 'issue.md')).slice(1, -1)
-		expect(textOf(model.requests[0])).toContain(`Read ${located}, then`)
+		const located = path.join(run.workspace, 'notes', 'issue.md')
+		expect(textOf(model.requests[0])).toContain(asInRequest(`Read ${located}, then`))
 	})
 
 	test('reminds the agent to call an exit, and fails after the reminders', async () => {

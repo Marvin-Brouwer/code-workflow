@@ -155,7 +155,7 @@ await planner.loop`Research ${story}. Write your findings to ${research} and fin
 const findings = await research.files()
 ```
 
-A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git. In a prompt it renders as that absolute path, so the agent still finds it after it changed into a checkout.
+A workspace file or folder can be made at module level; inside a run, `location()` says where it is on disk, for code that hands the path to something else, such as git. In a prompt it renders as that absolute path, so the agent still finds it after it has changed into a checkout.
 
 ### Humans
 
