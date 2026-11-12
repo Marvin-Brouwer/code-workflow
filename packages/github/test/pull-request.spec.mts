@@ -17,6 +17,9 @@ import { askedForInput, runOnGateway } from './support/test-run.mts'
 /** What a person wrote over the description while a new one was written. */
 const personsEdit = { title: 'Keep the session', description: 'Do not merge before Friday.' }
 
+/** What the new text was written from: the first pull request as it was opened. */
+const basedOnSameSite = { ...sameSite, number: firstPullRequest }
+
 /** The text after the second fix, which adds Secure to the cookie. */
 const secure = { title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' }
 
@@ -202,6 +205,42 @@ describe('updatePullRequest', () => {
 		expect(updated.skipped).toBe('unchanged')
 	})
 
+	test('skips a pull request that another run signed with the same text', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const { head } = await push(repository)({ message: 'Set SameSite' })
+			const pullRequest = await openPullRequest(repository, sameSite)
+			const stored = api.pullRequest(repositoryName, pullRequest.number)
+			api.pullRequest(repositoryName, pullRequest.number, { body: stored.body.replace(/`run-\d+`/, '`run-earlier`') })
+			return updatePullRequest(pullRequest, { ...sameSite, describedSha: head })
+		})
+		const updated = await run.result
+
+		// Assert
+		expect(updated.skipped).toBe('unchanged')
+	})
+
+	test('refuses a text written from another pull request', async () => {
+		// Arrange
+		const { gateway } = await connectedGithub()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: firstPullRequest + 1 } })
+		})
+
+		// Assert
+		await expect(run.result).rejects.toThrow('written from pull request 2, not from 1')
+	})
+
 	test('leaves a closed pull request as it is', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
@@ -261,7 +300,7 @@ describe('an edit while the text was written', () => {
 				await changeLogin(repository, 'SameSite=None\n')
 				const pullRequest = await openPullRequest(repository, sameSite)
 				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
-				return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: firstPullRequest } })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
 			},
 			{ inputs: [{ overwrite: false }] },
 		)
@@ -285,7 +324,7 @@ describe('an edit while the text was written', () => {
 				await changeLogin(repository, 'SameSite=None\n')
 				const pullRequest = await openPullRequest(repository, sameSite)
 				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
-				return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: firstPullRequest } })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
 			},
 			{ inputs: [{ overwrite: true }] },
 		)
@@ -309,7 +348,7 @@ describe('an edit while the text was written', () => {
 				const pullRequest = await openPullRequest(repository, sameSite)
 				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
 				await changeLogin(repository, 'SameSite=None; Secure\n')
-				return openPullRequest(repository, { ...secure, basedOn: { ...sameSite, number: firstPullRequest } })
+				return openPullRequest(repository, { ...secure, basedOn: basedOnSameSite })
 			},
 			{ inputs: [{ overwrite: false }] },
 		)
@@ -331,7 +370,7 @@ describe('an edit while the text was written', () => {
 			const pullRequest = await openPullRequest(repository, sameSite)
 			api.pullRequest(repositoryName, pullRequest.number, { state: 'closed' })
 			await changeLogin(repository, 'SameSite=None; Secure\n')
-			return openPullRequest(repository, { ...secure, basedOn: { ...sameSite, number: pullRequest.number } })
+			return openPullRequest(repository, { ...secure, basedOn: basedOnSameSite })
 		})
 		const reopened = await run.result
 
@@ -353,7 +392,7 @@ describe('an edit while the text was written', () => {
 				await changeLogin(repository, 'SameSite=None\n')
 				const pullRequest = await openPullRequest(repository, sameSite)
 				api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
-				return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: pullRequest.number } })
+				return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
 			},
 			{
 				inputs: [{ overwrite: true }, { overwrite: false }],
@@ -378,7 +417,7 @@ describe('an edit while the text was written', () => {
 			await changeLogin(repository, 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, sameSite)
 			api.pullRequest(repositoryName, pullRequest.number, { title: personsEdit.title, body: personsEdit.description })
-			return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: pullRequest.number } })
+			return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
 		})
 		await expect.poll(() => askedForInput(run.messages)).toBe(true)
 		const started = performance.now()
@@ -398,7 +437,7 @@ describe('an edit while the text was written', () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, sameSite)
-			return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: firstPullRequest } })
+			return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
 		})
 		const updated = await run.result
 

@@ -59,6 +59,18 @@ export function runIdLine(body: string): string | undefined {
 	return start === -1 ? undefined : lines[start + footerLines - 1]
 }
 
+/**
+ * `body` with `\n` line breaks and without the run id in its last connector footer, the notes next
+ * to it kept: two signings of the same text by different runs compare the same.
+ */
+export function withoutRunId(body: string): string {
+	const lines = linesOf(body)
+	const start = footerStart(lines)
+	if (start === -1) return lines.join('\n')
+	const at = start + footerLines - 1
+	return lines.map((line, index) => (index === at ? line.replace(/^`[^`]*`/, '') : line)).join('\n')
+}
+
 /** A body's lines, whichever line breaks GitHub's editor saved it with. */
 function linesOf(body: string): string[] {
 	return withUnixLineBreaks(body).split('\n')

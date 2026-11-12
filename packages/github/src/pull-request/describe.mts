@@ -75,11 +75,11 @@ export async function describe(agent: Agent, repository: Repository, options: De
 	if (current?.describedSha === head) return currentContent(current, options.issue)
 	const brief = await readBrief(repository)({ head })
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: head, ...closesIssue(options.issue), ...basedOnText(current) }
+	return { ...text, describedSha: head, ...closesIssue(options.issue), ...basedOnField(current) }
 }
 
-/** The `basedOn` field of the content: the text of the pull request it was written from, when there is one. */
-function basedOnText(current: PullRequest | undefined): { basedOn?: BasedOn } {
+/** The `basedOn` field of the content: the pull request it was written from, by number, and what it said then, when there is one. */
+function basedOnField(current: PullRequest | undefined): { basedOn?: BasedOn } {
 	return current === undefined ? {} : { basedOn: { number: current.number, title: current.title, description: current.description } }
 }
 
@@ -98,7 +98,7 @@ async function branchPullRequest(ref: PullRequestRef, repository: Repository): P
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */
 function currentContent(current: PullRequest, closes: Issue | undefined): PullRequestContent {
 	const { title, description, describedSha } = current
-	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes), ...basedOnText(current) }
+	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes), ...basedOnField(current) }
 }
 
 /** The `closes` field of the content, for when it closes an issue. */

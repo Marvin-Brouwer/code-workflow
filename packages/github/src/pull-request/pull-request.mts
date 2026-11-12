@@ -4,7 +4,7 @@ import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
-import { keptEdit } from './keeps-edit.mts'
+import { keptEdit } from './kept-edit.mts'
 import type { PullRequestContent } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */
@@ -30,12 +30,11 @@ export async function openPullRequest(repository: Repository, content: PullReque
 	const { head } = await push(repository)({ message: content.title }, context)
 	const { basedOn } = content
 	if (basedOn !== undefined) {
-		const { skipped: _skipped, ...updated } = await updatePullRequest(
+		return updatePullRequest(
 			{ repository: repository.name, number: basedOn.number },
 			{ ...content, describedSha: content.describedSha ?? head },
 			context,
 		)
-		return updated
 	}
 	const data = await stubs.openPullRequest(
 		{
@@ -77,7 +76,9 @@ export async function updatePullRequest(
 	content: PullRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedPullRequest> {
-	const kept = await keptEdit(async () => pullRequest(ref, context), content)
+	if (content.basedOn !== undefined && content.basedOn.number !== ref.number)
+		throw new Error(`The text was written from pull request ${String(content.basedOn.number)}, not from ${String(ref.number)}.`)
+	const kept = await keptEdit(() => pullRequest(ref, context), content)
 	if (kept !== undefined) return Object.freeze({ ...kept, skipped: 'edited' as const })
 	const { skipped, ...data } = await stubs.updatePullRequest(
 		{

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { runIdLine, signed, unsigned } from '../src/host/signature.mts'
+import { runIdLine, signed, unsigned, withoutRunId } from '../src/host/signature.mts'
 
 const runId = 'run-1'
 const sha = 'a'.repeat(40)
@@ -71,5 +71,19 @@ describe('runIdLine', () => {
 
 		// Assert
 		expect(line).toBeUndefined()
+	})
+})
+
+describe('withoutRunId', () => {
+	test('takes the run id out of the footer and keeps the notes next to it', () => {
+		// Arrange
+		const body = signed('Sets it.', runId, [], ['Fixes #7']).replaceAll('\n', '\r\n')
+
+		// Act
+		const text = withoutRunId(body)
+
+		// Assert
+		expect(text.split('\n').at(-1)).toBe(' Fixes #7')
+		expect(text).not.toContain(runId)
 	})
 })

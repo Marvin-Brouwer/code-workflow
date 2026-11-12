@@ -1,6 +1,6 @@
 import { Sha } from '../tools/git-tools.mts'
 import { markerValue } from '../tools/issue-tools.mts'
-import { runIdLine, signed, unsigned, withUnixLineBreaks } from './signature.mts'
+import { runIdLine, signed, unsigned, withoutRunId, withUnixLineBreaks } from './signature.mts'
 
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
@@ -30,9 +30,12 @@ export function signedDescription(body: string, runId: string, { describedSha, c
 	)
 }
 
-/** Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with. */
+/**
+ * Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with and
+ * whichever run signed it: a run that starts over doesn't rewrite a text only for its run id.
+ */
 export function sameBody(stored: string | null | undefined, signedBody: string): boolean {
-	return withUnixLineBreaks(stored ?? '') === signedBody
+	return withoutRunId(stored ?? '') === withoutRunId(signedBody)
 }
 
 /** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
