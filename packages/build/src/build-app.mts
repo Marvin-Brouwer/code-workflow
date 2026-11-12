@@ -40,8 +40,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	abortSignal.throwIfAborted()
 	assertSafeOut(path.resolve(directory), path.resolve(out))
 	const entry = await packageEntry(directory)
-	// The map's names are relative to the real repository, and the files' real paths: links and
-	// Windows' short names (`RUNNER~1`) would otherwise put the machine's folders in them.
+	// Both the repository and each source are taken by real path, so links and Windows' short
+	// names (`RUNNER~1`) don't put the machine's folders in the map's names.
 	const root = await realpath(directory)
 	const natives = await nativePackages(directory, abortSignal)
 	assertInstallable(natives, platform)
@@ -90,7 +90,7 @@ function assertSafeOut(directory: string, out: string): void {
 	}
 }
 
-/** A source's real path, or the path itself for a module that isn't a file. */
+/** A source's real path, or the path itself when it can't be resolved, such as a virtual module. */
 function realSource(file: string): string {
 	try {
 		return realpathSync.native(file)

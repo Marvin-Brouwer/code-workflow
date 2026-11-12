@@ -201,7 +201,7 @@ const keyedCall = 'whereCalled()'
 const keyedCallKey = 'keyed.mts:6:20'
 
 /** The environment variable that has the built entry print its key and exit. */
-const printKeyVariable = 'PRINT_KEY'
+const printKeyVariable = 'MESH_FLOW_TEST_PRINT_KEY'
 
 /** A module that keys its own call site the way a loop does, bundled after the `greeting` package. */
 const keyedModule = `import 'greeting'

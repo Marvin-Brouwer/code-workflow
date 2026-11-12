@@ -45,9 +45,7 @@ function lookUp(site: CallSite): SourcePlace | undefined {
 	const entry = map.findEntry(generatedLine, generatedColumn)
 	// An entry from an earlier line belongs to other code: the site has no place of its own.
 	if (!('originalSource' in entry) || entry.generatedLine !== generatedLine) return undefined
-	// The site can fall inside the entry's span: keep its offset from the entry's start. A segment
-	// without a source of its own carries the previous one's in Node's parser; loop calls always
-	// get a mapping of their own, so that only matters in theory.
+	// The site can fall inside the entry's span: keep its offset from the entry's start.
 	return {
 		file: entry.originalSource,
 		line: entry.originalLine + 1,
