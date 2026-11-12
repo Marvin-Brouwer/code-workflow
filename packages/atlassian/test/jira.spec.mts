@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { confluence, jira } from '../src/_module/atlassian.mts'
@@ -82,7 +83,7 @@ describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi
 		})
 
 		// Assert
-		expect(result.rendered).toBe(`${started.workspace}/jira/PROJ-7.md`)
+		expect(result.rendered).toBe(path.join(started.workspace, 'jira', 'PROJ-7.md'))
 		expect(result.story.url).toBe(`${settings['jira/url'].replace(/\/$/, '')}/browse/PROJ-7`)
 		expect(result.markdown).toContain('# PROJ-7: Login fails on Safari')
 		expect(result.markdown).toContain('Steps: **open** the login page.')
