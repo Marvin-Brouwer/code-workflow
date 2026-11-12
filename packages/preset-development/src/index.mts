@@ -38,6 +38,9 @@ export const Plan = z.object({
 })
 export type Plan = z.infer<typeof Plan>
 
+/** Where the planner writes the plan. In a prompt it renders as its absolute path, which `Plan.path` takes. */
+export const planFile = workspace.file('plan.md')
+
 const Findings = z.object({ findings: z.array(z.object({ source: z.string(), message: z.string() })) })
 
 /** One node per repository, for `inDependencyOrder`. */
@@ -62,9 +65,6 @@ export function codeReview(reviewer: Agent, repository: { name: string }, plan: 
 		return findings.map((finding) => ({ ...finding, source: `code review: ${finding.source}` }))
 	})
 }
-
-/** Where the planner writes the plan. In a prompt it renders as its absolute path, which `Plan.path` takes. */
-export const planFile = workspace.file('plan.md')
 
 /**
  * Plan deviations: the approved plan.md stays as approved; later findings are recorded next to it.
