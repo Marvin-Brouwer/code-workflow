@@ -12,8 +12,7 @@
 	},
 	"dependencies": {
 		"@mesh-flow/core": "workspace:*",
-		"@mesh-flow/github": "workspace:*",
-		"zod": "^4.6.7"
+		"@mesh-flow/github": "workspace:*"
 	},
 	"devDependencies": {
 		"@mesh-flow/engine": "workspace:*",

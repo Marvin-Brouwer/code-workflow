@@ -11,17 +11,16 @@ import { github, IssueParameters } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
 import { installDependencies } from '../install-dependencies.mts'
 
-export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
+export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)
 	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
 
-	const dependencies = await installDependencies({ repository: repository.path })
+	const dependencies = await installDependencies(repository, { abortSignal })
 
 	await developer.loop`
 		Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
 		${dependencies}
-		After changing package.json or its lockfile, install again with ${installDependencies}.
 		${limit({ minutes: 30 })}
 	`
 
