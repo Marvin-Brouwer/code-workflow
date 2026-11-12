@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs'
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -72,7 +72,7 @@ describe('buildApp', () => {
 
 		// Assert
 		expect(await bundleLineOf(first, keyedCall)).not.toBe(await bundleLineOf(second, keyedCall))
-		expect(keys).toEqual(Array.from({ length: keys.length }, () => 'keyed.mts:6:20'))
+		expect(keys).toEqual([keyedCallKey, keyedCallKey, keyedCallKey, keyedCallKey])
 		expect(await mapSources(second)).toEqual(expect.arrayContaining(['keyed.mts', 'greeting/index.js']))
 	})
 
@@ -187,11 +187,21 @@ if (native === 'host') mailbox.send({ type: 'described', description: ${JSON.str
 	})
 })
 
-/** Imports core's call sites from its sources, for the module the keying test writes. */
+/**
+ * Imports core's call sites from its sources, for the module the keying test writes. Deliberately
+ * not through a public entry point: the test checks core's real keying in a built app without
+ * making it part of core's API.
+ */
 const callSiteModule = pathToFileURL(path.join(import.meta.dirname, '../../core/src/run/call-site.mts')).href
 
-/** The call whose site `keyed.mts` keys, on its line 6, column 20. */
+/** The call whose site `keyed.mts` keys. */
 const keyedCall = 'whereCalled()'
+
+/** The key of `keyedCall`: its place in `keyed.mts`. */
+const keyedCallKey = 'keyed.mts:6:20'
+
+/** The environment variable that has the built entry print its key and exit. */
+const printKeyVariable = 'PRINT_KEY'
 
 /** A module that keys its own call site the way a loop does, bundled after the `greeting` package. */
 const keyedModule = `import 'greeting'
@@ -204,12 +214,13 @@ export const key = ${keyedCall}
 
 /** An entry that prints the key when asked to, and describes itself otherwise. */
 const printingKeyEntry = `import { key } from './keyed.mts'
-if (process.env.PRINT_KEY === '1') {
+if (process.env.${printKeyVariable} !== undefined) {
 	console.log(key)
 	process.exit(0)
 }
 ${describingEntry(description)}`
 
+/** A fresh folder for a built app. */
 async function outFolder(): Promise<string> {
 	return path.join(await temporaryDirectory(), 'app')
 }
@@ -218,17 +229,19 @@ async function outFolder(): Promise<string> {
 async function printedKey(out: string, nodeOptions: readonly string[] = []): Promise<string> {
 	const { stdout } = await run(process.execPath, [...nodeOptions, path.join(out, 'main.mjs')], {
 		cwd: await temporaryDirectory(),
-		env: { ...process.env, PRINT_KEY: '1' },
+		env: { ...process.env, [printKeyVariable]: 'yes' },
 	})
 	return stdout.trim().split('\n').at(-1) ?? ''
 }
 
+/** The line of the built bundle that holds `text`, from 1. */
 async function bundleLineOf(out: string, text: string): Promise<number> {
 	const lines = (await readFile(path.join(out, 'main.mjs'), 'utf8')).split('\n')
 	return lines.findIndex((line) => line.includes(text)) + 1
 }
 
-async function mapSources(out: string): Promise<unknown> {
+/** The files the built app's source map names. */
+async function mapSources(out: string): Promise<readonly string[]> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the build writes the map
-	return (JSON.parse(await readFile(path.join(out, 'main.mjs.map'), 'utf8')) as { sources: unknown }).sources
+	return (JSON.parse(await readFile(path.join(out, 'main.mjs.map'), 'utf8')) as { sources: readonly string[] }).sources
 }

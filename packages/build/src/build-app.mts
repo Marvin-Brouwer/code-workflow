@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
 import path from 'node:path'
@@ -39,7 +40,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	abortSignal.throwIfAborted()
 	assertSafeOut(path.resolve(directory), path.resolve(out))
 	const entry = await packageEntry(directory)
-	// The bundler names files by their real path, so the map's names are relative to the real repository.
+	// The map's names are relative to the real repository, and the files' real paths: links and
+	// Windows' short names (`RUNNER~1`) would otherwise put the machine's folders in them.
 	const root = await realpath(directory)
 	const natives = await nativePackages(directory, abortSignal)
 	assertInstallable(natives, platform)
@@ -61,10 +63,11 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 			file: path.join(out, builtEntry),
 			format: 'esm',
 			codeSplitting: false,
-			// Loops are keyed by their call site in the source, read through this map, so a rebuild that moves the bundle's lines keeps their keys.
+			// Loops are keyed by their call site in the source, read through this map, so a
+			// rebuild that moves the bundle's lines keeps their keys.
 			sourcemap: true,
 			sourcemapExcludeSources: true,
-			sourcemapPathTransform: (source, map) => sourceName(root, path.resolve(path.dirname(map), source)),
+			sourcemapPathTransform: (source, map) => sourceName(root, realSource(path.resolve(path.dirname(map), source))),
 		},
 	})
 	await markAppSourceMap(path.join(out, `${builtEntry}.map`), abortSignal)
@@ -84,6 +87,15 @@ function assertSafeOut(directory: string, out: string): void {
 		throw new Error(
 			`${out} is emptied before a build, and it holds the app's repository: give a folder of its own, such as .mesh-flow/app.`,
 		)
+	}
+}
+
+/** A source's real path, or the path itself for a module that isn't a file. */
+function realSource(file: string): string {
+	try {
+		return realpathSync.native(file)
+	} catch {
+		return file
 	}
 }
 

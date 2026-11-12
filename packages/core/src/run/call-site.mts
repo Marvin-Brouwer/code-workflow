@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getCallSites } from 'node:util'
-import { sourcePlace } from './source-site.mts'
+import { sourcePlace } from './source-place.mts'
 import { toPosix } from './to-posix.mts'
 
 /** Where a function was called from. */

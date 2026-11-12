@@ -19,6 +19,6 @@ export function sourceName(root: string, file: string): string {
 	const installed = segments.indexOf(packagesFolder)
 	if (installed === -1) return segments.join('/')
 	const inPackage = segments.slice(installed + 1)
-	const inStore = inPackage[0] === pnpmStore && inPackage[2] === packagesFolder
-	return (inStore ? inPackage.slice(3) : inPackage).join('/')
+	const [store, , storePackages, ...inStore] = inPackage
+	return (store === pnpmStore && storePackages === packagesFolder ? inStore : inPackage).join('/')
 }

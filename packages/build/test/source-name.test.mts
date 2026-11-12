@@ -6,8 +6,11 @@ const root = path.resolve('repository')
 
 describe('sourceName', () => {
 	test('names a file of the repository relative to it, with /', () => {
+		// Arrange
+		const file = path.join(root, 'workflows', 'fix-issue.mts')
+
 		// Act
-		const name = sourceName(root, path.join(root, 'workflows', 'fix-issue.mts'))
+		const name = sourceName(root, file)
 
 		// Assert
 		expect(name).toBe('workflows/fix-issue.mts')
@@ -46,8 +49,11 @@ describe('sourceName', () => {
 	})
 
 	test('only takes a whole node_modules folder for installed packages', () => {
+		// Arrange
+		const file = path.join(root, 'my_node_modules', 'x.mts')
+
 		// Act
-		const name = sourceName(root, path.join(root, 'my_node_modules', 'x.mts'))
+		const name = sourceName(root, file)
 
 		// Assert
 		expect(name).toBe('my_node_modules/x.mts')
