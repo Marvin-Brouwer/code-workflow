@@ -146,11 +146,14 @@ export type ReplyStage = z.infer<typeof ReplyStage>
 export const defaultReplyStage: ReplyStage = 'answer'
 
 /** What came of a reply: the comment posted or edited, or that the item is gone, a line comment deleted since it was read. */
-export const ReplyOutcome = z.union([PostedComment, z.object({ gone: z.literal(true) })])
+/** A reply that found its item gone. */
+const GoneReply = z.object({ gone: z.literal(true) })
+
+export const ReplyOutcome = z.union([PostedComment, GoneReply])
 export type ReplyOutcome = z.infer<typeof ReplyOutcome>
 
 /** Whether a reply found its item gone: a line comment deleted since it was read. */
-export function isGoneReply(outcome: ReplyOutcome): outcome is { gone: true } {
+export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
 	return 'gone' in outcome
 }
 

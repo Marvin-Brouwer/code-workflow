@@ -44,7 +44,7 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 
 	const reading = withKey(seenKey(item)).at(0)
 	const newReply = async (markerKeys: readonly string[]): Promise<ReplyOutcome> => {
-		const threadId = kind === 'review-comment' ? await threadOf(comments, commentId) : undefined
+		const threadId = kind === 'review-comment' ? await threadOrGone(comments, commentId) : undefined
 		if (threadId === gone) return { gone: true }
 		return comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
 	}
@@ -67,7 +67,7 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 	return newReply([repliedKey(item)])
 }
 
-/** What `threadOf` gives for a line comment deleted since it was read. */
+/** What `threadOrGone` gives for a line comment deleted since it was read. */
 const gone = Symbol('gone')
 
 /**
@@ -75,7 +75,7 @@ const gone = Symbol('gone')
  * deleted. Only a 404 here means the item is gone: one anywhere else, say on the conversation, is a
  * pull request that's gone or a token that may not write, and fails.
  */
-async function threadOf(comments: PullRequestComments, commentId: number): Promise<number | typeof gone> {
+async function threadOrGone(comments: PullRequestComments, commentId: number): Promise<number | typeof gone> {
 	try {
 		return await comments.threadOf(commentId)
 	} catch (error) {

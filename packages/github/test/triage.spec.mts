@@ -116,24 +116,17 @@ describe('triage', () => {
 	test('fails when GitHub will not take a reply on the conversation, rather than say the item is gone', async () => {
 		// Arrange
 		const { api, comments, gateway } = await reviewed()
-		const { writer } = scriptedWriter([
-			{
-				items: [
-					{ id: 'comment/1', asks: 'question', reply: 'Because.' },
-					{ id: 'comment/2', asks: 'change', reply: 'I will add one.' },
-				],
-			},
-		])
+		const { writer } = scriptedWriter([{ items: [{ id: 'comment/1', asks: 'question', reply: 'Because.' }] }])
 		api.failWith = (method) => (method === 'POST' ? 404 : undefined)
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
-			return triage(writer, repository, { pullRequest: where, comments })
+			return triage(writer, repository, { pullRequest: where, comments: comments.slice(0, 1) })
 		})
 
 		// Assert
-		await expect(run.result).rejects.toThrow()
+		await expect(run.result).rejects.toThrow('Failed as the test asked')
 	})
 
 	test('runs no loop for no items', async () => {
