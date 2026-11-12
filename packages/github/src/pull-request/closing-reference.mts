@@ -1,5 +1,5 @@
-import { sameRepositoryName } from '../repository-name.mts'
 import type { IssueRef } from '../issue/issue.mts'
+import { sameRepositoryName } from '../repository-name.mts'
 
 /** How a pull request in `repository` names `issue` to close it: `#7` in the same repository, `owner/name#7` in another. */
 export function closingReference(issue: IssueRef, repository: string): string {

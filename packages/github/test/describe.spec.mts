@@ -275,6 +275,24 @@ describe('describe', () => {
 		await expect(run.result).rejects.toThrow('is the pull request of fix/7, not of team/app fix/8')
 	})
 
+	test('refuses a pull request onto another branch than the default one', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		const { writer } = scriptedWriter([])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const pullRequest = await openPullRequest(repository, sameSite)
+			api.pullRequest(repositoryName, pullRequest.number, { base: { ref: 'release/1' } })
+			return describeBranch(writer, repository, { pullRequest })
+		})
+
+		// Assert
+		await expect(run.result).rejects.toThrow('merges into release/1, not into main')
+	})
+
 	test('settles promptly when the run stops while GitHub never answers the read of the pull request', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()

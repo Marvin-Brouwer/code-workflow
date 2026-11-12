@@ -1,7 +1,6 @@
 import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
-import { Sha } from '../tools/git-tools.mts'
 import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
@@ -20,7 +19,8 @@ import {
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
-import { runIdLine, signed, unsigned, withUnixLineBreaks } from './signature.mts'
+import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
+import { signed } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -48,52 +48,6 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		base: data.base.ref,
 		...descriptionOf(data.body),
 	}
-}
-
-/** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
-const describedKeyName = 'described'
-
-/** A pull request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
-function descriptionOf(body: string | null | undefined): { description: string; describedSha?: string } {
-	if (body === null || body === undefined) return { description: '' }
-	const sha = markerValue(body, describedKeyName)
-	// A marker someone edited is no marker: the commit it names is unknown.
-	return { description: unsigned(body), ...(sha !== undefined && Sha.safeParse(sha).success ? { describedSha: sha } : {}) }
-}
-
-/** What a description is signed with besides the run id: the commit it describes and the issue it closes. */
-interface DescriptionNotes {
-	readonly describedSha?: string | undefined
-	readonly closes?: string | undefined
-}
-
-/** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
-function signedDescription(body: string, runId: string, { describedSha, closes }: DescriptionNotes): string {
-	// Without trailing line breaks, as `unsigned` gives a description back, so a text that didn't change signs the same.
-	return signed(
-		body.trimEnd(),
-		runId,
-		describedSha === undefined ? [] : [`${describedKeyName}:${describedSha}`],
-		closes === undefined ? [] : [fixesNote(closes)],
-	)
-}
-
-/** Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with. */
-function sameBody(stored: string | null | undefined, signedBody: string): boolean {
-	return withUnixLineBreaks(stored ?? '') === signedBody
-}
-
-/** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
-function fixesNote(closes: string): string {
-	return `Fixes ${closes}`
-}
-
-/**
- * Whether a description's footer already closes the issue: the run id line of the last footer ends
- * in its note, so `Fixes #70` isn't `Fixes #7`, and a sentence of a person's isn't the footer.
- */
-function footerCloses(body: string | null | undefined, closes: string): boolean {
-	return runIdLine(body ?? '')?.endsWith(` ${fixesNote(closes)}`) ?? false
 }
 
 /** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */

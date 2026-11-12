@@ -4,6 +4,7 @@ import type { PullRequestText } from '../../src/pull-request/pull-request-text.m
 
 /** Where a prompt made by core's `prompt` keeps its parts: a registered symbol, the same in every module. */
 const promptParts = Symbol.for('mesh-flow.prompt')
+
 /** The parts a prompt keeps under {@link promptParts}. */
 const PromptParts = z.object({ strings: z.array(z.string()), values: z.array(z.unknown()) })
 
@@ -38,7 +39,7 @@ function shown(value: unknown): string {
 export function scriptedWriter(texts: readonly PullRequestText[]) {
 	const queue = [...texts]
 	const prompts: string[] = []
-	const loop = (strings: TemplateStringsArray, ...values: unknown[]) => {
+	function loop(strings: TemplateStringsArray, ...values: unknown[]): Promise<PullRequestText> {
 		prompts.push(rendered(strings, values).replace(/^[ \t]+/gm, ''))
 		const text = queue.shift()
 		return text === undefined ? Promise.reject(new Error('The writer has nothing more to write.')) : Promise.resolve(text)

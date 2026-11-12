@@ -32,7 +32,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				When every comment is handled, ${succeed()}.
 				${limit({ minutes: 30 })}
 			`
-			// No loop runs when the round didn't change the code.
+			// `describe` runs no writer loop when the pushed commit is already described.
 			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},
 		async checksFailed(failed) {
@@ -41,7 +41,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
 				${limit({ minutes: 20 })}
 			`
-			// No loop runs when the round didn't change the code.
+			// `describe` runs no writer loop when the pushed commit is already described.
 			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},
 	})

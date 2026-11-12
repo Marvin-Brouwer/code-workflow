@@ -1,9 +1,9 @@
-import { sameRepositoryName } from '../repository-name.mts'
-import { limit, prompt, succeed, type Agent, type Limit, type Prompt, type ToolContext } from '@mesh-flow/core'
+import { limit, prompt, succeed, type Agent, type Limit, type Prompt } from '@mesh-flow/core'
 import type { Issue } from '../issue/issue.mts'
+import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { readBrief, type PullRequestBrief } from './brief.mts'
+import { branchHead, readBrief, type PullRequestBrief } from './brief.mts'
 import { fenced } from './fenced.mts'
 import { pullRequest, type PullRequest } from './pull-request.mts'
 import { PullRequestText, textInPrompt, type PullRequestContent } from './pull-request-text.mts'
@@ -19,13 +19,14 @@ export interface DescribeOptions {
 	/**
 	 * The pull request the branch already has, to describe again: the agent starts from its title
 	 * and description, for the branch as it was last pushed, and no loop runs when they already
-	 * cover that commit. It has to be the pull request of the checkout's branch.
+	 * cover that commit. It has to be the pull request of the checkout's branch onto the default branch.
 	 */
 	readonly pullRequest?: PullRequestRef
 	/** The limit of the loop. Default: 10 minutes. */
 	readonly limit?: Limit
 }
 
+/** How long the loop may take when the caller sets no limit. */
 const defaultLimit = limit({ minutes: 10 })
 
 /** Git's customary width of a commit subject, for a title when the repository sets none. */
@@ -45,7 +46,11 @@ const customaryTitleCharacters = 72
  * rewrites the current text for the branch as it was last pushed. When the text already covers
  * that commit, or the pull request is closed, no loop runs and the current text comes back,
  * so calling it after every round costs a look. Writing the text is up to the caller: the result,
- * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is.
+ * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is. A pull request
+ * of another branch, or onto another branch than the default one, is refused.
+ *
+ * It stops with the run, as the loop does: an agent's loop follows the run's signal, not one of
+ * the caller's.
  *
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
@@ -53,37 +58,37 @@ const customaryTitleCharacters = 72
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
  * ```
  */
-export async function describe(
-	agent: Agent,
-	repository: Repository,
-	options: DescribeOptions = {},
-	context?: ToolContext,
-): Promise<PullRequestContent> {
-	const current = options.pullRequest === undefined ? undefined : await pullRequestOf(options.pullRequest, repository, context)
+export async function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
+	const current = options.pullRequest === undefined ? undefined : await branchPullRequest(options.pullRequest, repository)
 	if (current?.state === 'closed') return currentContent(current, options.issue)
 	// For a pull request that is open, what it shows: the branch as it was pushed.
-	const brief = await readBrief(repository)({ pushed: current !== undefined }, context)
-	if (current !== undefined && current.describedSha === brief.headSha) return currentContent(current, options.issue)
+	const head = await branchHead(repository)({ pushed: current !== undefined })
+	if (current?.describedSha === head) return currentContent(current, options.issue)
+	const brief = await readBrief(repository)({ head })
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: brief.headSha, ...closesField(options.issue) }
+	return { ...text, describedSha: head, ...closesIssue(options.issue) }
 }
 
-/** The pull request `ref` names, which has to be the one of the checkout's branch. */
-async function pullRequestOf(ref: PullRequestRef, repository: Repository, context: ToolContext | undefined): Promise<PullRequest> {
-	const current = await pullRequest(ref, context)
+/** The pull request `ref` names, which has to be the one of the checkout's branch onto the default branch. */
+async function branchPullRequest(ref: PullRequestRef, repository: Repository): Promise<PullRequest> {
+	const current = await pullRequest(ref)
 	if (!sameRepositoryName(current.repository, repository.name) || current.head.branch !== repository.branch)
 		throw new Error(`${current.url} is the pull request of ${current.head.branch}, not of ${repository.name} ${repository.branch}.`)
+	if (current.base !== repository.defaultBranch)
+		throw new Error(
+			`${current.url} merges into ${current.base}, not into ${repository.defaultBranch}, which the branch is described against.`,
+		)
 	return current
 }
 
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */
 function currentContent(current: PullRequest, closes: Issue | undefined): PullRequestContent {
 	const { title, description, describedSha } = current
-	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesField(closes) }
+	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes) }
 }
 
 /** The `closes` field of the content, for when it closes an issue. */
-function closesField(issue: Issue | undefined): { closes?: Issue } {
+function closesIssue(issue: Issue | undefined): { closes?: Issue } {
 	return issue === undefined ? {} : { closes: issue }
 }
 
@@ -104,7 +109,7 @@ function writeText(
 
 		What the branch changes against \`${brief.base}\`:
 		${fenced(brief.diffStat)}
-		The whole diff is in ${brief.diff}.
+		The whole diff is in ${brief.diffPath}.
 
 		Describe the branch as it is now against \`${brief.base}\`: what is different, and why it was done this
 		way. The reader reviews the result as it is, so nobody cares what happened on the way there: no earlier

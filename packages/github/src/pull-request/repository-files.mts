@@ -6,6 +6,7 @@ import { fenced } from './fenced.mts'
 export interface RepositoryFile {
 	/** Relative to the repository's root, POSIX. */
 	readonly path: string
+	/** The file's text, cut off when it's too long for a prompt. */
 	readonly text: string
 }
 
@@ -18,8 +19,14 @@ const templateFiles = new Set(templateRoots.map((root) => `${root}pull_request_t
 /** The folder of several templates GitHub takes in each of {@link templateRoots}. */
 const templateFolders = templateRoots.map((root) => `${root}pull_request_template/`)
 
-/** The folders a template or a lint setting can be in, lower case, besides the repository's root. */
+/** The folders under the root a template or a lint setting can be in, lower case. */
 const lookedInFolders = new Set(['.github', 'docs', 'pull_request_template'])
+
+/** The folders one level further down a template or a lint setting can be in, lower case. */
+const lookedInSubfolders = new Set(['.github/workflows', '.github/pull_request_template', 'docs/pull_request_template'])
+
+/** The byte order mark an editor may start a file with, which `JSON.parse` doesn't take. */
+const byteOrderMark = '\uFEFF'
 
 /** The package's manifest, where commitlint's settings may be too. */
 const packageFile = 'package.json'
@@ -34,14 +41,29 @@ const workflowFile = /^\.github\/workflows\/[^/]+\.ya?ml$/
 const lintsInWorkflow = /commitlint|semantic-pull-request|pr-title|pull-request-title/i
 
 /**
- * The paths at `ref` where a template or a lint setting can be: the root's entries and everything
- * in {@link lookedInFolders}. Never the whole tree, which a large repository's listing is too big for.
+ * The paths at `ref` where a template or a lint setting can be: the entries of the root, of
+ * {@link lookedInFolders} and of {@link lookedInSubfolders}, one level each. Never a whole folder's
+ * tree, which a large repository's `docs/` alone can be too big to list.
  */
 export async function filesAt(git: GitClient, ref: string): Promise<string[]> {
 	const root = entries((await git.lsTree('-z', '--name-only', ref)).stdout)
-	const folders = root.filter((entry) => lookedInFolders.has(entry.toLowerCase()))
-	if (folders.length === 0) return root
-	return [...root, ...entries((await git.lsTree('-r', '-z', '--name-only', ref, '--', ...folders)).stdout)]
+	const second = await entriesOf(
+		git,
+		ref,
+		root.filter((entry) => lookedInFolders.has(entry.toLowerCase())),
+	)
+	const third = await entriesOf(
+		git,
+		ref,
+		second.filter((entry) => lookedInSubfolders.has(entry.toLowerCase())),
+	)
+	return [...root, ...second, ...third]
+}
+
+/** The entries right in `folders` at `ref`, not in their subfolders. */
+async function entriesOf(git: GitClient, ref: string, folders: readonly string[]): Promise<string[]> {
+	if (folders.length === 0) return []
+	return entries((await git.lsTree('-z', '--name-only', ref, '--', ...folders.map((folder) => `${folder}/`))).stdout)
 }
 
 /** The pull request templates at `ref`: GitHub's one file, or every Markdown file in its folder of templates. */
@@ -78,6 +100,7 @@ export function filesInPrompt(files: readonly RepositoryFile[]): string {
 	return files.map((file) => `${file.path}:\n${fenced(file.text)}`).join('\n\n')
 }
 
+/** The entries of a NUL-terminated git listing (`-z`). */
 function entries(listing: string): string[] {
 	return listing.split('\0').filter((entry) => entry !== '')
 }
@@ -85,7 +108,7 @@ function entries(listing: string): string[] {
 /** `commitlint` in a `package.json`, as JSON of its own: the rest of the file says nothing about lint. */
 function commitlintInPackage(text: string): string | undefined {
 	try {
-		const parsed: unknown = JSON.parse(text)
+		const parsed: unknown = JSON.parse(text.startsWith(byteOrderMark) ? text.slice(byteOrderMark.length) : text)
 		if (typeof parsed !== 'object' || parsed === null || !Object.hasOwn(parsed, 'commitlint')) return undefined
 		const commitlint: unknown = Reflect.get(parsed, 'commitlint')
 		return JSON.stringify({ commitlint }, undefined, '\t')

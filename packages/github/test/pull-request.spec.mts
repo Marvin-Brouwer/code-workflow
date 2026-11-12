@@ -14,7 +14,11 @@ import {
 } from './support/connected-github.mts'
 import { runOnGateway } from './support/test-run.mts'
 
+/** The text after the second fix, which adds Secure to the cookie. */
 const secure = { title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' }
+
+/** An issue whose `Fixes #70` starts with the text of `Fixes #7`, which mustn't count as closing #7. */
+const otherIssue = 70
 
 describe('openPullRequest', () => {
 	test('signs the description with the run id, the issue it closes and the commit it describes', async () => {
@@ -64,13 +68,13 @@ describe('openPullRequest', () => {
 	test('gives the open pull request the new text for the same commit when it lacks the issue it should close', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
-		api.issue(repositoryName, 70)
+		api.issue(repositoryName, otherIssue)
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
-			await openPullRequest(repository, { ...sameSite, closes: { repository: repositoryName, number: 70 } })
+			await openPullRequest(repository, { ...sameSite, closes: { repository: repositoryName, number: otherIssue } })
 			return openPullRequest(repository, { ...secure, closes: issueRef })
 		})
 		const reopened = await run.result
@@ -97,6 +101,33 @@ describe('openPullRequest', () => {
 		// Assert
 		expect(api.repository(repositoryName).pulls.size).toBe(1)
 		expect(moved).toMatchObject(secure)
+	})
+
+	test('settles promptly when the run stops while GitHub never answers the new text of the open pull request', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
+		api.hold = (method, requestPath) => {
+			if (method !== 'PATCH' || !requestPath.endsWith(`/pulls/${firstPullRequest}`)) return undefined
+			resolve(undefined)
+			return new Promise(() => undefined)
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await openPullRequest(repository, sameSite)
+			await changeLogin(repository, 'SameSite=None; Secure\n')
+			return openPullRequest(repository, secure)
+		})
+		await stalled
+		const started = performance.now()
+		run.controller.abort(new Error('The run stopped.'))
+		await run.outcome
+
+		// Assert
+		expect(performance.now() - started).toBeLessThan(promptlyMs)
 	})
 })
 
