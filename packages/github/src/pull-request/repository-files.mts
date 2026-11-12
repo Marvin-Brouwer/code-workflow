@@ -47,17 +47,17 @@ const lintsInWorkflow = /commitlint|semantic-pull-request|pr-title|pull-request-
  */
 export async function filesAt(git: GitClient, ref: string): Promise<string[]> {
 	const root = entries((await git.lsTree('-z', '--name-only', ref)).stdout)
-	const second = await entriesOf(
+	const inFolders = await entriesOf(
 		git,
 		ref,
 		root.filter((entry) => lookedInFolders.has(entry.toLowerCase())),
 	)
-	const third = await entriesOf(
+	const inSubfolders = await entriesOf(
 		git,
 		ref,
-		second.filter((entry) => lookedInSubfolders.has(entry.toLowerCase())),
+		inFolders.filter((entry) => lookedInSubfolders.has(entry.toLowerCase())),
 	)
-	return [...root, ...second, ...third]
+	return [...root, ...inFolders, ...inSubfolders]
 }
 
 /** The entries right in `folders` at `ref`, not in their subfolders. */

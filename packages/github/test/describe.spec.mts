@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { access, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
@@ -214,6 +214,8 @@ describe('describe', () => {
 		// Assert
 		expect(prompts).toHaveLength(0)
 		expect(content).toMatchObject(sameSite)
+		// Not even the brief is read: no diff is written.
+		await expect(access(path.join(run.workspace, 'pull-requests'))).rejects.toThrow()
 	})
 
 	test('runs no loop for a closed pull request, and gives its text back', async () => {

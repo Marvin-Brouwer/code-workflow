@@ -3,7 +3,8 @@ import type { Issue } from '../issue/issue.mts'
 import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { branchHead, readBrief, type PullRequestBrief } from './brief.mts'
+import { branchHead } from './branch-head.mts'
+import { readBrief, type PullRequestBrief } from './brief.mts'
 import { fenced } from './fenced.mts'
 import { pullRequest, type PullRequest } from './pull-request.mts'
 import { PullRequestText, textInPrompt, type PullRequestContent } from './pull-request-text.mts'
@@ -45,7 +46,7 @@ const customaryTitleCharacters = 72
  * With `pullRequest`, it describes that pull request again, for after a round of review: the agent
  * rewrites the current text for the branch as it was last pushed. When the text already covers
  * that commit, or the pull request is closed, no loop runs and the current text comes back,
- * so calling it after every round costs a look. Writing the text is up to the caller: the result,
+ * so calling it after every round costs a read of the pull request and of the branch's commit. Writing the text is up to the caller: the result,
  * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is. A pull request
  * of another branch, or onto another branch than the default one, is refused.
  *

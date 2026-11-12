@@ -39,25 +39,8 @@ const notInFileNames = /[<>:"|?*\\]/g
 /** A path segment Windows takes as a device, or trims the end of: `con`, `aux`, `com1`, or one ending in a dot or a space. */
 const notAFileOnWindows = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$|[. ]$/i
 
-/**
- * The tool that reads which commit a checkout's branch is at: the checkout's `HEAD`, or with
- * `pushed` the branch as it was last pushed, which is what an open pull request shows.
- */
-export function branchHead(repository: Repository): Tool<{ pushed: boolean }, string> {
-	return tool('githubBranchHead', {
-		description: `Reads which commit the branch of ${repository.path} is at`,
-		input: z.object({ pushed: z.boolean() }),
-		action: async ({ pushed }, { abortSignal }) => {
-			const git = localGit(repository.directory, abortSignal)
-			const tracking = `refs/remotes/${origin}/${repository.branch}`
-			const head = pushed && (await git.hasRef(tracking)) ? tracking : 'HEAD'
-			return (await git.revParse(head)).stdout.trim()
-		},
-	})
-}
-
 /** Where in the workspace the diff of the branch goes: its path with each segment safe as a file name on Windows too. */
-function diffFileName(repository: Repository): string {
+function diffFilePath(repository: Repository): string {
 	const segments = repository.branch.split('/').map((segment) => {
 		const safe = segment.replace(notInFileNames, '-')
 		return notAFileOnWindows.test(safe) ? `${safe}-` : safe
@@ -84,7 +67,7 @@ export function readBrief(repository: Repository): Tool<{ head: string }, PullRe
 				throw new Error(`${repository.branch} has no commits on top of ${repository.defaultBranch}: there is nothing to describe.`)
 			// Three dots: against where the branch left the target, as the pull request shows it.
 			const range = `${target}...${head}`
-			const file = workspace.file(diffFileName(repository))
+			const file = workspace.file(diffFilePath(repository))
 			// Makes the file and its folders, for `git diff --output` to write into.
 			await file.write('')
 			const diffPath = file.location()

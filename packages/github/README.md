@@ -22,7 +22,11 @@ The agents are the workflow repository's own; the package takes them as paramete
 // agents.mts
 import { agent, prompt } from '@mesh-flow/core'
 
-export const developer = agent({ model: 'claude-sonnet-5-5', reasoning: 'medium', system: prompt`You fix issues in repositories you are new to.` })
+export const developer = agent({
+	model: 'claude-sonnet-5-5',
+	reasoning: 'medium',
+	system: prompt`You fix issues in repositories you are new to.`,
+})
 
 export const writer = agent({
 	model: 'claude-sonnet-5-5',
