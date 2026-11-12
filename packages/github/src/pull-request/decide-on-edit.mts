@@ -2,8 +2,8 @@ import { input } from '@mesh-flow/core'
 import type { PullRequest } from './pull-request.mts'
 import { sameText, textInPrompt, type PullRequestContent, type PullRequestText } from './pull-request-text.mts'
 
-/** What `keptEdit` decided: the pull request to leave as it is, or the text it said when it was last looked at. */
-export type EditDecision = { readonly kept: PullRequest } | { readonly seen: PullRequestText | undefined }
+/** What `decideOnEdit` decided: the pull request to leave as it is, or the text it said when it was last looked at. */
+export type EditDecision = { readonly kept: PullRequest } | { readonly seen?: PullRequestText }
 
 /**
  * Whether to leave the pull request as it is: someone edited it after the new text was written
@@ -15,12 +15,12 @@ export type EditDecision = { readonly kept: PullRequest } | { readonly seen: Pul
  *
  * The question waits on the run's signal, as every `input` does.
  */
-export async function keptEdit(
+export async function decideOnEdit(
 	read: () => Promise<PullRequest>,
 	content: PullRequestContent,
-	basedOn: PullRequestText | undefined = content.basedOn,
+	lastSeen: PullRequestText | undefined,
 ): Promise<EditDecision> {
-	let seen = basedOn
+	let seen = lastSeen
 	while (seen !== undefined) {
 		const current = await read()
 		if (current.state === 'closed' || sameText(current, seen) || sameText(current, content)) return { seen }
@@ -30,7 +30,7 @@ export async function keptEdit(
 		if (!overwrite) return { kept: current }
 		seen = { title: current.title, description: current.description }
 	}
-	return { seen }
+	return {}
 }
 
 /** What the person is asked: whether the new text may overwrite the edit on `current`. */

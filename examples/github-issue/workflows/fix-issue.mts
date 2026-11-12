@@ -20,6 +20,11 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	`
 
 	const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
+	// A pull request closed meanwhile is given back as it is, not opened again.
+	if (pullRequest.state === 'closed') {
+		await github.comment(issue, `Stopped: ${pullRequest.url} was closed.`, { key: 'status' })
+		return
+	}
 	await github.comment(issue, `Pull request opened: ${pullRequest.url}`, { key: 'status' })
 
 	// Returns once the pull request is merged or closed. Each round of review comments is one loop.

@@ -5,7 +5,7 @@ import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestData, PullRequestRef, UpdateSkip } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
-import { keptEdit } from './kept-edit.mts'
+import { decideOnEdit } from './decide-on-edit.mts'
 import type { PullRequestContent, PullRequestText } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */
@@ -55,10 +55,7 @@ export async function openPullRequest(repository: Repository, content: PullReque
 
 /** A pull request after `updatePullRequest`, with why nothing was written when nothing was. */
 export interface UpdatedPullRequest extends PullRequest {
-	/**
-	 * `closed`: a closed pull request keeps its text. `unchanged`: it already said this. `edited`:
-	 * someone edited it after `describe` read it, and the person chose to keep the edit.
-	 */
+	/** Why nothing was written, when nothing was: see {@link UpdateSkip}. */
 	readonly skipped?: UpdateSkip
 }
 
@@ -85,7 +82,7 @@ export async function updatePullRequest(
 		)
 	let lastSeen: PullRequestText | undefined = basedOn
 	for (;;) {
-		const decision = await keptEdit(() => pullRequest(ref, context), content, lastSeen)
+		const decision = await decideOnEdit(() => pullRequest(ref, context), content, lastSeen)
 		if ('kept' in decision) return Object.freeze({ ...decision.kept, skipped: 'edited' as const })
 		const { skipped, ...data } = await stubs.updatePullRequest(
 			{

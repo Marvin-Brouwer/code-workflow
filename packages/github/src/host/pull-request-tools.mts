@@ -1,6 +1,7 @@
 import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
+import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
 import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
@@ -18,11 +19,10 @@ import {
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
-import { sameText } from '../pull-request/pull-request-text.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
-import { descriptionOf, footerCloses, sameBody, signedDescription, unsignedText } from './pull-request-description.mts'
+import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
 import { signed } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
@@ -112,7 +112,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			if (current.state === 'closed') return { ...pullRequestData(repository, current), skipped: 'closed' as const }
 			// Edited since the caller looked: the caller asks the person again rather than write over it.
 			const now = { title: current.title, description: descriptionOf(current.body).description }
-			if (seen !== undefined && !sameText(now, seen) && !sameText(now, { title, description: unsignedText(body) }))
+			if (seen !== undefined && !sameText(now, seen) && !sameText(now, { title, description: body }))
 				return { ...pullRequestData(repository, current), skipped: 'edited' as const }
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			if (current.title === title && sameBody(current.body, signedBody))

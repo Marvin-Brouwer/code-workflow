@@ -47,9 +47,14 @@ export interface BasedOn extends PullRequestText {
 	readonly number: number
 }
 
-/** Whether two texts say the same. */
+/** Whether two texts say the same, whichever line breaks the descriptions were saved with. */
 export function sameText(one: PullRequestText, other: PullRequestText): boolean {
-	return one.title === other.title && one.description === other.description
+	return one.title === other.title && comparable(one.description) === comparable(other.description)
+}
+
+/** A description as GitHub gives it back once written: with `\n` line breaks and without trailing ones. */
+function comparable(description: string): string {
+	return description.replaceAll('\r\n', '\n').trimEnd()
 }
 
 /** A pull request's title and description as a prompt takes them, the description fenced. */

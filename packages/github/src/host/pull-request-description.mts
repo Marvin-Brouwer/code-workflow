@@ -21,9 +21,9 @@ export interface DescriptionNotes {
 
 /** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
 export function signedDescription(body: string, runId: string, { describedSha, closes }: DescriptionNotes): string {
-	// With `\n` line breaks and without trailing ones, as `unsigned` gives a description back, so a text that didn't change signs the same.
+	// So a text that didn't change signs the same.
 	return signed(
-		unsignedText(body),
+		normalizedDescription(body),
 		runId,
 		describedSha === undefined ? [] : [`${describedKeyName}:${describedSha}`],
 		closes === undefined ? [] : [fixesNote(closes)],
@@ -52,6 +52,6 @@ export function footerCloses(body: string | null | undefined, closes: string): b
 }
 
 /** A description as `descriptionOf` gives it back once signed: with `\n` line breaks and without trailing ones. */
-export function unsignedText(body: string): string {
+export function normalizedDescription(body: string): string {
 	return withUnixLineBreaks(body).trimEnd()
 }

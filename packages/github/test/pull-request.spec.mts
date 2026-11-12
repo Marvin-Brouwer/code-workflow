@@ -359,24 +359,26 @@ describe('an edit while the text was written', () => {
 		expect(api.pullRequest(repositoryName, firstPullRequest).title).toBe(personsEdit.title)
 	})
 
-	test('updates the pull request it was written from, and opens none when that one was closed meanwhile', async () => {
+	test('updates the pull request it was written from, and opens none nor pushes when that one was closed meanwhile', async () => {
 		// Arrange
-		const { api, gateway } = await connectedGithub()
+		const { api, remote, gateway } = await connectedGithub()
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, sameSite)
+			const closedAt = await remote.head(branch)
 			api.pullRequest(repositoryName, pullRequest.number, { state: 'closed' })
 			await changeLogin(repository, 'SameSite=None; Secure\n')
-			return openPullRequest(repository, { ...secure, basedOn: basedOnSameSite })
+			return { closedAt, reopened: await openPullRequest(repository, { ...secure, basedOn: basedOnSameSite }) }
 		})
-		const reopened = await run.result
+		const { closedAt, reopened } = await run.result
 
 		// Assert
 		expect(api.repository(repositoryName).pulls.size).toBe(1)
 		expect(reopened).toMatchObject({ ...sameSite, state: 'closed' })
+		expect(await remote.head(branch)).toBe(closedAt)
 	})
 
 	test('asks again when the pull request was edited again while the person answered', async () => {
