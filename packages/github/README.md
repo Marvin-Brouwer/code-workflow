@@ -33,7 +33,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
 
 	await github.review(pullRequest, {
-		comments: async (comments) => {
+		async comments(comments) {
 			await developer.loop`
 				Handle these review comments on ${pullRequest}: ${comments}.
 				Change the code where a comment asks for it, push with ${github.push(repository)},

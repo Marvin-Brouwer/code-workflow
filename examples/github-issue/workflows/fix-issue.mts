@@ -20,13 +20,11 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	`
 
 	const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
-	// After a round that may have changed the code; no loop runs when it didn't.
-	const describeAgain = async () => github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 	await github.comment(issue, `Pull request opened: ${pullRequest.url}`, { key: 'status' })
 
 	// Returns once the pull request is merged or closed. Each round of review comments is one loop.
 	const outcome = await github.review(pullRequest, {
-		comments: async (comments) => {
+		async comments(comments) {
 			await developer.loop`
 				Handle these review comments on ${pullRequest}: ${comments}.
 				Change the code in ${repository} where a comment asks for it, push with ${github.push(repository)},
@@ -34,15 +32,17 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				When every comment is handled, ${succeed()}.
 				${limit({ minutes: 30 })}
 			`
-			await describeAgain()
+			// No loop runs when the round didn't change the code.
+			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},
-		checksFailed: async (failed) => {
+		async checksFailed(failed) {
 			await developer.loop`
 				The checks on ${pullRequest} failed: ${failed.failures}.
 				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
 				${limit({ minutes: 20 })}
 			`
-			await describeAgain()
+			// No loop runs when the round didn't change the code.
+			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},
 	})
 
