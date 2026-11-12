@@ -136,16 +136,39 @@ export const reviewActivity = {
 }
 
 /**
+ * What a reply to a review item is. `plan`: what will be done about it, before it's done. `answer`
+ * (the default): the answer to a question, or what was done.
+ */
+export const ReplyStage = z.enum(['plan', 'answer'])
+export type ReplyStage = z.infer<typeof ReplyStage>
+
+/** The stage of a reply that names none. */
+export const defaultReplyStage: ReplyStage = 'answer'
+
+/** What came of a reply: the comment posted or edited, or that the item is gone, a line comment deleted since it was read. */
+/** A reply that found its item gone. */
+const GoneReply = z.object({ gone: z.literal(true) })
+
+export const ReplyOutcome = z.union([PostedComment, GoneReply])
+export type ReplyOutcome = z.infer<typeof ReplyOutcome>
+
+/** Whether a reply found its item gone: a line comment deleted since it was read. */
+export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
+	return 'gone' in outcome
+}
+
+/**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
- * listed as a reviewer's item. The first reply to an item replaces the "👀 Reading..." reply that
- * showed it was being read, and takes the 👀 reaction off the item. Replies to one item go one at a
- * time.
+ * listed as a reviewer's item. The first answer to an item replaces the "👀 Reading..." reply that
+ * showed it was being read, and takes the 👀 reaction off the item. A plan replaces the reading reply
+ * too but leaves the 👀 on, and the answer after a plan is a reply of its own under it, so the
+ * reviewer is notified of it. Replies to one item go one at a time.
  */
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
-	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1) }),
-	output: PostedComment,
+	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
+	output: ReplyOutcome,
 }
 
 /**
@@ -168,7 +191,10 @@ export const showBeingRead = {
 			}),
 		),
 	}),
-	output: z.object({ shown: z.array(ReviewItemId) }),
+	output: z.object({
+		shown: z.array(ReviewItemId),
+		answered: z.array(ReviewItemId).describe('Items the run answered already, such as before it started over'),
+	}),
 }
 
 /** A check or status on a commit that didn't pass. */

@@ -10,6 +10,12 @@ export const replyKey = 'reply'
 /** The marker key of the reply that says `item` is being read, until the answer replaces it. */
 export const seenKey = (item: string) => `seen:${item}`
 
+/** The marker key of the plan that replaced the reply that said `item` was being read, so the answer to it is a reply of its own. */
+export const plannedKey = (item: string) => `planned:${item}`
+
+/** The marker key of an answer to `item` that is a reply of its own, so a run that starts over finds it. */
+export const repliedKey = (item: string) => `replied:${item}`
+
 /** The marker key of the answer that replaced the reply that said `item` was being read, so `item` isn't shown again. */
 export const answeredKey = (item: string) => `answered:${item}`
 
@@ -31,6 +37,7 @@ export function readingNote(kind: ReviewItemKind, url: string): string {
 export interface OwnReply {
 	readonly id: number
 	readonly body: string
+	readonly url: string
 }
 
 /**
@@ -65,8 +72,8 @@ export function pullRequestComments(client: Octokit, repository: string, number:
 				onConversation ? client.paginate(client.rest.issues.listComments, { ...conversation, per_page: pageSize }) : [],
 			])
 			return [
-				...lineComments.flatMap(({ id, body }) => (isOwnReply(body) ? [{ id, body }] : [])),
-				...comments.flatMap(({ id, body }) => (isOwnReply(body) ? [{ id, body }] : [])),
+				...lineComments.flatMap(({ id, body, html_url: url }) => (isOwnReply(body) ? [{ id, body, url }] : [])),
+				...comments.flatMap(({ id, body, html_url: url }) => (isOwnReply(body) ? [{ id, body, url }] : [])),
 			]
 		},
 		async react(kind, commentId) {

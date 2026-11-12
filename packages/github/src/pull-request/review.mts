@@ -90,8 +90,10 @@ export async function review(
 				url: item.url,
 				...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
 			}))
-			await look(() => stubs.showBeingRead({ ...where, items }, context))
-			await handlers.comments(comments)
+			const { answered } = await look(() => stubs.showBeingRead({ ...where, items }, context))
+			// Answered before the run started over: the reviewer has the answer already, and writes a new comment if it doesn't settle it.
+			const unanswered = comments.filter((item) => !answered.includes(item.id))
+			if (unanswered.length > 0) await handlers.comments(unanswered)
 		}
 
 		if (handlers.checksFailed !== undefined && !reportedChecks.has(current.head.sha)) {

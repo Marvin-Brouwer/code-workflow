@@ -1,6 +1,5 @@
 import { toPrompt, type Agent } from '@mesh-flow/core'
 import { z } from 'zod'
-import type { PullRequestText } from '../../src/pull-request/pull-request-text.mts'
 
 /** Where a prompt made by core's `prompt` keeps its parts: a registered symbol, the same in every module. */
 const promptParts = Symbol.for('mesh-flow.prompt')
@@ -35,11 +34,11 @@ function shown(value: unknown): string {
 	return '(a value)'
 }
 
-/** An agent whose loops answer with `texts`, one each, and keep the prompts they got. */
-export function scriptedWriter(texts: readonly PullRequestText[]) {
+/** An agent whose loops answer with `texts`, one each, whatever their exit asks for, and keep the prompts they got. */
+export function scriptedWriter(texts: readonly unknown[]) {
 	const queue = [...texts]
 	const prompts: string[] = []
-	function loop(strings: TemplateStringsArray, ...values: unknown[]): Promise<PullRequestText> {
+	function loop(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown> {
 		prompts.push(rendered(strings, values).replace(/^[ \t]+/gm, ''))
 		const text = queue.shift()
 		return text === undefined ? Promise.reject(new Error('The writer has nothing more to write.')) : Promise.resolve(text)

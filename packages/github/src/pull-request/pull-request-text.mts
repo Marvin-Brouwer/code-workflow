@@ -49,12 +49,12 @@ export interface BasedOn extends PullRequestText {
 
 /** Whether two texts say the same, whichever line breaks the descriptions were saved with. */
 export function sameText(one: PullRequestText, other: PullRequestText): boolean {
-	return one.title === other.title && normalizedDescription(one.description) === normalizedDescription(other.description)
+	return one.title === other.title && normalizedBody(one.description) === normalizedBody(other.description)
 }
 
-/** A description as GitHub gives it back once written: with `\n` line breaks and without trailing ones. */
-export function normalizedDescription(description: string): string {
-	return description.replaceAll('\r\n', '\n').trimEnd()
+/** Text as GitHub gives it back once written, a description or a comment: with `\n` line breaks and without trailing ones. */
+export function normalizedBody(text: string): string {
+	return text.replaceAll('\r\n', '\n').trimEnd()
 }
 
 /** A pull request's title and description as a prompt takes them, the description fenced. */
