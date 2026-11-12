@@ -540,6 +540,9 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     hostname rules only allow HTTPS through its TLS-intercepting proxy; the gateway itself should be
     an IP and port rule instead, which is unverified. E2B has allow/deny lists (proven for one host).
     Public package sources by hostname mean either interception or a gateway-side package proxy.
+    npm and NuGet installs from their public registries pass the conformance suite on gVisor and on
+    microsandbox (Linux and Windows) without settings in the sandbox: microsandbox puts its
+    interception CA in the guest's trust store and CA variables itself.
 12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) passes the conformance
     suite on GitHub's hosted Windows runners in CI. Not yet tried on a developer machine.
 
