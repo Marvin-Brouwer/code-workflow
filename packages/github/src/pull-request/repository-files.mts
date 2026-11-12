@@ -70,6 +70,11 @@ export function filesInPrompt(files: readonly RepositoryFile[]): RendersInPrompt
 	return Object.freeze({ [toPrompt]: () => files.map((file) => file[toPrompt]()).join('\n\n') })
 }
 
+/** A pull request's title and description as a prompt takes them, the description fenced like a file. */
+export function textInPrompt(text: { readonly title: string; readonly description: string }): RendersInPrompt {
+	return Object.freeze({ [toPrompt]: () => `Title: ${text.title}\nDescription:\n${fence}\n${text.description.trimEnd()}\n${fence}` })
+}
+
 /** `commitlint` in a `package.json`, as JSON of its own: the rest of the file says nothing about lint. */
 function commitlintInPackage(text: string): string | undefined {
 	try {

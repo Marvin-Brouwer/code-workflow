@@ -6,9 +6,9 @@ import { z } from 'zod'
 import { githubHostTools } from '../src/host/connector.mts'
 import { signed } from '../src/host/signature.mts'
 import { collect } from '../src/issue/issue.mts'
-import { describe as describeBranch, redescribe } from '../src/pull-request/describe.mts'
+import { describe as describeBranch } from '../src/pull-request/describe.mts'
 import type { PullRequestText } from '../src/pull-request/pull-request-text.mts'
-import { openPullRequest, withClosingReference } from '../src/pull-request/pull-request.mts'
+import { closingReference, openPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { fakeGithub } from './support/fake-github.mts'
@@ -110,8 +110,8 @@ describe('describe', () => {
 		expect(await readFile(diffFile, 'utf8')).toContain('+SameSite=None')
 		const stored = api.repository(repositoryName).pulls.get(pullRequest.number)
 		expect(stored?.title).toBe('fix: keep the session on Safari')
-		expect(stored?.body).toBe(signed('## Summary\n\nKeeps it.\n\nFixes #7', run.runId, [`described:${head}`]))
-		expect(pullRequest.described).toBe(head)
+		expect(stored?.body).toBe(signed('## Summary\n\nKeeps it.', run.runId, [`described:${head}`], ['Fixes #7']))
+		expect(pullRequest).toMatchObject({ described: head, description: '## Summary\n\nKeeps it.' })
 	})
 
 	test('asks for a default shape without a template, and for a short title without lint settings', async () => {
@@ -155,7 +155,7 @@ describe('describe', () => {
 		expect(prompts[0]).not.toContain('## Made on the branch')
 	})
 
-	test('describes again only once the branch has commits the description does not cover', async () => {
+	test('describes again from the current text, and only once the branch has commits it does not cover', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const { writer, prompts } = scriptedWriter([
@@ -170,25 +170,30 @@ describe('describe', () => {
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			await push(repository)({ message: 'Set SameSite' })
 			const pullRequest = await openPullRequest(repository, { ...(await describeBranch(writer, repository, { issue })), closes: issue })
-			const unchanged = await redescribe(writer, pullRequest, repository, { issue })
+			const describeAgain = async () =>
+				updatePullRequest(pullRequest, { ...(await describeBranch(writer, repository, { issue, pullRequest })), closes: issue })
+			const unchanged = await describeAgain()
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
 			const { head } = await push(repository)({ message: 'Set Secure too' })
-			const changed = await redescribe(writer, pullRequest, repository, { issue })
-			const again = await redescribe(writer, pullRequest, repository, { issue })
+			const changed = await describeAgain()
+			const again = await describeAgain()
 			return { head, unchanged, changed, again }
 		})
 		const result = await run.result
 
 		// Assert
 		expect(prompts).toHaveLength(2)
-		expect(result.unchanged.title).toBe('Keep the session on Safari')
+		expect(prompts[1]).toContain('Start from them')
+		expect(prompts[1]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
+		expect(result.unchanged).toMatchObject({ title: 'Keep the session on Safari', skipped: 'unchanged' })
 		expect(result.changed).toMatchObject({ title: 'Keep the session on Safari and Firefox', described: result.head })
-		expect(result.again.described).toBe(result.head)
+		expect(result.changed.skipped).toBeUndefined()
+		expect(result.again).toMatchObject({ described: result.head, skipped: 'unchanged' })
 		const stored = api.repository(repositoryName).pulls.get(1)
-		expect(stored?.body).toBe(signed('Sets SameSite and Secure.\n\nFixes #7', run.runId, [`described:${result.head}`]))
+		expect(stored?.body).toBe(signed('Sets SameSite and Secure.', run.runId, [`described:${result.head}`], ['Fixes #7']))
 	})
 
-	test('leaves a closed pull request alone', async () => {
+	test('leaves a closed pull request as it is: no loop, and nothing written', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
@@ -197,22 +202,26 @@ describe('describe', () => {
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
-			await push(repository)({ message: 'Set SameSite' })
 			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
+			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
+			await push(repository)({ message: 'Set Secure too' })
 			api.pullRequest(repositoryName, pullRequest.number, { state: 'closed' })
-			return redescribe(writer, pullRequest, repository)
+			const text = await describeBranch(writer, repository, { pullRequest })
+			const updated = await updatePullRequest(pullRequest, { title: 'Something else', description: 'Else.' })
+			return { text, updated }
 		})
-		const closed = await run.result
+		const { text, updated } = await run.result
 
 		// Assert
 		expect(prompts).toHaveLength(0)
-		expect(closed.state).toBe('closed')
+		expect(text).toMatchObject({ title: 'Keep the session', description: 'Sets it.' })
+		expect(updated).toMatchObject({ state: 'closed', skipped: 'closed', title: 'Keep the session' })
+		expect(api.repository(repositoryName).pulls.get(1)?.title).toBe('Keep the session')
 	})
 
 	test('settles promptly when the run stops while GitHub never answers the new description', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
-		const { writer } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		api.hold = (method, requestPath) => {
 			if (method !== 'PATCH' || !requestPath.endsWith('/pulls/1')) return undefined
@@ -225,9 +234,7 @@ describe('describe', () => {
 			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
-			await push(repository)({ message: 'Set Secure too' })
-			return redescribe(writer, pullRequest, repository)
+			return updatePullRequest(pullRequest, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
 		})
 		await stalled
 		const started = performance.now()
@@ -259,14 +266,13 @@ describe('describe', () => {
 	})
 })
 
-describe('withClosingReference', () => {
-	test('closes an issue of the same repository by number, and one of another repository by its full name', () => {
+describe('closingReference', () => {
+	test('names an issue of the same repository by number, and one of another repository by its full name', () => {
 		// Act
-		const same = withClosingReference('Fixes the login.', { repository: 'team/app', number: 7 }, 'team/app')
-		const other = withClosingReference('Fixes the login.', { repository: 'team/web', number: 3 }, 'team/app')
-		const none = withClosingReference('Fixes the login.', undefined, 'team/app')
+		const same = closingReference({ repository: 'team/app', number: 7 }, 'team/app')
+		const other = closingReference({ repository: 'team/web', number: 3 }, 'team/app')
 
 		// Assert
-		expect([same, other, none]).toEqual(['Fixes the login.\n\nFixes #7', 'Fixes the login.\n\nFixes team/web#3', 'Fixes the login.'])
+		expect([same, other]).toEqual(['#7', 'team/web#3'])
 	})
 })

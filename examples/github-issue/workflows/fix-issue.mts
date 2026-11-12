@@ -21,6 +21,9 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 	const text = await github.describe(writer, repository, { issue })
 	const pullRequest = await github.openPullRequest(repository, { ...text, closes: issue })
+	// After a round that may have changed the code; no loop runs when it didn't.
+	const describeAgain = async () =>
+		github.updatePullRequest(pullRequest, { ...(await github.describe(writer, repository, { issue, pullRequest })), closes: issue })
 	await github.comment(issue, `Pull request opened: ${pullRequest.url}`, { key: 'status' })
 
 	// Returns once the pull request is merged or closed. Each round of review comments is one loop.
@@ -33,7 +36,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				When every comment is handled, ${succeed()}.
 				${limit({ minutes: 30 })}
 			`
-			await github.redescribe(writer, pullRequest, repository, { issue })
+			await describeAgain()
 		},
 		checksFailed: async (failed) => {
 			await developer.loop`
@@ -41,7 +44,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
 				${limit({ minutes: 20 })}
 			`
-			await github.redescribe(writer, pullRequest, repository, { issue })
+			await describeAgain()
 		},
 	})
 

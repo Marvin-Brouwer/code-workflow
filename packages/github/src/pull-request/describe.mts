@@ -4,14 +4,18 @@ import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
 import { brief, type PullRequestBrief } from './brief.mts'
-import { pullRequestOf, withClosingReference, type PullRequest } from './pull-request.mts'
-import { PullRequestText } from './pull-request-text.mts'
-import { filesInPrompt } from './repository-files.mts'
+import { PullRequestText, type PullRequestDescription } from './pull-request-text.mts'
+import { filesInPrompt, textInPrompt } from './repository-files.mts'
 
 /** What `describe` takes besides the agent and the checkout. */
 export interface DescribeOptions {
 	/** The issue the branch resolves, which the agent reads for the why. */
 	readonly issue?: Issue
+	/**
+	 * The pull request the branch already has, to describe again: the agent starts from its title
+	 * and description, and no loop runs when they already cover the checkout's `HEAD`.
+	 */
+	readonly pullRequest?: PullRequestRef
 	/** The limit of the loop. Default: 10 minutes. */
 	readonly limit?: Limit
 }
@@ -26,9 +30,16 @@ const defaultLimit = limit({ minutes: 10 })
  * keeps to those settings. The description says what the branch changes and why, as it is now:
  * never what happened on the way there. The package ships no agent: the workflow passes its own.
  *
+ * With `pullRequest`, it describes that pull request again, for after a round of review: the agent
+ * rewrites the current text for the branch as it is now. When the text already covers the
+ * checkout's `HEAD`, or the pull request is closed, no loop runs and the current text comes back,
+ * so calling it after every round costs a look. Writing the text is up to the caller, with
+ * `openPullRequest` or `updatePullRequest`.
+ *
  * ```ts
- * const text = await github.describe(writer, repository, { issue })
- * const pullRequest = await github.openPullRequest(repository, { ...text, closes: issue })
+ * const pullRequest = await github.openPullRequest(repository, { ...(await github.describe(writer, repository, { issue })), closes: issue })
+ * // After a round of review:
+ * await github.updatePullRequest(pullRequest, { ...(await github.describe(writer, repository, { issue, pullRequest })), closes: issue })
  * ```
  */
 export async function describe(
@@ -36,40 +47,34 @@ export async function describe(
 	repository: Repository,
 	options: DescribeOptions = {},
 	context?: ToolContext,
-): Promise<PullRequestText> {
-	return describeFrom(agent, repository, await brief(repository)({}, context), options)
-}
-
-/**
- * Describes the pull request again once its branch has commits the description doesn't cover yet,
- * such as after a round of review that changed the code: the agent writes the description afresh,
- * for the branch as it is now. When the description already covers the checkout's `HEAD`, or the
- * pull request is closed, nothing runs, so calling it after every round costs a look.
- *
- * ```ts
- * comments: async (comments) => {
- * 	await developer.loop`Handle these review comments on ${pullRequest}: ${comments}. ...`
- * 	await github.redescribe(writer, pullRequest, repository, { issue })
- * }
- * ```
- */
-export async function redescribe(
-	agent: Agent,
-	pullRequest: PullRequestRef,
-	repository: Repository,
-	options: DescribeOptions = {},
-	context?: ToolContext,
-): Promise<PullRequest> {
-	const where = { repository: pullRequest.repository, number: pullRequest.number }
-	const current = await stubs.getPullRequest(where, context)
+): Promise<PullRequestDescription> {
 	const read = await brief(repository)({}, context)
-	if (current.state === 'closed' || current.described === read.head) return pullRequestOf(current)
-	const text = await describeFrom(agent, repository, read, options)
-	const body = withClosingReference(text.description, options.issue, repository.name)
-	return pullRequestOf(await stubs.updatePullRequest({ ...where, title: text.title, body, described: read.head }, context))
+	const current = options.pullRequest === undefined ? undefined : await currentText(options.pullRequest, context)
+	if (current !== undefined && (current.closed || current.describes === read.head))
+		return { title: current.title, description: current.description, describes: current.describes ?? read.head }
+	const text = await describeFrom(agent, repository, read, options, current)
+	return { ...text, describes: read.head }
 }
 
-function describeFrom(agent: Agent, repository: Repository, read: PullRequestBrief, options: DescribeOptions): Promise<PullRequestText> {
+/** What a pull request says now, as far as `describe` can start from it. */
+interface CurrentText extends PullRequestText {
+	readonly closed: boolean
+	/** The commit the text was written for, when this package wrote it. */
+	readonly describes: string | undefined
+}
+
+async function currentText(ref: PullRequestRef, context: ToolContext | undefined): Promise<CurrentText> {
+	const data = await stubs.getPullRequest({ repository: ref.repository, number: ref.number }, context)
+	return { title: data.title, description: data.description ?? '', closed: data.state === 'closed', describes: data.described }
+}
+
+function describeFrom(
+	agent: Agent,
+	repository: Repository,
+	read: PullRequestBrief,
+	options: DescribeOptions,
+	current: CurrentText | undefined,
+): Promise<PullRequestText> {
 	return agent.loop`
 		Write the title and the description of the pull request that merges branch \`${repository.branch}\` of
 		${repository.name} into \`${read.base}\`. The checkout is ${repository}. ${issuePart(options.issue)}
@@ -86,6 +91,8 @@ function describeFrom(agent: Agent, repository: Repository, read: PullRequestBri
 		attempts, no review rounds, nothing like "previously we did" or "this update changes". Don't list the
 		commits one by one, and say only what the commits, the diff and the issue back up.
 
+		${currentPart(current)}
+
 		${templatePart(read)}
 
 		${lintPart(read)}
@@ -93,6 +100,18 @@ function describeFrom(agent: Agent, repository: Repository, read: PullRequestBri
 		The reference that closes the issue and the signature are added for you: leave them out.
 		When both are written, ${succeed(PullRequestText)}.
 		${options.limit ?? defaultLimit}
+	`
+}
+
+/** The text the pull request has now, to start from: written for an earlier state of the branch. */
+function currentPart(current: CurrentText | undefined): Prompt | string {
+	if (current === undefined) return ''
+	return prompt`
+		The pull request has a title and a description already, written for an earlier state of the branch.
+		Start from them: keep what still holds and its wording, change what no longer does, and add what is
+		new, so the result reads as if it was written for the branch as it is now.
+
+		${textInPrompt(current)}
 	`
 }
 
