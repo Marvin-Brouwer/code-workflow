@@ -1,24 +1,14 @@
-import { normalizedBody } from '../pull-request/pull-request-text.mts'
-import { commentMarker, markerValue } from '../tools/issue-tools.mts'
-import type { ReplyOutcome, ReplyStage, ReviewItemKind } from '../tools/pull-request-tools.mts'
-import {
-	answeredKey,
-	plannedKey,
-	reactionKey,
-	reactionKeyName,
-	repliedKey,
-	replyKey,
-	seenKey,
-	type OwnReply,
-	type PullRequestComments,
-} from './pull-request-comments.mts'
-import { signed, unsigned } from '@mesh-flow/forge/host'
-import { isGone } from './transient-error.mts'
+import { normalizedBody } from '../describe/change-text.mts'
+import { commentMarker, markerValue } from '../markers.mts'
+import type { ReplyStage } from '../review/triage-items.mts'
+import { answeredKey, plannedKey, reactionKey, reactionKeyName, repliedKey, replyKey, seenKey } from './reply-keys.mts'
+import type { OwnReply, ReplyOutcome, ReviewComments } from './review-comments.mts'
+import { signed, unsigned } from './signature.mts'
 
 /** A reply to review item `item`, the comment `commentId` of `kind`, as `replyToReviewItem` posts it. */
-export interface ReviewReply {
+export interface ReviewReply<Kind extends string> {
 	readonly item: string
-	readonly kind: ReviewItemKind
+	readonly kind: Kind
 	readonly commentId: number
 	readonly body: string
 	readonly stage: ReplyStage
@@ -28,12 +18,15 @@ export interface ReviewReply {
 /**
  * Replies to a review item. A plan takes the place of the "👀 Reading..." reply and keeps the 👀 on
  * the item. An answer takes the place of the reading reply too and takes the 👀 off, unless a plan
- * took that place already: then it's a reply of its own under the plan, since GitHub notifies the
+ * took that place already: then it's a reply of its own under the plan, since forges notify the
  * reviewer of a new comment and not of an edit. A reply that says what one of the item's replies
  * says already is that reply, so a run that starts over doesn't say it twice. A line comment deleted
  * since it was read takes no new reply in its thread: the item is gone.
  */
-export async function replyToItem(comments: PullRequestComments, reply: ReviewReply): Promise<ReplyOutcome> {
+export async function replyToItem<Kind extends string, Thread>(
+	comments: ReviewComments<Kind, Thread>,
+	reply: ReviewReply<Kind>,
+): Promise<ReplyOutcome> {
 	const { item, kind, commentId, body, stage, runId } = reply
 	const replies = await comments.ownReplies([kind])
 	const withKey = (key: string) => replies.filter((own) => own.body.includes(commentMarker(key)))
@@ -44,9 +37,9 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 
 	const reading = withKey(seenKey(item)).at(0)
 	const newReply = async (markerKeys: readonly string[]): Promise<ReplyOutcome> => {
-		const threadId = kind === 'review-comment' ? await threadOrGone(comments, commentId) : undefined
-		if (threadId === gone) return { gone: true }
-		return comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
+		const thread = await threadOrGone(comments, kind, commentId)
+		if (thread === gone) return { gone: true }
+		return comments.post(kind, thread, signed(body, runId, [replyKey, ...markerKeys]))
 	}
 	const reaction = reading === undefined ? undefined : markerValue(reading.body, reactionKeyName)
 	const reactionKeys = reaction === undefined ? [] : [reactionKey(Number(reaction))]
@@ -71,15 +64,19 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 const gone = Symbol('gone')
 
 /**
- * The first comment of the thread line comment `commentId` is in, or {@link gone} when it was
- * deleted. Only a 404 here means the item is gone: one anywhere else, say on the conversation, is a
- * pull request that's gone or a token that may not write, and fails.
+ * The thread a reply to comment `commentId` goes in, or {@link gone} when it was deleted. Only a
+ * comment that's gone here means the item is gone: one anywhere else, say on the conversation, is a
+ * request that's gone or a token that may not write, and fails.
  */
-async function threadOrGone(comments: PullRequestComments, commentId: number): Promise<number | typeof gone> {
+async function threadOrGone<Kind extends string, Thread>(
+	comments: ReviewComments<Kind, Thread>,
+	kind: Kind,
+	commentId: number,
+): Promise<Thread | undefined | typeof gone> {
 	try {
-		return await comments.threadOf(commentId)
+		return await comments.threadOf(kind, commentId)
 	} catch (error) {
-		if (isGone(error)) return gone
+		if (comments.isGone(error)) return gone
 		throw error
 	}
 }

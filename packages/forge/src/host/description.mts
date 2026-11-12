@@ -1,12 +1,12 @@
-import { normalizedBody } from '../pull-request/pull-request-text.mts'
-import { Sha } from '../tools/git-tools.mts'
-import { markerValue } from '../tools/issue-tools.mts'
-import { runIdLine, signed, unsigned, withoutRunId } from '@mesh-flow/forge/host'
+import { Sha } from '../checkout/bundle-schemas.mts'
+import { normalizedBody } from '../describe/change-text.mts'
+import { markerValue } from '../markers.mts'
+import { runIdLine, signed, unsigned, withoutRunId } from './signature.mts'
 
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
 
-/** A pull request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
+/** A pull or merge request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
 export function descriptionOf(body: string | null | undefined): { description: string; describedSha?: string } {
 	if (body === null || body === undefined) return { description: '' }
 	const sha = markerValue(body, describedKeyName)
@@ -32,14 +32,14 @@ export function signedDescription(body: string, runId: string, { describedSha, c
 }
 
 /**
- * Whether a body GitHub has is the signed one, whichever line breaks its editor saved it with and
+ * Whether a body the forge has is the signed one, whichever line breaks its editor saved it with and
  * whichever run signed it: a run that starts over doesn't rewrite a text only for its run id.
  */
 export function sameBody(stored: string | null | undefined, signedBody: string): boolean {
 	return withoutRunId(stored ?? '') === withoutRunId(signedBody)
 }
 
-/** The note next to the run id that has GitHub close an issue, such as `Fixes #7`. */
+/** The note next to the run id that has the forge close an issue, such as `Fixes #7`. */
 function fixesNote(closes: string): string {
 	return `Fixes ${closes}`
 }

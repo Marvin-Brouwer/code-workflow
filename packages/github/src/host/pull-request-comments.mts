@@ -1,29 +1,10 @@
+import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
 import type { Octokit } from '@octokit/rest'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker, type PostedComment } from '../tools/issue-tools.mts'
+import { commentMarker } from '../tools/issue-tools.mts'
 import type { ReviewItemKind } from '../tools/pull-request-tools.mts'
 import { pageSize } from './api.mts'
-
-/** The marker key every reply this package posts carries, so a look at the review never hands it back as a reviewer's. */
-export const replyKey = 'reply'
-
-/** The marker key of the reply that says `item` is being read, until the answer replaces it. */
-export const seenKey = (item: string) => `seen:${item}`
-
-/** The marker key of the plan that replaced the reply that said `item` was being read, so the answer to it is a reply of its own. */
-export const plannedKey = (item: string) => `planned:${item}`
-
-/** The marker key of an answer to `item` that is a reply of its own, so a run that starts over finds it. */
-export const repliedKey = (item: string) => `replied:${item}`
-
-/** The marker key of the answer that replaced the reply that said `item` was being read, so `item` isn't shown again. */
-export const answeredKey = (item: string) => `answered:${item}`
-
-/** The name of the marker that holds the 👀 reaction the reply that says an item is being read put on it. */
-export const reactionKeyName = 'reaction'
-
-/** The marker key, `reaction:<id>`, of 👀 reaction `reaction`. */
-export const reactionKey = (reaction: number) => `${reactionKeyName}:${String(reaction)}`
+import { isGone } from './transient-error.mts'
 
 /** The reaction that says a comment is being read. */
 const beingReadReaction = 'eyes'
@@ -33,31 +14,11 @@ export function readingNote(kind: ReviewItemKind, url: string): string {
 	return kind === 'review-comment' ? '👀 Reading...' : `👀 Reading [this ${kind}](${url})...`
 }
 
-/** A reply this package posted on a pull request: in a line comment's thread, or on the conversation. */
-export interface OwnReply {
-	readonly id: number
-	readonly body: string
-	readonly url: string
-}
-
 /**
  * Where the connector answers review items on one pull request: in the thread of a comment on a
- * line, or on the conversation for everything else. `kind` is the kind of the item answered.
+ * line, or on the conversation for everything else. A review takes no reactions on GitHub.
  */
-export interface PullRequestComments {
-	/** The replies this package posted where items of `kinds` are answered, read in one listing per place. */
-	ownReplies(kinds: readonly ReviewItemKind[]): Promise<readonly OwnReply[]>
-	/** Puts 👀 on comment `commentId` and returns the reaction's id. A review takes no reactions on GitHub. */
-	react(kind: ReviewItemKind, commentId: number): Promise<number | undefined>
-	/** Takes reaction `reaction` off comment `commentId`. One that's gone already is fine. */
-	unreact(kind: ReviewItemKind, commentId: number, reaction: number): Promise<void>
-	/** The first comment of the thread line comment `commentId` is in: GitHub only takes replies to that one. */
-	threadOf(commentId: number): Promise<number>
-	/** Replies where `kind` is answered: in the thread of line comment `threadId`, or on the conversation. */
-	post(kind: ReviewItemKind, threadId: number | undefined, body: string): Promise<PostedComment>
-	/** Replaces the body of this package's reply `commentId`, where `kind` is answered. */
-	edit(kind: ReviewItemKind, commentId: number, body: string): Promise<PostedComment>
-}
+export type PullRequestComments = ReviewComments<ReviewItemKind, number>
 
 /** The comments of pull request `number`, through `client`. */
 export function pullRequestComments(client: Octokit, repository: string, number: number): PullRequestComments {
@@ -91,10 +52,13 @@ export function pullRequestComments(client: Octokit, repository: string, number:
 					: client.rest.reactions.deleteForIssueComment(which)
 			await taken.catch(() => undefined)
 		},
-		async threadOf(commentId) {
+		// GitHub only takes replies to the first comment of a line comment's thread.
+		async threadOf(kind, commentId) {
+			if (kind !== 'review-comment') return undefined
 			const { data } = await client.rest.pulls.getReviewComment({ ...where, comment_id: commentId })
 			return data.in_reply_to_id ?? data.id
 		},
+		isGone,
 		async post(kind, threadId, body) {
 			if (kind === 'review-comment' && threadId !== undefined)
 				return posted(
@@ -116,6 +80,6 @@ function isOwnReply(body: string | null | undefined): body is string {
 }
 
 /** What the connector says about a comment it posted or edited. */
-function posted(data: { id: number; html_url: string }): PostedComment {
+function posted(data: { id: number; html_url: string }): PostedReply {
 	return { id: data.id, url: data.html_url }
 }
