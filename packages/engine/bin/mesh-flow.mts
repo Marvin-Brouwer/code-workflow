@@ -5,8 +5,9 @@
 // printing a module resolution error. The published package points its bin at `dist/cli.mjs`.
 const cliUrl = new URL('../dist/cli.mjs', import.meta.url)
 
-const isCliMissing = (error: unknown) =>
-	error instanceof Error && 'code' in error && error.code === 'ERR_MODULE_NOT_FOUND' && 'url' in error && error.url === cliUrl.href
+function isCliMissing(error: unknown): boolean {
+	return error instanceof Error && 'code' in error && error.code === 'ERR_MODULE_NOT_FOUND' && 'url' in error && error.url === cliUrl.href
+}
 
 try {
 	await import(cliUrl.href)
