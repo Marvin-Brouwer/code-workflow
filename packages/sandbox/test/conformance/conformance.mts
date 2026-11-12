@@ -130,6 +130,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const sandbox = await backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
 			cleanUp(sandbox.id)
 			const project = '/var/tmp/npm-check'
+			await sandbox.exec(['mkdir', '-p', project], { signal: timeout() })
 			await sandbox.writeFile(`${project}/package.json`, JSON.stringify({ name: 'npm-check', private: true }), timeout())
 
 			// Act
