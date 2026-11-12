@@ -2,7 +2,7 @@ import { limit, succeed, type Agent, type Limit } from '@mesh-flow/core'
 import { z } from 'zod'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
+import { isGoneReply, ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
 export interface TriageOptions {
@@ -64,7 +64,7 @@ export async function triage(agent: Agent, repository: Repository, options: Tria
 		const stage = sortedItem.asks === 'change' ? 'plan' : 'answer'
 		const outcome = await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body: sortedItem.reply, stage })
 		// A comment deleted since it was read asks for nothing any more.
-		if (sortedItem.asks === 'change' && !('gone' in outcome)) changes.push({ item, plan: sortedItem.reply })
+		if (sortedItem.asks === 'change' && !isGoneReply(outcome)) changes.push({ item, plan: sortedItem.reply })
 	}
 	return changes
 }

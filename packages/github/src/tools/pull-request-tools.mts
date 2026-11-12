@@ -145,6 +145,15 @@ export type ReplyStage = z.infer<typeof ReplyStage>
 /** The stage of a reply that names none. */
 export const defaultReplyStage: ReplyStage = 'answer'
 
+/** What came of a reply: the comment posted or edited, or that the item is gone, a line comment deleted since it was read. */
+export const ReplyOutcome = z.union([PostedComment, z.object({ gone: z.literal(true) })])
+export type ReplyOutcome = z.infer<typeof ReplyOutcome>
+
+/** Whether a reply found its item gone: a line comment deleted since it was read. */
+export function isGoneReply(outcome: ReplyOutcome): outcome is { gone: true } {
+	return 'gone' in outcome
+}
+
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
  * listed as a reviewer's item. The first answer to an item replaces the "👀 Reading..." reply that
@@ -152,10 +161,6 @@ export const defaultReplyStage: ReplyStage = 'answer'
  * too but leaves the 👀 on, and the answer after a plan is a reply of its own under it, so the
  * reviewer is notified of it. Replies to one item go one at a time.
  */
-/** What came of a reply: the comment posted or edited, or that the item is gone, say deleted since it was read. */
-export const ReplyOutcome = z.union([PostedComment, z.object({ gone: z.literal(true) })])
-export type ReplyOutcome = z.infer<typeof ReplyOutcome>
-
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
@@ -185,8 +190,7 @@ export const showBeingRead = {
 	}),
 	output: z.object({
 		shown: z.array(ReviewItemId),
-		/** The items the run answered already, say before it started over: `review` doesn't hand them over again. */
-		answered: z.array(ReviewItemId),
+		answered: z.array(ReviewItemId).describe('Items the run answered already, such as before it started over'),
 	}),
 }
 

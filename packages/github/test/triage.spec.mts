@@ -91,13 +91,13 @@ describe('triage', () => {
 
 	test('leaves out a line comment deleted since it was read', async () => {
 		// Arrange
-		const { gateway } = await reviewed()
+		const { pull, gateway } = await reviewed()
 		const deleted: ReviewItem = {
 			id: 'review-comment/9',
 			kind: 'review-comment',
 			author: 'reviewer',
 			body: 'Rename this.',
-			url: 'https://github.com/team/app/pull/4#r9',
+			url: `${pull.html_url}#r9`,
 			at: new Date().toISOString(),
 		}
 		const { writer } = scriptedWriter([{ items: [{ id: deleted.id, asks: 'change', reply: 'I will rename it.' }] }])
@@ -110,6 +110,30 @@ describe('triage', () => {
 
 		// Assert
 		await expect(run.result).resolves.toEqual([])
+		expect(pull.reviewComments).toEqual([])
+	})
+
+	test('fails when GitHub will not take a reply on the conversation, rather than say the item is gone', async () => {
+		// Arrange
+		const { api, comments, gateway } = await reviewed()
+		const { writer } = scriptedWriter([
+			{
+				items: [
+					{ id: 'comment/1', asks: 'question', reply: 'Because.' },
+					{ id: 'comment/2', asks: 'change', reply: 'I will add one.' },
+				],
+			},
+		])
+		api.failWith = (method) => (method === 'POST' ? 404 : undefined)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			return triage(writer, repository, { pullRequest: where, comments })
+		})
+
+		// Assert
+		await expect(run.result).rejects.toThrow()
 	})
 
 	test('runs no loop for no items', async () => {

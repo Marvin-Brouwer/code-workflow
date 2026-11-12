@@ -459,7 +459,7 @@ describe('github', () => {
 		expect(pull.comments.map((posted) => posted.body)).toEqual(['Why?', signed('Because.', run.runId, ['reply', 'replied:comment/1'])])
 	})
 
-	test('answers once after a plan, when the answer is tried again after the plan was marked answered', async () => {
+	test('posts the answer after a plan once, when it is tried again after failing halfway', async () => {
 		// Arrange
 		const { api, gateway } = await connected(noRetry)
 		const pull = api.pullRequest(repositoryName, 19)
@@ -471,10 +471,14 @@ describe('github', () => {
 			created_at: new Date().toISOString(),
 		})
 		const where = { repository: repositoryName, number: 19 }
-		// The answer's own reply fails once, after the plan was marked answered.
+		// The answer's own reply is the second post, after the reading reply, and it fails once.
+		const failingPost = 2
 		let posts = 0
-		api.hold = (method, requestPath) =>
-			method === 'POST' && requestPath.endsWith('/comments') && ++posts === 2 ? Promise.reject(new Error('Connection reset.')) : undefined
+		api.hold = (method, requestPath) => {
+			if (method !== 'POST' || !requestPath.endsWith('/comments')) return undefined
+			posts += 1
+			return posts === failingPost ? Promise.reject(new Error('Connection reset.')) : undefined
+		}
 		const answer = reply(where)
 
 		// Act
@@ -577,6 +581,15 @@ describe('github', () => {
 			body: signed('Because.', 'run-before', ['reply', 'answered:comment/1']),
 			user: { login: api.self },
 			html_url: `${pull.html_url}#c2`,
+			created_at: at,
+		})
+		pull.comments.push({ id: 4, body: 'And the docs?', user: { login: 'reviewer' }, html_url: `${pull.html_url}#c4`, created_at: at })
+		// An answer of its own, given when there was no reading reply to replace.
+		pull.comments.push({
+			id: 5,
+			body: signed('Updated.', 'run-before', ['reply', 'replied:comment/4']),
+			user: { login: api.self },
+			html_url: `${pull.html_url}#c5`,
 			created_at: at,
 		})
 		pull.comments.push({ id: 3, body: 'And the README?', user: { login: 'reviewer' }, html_url: `${pull.html_url}#c3`, created_at: at })

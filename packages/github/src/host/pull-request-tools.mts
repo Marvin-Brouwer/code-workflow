@@ -22,7 +22,7 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
-import { answeredKey, pullRequestComments, reactionKey, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
+import { answeredKey, pullRequestComments, reactionKey, readingNote, repliedKey, replyKey, seenKey } from './pull-request-comments.mts'
 import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
 import { replyToItem } from './review-reply.mts'
 import { signed } from './signature.mts'
@@ -218,7 +218,8 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
 			for (const { id: item, url, thread } of items) {
 				const { kind, id: commentId } = parseItemId(item)
-				if (hasReply(answeredKey(item))) {
+				// An answer replaced the reading reply, or is a reply of its own when there was none.
+				if (hasReply(answeredKey(item)) || hasReply(repliedKey(item))) {
 					answered.push(item)
 					continue
 				}

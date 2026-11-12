@@ -44,13 +44,9 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 
 	const reading = withKey(seenKey(item)).at(0)
 	const newReply = async (markerKeys: readonly string[]): Promise<ReplyOutcome> => {
-		try {
-			const threadId = kind === 'review-comment' ? await comments.threadOf(commentId) : undefined
-			return await comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
-		} catch (error) {
-			if (isGone(error)) return { gone: true }
-			throw error
-		}
+		const threadId = kind === 'review-comment' ? await threadOf(comments, commentId) : undefined
+		if (threadId === gone) return { gone: true }
+		return comments.post(kind, threadId, signed(body, runId, [replyKey, ...markerKeys]))
 	}
 	const reaction = reading === undefined ? undefined : markerValue(reading.body, reactionKeyName)
 	const reactionKeys = reaction === undefined ? [] : [reactionKey(Number(reaction))]
@@ -69,6 +65,23 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 	// The plan is marked answered first: an answer that fails halfway is then tried again as a reply of its own.
 	await comments.edit(kind, reading.id, signed(unsigned(reading.body), runId, [replyKey, answeredKey(item), plannedKey(item)]))
 	return newReply([repliedKey(item)])
+}
+
+/** What `threadOf` gives for a line comment deleted since it was read. */
+const gone = Symbol('gone')
+
+/**
+ * The first comment of the thread line comment `commentId` is in, or {@link gone} when it was
+ * deleted. Only a 404 here means the item is gone: one anywhere else, say on the conversation, is a
+ * pull request that's gone or a token that may not write, and fails.
+ */
+async function threadOf(comments: PullRequestComments, commentId: number): Promise<number | typeof gone> {
+	try {
+		return await comments.threadOf(commentId)
+	} catch (error) {
+		if (isGone(error)) return gone
+		throw error
+	}
 }
 
 /** Whether one of this package's replies says `body`, whichever run signed it. */
