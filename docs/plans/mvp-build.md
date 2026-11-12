@@ -222,8 +222,9 @@ the first proof that the sandbox, engine, core and gateway work together.
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
 against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
-Until then the root `pnpm build` skips `example`, since its imports don't resolve yet; this step
-takes that filter out again.
+Until this step lands, the root `pnpm build` skips `example` (`--filter=!example` in the root
+`package.json`), because its connector and preset sketches have no `package.json` yet and its
+imports don't resolve. This step takes that filter out again.
 
 ## Rules for every package
 
