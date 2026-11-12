@@ -95,6 +95,13 @@ export interface TestRun<T> {
 export interface TestRunOptions {
 	/** The answers to the run's `input` requests, in the order it asks; a request past them stays unanswered. */
 	readonly inputs?: readonly unknown[]
+	/** Called as the run asks its `index`th `input`, before the answer goes back: a change a person makes while they answer. */
+	readonly onInput?: (index: number) => void
+}
+
+/** Whether the run asked a person for input. */
+export function askedForInput(messages: readonly RuntimeMessage[]): boolean {
+	return messages.some((message) => message.type === 'request' && message.request.kind === 'input')
 }
 
 /**
@@ -105,9 +112,10 @@ export interface TestRunOptions {
 export async function runOnGateway<T>(
 	gateway: Gateway,
 	body: (context: { abortSignal: AbortSignal }) => Promise<T>,
-	{ inputs = [] }: TestRunOptions = {},
+	{ inputs = [], onInput }: TestRunOptions = {},
 ): Promise<TestRun<T>> {
 	const inputQueue = [...inputs]
+	let asked = 0
 	const workspace = path.join(await temporaryDirectory(), 'workspace')
 	const controller = new AbortController()
 	onTestFinished(() => {
@@ -130,8 +138,10 @@ export async function runOnGateway<T>(
 				wakes++
 				slot(message.request.id).resolve({})
 			}
-			if (message.type === 'request' && message.request.kind === 'input' && inputQueue.length > 0)
-				slot(message.request.id).resolve({ value: inputQueue.shift() })
+			if (message.type === 'request' && message.request.kind === 'input') {
+				onInput?.(asked++)
+				if (inputQueue.length > 0) slot(message.request.id).resolve({ value: inputQueue.shift() })
+			}
 		},
 		answer(requestId, abortSignal) {
 			return new Promise((resolve, reject) => {

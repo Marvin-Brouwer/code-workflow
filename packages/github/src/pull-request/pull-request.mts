@@ -4,7 +4,7 @@ import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
-import { keepsEdit } from './edited.mts'
+import { keptEdit } from './keeps-edit.mts'
 import type { PullRequestContent } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */
@@ -18,8 +18,9 @@ export interface PullRequest extends PullRequestData {
  * the description instead, so a rerun opens nothing twice. An open pull request whose description
  * was written for the same commit keeps it, as it was reviewed. The description is signed like
  * every post, and marked with the commit it describes, which `describe` reads to skip its loop.
- * When someone edited the open pull request after `describe` read it, the person is asked whether
- * to overwrite the edit; when they say no, it stays as it is.
+ * When the text was written from a pull request (`basedOn`), that one is updated with
+ * `updatePullRequest`, never a new one opened: it may have been merged or closed meanwhile, and
+ * someone may have edited it, which the person is asked about first.
  *
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
@@ -27,8 +28,15 @@ export interface PullRequest extends PullRequestData {
  */
 export async function openPullRequest(repository: Repository, content: PullRequestContent, context?: ToolContext): Promise<PullRequest> {
 	const { head } = await push(repository)({ message: content.title }, context)
-	const open = await openPullRequestOf(repository, context)
-	if (open !== undefined && (await keepsEdit(open, content))) return open
+	const { basedOn } = content
+	if (basedOn !== undefined) {
+		const { skipped: _skipped, ...updated } = await updatePullRequest(
+			{ repository: repository.name, number: basedOn.number },
+			{ ...content, describedSha: content.describedSha ?? head },
+			context,
+		)
+		return updated
+	}
 	const data = await stubs.openPullRequest(
 		{
 			repository: repository.name,
@@ -69,10 +77,8 @@ export async function updatePullRequest(
 	content: PullRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedPullRequest> {
-	if (content.basedOn !== undefined) {
-		const current = await pullRequest(ref, context)
-		if (await keepsEdit(current, content)) return Object.freeze({ ...current, skipped: 'edited' as const })
-	}
+	const kept = await keptEdit(async () => pullRequest(ref, context), content)
+	if (kept !== undefined) return Object.freeze({ ...kept, skipped: 'edited' as const })
 	const { skipped, ...data } = await stubs.updatePullRequest(
 		{
 			repository: ref.repository,
@@ -93,7 +99,7 @@ export async function pullRequest(ref: PullRequestRef, context?: ToolContext): P
 }
 
 /** The open pull request of the checkout's branch onto the default branch, when it has one. */
-export async function openPullRequestOf(repository: Repository, context?: ToolContext): Promise<PullRequest | undefined> {
+export async function findOpenPullRequest(repository: Repository, context?: ToolContext): Promise<PullRequest | undefined> {
 	const found = await stubs.findPullRequest(
 		{ repository: repository.name, head: repository.branch, base: repository.defaultBranch },
 		context,

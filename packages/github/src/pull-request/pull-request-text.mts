@@ -34,11 +34,16 @@ export interface PullRequestContent extends PullRequestText {
 	/** The issue the pull request closes when it merges: `Fixes` goes in the footer, next to the run id. */
 	readonly closes?: IssueRef
 	/**
-	 * The text of the pull request the new text was written from. When the pull request says
-	 * something else by the time it's written, someone edited it meanwhile, and the person is asked
-	 * before the edit is overwritten.
+	 * The pull request the new text was written from, and what it said then. `openPullRequest`
+	 * updates that one rather than open another. When it says something else by the time the text is
+	 * written, someone edited it meanwhile, and the person is asked before the edit is overwritten.
 	 */
-	readonly basedOn?: PullRequestText
+	readonly basedOn?: BasedOn
+}
+
+/** The pull request a text was written from, by number, and its title and description then. */
+export interface BasedOn extends PullRequestText {
+	readonly number: number
 }
 
 /** Whether two texts say the same. */

@@ -238,7 +238,7 @@ describe('describe', () => {
 
 		// Assert
 		expect(prompts[0]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
-		expect(content.basedOn).toEqual(sameSite)
+		expect(content.basedOn).toEqual({ ...sameSite, number: firstPullRequest })
 	})
 
 	test('runs no loop when the open pull request of the branch already describes its head, and none is named', async () => {

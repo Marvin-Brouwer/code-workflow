@@ -6,8 +6,8 @@ import type { PullRequestRef } from '../tools/pull-request-tools.mts'
 import { branchHead } from './branch-head.mts'
 import { readBrief, type PullRequestBrief } from './brief.mts'
 import { fenced } from './fenced.mts'
-import { openPullRequestOf, pullRequest, type PullRequest } from './pull-request.mts'
-import { PullRequestText, textInPrompt, type PullRequestContent } from './pull-request-text.mts'
+import { findOpenPullRequest, pullRequest, type PullRequest } from './pull-request.mts'
+import { PullRequestText, textInPrompt, type BasedOn, type PullRequestContent } from './pull-request-text.mts'
 import { filesInPrompt } from './repository-files.mts'
 
 /** What `describe` takes besides the agent and the checkout. */
@@ -47,12 +47,13 @@ const customaryTitleCharacters = 72
  *
  * With `pullRequest`, it describes that pull request again, for after a round of review: the agent
  * rewrites the current text for the branch as it was last pushed. When the text already covers
- * that commit, or the pull request is closed, no loop runs and the current text comes back,
- * so calling it after every round costs a read of the pull request and of the branch's commit. Writing the text is up to the caller: the result,
- * which closes `issue`, goes to `openPullRequest` or `updatePullRequest` as it is; it names the text
- * it was written from, so a person who edited the pull request meanwhile is asked before their edit
- * is overwritten. A pull request
- * of another branch, or onto another branch than the default one, is refused.
+ * that commit, or the pull request is closed, no loop runs and the current text comes back, so
+ * calling it after every round costs a read of the pull request and of the branch's commit. A pull
+ * request of another branch, or onto another branch than the default one, is refused.
+ *
+ * Writing the text is up to the caller: the result, which closes `issue`, goes to `openPullRequest`
+ * or `updatePullRequest` as it is. It names the pull request and the text it was written from, so
+ * a person who edited the pull request meanwhile is asked before their edit is overwritten.
  *
  * It stops with the run, as the loop does: an agent's loop follows the run's signal, not one of
  * the caller's.
@@ -67,7 +68,7 @@ export async function describe(agent: Agent, repository: Repository, options: De
 	// Without one named, the branch's open pull request all the same: a run that starts over after a
 	// round of review starts from the text that was reviewed, not from nothing.
 	const current =
-		options.pullRequest === undefined ? await openPullRequestOf(repository) : await branchPullRequest(options.pullRequest, repository)
+		options.pullRequest === undefined ? await findOpenPullRequest(repository) : await branchPullRequest(options.pullRequest, repository)
 	if (current?.state === 'closed') return currentContent(current, options.issue)
 	// For a pull request named, what it shows: the branch as it was pushed. Else what `openPullRequest` will push.
 	const head = await branchHead(repository)({ pushed: options.pullRequest !== undefined })
@@ -78,8 +79,8 @@ export async function describe(agent: Agent, repository: Repository, options: De
 }
 
 /** The `basedOn` field of the content: the text of the pull request it was written from, when there is one. */
-function basedOnText(current: PullRequest | undefined): { basedOn?: PullRequestText } {
-	return current === undefined ? {} : { basedOn: { title: current.title, description: current.description } }
+function basedOnText(current: PullRequest | undefined): { basedOn?: BasedOn } {
+	return current === undefined ? {} : { basedOn: { number: current.number, title: current.title, description: current.description } }
 }
 
 /** The pull request `ref` names, which has to be the one of the checkout's branch onto the default branch. */

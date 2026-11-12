@@ -1,4 +1,5 @@
 import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
+import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
 import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
@@ -71,6 +72,17 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 	return seen.localeCompare(latest) >= 0 ? seen : latest
 }
 
+/** The open pull request of branch `head` onto `base`, when there is one. */
+async function openOnBranch(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	head: string,
+	base: string,
+): Promise<ApiPullRequest | undefined> {
+	const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
+	return open[0]
+}
+
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
@@ -79,8 +91,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
-			const [existing] = open
+			const existing = await openOnBranch(client, where, head, base)
 			if (existing === undefined) {
 				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
 				return pullRequestData(repository, data)
@@ -107,9 +118,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(findPullRequest, async ({ repository, head, base }, context) => {
 			const client = await api(context)
-			const where = splitRepositoryName(repository)
-			const { data: open } = await client.rest.pulls.list({ ...where, state: 'open', head: `${where.owner}:${head}`, base, per_page: 1 })
-			const [found] = open
+			const found = await openOnBranch(client, splitRepositoryName(repository), head, base)
 			return found === undefined ? null : pullRequestData(repository, found)
 		}),
 
