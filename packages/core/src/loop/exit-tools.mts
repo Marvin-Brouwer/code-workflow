@@ -1,4 +1,5 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
+import path from 'node:path'
 import { z } from 'zod'
 import type { ExitSpec } from '../exits/exit.mts'
 import { counted } from '../render/counted.mts'
@@ -49,15 +50,16 @@ function succeedTool(schema: z.ZodType | undefined, gate: RunGate, session: Loop
 
 function folderTool(folder: WorkspaceFolder, gate: RunGate, session: LoopSession): ToolRegistration {
 	const minFiles = folder.options.minFiles ?? 0
+	const directory = `${folder.location()}${path.sep}`
 	return exitTool(
 		'succeed',
-		`Finish the task, once ${folder.path}/ holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,
+		`Finish the task, once ${directory} holds your work${minFiles > 0 ? ` (at least ${counted(minFiles, 'file')})` : ''}.`,
 		{ type: 'object', properties: {} },
 		session,
 		async () => {
 			const files = await folder.files()
 			if (files.length < minFiles)
-				return errorResult(`${folder.path}/ has ${files.length} of the ${minFiles} files it needs. Write them, then call succeed again.`)
+				return errorResult(`${directory} has ${files.length} of the ${minFiles} files it needs. Write them, then call succeed again.`)
 			return handIn(gate, session, async () => folder)
 		},
 	)

@@ -10,8 +10,9 @@ import { workspaceFolder } from './workspace-folder.mts'
  * export const deviations = workspace.file('plan-deviations.md')
  * ```
  *
- * In a prompt, a file renders as its path and a folder as its path and its files, such as
- * `research/ (Research notes), with overview.md, repositories.md`.
+ * In a prompt, a file renders as where it is on disk and a folder as where it is and its files, such
+ * as `/home/user/workspace/research/ (Research notes), with overview.md, repositories.md`. The paths
+ * are absolute, so they still work once the agent changed into a checkout.
  */
 export const workspace = Object.freeze({
 	file: workspaceFile,

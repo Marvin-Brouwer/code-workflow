@@ -13,8 +13,9 @@ export interface WorkspaceFolderOptions {
 }
 
 /**
- * A folder in the run's workspace. In a prompt it renders as its path and the files in it. As an
- * exit, `succeed(folder)` lets the agent finish once the folder meets its options.
+ * A folder in the run's workspace. In a prompt it renders as where it is on disk and the files in
+ * it, so the agent finds it from any directory. As an exit, `succeed(folder)` lets the agent finish
+ * once the folder meets its options.
  */
 export interface WorkspaceFolder {
 	readonly kind: 'folder'
@@ -31,8 +32,9 @@ export interface WorkspaceFolder {
 /** A folder in the run's workspace. Like a file, it can be made outside a run. */
 export function workspaceFolder(relative: string, options: WorkspaceFolderOptions = {}): WorkspaceFolder {
 	const folderPath = workspacePath(relative)
+	const located = (what: string) => onDisk(folderPath, `${what} workspace folder ${folderPath}`)
 	const files = async () => {
-		const directory = onDisk(folderPath, `Listing workspace folder ${folderPath}`)
+		const directory = located('Listing')
 		const entries = await readdir(directory, { recursive: true, withFileTypes: true }).catch((error: unknown) => {
 			if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
 			throw error
@@ -47,11 +49,12 @@ export function workspaceFolder(relative: string, options: WorkspaceFolderOption
 		kind: 'folder' as const,
 		path: folderPath,
 		options,
-		location: () => onDisk(folderPath, `Locating workspace folder ${folderPath}`),
+		location: () => located('Locating'),
 		files,
 		[toPrompt]: async () => {
+			const directory = `${located('Rendering')}${path.sep}`
 			const names = (await files()).map((file) => path.posix.relative(folderPath, file.path))
-			const label = options.description === undefined ? `${folderPath}/` : `${folderPath}/ (${options.description})`
+			const label = options.description === undefined ? directory : `${directory} (${options.description})`
 			return names.length === 0 ? `${label}, empty so far` : `${label}, with ${names.join(', ')}`
 		},
 	})

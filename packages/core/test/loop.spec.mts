@@ -289,8 +289,25 @@ describe('loop', () => {
 
 		// Assert
 		expect(await run.result).toBe(Research)
-		expect(textOf(model.requests[0])).toContain('research/, empty so far')
+		// Absolute, so the agent still finds it after it changed into a checkout; escaped as the request JSON has it.
+		const listed = JSON.stringify(`${path.join(run.workspace, 'research')}${path.sep}, empty so far`).slice(1, -1)
+		expect(textOf(model.requests[0])).toContain(listed)
 		expect(textOf(model.requests[1])).toContain('has 0 of the 1 files')
+	})
+
+	test('renders a workspace file as where it is on disk, so it is found from inside a checkout too', async () => {
+		// Arrange
+		const notes = workspace.file('notes/issue.md')
+		const model = scriptedModel([callsTool('succeed')])
+		const helper = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(() => helper.loop`Read ${notes}, then ${succeed()}.`, model)
+		await run.result
+
+		// Assert
+		const located = JSON.stringify(path.join(run.workspace, 'notes', 'issue.md')).slice(1, -1)
+		expect(textOf(model.requests[0])).toContain(`Read ${located}, then`)
 	})
 
 	test('reminds the agent to call an exit, and fails after the reminders', async () => {

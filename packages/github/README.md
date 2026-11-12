@@ -72,7 +72,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 ### Repositories
 
-`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its path. A checkout of the repository that is already there is reused, and switched to the branch when it is on another; one folder holds one repository, so a second repository with the same name in one run is an error.
+`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its absolute path, so the agent finds it from inside another checkout too. A checkout of the repository that is already there is reused, and switched to the branch when it is on another; one folder holds one repository, so a second repository with the same name in one run is an error.
 
 `github.push(repository)` is a tool: it commits every change in the checkout with the message it's given (what changed and why, which is what `describe` later reads) and pushes the branch. Code calls it too, as a function, and `openPullRequest` calls it first.
 

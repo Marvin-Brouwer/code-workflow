@@ -107,7 +107,7 @@ describe('github', () => {
 		const result = await run.result
 
 		// Assert
-		expect(result.rendered).toBe('app')
+		expect(result.rendered).toBe(path.join(run.workspace, 'app'))
 		expect(result.repository.directory).toBe(path.join(run.workspace, 'app'))
 		expect(result.pushed).toMatchObject({ pushed: true, head: await remote.head('fix/7') })
 		expect(result.nothing).toMatchObject({ pushed: false })

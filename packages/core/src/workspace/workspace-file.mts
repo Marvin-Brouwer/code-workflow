@@ -3,7 +3,10 @@ import path from 'node:path'
 import { toPrompt } from '../render/to-prompt.mts'
 import { onDisk, workspacePath } from './workspace-path.mts'
 
-/** A file in the run's workspace. In a prompt it renders as its path. */
+/**
+ * A file in the run's workspace. In a prompt it renders as where it is on disk, so the agent finds
+ * it from any directory, also after it changed into a checkout.
+ */
 export interface WorkspaceFile {
 	readonly kind: 'file'
 	/** Relative to the workspace, POSIX. */
@@ -40,6 +43,6 @@ export function workspaceFile(relative: string): WorkspaceFile {
 			await mkdir(path.dirname(file), { recursive: true })
 			await appendFile(file, `${JSON.stringify(entry)}\n`)
 		},
-		[toPrompt]: () => filePath,
+		[toPrompt]: () => located('Rendering'),
 	})
 }
