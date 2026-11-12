@@ -125,6 +125,27 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			expect(statuses['example.com']).toBe('000')
 		})
 
+		test('npm installs a package from an allowed registry, with no flags or settings', async () => {
+			// Arrange
+			const sandbox = await backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
+			cleanUp(sandbox.id)
+			const project = '/var/tmp/npm-check'
+			await sandbox.writeFile(`${project}/package.json`, JSON.stringify({ name: 'npm-check', private: true }), timeout())
+
+			// Act
+			const result = await sandbox.exec(['npm', 'install', '--no-audit', '--no-fund', 'is-number@7.0.0'], {
+				signal: timeout(180),
+				cwd: project,
+			})
+
+			// Assert
+			expect(result, result.stderr).toMatchObject({ exitCode: 0 })
+			const installed = z
+				.object({ version: z.string() })
+				.parse(JSON.parse(await sandbox.readFile(`${project}/node_modules/is-number/package.json`, timeout())))
+			expect(installed.version).toBe('7.0.0')
+		})
+
 		test('list shows a paused sandbox until it is removed', async () => {
 			// Arrange
 			const sandbox = await backend.create(spec, timeout())
