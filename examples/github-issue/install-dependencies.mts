@@ -16,7 +16,10 @@ const execFileAsync = promisify(execFile)
 /** How long an install may take when {@link InstallOptions.timeout} is left out. */
 const defaultTimeout: WaitSpec = { hours: 1 }
 
-const msPerMinute = 60_000
+const msPerSecond = 1_000
+
+/** The longest timer Node keeps: a longer one fires at once. About 24.8 days. */
+const maxTimerMs = 2 ** 31 - 1
 
 /** npm writes more than execFile's 1 MiB default on a large install, which would count as a failure. */
 const maxOutputBytes = 16 * 1024 * 1024
@@ -74,6 +77,7 @@ const notHandled = ['yarn.lock', 'bun.lock', 'bun.lockb'] as const
  * ```
  */
 export async function installDependencies(repository: github.Repository, options: InstallOptions): Promise<InstallResult> {
+	const limitMs = installLimitMs(options.timeout ?? defaultTimeout)
 	const { directory } = repository
 	if (!(await exists(directory, 'package.json')))
 		return result('nothing to install', `${repository.path} has no package.json, so it has no npm dependencies.`)
@@ -89,8 +93,7 @@ export async function installDependencies(repository: github.Repository, options
 	)
 	const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
 	const [program, ...args] = command
-	const { timeout = defaultTimeout } = options
-	const limitMs = timeout === 'indefinite' ? undefined : durationMs(timeout)
+	// A timer inside the sandbox: fine while every pause aborts the run first, as the engine's do.
 	const installTimeouts = limitMs === undefined ? [] : [AbortSignal.timeout(limitMs)]
 	try {
 		await execFileAsync(program, args, {
@@ -104,13 +107,26 @@ export async function installDependencies(repository: github.Repository, options
 	} catch (error) {
 		if (options.abortSignal.aborted) throw options.abortSignal.reason
 		const log = path.join(installLogDirectory, `${repository.path.replaceAll('/', '_')}.log`)
-		const stopped = installTimeouts.some((signal) => signal.aborted)
-			? `Stopped after ${String((limitMs ?? 0) / msPerMinute)} minutes.\n`
-			: ''
+		const stopped =
+			limitMs !== undefined && installTimeouts.some((signal) => signal.aborted)
+				? `Stopped after ${String(limitMs / msPerSecond)} seconds.\n`
+				: ''
 		await mkdir(installLogDirectory, { recursive: true })
 		await writeFile(log, `${stopped}${outputOf(error)}`)
 		return result('failed', `Installing the npm dependencies of ${repository.path} failed; the output is in ${log}.`)
 	}
+}
+
+/**
+ * The limit in whole milliseconds, or undefined for none. Throws for a timeout Node can't keep, on
+ * every repository alike, since it's the workflow's mistake rather than the install's.
+ */
+function installLimitMs(timeout: WaitSpec | 'indefinite'): number | undefined {
+	if (timeout === 'indefinite') return undefined
+	const ms = Math.ceil(durationMs(timeout))
+	if (ms > maxTimerMs)
+		throw new RangeError(`An install timeout can be at most 24 days, not ${JSON.stringify(timeout)}; use 'indefinite' for no limit.`)
+	return ms
 }
 
 function result(state: InstallResult['state'], detail: string): InstallResult {
