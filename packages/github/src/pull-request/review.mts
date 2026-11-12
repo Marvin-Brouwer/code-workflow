@@ -1,8 +1,7 @@
-import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
+import type { ToolContext, WaitSpec } from '@mesh-flow/core'
+import { watchReview } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
 import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
-import { defaultLookEvery, defaultToleratedOutage } from '@mesh-flow/forge'
-import { patientLook } from '@mesh-flow/forge'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'
 
 /** The checks of one commit failed. */
@@ -70,41 +69,30 @@ export async function review(
 	context?: ToolContext,
 ): Promise<ReviewOutcome> {
 	const where = { repository: on.repository, number: on.number }
-	const every = options.every ?? defaultLookEvery
-	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
-	let since: string | undefined
-	// The host lists from the latest moment seen, inclusive, so an item at that second comes again.
-	const handled = new Set<string>()
-	const reportedChecks = new Set<string>()
-	for (;;) {
-		const current = pullRequestOf(await look(() => stubs.getPullRequest(where, context)))
-		if (current.state === 'closed') return { state: current.merged ? 'merged' : 'closed', pullRequest: current }
-
-		const activity = await look(() => stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context))
-		since = activity.until ?? since
-		const comments = activity.items.filter((item) => !handled.has(item.id))
-		for (const item of comments) handled.add(item.id)
-		if (comments.length > 0 && handlers.comments !== undefined) {
-			const items = comments.map((item) => ({
-				id: item.id,
-				url: item.url,
-				...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
-			}))
-			const { answered } = await look(() => stubs.showBeingRead({ ...where, items }, context))
-			// Answered before the run started over: the reviewer has the answer already, and writes a new comment if it doesn't settle it.
-			const unanswered = comments.filter((item) => !answered.includes(item.id))
-			if (unanswered.length > 0) await handlers.comments(unanswered)
-		}
-
-		if (handlers.checksFailed !== undefined && !reportedChecks.has(current.head.sha)) {
-			const checks = await look(() => stubs.checksOnRef({ repository: on.repository, ref: current.head.sha }, context))
-			if (checks.status === 'completed') {
-				reportedChecks.add(current.head.sha)
-				if (checks.failures.length > 0)
-					await handlers.checksFailed({ pullRequest: current, sha: current.head.sha, failures: checks.failures })
-			}
-		}
-
-		await wait(every)
-	}
+	const { checksFailed } = handlers
+	const { state, request } = await watchReview<PullRequest, ReviewItem, CheckFailure>(
+		{
+			read: async () => pullRequestOf(await stubs.getPullRequest(where, context)),
+			activity: (since) => stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context),
+			showBeingRead: (items) =>
+				stubs.showBeingRead(
+					{
+						...where,
+						items: items.map((item) => ({
+							id: item.id,
+							url: item.url,
+							...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
+						})),
+					},
+					context,
+				),
+			checks: (sha) => stubs.checksOnRef({ repository: on.repository, ref: sha }, context),
+		},
+		{
+			...(handlers.comments === undefined ? {} : { comments: handlers.comments }),
+			...(checksFailed === undefined ? {} : { failed: (pullRequest, sha, failures) => checksFailed({ pullRequest, sha, failures }) }),
+		},
+		options,
+	)
+	return { state, pullRequest: request }
 }

@@ -39,3 +39,22 @@ export {
 } from '../describe/change-text.mts'
 export { decideOnEdit, type EditDecision } from '../describe/decide-on-edit.mts'
 export { describeChange, type DescribeChangeOptions, type DescribeForge } from '../describe/describe-change.mts'
+export {
+	triageItems,
+	triageResult,
+	type PlannedChange,
+	type ReplyStage,
+	type TriageForge,
+	type TriageItem,
+	type TriageItemsOptions,
+} from '../review/triage-items.mts'
+export {
+	watchReview,
+	type CommitChecks,
+	type ReviewActivity,
+	type ReviewWatch,
+	type WatchedRequest,
+	type WatchHandlers,
+	type WatchOptions,
+	type WatchOutcome,
+} from '../review/watch-review.mts'
