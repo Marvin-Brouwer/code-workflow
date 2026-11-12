@@ -1,8 +1,9 @@
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '../render/to-prompt.mts'
-import { workspaceFile, type WorkspaceFile } from './workspace-file.mts'
+import { hasErrorCode } from '../run/has-error-code.mts'
 import { toPosix } from '../run/to-posix.mts'
+import { workspaceFile, type WorkspaceFile } from './workspace-file.mts'
 import { asDirectory, onDisk, workspacePath } from './workspace-path.mts'
 
 export interface WorkspaceFolderOptions {
@@ -36,7 +37,7 @@ export function workspaceFolder(relative: string, options: WorkspaceFolderOption
 	const files = async () => {
 		const directory = located('Listing')
 		const entries = await readdir(directory, { recursive: true, withFileTypes: true }).catch((error: unknown) => {
-			if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
+			if (hasErrorCode(error, 'ENOENT')) return []
 			throw error
 		})
 		return entries

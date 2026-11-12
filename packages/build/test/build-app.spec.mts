@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import { appManifestFile, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { buildApp } from '../src/build-app.mts'
@@ -9,6 +12,8 @@ import { appRepository, describingEntry, protocolModule } from './support/app-re
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
+
+const run = promisify(execFile)
 
 const description: WorkflowsDescription = {
 	sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: [] } },
@@ -34,11 +39,41 @@ describe('buildApp', () => {
 
 		// Assert
 		expect(manifest).toMatchObject({ entry: 'main.mjs', platform: { os: 'linux', cpu: 'x64' }, description })
-		expect((await readdir(out)).toSorted()).toEqual(['main.mjs', appManifestFile, 'package.json'].toSorted())
+		expect((await readdir(out)).toSorted()).toEqual(['main.mjs', 'main.mjs.map', appManifestFile, 'package.json'].toSorted())
 		const bundled = await readFile(path.join(out, 'main.mjs'), 'utf8')
 		expect(bundled).toContain('Hello')
 		expect(bundled).not.toMatch(/from ['"]greeting['"]/)
 		expect(JSON.parse(await readFile(path.join(out, appManifestFile), 'utf8'))).toEqual(manifest)
+	})
+
+	test('keys a call site by its place in the source, the same across rebuilds, links and --enable-source-maps', async () => {
+		// Arrange
+		const files = { 'main.mts': printingKeyEntry, 'keyed.mts': keyedModule, 'greeting.mts': `export const greeting: string = 'Hello'\n` }
+		const linesBeforeKeyed = 5
+		const shiftingGreeting = {
+			files: { 'index.js': `${'console.log("shifts the bundle")\n'.repeat(linesBeforeKeyed)}export const punctuation = '!'\n` },
+		}
+		const repository = await appRepository({ files, packages: { greeting: greetingPackage } })
+		const shifted = await appRepository({ files, packages: { greeting: shiftingGreeting } })
+		const linked = path.join(await temporaryDirectory(), 'linked')
+		await symlink(repository, linked, 'junction')
+		const [first, second, third] = [await outFolder(), await outFolder(), await outFolder()]
+
+		// Act
+		await buildApp({ directory: repository, out: first, abortSignal })
+		await buildApp({ directory: shifted, out: second, abortSignal })
+		await buildApp({ directory: linked, out: third, abortSignal })
+		const keys = [
+			await printedKey(first),
+			await printedKey(second),
+			await printedKey(third),
+			await printedKey(first, ['--enable-source-maps']),
+		]
+
+		// Assert
+		expect(await bundleLineOf(first, keyedCall)).not.toBe(await bundleLineOf(second, keyedCall))
+		expect(keys).toEqual([keyedCallKey, keyedCallKey, keyedCallKey, keyedCallKey])
+		expect(await mapSources(second)).toEqual(expect.arrayContaining(['keyed.mts', 'greeting/index.js']))
 	})
 
 	test('says where to point main when package.json has none', async () => {
@@ -151,3 +186,62 @@ if (native === 'host') mailbox.send({ type: 'described', description: ${JSON.str
 		expect(await readdir(path.join(directory, '.mesh-flow'))).toEqual([])
 	})
 })
+
+/**
+ * Imports core's call sites from its sources, for the module the keying test writes. Deliberately
+ * not through a public entry point: the test checks core's real keying in a built app without
+ * making it part of core's API.
+ */
+const callSiteModule = pathToFileURL(path.join(import.meta.dirname, '../../core/src/run/call-site.mts')).href
+
+/** The call whose site `keyed.mts` keys. */
+const keyedCall = 'whereCalled()'
+
+/** The key of `keyedCall`: its place in `keyed.mts`. */
+const keyedCallKey = 'keyed.mts:6:20'
+
+/** The environment variable that has the built entry print its key and exit. */
+const printKeyVariable = 'MESH_FLOW_TEST_PRINT_KEY'
+
+/** A module that keys its own call site the way a loop does, bundled after the `greeting` package. */
+const keyedModule = `import 'greeting'
+import { callSite, callSiteText } from '${callSiteModule}'
+function whereCalled(): string {
+	return callSiteText(callSite(1))
+}
+export const key = ${keyedCall}
+`
+
+/** An entry that prints the key when asked to, and describes itself otherwise. */
+const printingKeyEntry = `import { key } from './keyed.mts'
+if (process.env.${printKeyVariable} !== undefined) {
+	console.log(key)
+	process.exit(0)
+}
+${describingEntry(description)}`
+
+/** A fresh folder for a built app. */
+async function outFolder(): Promise<string> {
+	return path.join(await temporaryDirectory(), 'app')
+}
+
+/** Runs the built app the way the sandbox does, from another working directory, and returns the key it printed last. */
+async function printedKey(out: string, nodeOptions: readonly string[] = []): Promise<string> {
+	const { stdout } = await run(process.execPath, [...nodeOptions, path.join(out, 'main.mjs')], {
+		cwd: await temporaryDirectory(),
+		env: { ...process.env, [printKeyVariable]: 'yes' },
+	})
+	return stdout.trim().split('\n').at(-1) ?? ''
+}
+
+/** The line of the built bundle that holds `text`, from 1. */
+async function bundleLineOf(out: string, text: string): Promise<number> {
+	const lines = (await readFile(path.join(out, 'main.mjs'), 'utf8')).split('\n')
+	return lines.findIndex((line) => line.includes(text)) + 1
+}
+
+/** The files the built app's source map names. */
+async function mapSources(out: string): Promise<readonly string[]> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the build writes the map
+	return (JSON.parse(await readFile(path.join(out, 'main.mjs.map'), 'utf8')) as { sources: readonly string[] }).sources
+}

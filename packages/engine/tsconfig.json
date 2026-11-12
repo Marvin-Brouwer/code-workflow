@@ -6,5 +6,5 @@
 		// Node 22 has all of ES2024, such as `Promise.withResolvers`, which the gateway's sources use.
 		"lib": ["ES2024"]
 	},
-	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]
+	"include": ["bin", "src", "test", "tsdown.config.mts", "vitest.config.mts"]
 }
