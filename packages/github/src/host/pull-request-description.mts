@@ -1,6 +1,7 @@
+import { normalizedDescription } from '../pull-request/pull-request-text.mts'
 import { Sha } from '../tools/git-tools.mts'
 import { markerValue } from '../tools/issue-tools.mts'
-import { runIdLine, signed, unsigned, withoutRunId, withUnixLineBreaks } from './signature.mts'
+import { runIdLine, signed, unsigned, withoutRunId } from './signature.mts'
 
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
@@ -49,9 +50,4 @@ function fixesNote(closes: string): string {
  */
 export function footerCloses(body: string | null | undefined, closes: string): boolean {
 	return runIdLine(body ?? '')?.endsWith(` ${fixesNote(closes)}`) ?? false
-}
-
-/** A description as `descriptionOf` gives it back once signed: with `\n` line breaks and without trailing ones. */
-export function normalizedDescription(body: string): string {
-	return withUnixLineBreaks(body).trimEnd()
 }

@@ -359,7 +359,7 @@ describe('an edit while the text was written', () => {
 		expect(api.pullRequest(repositoryName, firstPullRequest).title).toBe(personsEdit.title)
 	})
 
-	test('updates the pull request it was written from, and opens none nor pushes when that one was closed meanwhile', async () => {
+	test('updates the pull request it was written from, and neither opens one nor pushes when that one was closed meanwhile', async () => {
 		// Arrange
 		const { api, remote, gateway } = await connectedGithub()
 

@@ -49,11 +49,11 @@ export interface BasedOn extends PullRequestText {
 
 /** Whether two texts say the same, whichever line breaks the descriptions were saved with. */
 export function sameText(one: PullRequestText, other: PullRequestText): boolean {
-	return one.title === other.title && comparable(one.description) === comparable(other.description)
+	return one.title === other.title && normalizedDescription(one.description) === normalizedDescription(other.description)
 }
 
 /** A description as GitHub gives it back once written: with `\n` line breaks and without trailing ones. */
-function comparable(description: string): string {
+export function normalizedDescription(description: string): string {
 	return description.replaceAll('\r\n', '\n').trimEnd()
 }
 
