@@ -1,9 +1,9 @@
 import { tool, workspace, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
-import { localGit } from '../repository/local-git.mts'
+import { localGit } from '@mesh-flow/forge'
 import { trackingRef, type Repository } from '../repository/repository.mts'
 import { Sha } from '../tools/git-tools.mts'
-import { capped } from './capped.mts'
+import { capped } from '@mesh-flow/forge'
 import { filesAt, lintSettingsAt, templatesAt, type RepositoryFile } from './repository-files.mts'
 
 /** What an agent needs to describe a branch: what it changes against the merge target, and the repository's rules for describing it. */

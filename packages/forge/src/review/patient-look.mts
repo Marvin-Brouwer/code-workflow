@@ -10,8 +10,8 @@ export interface PatientLookOptions {
 }
 
 /**
- * Makes a look at GitHub that a watch can survive failing: when the host can't do a call, because
- * the network or GitHub is down for longer than the host's own retries cover, the look is tried
+ * Makes a look at a forge that a watch can survive failing: when the host can't do a call, because
+ * the network or the forge is down for longer than the host's own retries cover, the look is tried
  * again after `every`. It gives up once `toleratedOutage / every` looks in a row have failed; the
  * time the failing calls take comes on top. Only transient gateway errors are tolerated; a bad
  * token, a missing permission or a stop is thrown at once.

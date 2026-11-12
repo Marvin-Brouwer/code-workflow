@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { tool, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
-import { withScratchFile } from '../scratch-file.mts'
+import { withScratchFile } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
-import { localGit } from './local-git.mts'
+import { localGit } from '@mesh-flow/forge'
 import { trackingRef, type Repository } from './repository.mts'
 
 /** What a push did. */

@@ -1,8 +1,8 @@
 import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
-import { defaultLookEvery, defaultToleratedOutage } from './look-interval.mts'
-import { patientLook } from './patient-look.mts'
+import { defaultLookEvery, defaultToleratedOutage } from '@mesh-flow/forge'
+import { patientLook } from '@mesh-flow/forge'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'
 
 /** The checks of one commit failed. */

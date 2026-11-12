@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { signed } from '../src/host/signature.mts'
+import { signed } from '@mesh-flow/forge/host'
 import { triage, triageResult } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'

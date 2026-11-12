@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 /** What the directories this package makes for a file in passing are called. */
-const scratchPrefix = 'mesh-flow-github-'
+const scratchPrefix = 'mesh-flow-forge-'
 
 /** Runs `use` with the path of `fileName` in a fresh directory, which is removed afterwards. */
 export async function withScratchFile<T>(fileName: string, use: (file: string) => Promise<T>): Promise<T> {

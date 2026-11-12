@@ -12,7 +12,7 @@ import {
 	type OwnReply,
 	type PullRequestComments,
 } from './pull-request-comments.mts'
-import { signed, unsigned } from './signature.mts'
+import { signed, unsigned } from '@mesh-flow/forge/host'
 import { isGone } from './transient-error.mts'
 
 /** A reply to review item `item`, the comment `commentId` of `kind`, as `replyToReviewItem` posts it. */

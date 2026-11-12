@@ -4,9 +4,9 @@ import { tool, toPrompt, workspace } from '@mesh-flow/core'
 import type { GitClient } from '@mesh-flow/git'
 import { z } from 'zod'
 import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
-import { withScratchFile } from '../scratch-file.mts'
+import { withScratchFile } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
-import { localGit } from './local-git.mts'
+import { localGit } from '@mesh-flow/forge'
 
 /**
  * A checkout of a GitHub repository in the workspace, on a branch. In a prompt it renders as where it

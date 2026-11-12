@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
-import { fenced } from './fenced.mts'
+import { fenced } from '@mesh-flow/forge'
 
 /** GitHub's longest pull request title. */
 const maxTitleCharacters = 256

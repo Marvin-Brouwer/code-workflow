@@ -12,6 +12,8 @@ export default defineConfig({
 			'@mesh-flow/gateway': source('../gateway/src/_module/gateway.mts'),
 			'@mesh-flow/core': source('../core/src/_module/core.mts'),
 			'@mesh-flow/git': source('../git/src/_module/git.mts'),
+			'@mesh-flow/forge/host': source('../forge/src/_module/host.mts'),
+			'@mesh-flow/forge': source('../forge/src/_module/forge.mts'),
 		},
 	},
 	test: {

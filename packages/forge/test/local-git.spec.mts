@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { committer, localGit } from '../src/repository/local-git.mts'
+import { committer, localGit } from '../src/checkout/local-git.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 describe('localGit', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { fenced } from '../src/pull-request/fenced.mts'
+import { fenced } from '../src/describe/fenced.mts'
 
 describe('fenced', () => {
 	test('fences a text with five backticks, or more than the longest run the text holds', () => {

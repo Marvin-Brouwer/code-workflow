@@ -1,6 +1,6 @@
 import { tool, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
-import { localGit } from '../repository/local-git.mts'
+import { localGit } from '@mesh-flow/forge'
 import { trackingRef, type Repository } from '../repository/repository.mts'
 
 /**

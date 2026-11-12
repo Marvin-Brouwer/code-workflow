@@ -1,8 +1,8 @@
 import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { defaultLookEvery, defaultToleratedOutage, looksWithin } from './look-interval.mts'
-import { patientLook } from './patient-look.mts'
+import { defaultLookEvery, defaultToleratedOutage, looksWithin } from '@mesh-flow/forge'
+import { patientLook } from '@mesh-flow/forge'
 
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {

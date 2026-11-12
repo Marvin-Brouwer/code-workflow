@@ -1,7 +1,7 @@
 import { normalizedBody } from '../pull-request/pull-request-text.mts'
 import { Sha } from '../tools/git-tools.mts'
 import { markerValue } from '../tools/issue-tools.mts'
-import { runIdLine, signed, unsigned, withoutRunId } from './signature.mts'
+import { runIdLine, signed, unsigned, withoutRunId } from '@mesh-flow/forge/host'
 
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
