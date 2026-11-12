@@ -131,8 +131,8 @@ exit tool. What an interpolated value becomes:
 | a tool | registered for this loop, referenced by name |
 | an exit (`succeed`, `propose`, `verify`, `fail`) | registered as an exit tool, referenced by name |
 | `limit(...)` | the loop's limit, as a line the agent can read (see [Loop limits](#loop-limits)) |
-| a workspace file | its path |
-| a workspace folder | its path plus a listing of its files |
+| a workspace file | its absolute path |
+| a workspace folder | its absolute path plus a listing of its files |
 | anything else | rendered as text |
 
 ### Exit tools: gates on "may this agent finish?"
