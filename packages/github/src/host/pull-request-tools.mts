@@ -18,10 +18,11 @@ import {
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
+import { sameText } from '../pull-request/pull-request-text.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
-import { descriptionOf, footerCloses, sameBody, signedDescription } from './pull-request-description.mts'
+import { descriptionOf, footerCloses, sameBody, signedDescription, unsignedText } from './pull-request-description.mts'
 import { signed } from './signature.mts'
 import { refusedToken } from './transient-error.mts'
 
@@ -103,12 +104,16 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			return pullRequestData(repository, data)
 		}),
 
-		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha, closes }, context) => {
+		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha, closes, seen }, context) => {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), pull_number: number }
 			const { data: current } = await client.rest.pulls.get(where)
 			// A closed pull request keeps the text it was reviewed with.
 			if (current.state === 'closed') return { ...pullRequestData(repository, current), skipped: 'closed' as const }
+			// Edited since the caller looked: the caller asks the person again rather than write over it.
+			const now = { title: current.title, description: descriptionOf(current.body).description }
+			if (seen !== undefined && !sameText(now, seen) && !sameText(now, { title, description: unsignedText(body) }))
+				return { ...pullRequestData(repository, current), skipped: 'edited' as const }
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			if (current.title === title && sameBody(current.body, signedBody))
 				return { ...pullRequestData(repository, current), skipped: 'unchanged' as const }

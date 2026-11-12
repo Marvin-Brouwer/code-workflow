@@ -41,8 +41,9 @@ export interface PullRequestContent extends PullRequestText {
 	readonly basedOn?: BasedOn
 }
 
-/** The pull request a text was written from, by number, and its title and description then. */
+/** The pull request a text was written from, by repository and number, and its title and description then. */
 export interface BasedOn extends PullRequestText {
+	readonly repository: string
 	readonly number: number
 }
 

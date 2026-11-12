@@ -75,12 +75,14 @@ export async function describe(agent: Agent, repository: Repository, options: De
 	if (current?.describedSha === head) return currentContent(current, options.issue)
 	const brief = await readBrief(repository)({ head })
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: head, ...closesIssue(options.issue), ...basedOnField(current) }
+	return { ...text, describedSha: head, ...closesField(options.issue), ...basedOnField(current) }
 }
 
 /** The `basedOn` field of the content: the pull request it was written from, by number, and what it said then, when there is one. */
 function basedOnField(current: PullRequest | undefined): { basedOn?: BasedOn } {
-	return current === undefined ? {} : { basedOn: { number: current.number, title: current.title, description: current.description } }
+	return current === undefined
+		? {}
+		: { basedOn: { repository: current.repository, number: current.number, title: current.title, description: current.description } }
 }
 
 /** The pull request `ref` names, which has to be the one of the checkout's branch onto the default branch. */
@@ -98,11 +100,11 @@ async function branchPullRequest(ref: PullRequestRef, repository: Repository): P
 /** What the pull request says now, as `describe` resolves to it when no loop runs. */
 function currentContent(current: PullRequest, closes: Issue | undefined): PullRequestContent {
 	const { title, description, describedSha } = current
-	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesIssue(closes), ...basedOnField(current) }
+	return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesField(closes), ...basedOnField(current) }
 }
 
 /** The `closes` field of the content, for when it closes an issue. */
-function closesIssue(issue: Issue | undefined): { closes?: Issue } {
+function closesField(issue: Issue | undefined): { closes?: Issue } {
 	return issue === undefined ? {} : { closes: issue }
 }
 

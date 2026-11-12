@@ -18,13 +18,13 @@ import { askedForInput, runOnGateway } from './support/test-run.mts'
 const personsEdit = { title: 'Keep the session', description: 'Do not merge before Friday.' }
 
 /** What the new text was written from: the first pull request as it was opened. */
-const basedOnSameSite = { ...sameSite, number: firstPullRequest }
+const basedOnSameSite = { ...sameSite, repository: repositoryName, number: firstPullRequest }
 
 /** The text after the second fix, which adds Secure to the cookie. */
 const secure = { title: 'Keep the session on Safari and Firefox', description: 'Sets SameSite and Secure.' }
 
 /** An issue whose `Fixes #70` starts with the text of `Fixes #7`, which mustn't count as closing #7. */
-const otherIssue = 70
+const otherIssueNumber = 70
 
 describe('openPullRequest', () => {
 	test('signs the description with the run id, the issue it closes and the commit it describes', async () => {
@@ -74,13 +74,13 @@ describe('openPullRequest', () => {
 	test('gives the open pull request the new text for the same commit when it lacks the issue it should close', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
-		api.issue(repositoryName, otherIssue)
+		api.issue(repositoryName, otherIssueNumber)
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
-			await openPullRequest(repository, { ...sameSite, closes: { repository: repositoryName, number: otherIssue } })
+			await openPullRequest(repository, { ...sameSite, closes: { repository: repositoryName, number: otherIssueNumber } })
 			return openPullRequest(repository, { ...secure, closes: issueRef })
 		})
 		const reopened = await run.result
@@ -114,7 +114,7 @@ describe('openPullRequest', () => {
 		const { api, gateway } = await connectedGithub()
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		api.hold = (method, requestPath) => {
-			if (method !== 'PATCH' || !requestPath.endsWith(`/pulls/${firstPullRequest}`)) return undefined
+			if (method !== 'PATCH' || !requestPath.endsWith(`/pulls/${String(firstPullRequest)}`)) return undefined
 			resolve(undefined)
 			return new Promise(() => undefined)
 		}
@@ -234,11 +234,11 @@ describe('updatePullRequest', () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, sameSite)
-			return updatePullRequest(pullRequest, { ...secure, basedOn: { ...sameSite, number: firstPullRequest + 1 } })
+			return updatePullRequest(pullRequest, { ...secure, basedOn: { ...basedOnSameSite, number: firstPullRequest + 1 } })
 		})
 
 		// Assert
-		await expect(run.result).rejects.toThrow('written from pull request 2, not from 1')
+		await expect(run.result).rejects.toThrow('written from team/app#2, not from team/app#1')
 	})
 
 	test('leaves a closed pull request as it is', async () => {
@@ -265,7 +265,7 @@ describe('updatePullRequest', () => {
 		const { api, gateway } = await connectedGithub()
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		api.hold = (method, requestPath) => {
-			if (method !== 'PATCH' || !requestPath.endsWith(`/pulls/${firstPullRequest}`)) return undefined
+			if (method !== 'PATCH' || !requestPath.endsWith(`/pulls/${String(firstPullRequest)}`)) return undefined
 			resolve(undefined)
 			return new Promise(() => undefined)
 		}
@@ -405,6 +405,35 @@ describe('an edit while the text was written', () => {
 
 		// Assert
 		expect(updated).toMatchObject({ ...editedAgain, skipped: 'edited' })
+	})
+
+	test('asks when the pull request was edited between the last look and the write', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		let reads = 0
+		api.hold = (method, requestPath) => {
+			if (method !== 'GET' || !requestPath.endsWith(`/pulls/${String(firstPullRequest)}`)) return undefined
+			// The host's read, right before it writes: a person saved an edit just after the run's own look.
+			if (++reads === 2) api.pullRequest(repositoryName, firstPullRequest, { title: personsEdit.title, body: personsEdit.description })
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(
+			gateway,
+			async () => {
+				const repository = await checkout({ repository: repositoryName, branch })
+				await changeLogin(repository, 'SameSite=None\n')
+				const pullRequest = await openPullRequest(repository, sameSite)
+				return updatePullRequest(pullRequest, { ...secure, basedOn: basedOnSameSite })
+			},
+			{ inputs: [{ overwrite: false }] },
+		)
+		const updated = await run.result
+
+		// Assert
+		expect(updated).toMatchObject({ ...personsEdit, skipped: 'edited' })
+		expect(api.pullRequest(repositoryName, firstPullRequest).body).toBe(personsEdit.description)
 	})
 
 	test('settles promptly when the run stops while the person never answers', async () => {

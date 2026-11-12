@@ -1,11 +1,12 @@
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
+import { sameRepositoryName } from '../repository-name.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
+import type { PullRequestData, PullRequestRef, UpdateSkip } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
 import { keptEdit } from './kept-edit.mts'
-import type { PullRequestContent } from './pull-request-text.mts'
+import type { PullRequestContent, PullRequestText } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */
 export interface PullRequest extends PullRequestData {
@@ -27,15 +28,16 @@ export interface PullRequest extends PullRequestData {
  * ```
  */
 export async function openPullRequest(repository: Repository, content: PullRequestContent, context?: ToolContext): Promise<PullRequest> {
-	const { head } = await push(repository)({ message: content.title }, context)
 	const { basedOn } = content
 	if (basedOn !== undefined) {
-		return updatePullRequest(
-			{ repository: repository.name, number: basedOn.number },
-			{ ...content, describedSha: content.describedSha ?? head },
-			context,
-		)
+		const ref = { repository: basedOn.repository, number: basedOn.number }
+		// Merged or closed meanwhile: nothing to push to, and its text stays.
+		const current = await pullRequest(ref, context)
+		if (current.state === 'closed') return current
+		const pushed = await push(repository)({ message: content.title }, context)
+		return updatePullRequest(ref, { ...content, describedSha: content.describedSha ?? pushed.head }, context)
 	}
+	const { head } = await push(repository)({ message: content.title }, context)
 	const data = await stubs.openPullRequest(
 		{
 			repository: repository.name,
@@ -57,7 +59,7 @@ export interface UpdatedPullRequest extends PullRequest {
 	 * `closed`: a closed pull request keeps its text. `unchanged`: it already said this. `edited`:
 	 * someone edited it after `describe` read it, and the person chose to keep the edit.
 	 */
-	readonly skipped?: 'closed' | 'unchanged' | 'edited'
+	readonly skipped?: UpdateSkip
 }
 
 /**
@@ -76,22 +78,31 @@ export async function updatePullRequest(
 	content: PullRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedPullRequest> {
-	if (content.basedOn !== undefined && content.basedOn.number !== ref.number)
-		throw new Error(`The text was written from pull request ${String(content.basedOn.number)}, not from ${String(ref.number)}.`)
-	const kept = await keptEdit(() => pullRequest(ref, context), content)
-	if (kept !== undefined) return Object.freeze({ ...kept, skipped: 'edited' as const })
-	const { skipped, ...data } = await stubs.updatePullRequest(
-		{
-			repository: ref.repository,
-			number: ref.number,
-			title: content.title,
-			body: content.description,
-			...(content.describedSha === undefined ? {} : { describedSha: content.describedSha }),
-			...closingField(content.closes, ref.repository),
-		},
-		context,
-	)
-	return Object.freeze({ ...pullRequestOf(data), ...(skipped === undefined ? {} : { skipped }) })
+	const { basedOn } = content
+	if (basedOn !== undefined && (!sameRepositoryName(basedOn.repository, ref.repository) || basedOn.number !== ref.number))
+		throw new Error(
+			`The text was written from ${basedOn.repository}#${String(basedOn.number)}, not from ${ref.repository}#${String(ref.number)}.`,
+		)
+	let lastSeen: PullRequestText | undefined = basedOn
+	for (;;) {
+		const decision = await keptEdit(() => pullRequest(ref, context), content, lastSeen)
+		if ('kept' in decision) return Object.freeze({ ...decision.kept, skipped: 'edited' as const })
+		const { skipped, ...data } = await stubs.updatePullRequest(
+			{
+				repository: ref.repository,
+				number: ref.number,
+				title: content.title,
+				body: content.description,
+				...(content.describedSha === undefined ? {} : { describedSha: content.describedSha }),
+				...closingField(content.closes, ref.repository),
+				...(decision.seen === undefined ? {} : { seen: decision.seen }),
+			},
+			context,
+		)
+		// Edited between the last look and the write: look again, which asks the person.
+		if (skipped !== 'edited') return Object.freeze({ ...pullRequestOf(data), ...(skipped === undefined ? {} : { skipped }) })
+		lastSeen = decision.seen
+	}
 }
 
 /** Reads a pull request as it is now: its state, whether it was merged, and its head commit. */

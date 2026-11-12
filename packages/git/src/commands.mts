@@ -88,7 +88,7 @@ export const commands = {
 	lsFiles(...args: string[]): string[] {
 		return ['ls-files', ...args]
 	},
-	/** `git ls-tree`: the files of a commit's tree, such as `lsTree('-r', '-z', '--name-only', 'origin/main')`. */
+	/** `git ls-tree`: the files of a commit's tree, such as `lsTree('-z', '--name-only', 'origin/main')`. */
 	lsTree(...args: string[]): string[] {
 		return ['ls-tree', ...args]
 	},

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, onTestFinished, test } from 'vitest'
 import { filesAt, lintSettingsAt, templatesAt } from '../src/pull-request/repository-files.mts'
 import { localGit } from '../src/repository/local-git.mts'
 import { git } from './support/local-remote.mts'
@@ -19,7 +19,11 @@ async function committed(files: Readonly<Record<string, string>>) {
 	}
 	await git(directory, 'add', '--all')
 	await git(directory, 'commit', '--quiet', '--message', 'Start')
-	return localGit(directory, new AbortController().signal)
+	const abortController = new AbortController()
+	onTestFinished(() => {
+		abortController.abort()
+	})
+	return localGit(directory, abortController.signal)
 }
 
 /** The paths of the templates at `HEAD`. */
@@ -75,6 +79,19 @@ describe('templatesAt', () => {
 })
 
 describe('lintSettingsAt', () => {
+	test('takes a commitlint settings file and a workflow that checks the title, whatever their case', async () => {
+		// Act
+		const settings = await lintSettings({
+			'.CommitLintRC.json': '{ "extends": ["@commitlint/config-conventional"] }\n',
+			'.github/workflows/title.yml': 'uses: amannn/action-semantic-pull-request@v5\n',
+			'.github/workflows/build.yml': 'run: pnpm build\n',
+			'docs/commitlint.config.ts': 'export default {}\n',
+		})
+
+		// Assert
+		expect(settings.map((setting) => setting.path).toSorted()).toEqual(['.CommitLintRC.json', '.github/workflows/title.yml'])
+	})
+
 	test('takes commitlint from package.json, without the rest of the file', async () => {
 		// Act
 		const settings = await lintSettings({

@@ -79,6 +79,13 @@ export const openPullRequest = {
 	output: PullRequestData,
 }
 
+/**
+ * Why `updatePullRequest` wrote nothing. `closed`: a closed pull request keeps its text.
+ * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
+ */
+export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
+export type UpdateSkip = z.infer<typeof UpdateSkip>
+
 /** Gives an open pull request on the host a new title and description; a closed one is left as it is. */
 export const updatePullRequest = {
 	name: 'githubUpdatePullRequest',
@@ -88,9 +95,11 @@ export const updatePullRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
+		/** What the pull request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
-	/** With `skipped` when nothing was written: the pull request is closed, or already says this. */
-	output: PullRequestData.extend({ skipped: z.enum(['closed', 'unchanged']).optional() }),
+	/** With `skipped` when nothing was written. */
+	output: PullRequestData.extend({ skipped: UpdateSkip.optional() }),
 }
 
 /** Finds on the host the open pull request of a branch onto a base, when it has one. */

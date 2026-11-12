@@ -238,7 +238,7 @@ describe('describe', () => {
 
 		// Assert
 		expect(prompts[0]).toContain('Title: Keep the session on Safari\nDescription:\n`````\nSets SameSite.\n`````')
-		expect(content.basedOn).toEqual({ ...sameSite, number: firstPullRequest })
+		expect(content.basedOn).toEqual({ ...sameSite, repository: repositoryName, number: firstPullRequest })
 	})
 
 	test('runs no loop when the open pull request of the branch already describes its head, and none is named', async () => {
@@ -337,13 +337,40 @@ describe('describe', () => {
 		await expect(run.result).rejects.toThrow('merges into release/1, not into main')
 	})
 
+	test('settles promptly when the run stops while GitHub never answers the look for the pull request of the branch', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		const { writer } = scriptedWriter([])
+		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
+		api.hold = (method, requestPath) => {
+			if (method !== 'GET' || !requestPath.endsWith('/pulls')) return undefined
+			resolve(undefined)
+			return new Promise(() => undefined)
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			await push(repository)({ message: 'Set SameSite' })
+			return describeBranch(writer, repository)
+		})
+		await stalled
+		const started = performance.now()
+		run.controller.abort(new Error('The run stopped.'))
+		await run.outcome
+
+		// Assert
+		expect(performance.now() - started).toBeLessThan(promptlyMs)
+	})
+
 	test('settles promptly when the run stops while GitHub never answers the read of the pull request', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
 		const { writer } = scriptedWriter([])
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		api.hold = (method, requestPath) => {
-			if (method !== 'GET' || !requestPath.endsWith(`/pulls/${firstPullRequest}`)) return undefined
+			if (method !== 'GET' || !requestPath.endsWith(`/pulls/${String(firstPullRequest)}`)) return undefined
 			resolve(undefined)
 			return new Promise(() => undefined)
 		}

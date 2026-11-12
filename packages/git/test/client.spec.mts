@@ -89,6 +89,19 @@ describe('gitClient', () => {
 		expect(await git.conflictedFiles()).toEqual([])
 	})
 
+	test('lists a tree and shows a file as a commit has it', async () => {
+		// Arrange
+		const git = await repository()
+
+		// Act
+		const listing = (await git.lsTree('-z', '--name-only', 'main')).stdout
+		const readme = (await git.show('main:README.md')).stdout
+
+		// Assert
+		expect(listing.split('\0').filter(Boolean)).toEqual(['README.md'])
+		expect(readme).toBe('# Example')
+	})
+
 	test('knows the default branch from what a clone recorded, or by probing main and master', async () => {
 		// Arrange
 		const abortSignal = new AbortController().signal

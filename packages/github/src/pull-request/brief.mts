@@ -1,7 +1,7 @@
 import { tool, workspace, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
 import { localGit } from '../repository/local-git.mts'
-import { origin, type Repository } from '../repository/repository.mts'
+import { trackingRef, type Repository } from '../repository/repository.mts'
 import { Sha } from '../tools/git-tools.mts'
 import { capped } from './capped.mts'
 import { filesAt, lintSettingsAt, templatesAt, type RepositoryFile } from './repository-files.mts'
@@ -61,7 +61,7 @@ export function readBrief(repository: Repository): Tool<{ head: string }, PullRe
 		input: z.object({ head: Sha }),
 		action: async ({ head }, { abortSignal }): Promise<PullRequestBrief> => {
 			const git = localGit(repository.directory, abortSignal)
-			const target = `refs/remotes/${origin}/${repository.defaultBranch}`
+			const target = trackingRef(repository.defaultBranch)
 			const log = (await git.log('--reverse', `--format=${commitLogFormat}`, `${target}..${head}`)).stdout
 			if (log.trim() === '')
 				throw new Error(`${repository.branch} has no commits on top of ${repository.defaultBranch}: there is nothing to describe.`)

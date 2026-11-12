@@ -23,7 +23,7 @@ export interface DescriptionNotes {
 export function signedDescription(body: string, runId: string, { describedSha, closes }: DescriptionNotes): string {
 	// With `\n` line breaks and without trailing ones, as `unsigned` gives a description back, so a text that didn't change signs the same.
 	return signed(
-		withUnixLineBreaks(body).trimEnd(),
+		unsignedText(body),
 		runId,
 		describedSha === undefined ? [] : [`${describedKeyName}:${describedSha}`],
 		closes === undefined ? [] : [fixesNote(closes)],
@@ -49,4 +49,9 @@ function fixesNote(closes: string): string {
  */
 export function footerCloses(body: string | null | undefined, closes: string): boolean {
 	return runIdLine(body ?? '')?.endsWith(` ${fixesNote(closes)}`) ?? false
+}
+
+/** A description as `descriptionOf` gives it back once signed: with `\n` line breaks and without trailing ones. */
+export function unsignedText(body: string): string {
+	return withUnixLineBreaks(body).trimEnd()
 }
