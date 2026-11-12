@@ -14,4 +14,5 @@ describeConformance(
 			...(process.env.HTTPS_PROXY === undefined ? {} : { upstreamProxy: process.env.HTTPS_PROXY }),
 		}),
 	'node:22-slim',
+	'node:22-bookworm',
 )

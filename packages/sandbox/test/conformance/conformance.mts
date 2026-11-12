@@ -54,10 +54,14 @@ async function stubState(sandbox: Sandbox, pid: number): Promise<string> {
 
 /**
  * The checks every backend has to pass, from the pause POCs: a pending await survives a pause
- * in the same process, memory and stack; egress reaches the allowlist only; list, remove and
- * close leave nothing behind. Needs a real backend, so it only runs when enabled.
+ * in the same process, memory and stack; egress reaches the allowlist only; package managers
+ * install from an allowed registry; list, remove and close leave nothing behind. Needs a real
+ * backend, so it only runs when enabled.
+ *
+ * `image` needs Node 22. `fullImage` needs Node 22, curl and the CA certificates too, as
+ * `node:22-bookworm` has them, for the package managers that aren't Node.
  */
-export function describeConformance(name: BackendName, open: () => SandboxBackend, image: string): void {
+export function describeConformance(name: BackendName, open: () => SandboxBackend, image: string, fullImage: string): void {
 	const spec: SandboxSpec = { image, cpus: 1, memoryMb: 1024, egress: { allow: [] } }
 
 	describe.skipIf(!conformanceEnabled(name))(`${name} conformance`, () => {
@@ -145,6 +149,37 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 				.object({ version: z.string() })
 				.parse(JSON.parse(await sandbox.readFile(`${project}/node_modules/is-number/package.json`, timeout())))
 			expect(installed.version).toBe('7.0.0')
+		})
+
+		// The SDK comes from Microsoft's install script, so the test shows curl gets through too.
+		test('dotnet restores a package from an allowed feed, with no flags or settings', { timeout: 600_000 }, async () => {
+			// Arrange
+			const egress = { allow: ['builds.dotnet.microsoft.com', 'api.nuget.org'] }
+			// The SDK unpacks to about 700 MB, which gVisor keeps in memory.
+			const sandbox = await backend.create({ ...spec, image: fullImage, memoryMb: 4096, egress }, timeout())
+			cleanUp(sandbox.id)
+			const project = '/var/tmp/dotnet-check'
+			const env = { DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1' }
+			const install =
+				'curl -fsSL https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh | bash -s -- --channel 8.0 --install-dir /var/tmp/dotnet'
+			const installed = await sandbox.exec(['sh', '-c', install], { signal: timeout(420), env })
+			expect(installed, installed.stdout + installed.stderr).toMatchObject({ exitCode: 0 })
+			await sandbox.exec(['mkdir', '-p', project], { signal: timeout() })
+			const csproj = [
+				'<Project Sdk="Microsoft.NET.Sdk">',
+				'<PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>',
+				'<ItemGroup><PackageReference Include="Newtonsoft.Json" Version="13.0.3" /></ItemGroup>',
+				'</Project>',
+			].join('\n')
+			await sandbox.writeFile(`${project}/check.csproj`, csproj, timeout())
+
+			// Act
+			const result = await sandbox.exec(['/var/tmp/dotnet/dotnet', 'restore'], { signal: timeout(180), cwd: project, env })
+
+			// Assert
+			expect(result, result.stdout + result.stderr).toMatchObject({ exitCode: 0 })
+			const assets = await sandbox.readFile(`${project}/obj/project.assets.json`, timeout())
+			expect(assets).toContain('Newtonsoft.Json/13.0.3')
 		})
 
 		test('list shows a paused sandbox until it is removed', async () => {

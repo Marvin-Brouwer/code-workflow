@@ -7,7 +7,11 @@ describeConformance(
 	() =>
 		e2bBackend({
 			apiKey: process.env.E2B_API_KEY ?? '',
-			templates: { 'node:22-slim': process.env.MESH_FLOW_E2B_TEMPLATE ?? 'base' },
+			templates: {
+				'node:22-slim': process.env.MESH_FLOW_E2B_TEMPLATE ?? 'base',
+				'node:22-bookworm': process.env.MESH_FLOW_E2B_TEMPLATE ?? 'base',
+			},
 		}),
 	'node:22-slim',
+	'node:22-bookworm',
 )
