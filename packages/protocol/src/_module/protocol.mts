@@ -5,6 +5,7 @@
  * @module
  */
 export { AppManifest, appManifestFile, AppPlatform } from '../app-manifest.mts'
+export { appSourceMapMarker } from '../app-source-map.mts'
 export {
 	CallAnswer,
 	CallMessage,

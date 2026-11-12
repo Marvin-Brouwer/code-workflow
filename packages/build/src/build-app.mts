@@ -1,12 +1,13 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
 import path from 'node:path'
-import { appManifestFile, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
+import { appManifestFile, appSourceMapMarker, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
 import { build } from 'rolldown'
 import { describeBuiltApp } from './describe-built-app.mts'
 import { assertInstallable, installForPlatform } from './install-for-platform.mts'
 import { nativePackages, type NativePackage } from './native-packages.mts'
 import { packageEntry } from './package-entry.mts'
+import { sourceName } from './source-name.mts'
 
 /** What `buildApp` takes. */
 export interface BuildAppOptions {
@@ -38,6 +39,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	abortSignal.throwIfAborted()
 	assertSafeOut(path.resolve(directory), path.resolve(out))
 	const entry = await packageEntry(directory)
+	// The bundler names files by their real path, so the map's names are relative to the real repository.
+	const root = await realpath(directory)
 	const natives = await nativePackages(directory, abortSignal)
 	assertInstallable(natives, platform)
 	await rm(out, { recursive: true, force: true })
@@ -58,12 +61,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 			file: path.join(out, builtEntry),
 			format: 'esm',
 			codeSplitting: false,
-			// The loops' keys come from it: a call site in the source stays put when a rebuild moves the bundle's lines.
+			// Loops are keyed by their call site in the source, read through this map, so a rebuild that moves the bundle's lines keeps their keys.
 			sourcemap: true,
 			sourcemapExcludeSources: true,
-			sourcemapPathTransform: (source, map) => sourceName(directory, path.resolve(path.dirname(map), source)),
+			sourcemapPathTransform: (source, map) => sourceName(root, path.resolve(path.dirname(map), source)),
 		},
 	})
+	await markAppSourceMap(path.join(out, `${builtEntry}.map`), abortSignal)
 	// Described before the sandbox's binaries are installed next to it: this machine may not run them.
 	const description = await describeBuiltApp({ bundle: path.join(out, builtEntry), directory, abortSignal })
 	await installForPlatform(out, natives, platform, abortSignal)
@@ -83,18 +87,11 @@ function assertSafeOut(directory: string, out: string): void {
 	}
 }
 
-/** Marks where a package manager keeps an installed package. */
-const installedPackages = 'node_modules/'
-
-/**
- * A source file as the source map names it: relative to the repository, with `/`, and for an
- * installed package from its name on (`@mesh-flow/github/dist/github.mjs`), so where the package
- * manager keeps it, such as pnpm's folder with the versions of its peers, doesn't count.
- */
-function sourceName(directory: string, file: string): string {
-	const name = path.relative(directory, file).split(path.sep).join('/')
-	const installed = name.lastIndexOf(installedPackages)
-	return installed === -1 ? name : name.slice(installed + installedPackages.length)
+/** Marks the map as the build's, so the runtime keys loops through it and leaves other maps alone. */
+async function markAppSourceMap(mapFile: string, abortSignal: AbortSignal): Promise<void> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- rolldown just wrote it
+	const map = JSON.parse(await readFile(mapFile, { encoding: 'utf8', signal: abortSignal })) as Record<string, unknown>
+	await writeFile(mapFile, JSON.stringify({ ...map, [appSourceMapMarker]: true }), { signal: abortSignal })
 }
 
 function isNative(id: string, natives: readonly NativePackage[]): boolean {
