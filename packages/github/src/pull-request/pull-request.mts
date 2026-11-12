@@ -1,51 +1,38 @@
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
-import type { IssueRef } from '../issue/issue.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
+import { closingField } from './closing-reference.mts'
+import type { PullRequestContent } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */
 export interface PullRequest extends PullRequestData {
 	[toPrompt](): string
 }
 
-/** What `openPullRequest` and `updatePullRequest` take: the text, such as `describe` writes it, and the issue it closes. */
-export interface PullRequestTextOptions {
-	readonly title: string
-	readonly description: string
-	/** The commit the description was written for; `describe` sets it. Default for `openPullRequest`: the pushed head. */
-	readonly describes?: string
-	/** The issue the pull request closes when it merges: `Fixes` goes in the footer, next to the run id. */
-	readonly closes?: IssueRef
-}
-
 /**
  * Commits and pushes what the checkout holds, then opens a pull request for its branch onto the
  * default branch. When the branch already has an open pull request, that one gets the title and
- * the description instead, so a rerun opens nothing twice. The description is signed like every
+ * the description instead, so a rerun opens nothing twice; unless its description was already
+ * written for the same commit, which then stays as it was reviewed. The description is signed like every
  * post, and marked with the commit it describes, which `describe` reads to skip its loop.
  *
  * ```ts
- * const text = await github.describe(writer, repository, { issue })
- * const pullRequest = await github.openPullRequest(repository, { ...text, closes: issue })
+ * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
  * ```
  */
-export async function openPullRequest(
-	repository: Repository,
-	options: PullRequestTextOptions,
-	context?: ToolContext,
-): Promise<PullRequest> {
-	const { head } = await push(repository)({ message: options.title }, context)
+export async function openPullRequest(repository: Repository, content: PullRequestContent, context?: ToolContext): Promise<PullRequest> {
+	const { head } = await push(repository)({ message: content.title }, context)
 	const data = await stubs.openPullRequest(
 		{
 			repository: repository.name,
 			head: repository.branch,
 			base: repository.defaultBranch,
-			title: options.title,
-			body: options.description,
-			described: options.describes ?? head,
-			...closing(options.closes, repository.name),
+			title: content.title,
+			body: content.description,
+			describedSha: content.describedSha ?? head,
+			...closingField(content.closes, repository.name),
 		},
 		context,
 	)
@@ -65,35 +52,26 @@ export interface UpdatedPullRequest extends PullRequest {
  * with `skipped` saying why when nothing was written.
  *
  * ```ts
- * await github.updatePullRequest(pullRequest, { ...(await github.describe(writer, repository, { issue, pullRequest })), closes: issue })
+ * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
  * ```
  */
 export async function updatePullRequest(
 	ref: PullRequestRef,
-	options: PullRequestTextOptions,
+	content: PullRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedPullRequest> {
 	const { skipped, ...data } = await stubs.updatePullRequest(
 		{
 			repository: ref.repository,
 			number: ref.number,
-			title: options.title,
-			body: options.description,
-			...(options.describes === undefined ? {} : { described: options.describes }),
-			...closing(options.closes, ref.repository),
+			title: content.title,
+			body: content.description,
+			...(content.describedSha === undefined ? {} : { describedSha: content.describedSha }),
+			...closingField(content.closes, ref.repository),
 		},
 		context,
 	)
 	return Object.freeze({ ...pullRequestOf(data), ...(skipped === undefined ? {} : { skipped }) })
-}
-
-/** How a pull request in `repository` names `issue` to close it: `#7` in the same repository, `owner/name#7` in another. */
-export function closingReference(issue: IssueRef, repository: string): string {
-	return issue.repository === repository ? `#${String(issue.number)}` : `${issue.repository}#${String(issue.number)}`
-}
-
-function closing(issue: IssueRef | undefined, repository: string): { closes?: string } {
-	return issue === undefined ? {} : { closes: closingReference(issue, repository) }
 }
 
 /** Reads a pull request as it is now: its state, whether it was merged, and its head commit. */
@@ -101,6 +79,7 @@ export async function pullRequest(ref: PullRequestRef, context?: ToolContext): P
 	return pullRequestOf(await stubs.getPullRequest({ repository: ref.repository, number: ref.number }, context))
 }
 
+/** A pull request's data as the value code gets, which renders as its URL in a prompt. */
 export function pullRequestOf(data: PullRequestData): PullRequest {
 	return Object.freeze({ ...data, [toPrompt]: () => data.url })
 }

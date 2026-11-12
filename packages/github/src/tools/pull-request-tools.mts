@@ -18,10 +18,10 @@ export const PullRequestData = PullRequestRef.extend({
 	merged: z.boolean(),
 	head: z.object({ branch: BranchName, sha: Sha }),
 	base: BranchName,
+	/** The description, without the footer when this package wrote it. */
+	description: z.string(),
 	/** The commit the description was written for, when this package wrote it. */
-	described: Sha.optional(),
-	/** The description as it was written, without the footer, when this package wrote it. */
-	description: z.string().optional(),
+	describedSha: Sha.optional(),
 })
 export type PullRequestData = z.infer<typeof PullRequestData>
 
@@ -59,17 +59,17 @@ export type ReviewItem = z.infer<typeof ReviewItem>
 /** How a pull request names the issue it closes: `#7` in its own repository, `owner/name#7` in another. */
 const IssueReference = z.string().regex(/^([\w.-]+\/[\w.-]+)?#\d+$/)
 
-/** Opens the pull request on the host, or finds the open one for the branch. */
+/** Opens the pull request on the host, or gives the open one for the branch this title and description. */
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
-	description: 'Opens a pull request on GitHub, or returns the open one for the branch',
+	description: 'Opens a pull request on GitHub, or gives the open one for the branch this title and description',
 	input: z.object({
 		repository: RepositoryName,
 		head: BranchName,
 		base: BranchName,
 		title: z.string().min(1),
 		body: z.string(),
-		described: Sha.optional(),
+		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
 	}),
 	output: PullRequestData,
@@ -82,7 +82,7 @@ export const updatePullRequest = {
 	input: PullRequestRef.extend({
 		title: z.string().min(1),
 		body: z.string(),
-		described: Sha.optional(),
+		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
 	}),
 	/** With `skipped` when nothing was written: the pull request is closed, or already says this. */

@@ -16,6 +16,7 @@ import {
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
+import { Sha } from '../tools/git-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
@@ -45,20 +46,19 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		merged: data.merged ?? (data.merged_at !== null && data.merged_at !== undefined),
 		head: { branch: data.head.ref, sha: data.head.sha },
 		base: data.base.ref,
-		...described(data.body),
+		...describedFields(data.body),
 	}
 }
 
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
 
-/**
- * For a description this package wrote, the commit it was written for, by its marker, and the
- * description as the agent wrote it, without the footer.
- */
-function described(body: string | null | undefined): { described?: string; description?: string } {
-	const sha = body === null || body === undefined ? undefined : markerValue(body, describedKeyName)
-	return sha === undefined || body === null || body === undefined ? {} : { described: sha, description: unsigned(body) }
+/** A pull request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
+function describedFields(body: string | null | undefined): { description: string; describedSha?: string } {
+	if (body === null || body === undefined) return { description: '' }
+	const sha = markerValue(body.replaceAll('\r\n', '\n'), describedKeyName)
+	// A marker someone edited is no marker: the commit it names is unknown.
+	return { description: unsigned(body), ...(sha !== undefined && Sha.safeParse(sha).success ? { describedSha: sha } : {}) }
 }
 
 /** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
@@ -90,7 +90,7 @@ function later(seen: string | undefined, latest: string | undefined): string | u
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
 	return [
-		hostTool(openPullRequest, async ({ repository, head, base, title, body, described: sha, closes }, context) => {
+		hostTool(openPullRequest, async ({ repository, head, base, title, body, describedSha: sha, closes }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const signedBody = signedDescription(body, context.runId, sha, closes)
@@ -100,12 +100,14 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
 				return pullRequestData(repository, data)
 			}
-			if (existing.title === title && existing.body === signedBody) return pullRequestData(repository, existing)
+			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
+			const kept = existing.title === title && existing.body === signedBody
+			if (kept || (sha !== undefined && describedFields(existing.body).describedSha === sha)) return pullRequestData(repository, existing)
 			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
 			return pullRequestData(repository, data)
 		}),
 
-		hostTool(updatePullRequest, async ({ repository, number, title, body, described: sha, closes }, context) => {
+		hostTool(updatePullRequest, async ({ repository, number, title, body, describedSha: sha, closes }, context) => {
 			const client = await api(context)
 			const where = { ...splitRepositoryName(repository), pull_number: number }
 			const { data: current } = await client.rest.pulls.get(where)

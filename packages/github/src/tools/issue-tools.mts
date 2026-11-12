@@ -34,14 +34,17 @@ export function commentMarker(key: string): string {
 	return `${markerStart}${key} -->`
 }
 
-/** What marker `name:<value>` in a comment's body holds, if the body has one. */
+/** What marker `name:<value>` in a comment's body holds, if the body has one: the last one, which the connector wrote last. */
 export function markerValue(body: string, name: string): string | undefined {
 	const start = `${markerStart}${name}:`
-	const from = body.indexOf(start)
+	const from = body.lastIndexOf(start)
 	if (from === -1) return undefined
 	const end = body.indexOf(' -->', from + start.length)
 	return end === -1 ? undefined : body.slice(from + start.length, end)
 }
+
+/** Every marker in a body, each with the line break after it. */
+export const markers = /<!-- mesh-flow:[^>]*-->\n?/g
 
 /** Whether a comment's body carries a marker: this package wrote it, so it isn't a reviewer's. */
 export function isMarked(body: string | null | undefined): boolean {
