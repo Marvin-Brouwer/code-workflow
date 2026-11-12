@@ -17,7 +17,8 @@ const execFileAsync = promisify(execFile)
 const maxOutputBytes = 16 * 1024 * 1024
 
 /** An install that takes longer has hung, such as a lifecycle script that waits for input. */
-const installTimeoutMs = 10 * 60_000
+const installTimeoutMinutes = 10
+const installTimeoutMs = installTimeoutMinutes * 60_000
 
 /**
  * Where a failed install's output goes, one file per repository. The prompt names the file rather
@@ -79,19 +80,19 @@ export const installDependencies = tool('installDependencies', {
 		const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
 		const [program, ...args] = command
 		await excludeFromGit(directory, 'node_modules', abortSignal)
-		const timeout = AbortSignal.timeout(installTimeoutMs)
+		const installTimeout = AbortSignal.timeout(installTimeoutMs)
 		try {
 			await execFileAsync(program, args, {
 				cwd: directory,
-				signal: AbortSignal.any([abortSignal, timeout]),
+				signal: AbortSignal.any([abortSignal, installTimeout]),
 				maxBuffer: maxOutputBytes,
 				env: { ...process.env, ...env },
 			})
 			return result('installed', `The npm dependencies of ${repository} are installed (${command.join(' ')}).`)
 		} catch (error) {
 			if (abortSignal.aborted) throw error
-			const log = path.join(installLogDirectory, `${path.basename(directory)}.log`)
-			const stopped = timeout.aborted ? `Stopped after ${String(installTimeoutMs / 60_000)} minutes.\n` : ''
+			const log = path.join(installLogDirectory, `${repository.replaceAll('/', '_')}.log`)
+			const stopped = installTimeout.aborted ? `Stopped after ${String(installTimeoutMinutes)} minutes.\n` : ''
 			await mkdir(installLogDirectory, { recursive: true })
 			await writeFile(log, `${stopped}${outputOf(error)}`)
 			return result('failed', `Installing the npm dependencies of ${repository} failed; the output is in ${log}.`)
@@ -118,11 +119,19 @@ function exists(directory: string, file: string): Promise<boolean> {
 
 /**
  * Adds `pattern` to the checkout's own ignore list, which isn't committed, unless it's there. Git
- * says where that list is, since `.git` can be a file (a worktree) and `info/` can be missing.
+ * says where that list is, since `.git` can be a file (a worktree) and `info/` can be missing. A
+ * folder that isn't a checkout is left alone.
  */
 async function excludeFromGit(directory: string, pattern: string, abortSignal: AbortSignal): Promise<void> {
-	const { stdout } = await execFileAsync('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd: directory, signal: abortSignal })
-	const exclude = path.resolve(directory, stdout.trim())
+	const located = await execFileAsync('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd: directory, signal: abortSignal }).catch(
+		(error: unknown) => {
+			// Not a checkout: there is no git to keep node_modules out of.
+			if (abortSignal.aborted) throw error
+			return undefined
+		},
+	)
+	if (located === undefined) return
+	const exclude = path.resolve(directory, located.stdout.trim())
 	const current = await readFile(exclude, 'utf8').catch(() => '')
 	if (current.split('\n').includes(pattern)) return
 	await mkdir(path.dirname(exclude), { recursive: true })

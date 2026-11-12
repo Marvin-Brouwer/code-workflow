@@ -12,12 +12,12 @@ const stub = guestScript('stub.mts')
 const probe = guestScript('probe.mts')
 const stateDir = '/var/tmp/conformance'
 const stubLog = '/var/tmp/stub.log'
+/** What a test spends besides its main command: create, which may pull the image, and writing files. */
+const setupSeconds = 120
 
 const npmProject = '/var/tmp/npm-check'
 const npmPackage = { name: 'is-number', version: '7.0.0' }
 const npmInstallSeconds = 180
-/** What a test spends besides its main command: create, which may pull the image, and writing files. */
-const setupSeconds = 120
 
 const dotnetProject = '/var/tmp/dotnet-check'
 const nugetPackage = { name: 'Newtonsoft.Json', version: '13.0.3' }
