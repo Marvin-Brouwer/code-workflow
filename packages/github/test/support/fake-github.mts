@@ -17,6 +17,11 @@ export interface FakeComment {
 	reactions?: { id: number; content: string }[]
 }
 
+/** The reactions on a comment, by content. */
+export function reactionsOf(item: FakeComment | undefined): string[] {
+	return item?.reactions?.map((reaction) => reaction.content) ?? []
+}
+
 export interface FakeReviewComment extends FakeComment {
 	path: string
 	line: number | null

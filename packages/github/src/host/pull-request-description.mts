@@ -1,4 +1,4 @@
-import { normalizedDescription } from '../pull-request/pull-request-text.mts'
+import { normalizedBody } from '../pull-request/pull-request-text.mts'
 import { Sha } from '../tools/git-tools.mts'
 import { markerValue } from '../tools/issue-tools.mts'
 import { runIdLine, signed, unsigned, withoutRunId } from './signature.mts'
@@ -24,7 +24,7 @@ export interface DescriptionNotes {
 export function signedDescription(body: string, runId: string, { describedSha, closes }: DescriptionNotes): string {
 	// So a text that didn't change signs the same.
 	return signed(
-		normalizedDescription(body),
+		normalizedBody(body),
 		runId,
 		describedSha === undefined ? [] : [`${describedKeyName}:${describedSha}`],
 		closes === undefined ? [] : [fixesNote(closes)],

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { signed } from '../src/host/signature.mts'
+import { triage, triageResult } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
-import { triage, triageResult } from '../src/pull-request/triage.mts'
 import type { ReviewItem } from '../src/tools/pull-request-tools.mts'
 import { branch, connectedGithub, promptlyMs, repositoryName } from './support/connected-github.mts'
-import type { FakeComment } from './support/fake-github.mts'
+import { reactionsOf } from './support/fake-github.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
 import { runOnGateway } from './support/test-run.mts'
 
@@ -18,9 +18,6 @@ const where = { repository: repositoryName, number: pullRequestNumber }
 /** A question and a request for a change, on the conversation. */
 const question = { id: 1, body: 'Why SameSite=None?' }
 const change = { id: 2, body: 'Add a test for Safari.' }
-
-/** The reactions on a comment, by content. */
-const reactionsOf = (item: FakeComment | undefined) => item?.reactions?.map((reaction) => reaction.content) ?? []
 
 /** A fake GitHub whose pull request has the question and the change on its conversation, and the items as `review` hands them. */
 async function reviewed() {
@@ -43,8 +40,8 @@ describe('triage', () => {
 		const { writer, prompts } = scriptedWriter([
 			{
 				items: [
-					{ id: 'comment/2', kind: 'change', reply: 'I will add a Safari test.' },
-					{ id: 'comment/1', kind: 'question', reply: 'Safari drops it otherwise.' },
+					{ id: 'comment/2', asks: 'change', reply: 'I will add a Safari test.' },
+					{ id: 'comment/1', asks: 'question', reply: 'Safari drops it otherwise.' },
 				],
 			},
 		])
@@ -87,7 +84,7 @@ describe('triage', () => {
 	test('stops promptly when the run stops while GitHub never takes the reply', async () => {
 		// Arrange
 		const { api, comments, gateway } = await reviewed()
-		const { writer } = scriptedWriter([{ items: [{ id: 'comment/1', kind: 'question', reply: 'Because.' }] }])
+		const { writer } = scriptedWriter([{ items: [{ id: 'comment/1', asks: 'question', reply: 'Because.' }] }])
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		api.hold = (method) => {
 			if (method !== 'POST') return undefined
@@ -118,8 +115,8 @@ describe('triageResult', () => {
 		// Act
 		const parsed = triageResult(comments).safeParse({
 			items: [
-				{ id: 'comment/1', kind: 'question', reply: 'Because.' },
-				{ id: 'comment/2', kind: 'change', reply: 'Will do.' },
+				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
+				{ id: 'comment/2', asks: 'change', reply: 'Will do.' },
 			],
 		})
 
@@ -134,9 +131,9 @@ describe('triageResult', () => {
 		// Act
 		const parsed = triageResult(comments).safeParse({
 			items: [
-				{ id: 'comment/1', kind: 'question', reply: 'Because.' },
-				{ id: 'comment/1', kind: 'change', reply: 'Will do.' },
-				{ id: 'comment/9', kind: 'change', reply: 'Will do.' },
+				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
+				{ id: 'comment/1', asks: 'change', reply: 'Will do.' },
+				{ id: 'comment/9', asks: 'change', reply: 'Will do.' },
 			],
 		})
 

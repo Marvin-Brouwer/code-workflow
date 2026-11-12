@@ -142,6 +142,9 @@ export const reviewActivity = {
 export const ReplyStage = z.enum(['plan', 'answer'])
 export type ReplyStage = z.infer<typeof ReplyStage>
 
+/** The stage of a reply that names none. */
+export const defaultReplyStage: ReplyStage = 'answer'
+
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
  * listed as a reviewer's item. The first answer to an item replaces the "👀 Reading..." reply that

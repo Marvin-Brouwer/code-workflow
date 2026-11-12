@@ -23,8 +23,8 @@ export interface PlannedChange {
 /** How long the loop may take when the caller sets no limit. */
 const defaultLimit = limit({ minutes: 10 })
 
-/** What the agent sorts each item into. */
-const ItemKind = z.enum(['question', 'change'])
+/** What the agent sorts each item into: what it asks for. */
+const ItemAsks = z.enum(['question', 'change'])
 
 /**
  * Has `agent` sort review items into questions and requests for a change, in one loop that changes
@@ -34,8 +34,8 @@ const ItemKind = z.enum(['question', 'change'])
  * reviewer sees each item go from being read, to the plan, to what was done, and a question go from
  * being read to its answer.
  *
- * Code posts the replies, not the agent, once the loop is done. The loop stops with the run, like
- * every loop.
+ * Code posts the replies, not the agent, once the loop is done. Stopping the run stops the loop and
+ * any reply still in flight.
  *
  * ```ts
  * const changes = await github.triage(developer, repository, { pullRequest, comments })
@@ -55,20 +55,20 @@ export async function triage(agent: Agent, repository: Repository, options: Tria
 		When every item is sorted, ${succeed(triageResult(comments))}.
 		${options.limit ?? defaultLimit}
 	`
-	const replies = new Map(sorted.items.map((sortedItem) => [sortedItem.id, sortedItem]))
+	const sortedById = new Map(sorted.items.map((sortedItem) => [sortedItem.id, sortedItem]))
 	const changes: PlannedChange[] = []
 	// One at a time and in the reviewer's order: GitHub limits bursts of writes.
 	for (const item of comments) {
-		const sortedItem = replies.get(item.id)
+		const sortedItem = sortedById.get(item.id)
 		if (sortedItem === undefined) continue
-		const stage = sortedItem.kind === 'question' ? 'answer' : 'plan'
+		const stage = sortedItem.asks === 'question' ? 'answer' : 'plan'
 		await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body: sortedItem.reply, stage })
-		if (sortedItem.kind === 'change') changes.push({ item, plan: sortedItem.reply })
+		if (sortedItem.asks === 'change') changes.push({ item, plan: sortedItem.reply })
 	}
 	return changes
 }
 
-/** What the agent finishes with: every item in `comments`, once, with its kind and its reply. */
+/** What the agent finishes with: every item in `comments`, once, with what it asks for and its reply. */
 export function triageResult(comments: readonly ReviewItem[]) {
 	const ids = new Set(comments.map((item) => item.id))
 	return z
@@ -76,7 +76,7 @@ export function triageResult(comments: readonly ReviewItem[]) {
 			items: z.array(
 				z.object({
 					id: ReviewItemId.describe('The id of the item, as listed'),
-					kind: ItemKind,
+					asks: ItemAsks,
 					reply: z.string().min(1).describe('The answer to a question, or what you will do about a request to change something'),
 				}),
 			),

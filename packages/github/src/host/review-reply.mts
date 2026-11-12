@@ -1,4 +1,4 @@
-import { normalizedDescription } from '../pull-request/pull-request-text.mts'
+import { normalizedBody } from '../pull-request/pull-request-text.mts'
 import { commentMarker, markerValue, type PostedComment } from '../tools/issue-tools.mts'
 import type { ReplyStage, ReviewItemKind } from '../tools/pull-request-tools.mts'
 import {
@@ -66,5 +66,5 @@ export async function replyToItem(comments: PullRequestComments, reply: ReviewRe
 
 /** Whether one of this package's replies says `body`, whichever run signed it. */
 function saysTheSame(own: OwnReply, body: string): boolean {
-	return normalizedDescription(unsigned(own.body)) === normalizedDescription(body)
+	return normalizedBody(unsigned(own.body)) === normalizedBody(body)
 }

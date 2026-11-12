@@ -13,7 +13,7 @@ import { review } from '../src/pull-request/review.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
-import { fakeGithub, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
+import { fakeGithub, reactionsOf, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
@@ -41,9 +41,6 @@ const promptlyMs = 1000
 
 /** Long enough for a second answer that didn't wait its turn to have listed the comments. */
 const secondLookMs = 300
-
-/** The reactions on a comment, by content. */
-const reactionsOf = (item: FakeComment | undefined) => item?.reactions?.map((reaction) => reaction.content) ?? []
 
 /** The marker key of the 👀 reaction on a comment, as the reply that says it's being read carries it. */
 function eyesKeyOf(item: FakeComment | undefined): string {
@@ -437,7 +434,7 @@ describe('github', () => {
 		])
 	})
 
-	test('says an answer once, when it is given again after a restart', async () => {
+	test('says an answer once, when it is given twice, as after a restart', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const pull = api.pullRequest(repositoryName, 18)
