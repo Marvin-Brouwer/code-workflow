@@ -18,9 +18,10 @@
 		"directory": "packages/engine"
 	},
 	"bin": {
-		"mesh-flow": "./dist/cli.mjs"
+		"mesh-flow": "./bin/mesh-flow.mjs"
 	},
 	"files": [
+		"bin",
 		"dist",
 		"README.md"
 	],
