@@ -13,6 +13,8 @@ import type { github } from '@mesh-flow/github'
 
 const execFileAsync = promisify(execFile)
 
+const msPerMinute = 60_000
+
 /** npm writes more than execFile's 1 MiB default on a large install, which would count as a failure. */
 const maxOutputBytes = 16 * 1024 * 1024
 
@@ -30,6 +32,7 @@ export interface InstallResult {
 	[toPrompt](): string
 }
 
+/** How {@link installDependencies} runs. */
 export interface InstallOptions {
 	/** Aborts the install: the run's signal. */
 	readonly abortSignal: AbortSignal
@@ -59,7 +62,8 @@ const notHandled = ['yarn.lock', 'bun.lock', 'bun.lockb'] as const
  * Installs as the checkout's lockfile says: `npm ci` for package-lock.json, pnpm for
  * pnpm-lock.yaml, and `npm install` without writing a lockfile when there is none. A failed install
  * isn't the run's end, since a broken lockfile may be what the issue is about: the result says
- * where npm's output is.
+ * where npm's output is. The checkout is expected to ignore `node_modules`, since `github.push`
+ * commits every change.
  *
  * ```ts
  * const dependencies = await installDependencies(repository, { abortSignal, timeoutMinutes: 10 })
@@ -82,19 +86,20 @@ export async function installDependencies(repository: github.Repository, options
 	)
 	const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
 	const [program, ...args] = command
-	const timeout = options.timeoutMinutes === undefined ? undefined : AbortSignal.timeout(options.timeoutMinutes * 60_000)
+	const installTimeouts = options.timeoutMinutes === undefined ? [] : [AbortSignal.timeout(options.timeoutMinutes * msPerMinute)]
 	try {
 		await execFileAsync(program, args, {
 			cwd: directory,
-			signal: timeout === undefined ? options.abortSignal : AbortSignal.any([options.abortSignal, timeout]),
+			// Stops npm itself; a process a lifecycle script started in the background keeps running.
+			signal: AbortSignal.any([options.abortSignal, ...installTimeouts]),
 			maxBuffer: maxOutputBytes,
 			env: { ...process.env, ...env },
 		})
 		return result('installed', `The npm dependencies of ${repository.path} are installed (${command.join(' ')}).`)
 	} catch (error) {
-		if (options.abortSignal.aborted) throw error
+		if (options.abortSignal.aborted) throw options.abortSignal.reason
 		const log = path.join(installLogDirectory, `${repository.path.replaceAll('/', '_')}.log`)
-		const stopped = timeout?.aborted === true ? `Stopped after ${String(options.timeoutMinutes)} minutes.\n` : ''
+		const stopped = installTimeouts.some((signal) => signal.aborted) ? `Stopped after ${String(options.timeoutMinutes)} minutes.\n` : ''
 		await mkdir(installLogDirectory, { recursive: true })
 		await writeFile(log, `${stopped}${outputOf(error)}`)
 		return result('failed', `Installing the npm dependencies of ${repository.path} failed; the output is in ${log}.`)
