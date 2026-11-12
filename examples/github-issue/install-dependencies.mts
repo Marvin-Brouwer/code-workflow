@@ -17,8 +17,9 @@ const execFileAsync = promisify(execFile)
 const defaultTimeout: WaitSpec = { hours: 1 }
 
 const msPerSecond = 1_000
+const msPerHour = 60 * 60 * msPerSecond
 
-/** The longest timer Node keeps: a longer one fires at once. About 24.8 days. */
+/** The longest timer Node keeps, about 24.8 days: a longer one fires at once. */
 const maxTimerMs = 2 ** 31 - 1
 
 /** npm writes more than execFile's 1 MiB default on a large install, which would count as a failure. */
@@ -44,7 +45,8 @@ export interface InstallOptions {
 	readonly abortSignal: AbortSignal
 	/**
 	 * Gives up after this long and reports the install as failed, for a lifecycle script that hangs,
-	 * such as one waiting for input. An hour when left out; `'indefinite'` sets no limit.
+	 * such as one waiting for input. An hour when left out, and at most 596 hours (about 24.8 days), or it throws;
+	 * `'indefinite'` sets no limit.
 	 */
 	readonly timeout?: WaitSpec | 'indefinite'
 }
@@ -93,7 +95,8 @@ export async function installDependencies(repository: github.Repository, options
 	)
 	const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
 	const [program, ...args] = command
-	// A timer inside the sandbox: fine while every pause aborts the run first, as the engine's do.
+	// The timer runs inside the sandbox, whose clock can jump across a pause; that's fine, since the
+	// engine aborts the run before it pauses.
 	const installTimeouts = limitMs === undefined ? [] : [AbortSignal.timeout(limitMs)]
 	try {
 		await execFileAsync(program, args, {
@@ -118,14 +121,16 @@ export async function installDependencies(repository: github.Repository, options
 }
 
 /**
- * The limit in whole milliseconds, or undefined for none. Throws for a timeout Node can't keep, on
- * every repository alike, since it's the workflow's mistake rather than the install's.
+ * The limit in whole milliseconds, or undefined for none. Throws for a timeout Node can't keep, the
+ * same for every repository, since it's the workflow's mistake rather than the install's.
  */
 function installLimitMs(timeout: WaitSpec | 'indefinite'): number | undefined {
 	if (timeout === 'indefinite') return undefined
 	const ms = Math.ceil(durationMs(timeout))
 	if (ms > maxTimerMs)
-		throw new RangeError(`An install timeout can be at most 24 days, not ${JSON.stringify(timeout)}; use 'indefinite' for no limit.`)
+		throw new RangeError(
+			`An install timeout can be at most ${String(Math.floor(maxTimerMs / msPerHour))} hours, not ${JSON.stringify(timeout)}; use 'indefinite' for no limit.`,
+		)
 	return ms
 }
 
