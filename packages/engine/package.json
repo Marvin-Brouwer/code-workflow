@@ -18,7 +18,7 @@
 		"directory": "packages/engine"
 	},
 	"bin": {
-		"mesh-flow": "./dist/cli.mjs"
+		"mesh-flow": "./bin/mesh-flow.mts"
 	},
 	"files": [
 		"dist",
@@ -34,6 +34,9 @@
 		}
 	},
 	"publishConfig": {
+		"bin": {
+			"mesh-flow": "./dist/cli.mjs"
+		},
 		"access": "public",
 		"provenance": true,
 		"registry": "https://registry.npmjs.org/"
@@ -71,6 +74,6 @@
 		"vitest": "^5.1.0"
 	},
 	"engines": {
-		"node": ">=22"
+		"node": ">=22.18"
 	}
 }
