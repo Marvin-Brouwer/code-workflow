@@ -205,7 +205,7 @@ describe('describe', () => {
 		expect(performance.now() - started).toBeLessThan(promptlyMs)
 	})
 
-	test('keeps the text of the open pull request when it is opened again for the same commit, and gives it the text for a new one', async () => {
+	test('keeps the text of the open pull request when it is opened again for the same commit, unless it should close an issue it does not, and gives it the text for a new commit', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 
@@ -215,20 +215,25 @@ describe('describe', () => {
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
 			const rerun = await openPullRequest(repository, { title: 'Keep the session, written again', description: 'Sets it, again.' })
+			const closes = { repository: repositoryName, number: 7 }
+			const withCloses = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.', closes })
+			const closesBody = api.repository(repositoryName).pulls.get(1)?.body
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None; Secure\n')
 			const moved = await openPullRequest(repository, { title: 'Keep the session on Safari', description: 'Sets SameSite.' })
-			return { rerun, moved }
+			return { rerun, withCloses, closesBody, moved }
 		})
-		const { rerun, moved } = await run.result
+		const { rerun, withCloses, closesBody, moved } = await run.result
 
 		// Assert
 		const pulls = api.repository(repositoryName).pulls
 		expect(pulls.size).toBe(1)
 		expect(rerun.title).toBe('Keep the session')
+		expect(withCloses.description).toBe('Sets it.')
+		expect(closesBody).toContain('Fixes #7')
 		expect(moved).toMatchObject({ title: 'Keep the session on Safari', description: 'Sets SameSite.' })
 	})
 
-	test('starts from the text of a pull request a person wrote, without touching its own rules', async () => {
+	test('starts from the text of a pull request a person wrote, without cutting at its own `---` rule', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
@@ -248,7 +253,7 @@ describe('describe', () => {
 		expect(prompts[0]).toContain('Description:\n`````\nSets the cookie.\n\n---\nNotes of my own.\n`````')
 	})
 
-	test('takes the text from under footers and markers saved with CRLF, and a marker someone edited as none', async () => {
+	test('takes the footer and markers out of a description saved with CRLF, keeps what a person added under it, and takes an edited marker as none', async () => {
 		// Arrange
 		const { api, gateway } = await connected()
 		const sha = 'a'.repeat(40)
@@ -258,22 +263,40 @@ describe('describe', () => {
 			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
 			const pullRequest = await openPullRequest(repository, { title: 'Keep the session', description: 'Sets it.' })
-			const stored = api.pullRequest(repositoryName, pullRequest.number)
-			stored.body = `${signed('Sets it.', run.runId, [`described:${sha}`])}\n\n---\nAdded later.`.replaceAll('\n', '\r\n')
+			api.pullRequest(repositoryName, pullRequest.number, {
+				body: `${signed('Sets it.', run.runId, [`described:${sha}`])}\n\n---\nAdded later.`.replaceAll('\n', '\r\n'),
+			})
 			const saved = await getPullRequest(pullRequest)
-			stored.body = signed('Sets it.', run.runId, ['described:not-a-sha'])
+			api.pullRequest(repositoryName, pullRequest.number, { body: signed('Sets it.', run.runId, ['described:not-a-sha']) })
 			const edited = await getPullRequest(pullRequest)
 			return { saved, edited }
 		})
 		const { saved, edited } = await run.result
 
 		// Assert
-		expect(saved).toMatchObject({ description: 'Sets it.', describedSha: sha })
+		expect(saved).toMatchObject({ description: 'Sets it.\n\n---\nAdded later.', describedSha: sha })
 		expect(edited.description).toBe('Sets it.')
 		expect(edited.describedSha).toBeUndefined()
 	})
 
-	test('refuses to describe a checkout with changes that are not committed', async () => {
+	test('refuses to describe a checkout with changes to tracked files that are not committed', async () => {
+		// Arrange
+		const { gateway } = await connected()
+		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			await writeFile(path.join(repository.directory, 'README.md'), '# Changed\n')
+			return describeBranch(writer, repository)
+		})
+
+		// Assert
+		await expect(run.result).rejects.toThrow("app has changes that aren't committed")
+		expect(prompts).toHaveLength(0)
+	})
+
+	test('describes a checkout with untracked files left behind, as it is committed', async () => {
 		// Arrange
 		const { gateway } = await connected()
 		const { writer, prompts } = scriptedWriter([{ title: 'Keep the session on Safari', description: 'Sets SameSite.' }])
@@ -282,12 +305,15 @@ describe('describe', () => {
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			await writeFile(path.join(repository.directory, 'login.txt'), 'SameSite=None\n')
+			await push(repository)({ message: 'Set SameSite' })
+			await writeFile(path.join(repository.directory, 'coverage.json'), '{}\n')
 			return describeBranch(writer, repository)
 		})
+		await run.result
 
 		// Assert
-		await expect(run.result).rejects.toThrow("app has changes that aren't committed")
-		expect(prompts).toHaveLength(0)
+		expect(prompts[0]).toContain('login.txt | 1 +')
+		expect(prompts[0]).not.toContain('coverage.json')
 	})
 
 	test('settles promptly when the run stops while GitHub never answers the read of the pull request', async () => {
@@ -297,7 +323,10 @@ describe('describe', () => {
 		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
 		let reads = 0
 		api.hold = (method, requestPath) => {
-			if (method !== 'GET' || !requestPath.endsWith('/pulls/1') || ++reads === 1) return undefined
+			if (method !== 'GET' || !requestPath.endsWith('/pulls/1')) return undefined
+			reads++
+			// The first read is the test's own, to see that reads go through; the second, describe's, never comes back.
+			if (reads === 1) return undefined
 			resolve(undefined)
 			return new Promise(() => undefined)
 		}

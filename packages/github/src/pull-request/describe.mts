@@ -52,14 +52,14 @@ export async function describe(
 	context?: ToolContext,
 ): Promise<PullRequestContent> {
 	const brief = await readBrief(repository)({}, context)
-	const closes = options.issue === undefined ? {} : { closes: options.issue }
+	const closesField = options.issue === undefined ? {} : { closes: options.issue }
 	const current = options.pullRequest === undefined ? undefined : await currentText(options.pullRequest, context)
 	if (current !== undefined && (current.closed || current.describedSha === brief.headSha)) {
 		const { title, description, describedSha } = current
-		return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closes }
+		return { title, description, ...(describedSha === undefined ? {} : { describedSha }), ...closesField }
 	}
 	const text = await writeText(agent, repository, brief, options, current)
-	return { ...text, describedSha: brief.headSha, ...closes }
+	return { ...text, describedSha: brief.headSha, ...closesField }
 }
 
 /** What a pull request says now, as far as `describe` can start from it. */

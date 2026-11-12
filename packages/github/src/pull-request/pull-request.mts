@@ -14,9 +14,9 @@ export interface PullRequest extends PullRequestData {
 /**
  * Commits and pushes what the checkout holds, then opens a pull request for its branch onto the
  * default branch. When the branch already has an open pull request, that one gets the title and
- * the description instead, so a rerun opens nothing twice; unless its description was already
- * written for the same commit, which then stays as it was reviewed. The description is signed like every
- * post, and marked with the commit it describes, which `describe` reads to skip its loop.
+ * the description instead, so a rerun opens nothing twice. An open pull request whose description
+ * was written for the same commit keeps it, as it was reviewed. The description is signed like
+ * every post, and marked with the commit it describes, which `describe` reads to skip its loop.
  *
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))

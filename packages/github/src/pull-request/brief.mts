@@ -38,7 +38,8 @@ const notInFileNames = /[<>:"|?*\\]/g
  * The tool that reads what a checkout's branch changes against the default branch and how the
  * repository wants a pull request written. The template and the lint settings are read as the
  * default branch has them, so a change on the branch itself doesn't decide how it is described.
- * The branch is described as it is committed, so a checkout with uncommitted changes is refused.
+ * The branch is described as it is committed, so a checkout with uncommitted changes to tracked
+ * files is refused.
  */
 export function readBrief(repository: Repository) {
 	return tool('githubPullRequestBrief', {
@@ -46,19 +47,21 @@ export function readBrief(repository: Repository) {
 		input: z.object({}),
 		action: async (_, { abortSignal }): Promise<PullRequestBrief> => {
 			const git = localGit(repository.directory, abortSignal)
-			if ((await git.dirtyFiles()).length > 0)
+			// Tracked files only: what a test run leaves behind untracked doesn't hold up the description.
+			if (await git.hasChanges())
 				throw new Error(`${repository.path} has changes that aren't committed: push them before the branch is described.`)
 			const target = `refs/remotes/${origin}/${repository.defaultBranch}`
 			// Three dots: against where the branch left the target, as the pull request shows it.
 			const range = `${target}...HEAD`
 			const file = workspace.file(`${diffsFolder.path}/${repository.path}/${repository.branch.replace(notInFileNames, '-')}.diff`)
+			// Makes the file and its folders, for `git diff --output` to write into.
 			await file.write('')
 			const location = file.location()
 			const files = await filesAt(git, target)
 			const [headSha, commitLog, diffStat, templates, settings] = await Promise.all([
 				git.revParse('HEAD').then(({ stdout }) => stdout.trim()),
-				git.log('--reverse', '--format=- %s%n%w(0,2,2)%b', `${target}..HEAD`).then(({ stdout }) => capped(stdout, 'commits')),
-				git.diff(`--stat=${String(statWidth)}`, range).then(({ stdout }) => capped(stdout, 'files')),
+				git.log('--reverse', '--format=- %s%n%w(0,2,2)%b', `${target}..HEAD`).then(({ stdout }) => capped(stdout, 'more commits follow')),
+				git.diff(`--stat=${String(statWidth)}`, range).then(({ stdout }) => capped(stdout, 'more files follow, see the diff file')),
 				pullRequestTemplates(git, target, files),
 				lintSettings(git, target, files),
 				// Straight into the file: a diff can be larger than what git's output may be in memory.
@@ -78,7 +81,7 @@ export function readBrief(repository: Repository) {
 }
 
 /** `listing` as the prompt takes it: cut off, with a note, past {@link maxListingCharacters}. */
-function capped(listing: string, what: string): string {
+function capped(listing: string, note: string): string {
 	if (listing.length <= maxListingCharacters) return listing
-	return `${listing.slice(0, maxListingCharacters)}\n(cut off here: more ${what} follow, see the diff file)`
+	return `${listing.slice(0, maxListingCharacters)}\n(cut off here: ${note})`
 }

@@ -59,10 +59,14 @@ export type ReviewItem = z.infer<typeof ReviewItem>
 /** How a pull request names the issue it closes: `#7` in its own repository, `owner/name#7` in another. */
 const IssueReference = z.string().regex(/^([\w.-]+\/[\w.-]+)?#\d+$/)
 
-/** Opens the pull request on the host, or gives the open one for the branch this title and description. */
+/**
+ * Opens the pull request on the host, or gives the open one for the branch this title and
+ * description, unless it was already described for this commit.
+ */
 export const openPullRequest = {
 	name: 'githubOpenPullRequest',
-	description: 'Opens a pull request on GitHub, or gives the open one for the branch this title and description',
+	description:
+		'Opens a pull request on GitHub, or gives the open one for the branch this title and description, unless it was already described for this commit',
 	input: z.object({
 		repository: RepositoryName,
 		head: BranchName,

@@ -1,6 +1,7 @@
 import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
+import { Sha } from '../tools/git-tools.mts'
 import { commentMarker, isMarked, markerValue } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
@@ -16,7 +17,6 @@ import {
 	type PullRequestData,
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
-import { Sha } from '../tools/git-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { oneAtATime } from './one-at-a-time.mts'
 import { answeredKey, pullRequestComments, reactionKey, reactionKeyName, readingNote, replyKey, seenKey } from './pull-request-comments.mts'
@@ -56,14 +56,20 @@ const describedKeyName = 'described'
 /** A pull request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
 function describedFields(body: string | null | undefined): { description: string; describedSha?: string } {
 	if (body === null || body === undefined) return { description: '' }
-	const sha = markerValue(body.replaceAll('\r\n', '\n'), describedKeyName)
+	const sha = markerValue(body, describedKeyName)
 	// A marker someone edited is no marker: the commit it names is unknown.
 	return { description: unsigned(body), ...(sha !== undefined && Sha.safeParse(sha).success ? { describedSha: sha } : {}) }
 }
 
 /** A description as the connector writes it: signed, with `Fixes` next to the run id, and marked with the commit it describes. */
 function signedDescription(body: string, runId: string, sha: string | undefined, closes: string | undefined): string {
-	return signed(body, runId, sha === undefined ? [] : [`${describedKeyName}:${sha}`], closes === undefined ? [] : [`Fixes ${closes}`])
+	// Without trailing line breaks, as `unsigned` gives a description back, so a text that didn't change signs the same.
+	return signed(
+		body.trimEnd(),
+		runId,
+		sha === undefined ? [] : [`${describedKeyName}:${sha}`],
+		closes === undefined ? [] : [`Fixes ${closes}`],
+	)
 }
 
 /** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
@@ -101,8 +107,10 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				return pullRequestData(repository, data)
 			}
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
-			const kept = existing.title === title && existing.body === signedBody
-			if (kept || (sha !== undefined && describedFields(existing.body).describedSha === sha)) return pullRequestData(repository, existing)
+			const same = existing.title === title && existing.body === signedBody
+			const closesAlready = closes === undefined || (existing.body?.includes(`Fixes ${closes}`) ?? false)
+			const describedAlready = sha !== undefined && describedFields(existing.body).describedSha === sha && closesAlready
+			if (same || describedAlready) return pullRequestData(repository, existing)
 			const { data } = await client.rest.pulls.update({ ...where, pull_number: existing.number, title, body: signedBody })
 			return pullRequestData(repository, data)
 		}),

@@ -60,15 +60,15 @@ export async function pullRequestTemplates(git: GitClient, ref: string, files: r
  * file or its key in `package.json`, and the GitHub workflows that run such a lint.
  */
 export async function lintSettings(git: GitClient, ref: string, files: readonly string[]): Promise<RepositoryFile[]> {
-	const commitlintFiles = files.filter((file) => commitlintConfig.test(file.toLowerCase()))
-	const workflows = files.filter((file) => workflowFile.test(file))
-	const [configs, inPackage, workflowFiles] = await Promise.all([
-		Promise.all(commitlintFiles.map((file) => readRepositoryFile(git, ref, file))),
+	const commitlintPaths = files.filter((file) => commitlintConfig.test(file.toLowerCase()))
+	const workflowPaths = files.filter((file) => workflowFile.test(file))
+	const [commitlintFiles, inPackage, workflowFiles] = await Promise.all([
+		Promise.all(commitlintPaths.map((file) => readRepositoryFile(git, ref, file))),
 		files.includes(packageFile) ? show(git, ref, packageFile).then(commitlintInPackage) : undefined,
-		Promise.all(workflows.map((file) => readRepositoryFile(git, ref, file))),
+		Promise.all(workflowPaths.map((file) => readRepositoryFile(git, ref, file))),
 	])
 	return [
-		...configs,
+		...commitlintFiles,
 		...(inPackage === undefined ? [] : [repositoryFile(packageFile, inPackage)]),
 		...workflowFiles.filter((file) => lintsInWorkflow.test(file.text)),
 	]

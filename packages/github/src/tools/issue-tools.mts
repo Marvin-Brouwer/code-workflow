@@ -27,7 +27,7 @@ export const PostedComment = z.object({ id: z.int(), url: z.url() })
 export type PostedComment = z.infer<typeof PostedComment>
 
 /** What every marker this package leaves in a comment starts with. */
-const markerStart = '<!-- mesh-flow:'
+export const markerStart = '<!-- mesh-flow:'
 
 /** Mixed into a comment's body to find it again, so posting it twice updates it instead. */
 export function commentMarker(key: string): string {
@@ -42,9 +42,6 @@ export function markerValue(body: string, name: string): string | undefined {
 	const end = body.indexOf(' -->', from + start.length)
 	return end === -1 ? undefined : body.slice(from + start.length, end)
 }
-
-/** Every marker in a body, each with the line break after it. */
-export const markers = /<!-- mesh-flow:[^>]*-->\n?/g
 
 /** Whether a comment's body carries a marker: this package wrote it, so it isn't a reviewer's. */
 export function isMarked(body: string | null | undefined): boolean {
