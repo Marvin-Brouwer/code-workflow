@@ -15,6 +15,9 @@ const execFileAsync = promisify(execFile)
 
 const msPerMinute = 60_000
 
+/** How long an install may take when {@link InstallOptions.timeoutMinutes} is left out. */
+const defaultTimeoutMinutes = 60
+
 /** npm writes more than execFile's 1 MiB default on a large install, which would count as a failure. */
 const maxOutputBytes = 16 * 1024 * 1024
 
@@ -37,10 +40,10 @@ export interface InstallOptions {
 	/** Aborts the install: the run's signal. */
 	readonly abortSignal: AbortSignal
 	/**
-	 * Gives up after this long and reports the install as failed, for a lifecycle script that
-	 * hangs, such as one waiting for input. No limit when left out.
+	 * Gives up after this many minutes and reports the install as failed, for a lifecycle script
+	 * that hangs, such as one waiting for input. An hour when left out; `'indefinite'` sets no limit.
 	 */
-	readonly timeoutMinutes?: number
+	readonly timeoutMinutes?: number | 'indefinite'
 }
 
 /** Lets corepack fetch pnpm from the npm registry without asking first. */
@@ -86,7 +89,8 @@ export async function installDependencies(repository: github.Repository, options
 	)
 	const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
 	const [program, ...args] = command
-	const installTimeouts = options.timeoutMinutes === undefined ? [] : [AbortSignal.timeout(options.timeoutMinutes * msPerMinute)]
+	const { timeoutMinutes = defaultTimeoutMinutes } = options
+	const installTimeouts = timeoutMinutes === 'indefinite' ? [] : [AbortSignal.timeout(timeoutMinutes * msPerMinute)]
 	try {
 		await execFileAsync(program, args, {
 			cwd: directory,
@@ -99,7 +103,7 @@ export async function installDependencies(repository: github.Repository, options
 	} catch (error) {
 		if (options.abortSignal.aborted) throw options.abortSignal.reason
 		const log = path.join(installLogDirectory, `${repository.path.replaceAll('/', '_')}.log`)
-		const stopped = installTimeouts.some((signal) => signal.aborted) ? `Stopped after ${String(options.timeoutMinutes)} minutes.\n` : ''
+		const stopped = installTimeouts.some((signal) => signal.aborted) ? `Stopped after ${String(timeoutMinutes)} minutes.\n` : ''
 		await mkdir(installLogDirectory, { recursive: true })
 		await writeFile(log, `${stopped}${outputOf(error)}`)
 		return result('failed', `Installing the npm dependencies of ${repository.path} failed; the output is in ${log}.`)
