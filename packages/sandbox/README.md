@@ -161,7 +161,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 
 - **Timers across a pause.** E2B stops the guest's monotonic clock, so a `setTimeout` inside the sandbox doesn't count paused time. gVisor's does. Wall-clock waits belong in the engine. `Date.now()` is right after a resume everywhere.
 - **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeoutMs` (24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
-- **microsandbox** needs TLS interception for hostname egress rules: allowed HTTPS goes through its proxy, with its own CA. Node in the sandbox needs `--use-system-ca` to trust it. A full snapshot is refused while microsandbox manages a running job, which is why `startInBackground` uses `setsid -f` instead.
+- **microsandbox** needs TLS interception for hostname egress rules: allowed HTTPS goes through its proxy, with its own CA. microsandbox adds that CA to the guest's trust store and sets the usual CA variables (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`), so npm, curl and dotnet trust it with no settings, as the conformance suite shows. A full snapshot is refused while microsandbox manages a running job, which is why `startInBackground` uses `setsid -f` instead.
 - **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise). A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one. Processes started with `runsc exec` don't survive a checkpoint, only the container's init and its children, so the init is a small shell that starts each `startInBackground` process as its own child. Its options:
   - `directory`: images, bundles, checkpoints and runsc's state. Keep it across restarts.
   - `platform`: runsc's platform, `systrap` by default; `kvm` is faster where `/dev/kvm` exists.
@@ -169,7 +169,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 
   It pulls images from Docker Hub itself, no Docker needed: each layer is checked against its digest, and the image's `Env` and `WorkingDir` apply. Other registries aren't supported yet. The unpacked files belong to the user the engine runs as, so with `sudo runsc` setuid bits are lost; root in the sandbox gets Docker's default capabilities and can still write everywhere.
 
-  Its sandboxes have no network. When hosts are allowed, a proxy on the host tunnels to those only, on port 443, and the sandbox gets `HTTPS_PROXY` pointing at a forwarder that runs as its init. So only tools that honour `HTTPS_PROXY` get out, and the image needs Node 22.3 or later.
+  Its sandboxes have no network. When hosts are allowed, a proxy on the host tunnels to those only, on port 443, and the sandbox gets `HTTPS_PROXY` pointing at a forwarder that runs as its init. So only tools that honour `HTTPS_PROXY` get out, and the image needs Node 22.3 or later: without it, a create that allows hosts fails. `create` returns once the forwarder listens, so the first command can use it.
 
 ## Tests
 
@@ -179,7 +179,7 @@ pnpm --filter @mesh-flow/sandbox test
 
 Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere, except the conformance suite below. The gVisor backend runs against a fake `runsc` there, including the checks that `close` finishes while a command or a create never does.
 
-The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; `list`, `remove` and `close` leave nothing behind. It needs the backend on the machine, so it only runs when asked:
+The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; npm and NuGet install from an allowed registry with no proxy or certificate settings; `list`, `remove` and `close` leave nothing behind. The package checks also need `node:22-bookworm`, and reach `registry.npmjs.org`, `builds.dotnet.microsoft.com` (for the SDK) and `api.nuget.org`. It needs the backend on the machine, so it only runs when asked:
 
 ```bash
 MESH_FLOW_SANDBOX_TESTS=gvisor RUNSC="sudo $(command -v runsc)" pnpm --filter @mesh-flow/sandbox test

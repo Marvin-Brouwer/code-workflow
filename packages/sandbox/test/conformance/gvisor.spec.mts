@@ -13,5 +13,5 @@ describeConformance(
 			runsc: (process.env.RUNSC ?? 'runsc').split(' ').filter(Boolean),
 			...(process.env.HTTPS_PROXY === undefined ? {} : { upstreamProxy: process.env.HTTPS_PROXY }),
 		}),
-	'node:22-slim',
+	{ node: 'node:22-slim', packageManagers: 'node:22-bookworm' },
 )
