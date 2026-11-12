@@ -54,7 +54,15 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 			if (log.code === 'UNRESOLVED_IMPORT') throw new Error(`${log.message} Is it installed?`)
 			report(level, log)
 		},
-		output: { file: path.join(out, builtEntry), format: 'esm', codeSplitting: false },
+		output: {
+			file: path.join(out, builtEntry),
+			format: 'esm',
+			codeSplitting: false,
+			// The loops' keys come from it: a call site in the source stays put when a rebuild moves the bundle's lines.
+			sourcemap: true,
+			sourcemapExcludeSources: true,
+			sourcemapPathTransform: (source, map) => sourceName(directory, path.resolve(path.dirname(map), source)),
+		},
 	})
 	// Described before the sandbox's binaries are installed next to it: this machine may not run them.
 	const description = await describeBuiltApp({ bundle: path.join(out, builtEntry), directory, abortSignal })
@@ -73,6 +81,20 @@ function assertSafeOut(directory: string, out: string): void {
 			`${out} is emptied before a build, and it holds the app's repository: give a folder of its own, such as .mesh-flow/app.`,
 		)
 	}
+}
+
+/** Marks where a package manager keeps an installed package. */
+const installedPackages = 'node_modules/'
+
+/**
+ * A source file as the source map names it: relative to the repository, with `/`, and for an
+ * installed package from its name on (`@mesh-flow/github/dist/github.mjs`), so where the package
+ * manager keeps it, such as pnpm's folder with the versions of its peers, doesn't count.
+ */
+function sourceName(directory: string, file: string): string {
+	const name = path.relative(directory, file).split(path.sep).join('/')
+	const installed = name.lastIndexOf(installedPackages)
+	return installed === -1 ? name : name.slice(installed + installedPackages.length)
 }
 
 function isNative(id: string, natives: readonly NativePackage[]): boolean {

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { SourceMap, type SourceMapPayload } from 'node:module'
 import path from 'node:path'
 import { appManifestFile, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
@@ -34,11 +35,34 @@ describe('buildApp', () => {
 
 		// Assert
 		expect(manifest).toMatchObject({ entry: 'main.mjs', platform: { os: 'linux', cpu: 'x64' }, description })
-		expect((await readdir(out)).toSorted()).toEqual(['main.mjs', appManifestFile, 'package.json'].toSorted())
+		expect((await readdir(out)).toSorted()).toEqual(['main.mjs', 'main.mjs.map', appManifestFile, 'package.json'].toSorted())
 		const bundled = await readFile(path.join(out, 'main.mjs'), 'utf8')
 		expect(bundled).toContain('Hello')
 		expect(bundled).not.toMatch(/from ['"]greeting['"]/)
 		expect(JSON.parse(await readFile(path.join(out, appManifestFile), 'utf8'))).toEqual(manifest)
+	})
+
+	test("maps the bundle back to the app's files, so a place in the source stays put across rebuilds", async () => {
+		// Arrange
+		const files = {
+			'main.mts': `${describingEntry(description)}import { marked } from './marked.mts'\nconsole.log(marked())\n`,
+			'marked.mts': `export function marked(): string {\n\treturn new Error('marker').message\n}\n`,
+			'greeting.mts': `export const greeting: string = 'Hello'\n`,
+		}
+		const padded = { files: { 'index.js': `${'console.log("padding")\n'.repeat(5)}export const punctuation = '!'\n` } }
+		const first = path.join(await temporaryDirectory(), 'app')
+		const second = path.join(await temporaryDirectory(), 'app')
+
+		// Act
+		await buildApp({ directory: await appRepository({ files, packages: { greeting: greetingPackage } }), out: first, abortSignal })
+		await buildApp({ directory: await appRepository({ files, packages: { greeting: padded } }), out: second, abortSignal })
+
+		// Assert
+		const [before, after] = await Promise.all([sourceOf(first, '"marker"'), sourceOf(second, '"marker"')])
+		expect(before.lineNumber).not.toBe(after.lineNumber)
+		expect(before.origin).toEqual({ fileName: 'marked.mts', lineNumber: 2, columnNumber: 19 })
+		expect(after.origin).toEqual(before.origin)
+		expect(after.sources).toEqual(expect.arrayContaining(['marked.mts', 'greeting/index.js']))
 	})
 
 	test('says where to point main when package.json has none', async () => {
@@ -151,3 +175,14 @@ if (native === 'host') mailbox.send({ type: 'described', description: ${JSON.str
 		expect(await readdir(path.join(directory, '.mesh-flow'))).toEqual([])
 	})
 })
+
+/** Where `text` is in the built bundle, and where the source map says it came from. */
+async function sourceOf(out: string, text: string): Promise<{ lineNumber: number; origin: unknown; sources: readonly string[] }> {
+	const lines = (await readFile(path.join(out, 'main.mjs'), 'utf8')).split('\n')
+	const index = lines.findIndex((line) => line.includes(text))
+	const lineNumber = index + 1
+	const column = (lines[index] ?? '').indexOf(text) + 1
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the build writes the map
+	const payload = JSON.parse(await readFile(path.join(out, 'main.mjs.map'), 'utf8')) as SourceMapPayload
+	return { lineNumber, origin: new SourceMap(payload).findOrigin(lineNumber, column), sources: payload.sources }
+}
