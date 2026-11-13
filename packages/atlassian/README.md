@@ -109,7 +109,9 @@ The `host` entry point is what `mesh-flow connector add` loads: `connector`, and
 ```ts
 import { atlassianHostTools } from '@mesh-flow/atlassian/host'
 
-const tools = atlassianHostTools({ fetch: fake.fetch, retry: { maxAttempts: 2, initialDelayMs: 1, backoffFactor: 1 } })
+// A site that answers every request with an empty object, and retries without waiting.
+const answersItself: typeof fetch = async () => new Response('{}', { headers: { 'content-type': 'application/json' } })
+const tools = atlassianHostTools({ fetch: answersItself, retry: { maxAttempts: 2, initialDelayMs: 1, backoffFactor: 1 } })
 ```
 
 Reads and updates that Jira or Confluence didn't answer, or answered 502, 503 or 504, are sent up to four times (`defaultRequestRetry`); a failure that may still pass after that reaches the sandbox marked transient. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.

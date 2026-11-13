@@ -1,19 +1,45 @@
+/** A call that waits its turn behind the earlier calls with the same key. */
+export type OneAtATime = <T>(key: string, abortSignal: AbortSignal, call: () => Promise<T>) => Promise<T>
+
 /**
- * Runs calls that share a key one after the other, in the order they came, and calls with
- * different keys side by side: for a read, a write and a record of it that must not interleave.
- * A call that fails lets the next one run.
+ * Runs calls with the same key one after another, and calls with different keys side by side. A
+ * call that fails doesn't stop the ones queued after it. A call whose `abortSignal` aborts while it
+ * waits rejects at once with the signal's reason, and is never run.
  */
-export function oneAtATimePerKey(): <T>(key: string, call: () => Promise<T>) => Promise<T> {
-	const tails = new Map<string, Promise<unknown>>()
-	return (key, call) => {
-		const previous = tails.get(key) ?? Promise.resolve()
-		const running = previous.then(call, call)
-		const tail = running.catch(() => undefined)
-		tails.set(key, tail)
-		// Forgotten once nothing waits behind it, so keys don't pile up.
-		void tail.then(() => {
-			if (tails.get(key) === tail) tails.delete(key)
-		})
-		return running
+export function oneAtATime(): OneAtATime {
+	const lastOn = new Map<string, Promise<unknown>>()
+	return (key, abortSignal, call) => {
+		const turn = (lastOn.get(key) ?? Promise.resolve())
+			.catch(() => undefined)
+			.then(() => {
+				abortSignal.throwIfAborted()
+				return call()
+			})
+		lastOn.set(key, turn)
+		// Forgotten once the turn is really over, not when its caller stops waiting: the call before it may still run.
+		void turn
+			.catch(() => undefined)
+			.finally(() => {
+				if (lastOn.get(key) === turn) lastOn.delete(key)
+			})
+		return untilAborted(turn, abortSignal)
+	}
+}
+
+/**
+ * Waits for `promise`, or rejects with the signal's reason as soon as it aborts. The same as core's
+ * own `untilAborted`, which core doesn't export.
+ */
+async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
+	abortSignal.throwIfAborted()
+	const { promise: aborted, reject } = Promise.withResolvers<never>()
+	const onAbort = () => {
+		reject(abortSignal.reason)
+	}
+	abortSignal.addEventListener('abort', onAbort, { once: true })
+	try {
+		return await Promise.race([promise, aborted])
+	} finally {
+		abortSignal.removeEventListener('abort', onAbort)
 	}
 }

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { confluence, jira } from '../src/_module/atlassian.mts'
-import { atlassianHostTools } from '../src/_module/host.mts'
+import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
 import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage } from './support/fake-atlassian.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
@@ -43,7 +43,7 @@ const deployments = [
 const [, dataCenter] = deployments
 
 /** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
-const quickRetry = { maxAttempts: 4, initialDelayMs: 1, backoffFactor: 1 }
+const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
 
 /** What the fake holds before a run. */
 interface Arrangement {

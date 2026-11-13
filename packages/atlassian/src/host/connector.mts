@@ -1,8 +1,8 @@
 import { connectorHost, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
 import { confluenceApi } from './confluence/confluence-api.mts'
 import { confluenceHostTools } from './confluence/confluence-host-tools.mts'
-import { jiraApi } from './jira/jira-api.mts'
 import type { AtlassianHostOptions } from './host-options.mts'
+import { jiraApi } from './jira/jira-api.mts'
 import { jiraHostTools } from './jira/jira-host-tools.mts'
 
 /**

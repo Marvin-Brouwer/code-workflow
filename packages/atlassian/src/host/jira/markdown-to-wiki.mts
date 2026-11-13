@@ -6,9 +6,14 @@ const fencedCode = /^```([\w+-]*)[ \t]*\n([\s\S]*?)\n```[ \t]*$/gm
 /** A code span: what's between one backtick and the next on the line. */
 const codeSpan = /`([^`\n]+)`/g
 
-/** What stands in for a code block or span while the rest is converted: letters and digits only, which jira2md leaves alone. */
-const placeholder = (index: number) => `MESHFLOWCODE${String(index)}X`
-const placeholders = /MESHFLOWCODE(\d+)X/g
+/** What a placeholder starts with: letters only, which jira2md leaves alone. */
+const placeholderPrefix = 'MESHFLOWCODE'
+
+/** What stands in for a code block or span while the rest is converted: the prefix, its index and an `X`. */
+const placeholder = (index: number) => `${placeholderPrefix}${String(index)}X`
+
+/** Every placeholder in the converted text, with its index. */
+const placeholders = new RegExp(`${placeholderPrefix}(\\d+)X`, 'g')
 
 /**
  * Markdown as Jira Data Center's wiki markup. Code blocks and spans are taken out before jira2md

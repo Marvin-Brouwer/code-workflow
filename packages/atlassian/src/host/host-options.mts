@@ -8,6 +8,7 @@ export interface RequestRetry {
 	readonly maxAttempts: number
 	/** The wait before the first retry; each next wait is `backoffFactor` times as long. */
 	readonly initialDelayMs: number
+	/** How many times as long each wait is as the one before. */
 	readonly backoffFactor: number
 }
 

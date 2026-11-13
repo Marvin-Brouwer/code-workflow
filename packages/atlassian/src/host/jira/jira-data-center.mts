@@ -1,7 +1,7 @@
 import { createServerClient, type ServerClientConfig } from 'jira.js'
-import { markdownToWiki } from './markdown-to-wiki.mts'
 import { sentOnce } from '../host-options.mts'
 import type { JiraSite } from './jira-site.mts'
+import { markdownToWiki } from './markdown-to-wiki.mts'
 import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.mts'
 import { orWhenNotFound } from './when-not-found.mts'
 

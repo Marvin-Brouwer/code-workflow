@@ -3,19 +3,19 @@ import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { commentOnIssue, getIssue, transitionIssue } from '../../tools/issue-tools.mts'
 import { defaultIssueSearchLimit, searchIssues } from '../../tools/issue-search-tools.mts'
-import { oneAtATimePerKey } from '../one-at-a-time.mts'
+import { oneAtATime } from '../one-at-a-time.mts'
 import { signed } from '../signature.mts'
 import { markingTransient } from '../transient-error.mts'
 import { issueData, issueUrl } from './issue-data.mts'
 import type { JiraApi } from './jira-api.mts'
 
+/** Hex digits of a comment key's hash in its property's name: enough that two keys of one issue never meet. */
+const keyHashLength = 16
+
 /** Where the connector keeps the id of one keyed comment: an issue property per key, named by a hash of the key. */
 export function keyedCommentProperty(commentKey: string): string {
 	return `mesh-flow.comment.${createHash('sha256').update(commentKey).digest('hex').slice(0, keyHashLength)}`
 }
-
-/** Hex digits of a comment key's hash in its property's name: enough that two keys of one issue never meet. */
-const keyHashLength = 16
 
 /** What a keyed comment's property holds: the key it was posted with, and the comment's id. */
 const KeyedComment = z.object({ key: z.string(), id: z.string() })
@@ -23,7 +23,7 @@ const KeyedComment = z.object({ key: z.string(), id: z.string() })
 /** The host halves of the Jira tools. */
 export function jiraHostTools(api: JiraApi): HostTool[] {
 	// Two comments with one key at once would both be posted: the second waits for the first.
-	const oneCommentAtATime = oneAtATimePerKey()
+	const oneCommentAtATime = oneAtATime()
 	return [
 		hostTool(getIssue, async ({ key }, context) => {
 			const site = await api(context)
@@ -74,7 +74,7 @@ export function jiraHostTools(api: JiraApi): HostTool[] {
 			const posted = (id: string) => ({ id, url: `${issueUrl(site.url, key)}?focusedCommentId=${id}` })
 			if (commentKey === undefined) return posted(await markingTransient(() => site.addComment(key, markdown, abortSignal)))
 			const property = keyedCommentProperty(commentKey)
-			return oneCommentAtATime(`${site.url} ${key} ${property}`, async () => {
+			return oneCommentAtATime(`${site.url} ${key} ${property}`, abortSignal, async () => {
 				const recorded = KeyedComment.safeParse(await markingTransient(() => site.property(key, property, abortSignal)))
 				const earlier = recorded.success && recorded.data.key === commentKey ? recorded.data.id : undefined
 				if (earlier !== undefined && (await markingTransient(() => site.updateComment(key, earlier, markdown, abortSignal))))
