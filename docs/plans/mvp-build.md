@@ -203,7 +203,7 @@ export default defineMeshFlow({
 // workflows/fix-issue.mts
 export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, async ({ parameters }) => {
     const issue = await github.collect(parameters.issue);
-    const repository = await github.checkout(issue.repository, { branch: `fix/${issue.number}` });
+    const repository = await github.checkout({ repository: issue.repository, branch: `fix/${issue.number}` });
 
     await developer.loop`
         Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.

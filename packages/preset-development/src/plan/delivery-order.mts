@@ -17,7 +17,7 @@ export interface Delivery extends DependencyNode {
  *
  * ```ts
  * await inDependencyOrder(deliveryOrder(plan), async (part, upstream) => {
- * 	const repository = await gitlab.checkout(part.repository, { branch })
+ * 	const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
  * 	// ...
  * })
  * ```

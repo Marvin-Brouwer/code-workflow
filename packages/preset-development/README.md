@@ -22,7 +22,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 	`
 
 	await inDependencyOrder(deliveryOrder(plan), async (part) => {
-		const repository = await gitlab.checkout(part.repository, { branch: `feature/${story.key}` })
+		const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
 		await developer.loop`
 			Implement your part of ${plan.path}, as amended by ${deviations}, in ${repository}.
 			Record any deviation from the plan with ${deviations.record}.

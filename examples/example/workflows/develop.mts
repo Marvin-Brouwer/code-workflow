@@ -40,7 +40,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 	// Starts each repository once the repositories it depends on are merged, with the packages
 	// their merges published. Independent repositories don't wait for each other.
 	await inDependencyOrder(deliveryOrder(plan), async (part, upstream: readonly (readonly gitlab.PublishedPackage[])[]) => {
-		const repository = await gitlab.checkout(part.repository, { branch: `feature/${story.key}` })
+		const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
 		await dotnet.updatePackages(repository, upstream.flat())
 
 		await developer.loop`
@@ -57,7 +57,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		// Code commits and pushes what was handed in, so `describe` reads the work as it was verified.
 		await gitlab.push(repository)({ message: `${story.key}: ${part.changes}` })
 
-		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
 		// A merge request merged or closed meanwhile is given back as it is, not opened again.
 		if (mergeRequest.state === 'closed' && !mergeRequest.merged)
 			throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
@@ -82,7 +82,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 					// What was fixed after the last push, to make the tests pass, goes up too.
 					await gitlab.push(repository)({ message: `${story.key}: review changes` })
 					// `describe` runs no writer loop when the pushed commit is already described.
-					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
 				},
 				async pipelineFailed({ failures }) {
 					await developer.loop`
@@ -90,7 +90,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 						Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
 						${limit({ minutes: 45 })}
 					`
-					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
 				},
 			})
 			if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)

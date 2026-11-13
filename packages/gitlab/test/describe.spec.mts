@@ -19,10 +19,10 @@ describe('describe', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const { head } = await push(repository)({ message: 'Set SameSite on the session cookie' })
-			return { content: await describeBranch(writer, repository, { closes: issue }), head }
+			return { content: await describeBranch(writer, repository, { issue }), head }
 		})
 		const { content, head } = await run.result
 
@@ -45,7 +45,7 @@ describe('describe', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await push(repository)({ message: 'Set SameSite' })
 			await openMergeRequest(repository, await describeBranch(writer, repository))

@@ -23,7 +23,7 @@ export interface MergeRequest extends MergeRequestData {
  * someone may have edited it, which the person is asked about first.
  *
  * ```ts
- * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+ * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
  * ```
  */
 export async function openMergeRequest(repository: Repository, content: MergeRequestContent, context?: ToolContext): Promise<MergeRequest> {
@@ -66,7 +66,7 @@ export interface UpdatedMergeRequest extends MergeRequest {
  * no. Resolves to the merge request as it is then, with `skipped` saying why when nothing was written.
  *
  * ```ts
- * await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+ * await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
  * ```
  */
 export async function updateMergeRequest(

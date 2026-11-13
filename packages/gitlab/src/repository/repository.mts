@@ -24,16 +24,11 @@ export interface Repository extends Checkout {
  * named after the project's last segment.
  *
  * ```ts
- * const repository = await gitlab.checkout('team/api', { branch: `feature/${story.key}` })
+ * const repository = await gitlab.checkout({ repository: 'team/api', branch: `feature/${story.key}` })
  * await developer.loop`Implement ${story} in ${repository}, then push with ${gitlab.push(repository)}.`
  * ```
  */
-export function checkout(project: ProjectPath, options: { readonly branch: BranchName }): Promise<Repository> {
-	return checkoutTool({ repository: project, branch: options.branch })
-}
-
-/** The checkout as a tool, so a run that starts over finds it done. */
-const checkoutTool = tool('gitlabCheckout', {
+export const checkout = tool('gitlabCheckout', {
 	description: 'Checks a GitLab project out into the workspace, on a branch',
 	input: z.object({ repository: ProjectPath, branch: BranchName }),
 	action: (input, context): Promise<Repository> =>

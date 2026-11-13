@@ -14,7 +14,7 @@ import { dotnet } from '@mesh-flow/toolchain-dotnet'
 declare const developer: Agent
 declare const story: { readonly key: string }
 
-const repository = await gitlab.checkout('team/backend/api', { branch: `feature/${story.key}` })
+const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
 await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
 
 await developer.loop`

@@ -127,7 +127,7 @@ describe('triage and reply', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			let planned: unknown
 			await review(
 				where,
@@ -176,7 +176,7 @@ describe('triage and reply', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			return triage(writer, repository, { mergeRequest: where, comments: [item] })
 		})
 

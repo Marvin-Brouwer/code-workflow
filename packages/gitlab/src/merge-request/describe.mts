@@ -15,7 +15,7 @@ export interface DescribeOptions {
 	 * The issue the branch resolves, which the agent reads for the why, and which the result closes.
 	 * Pass it again when describing a merge request again, or the `Fixes` line is gone.
 	 */
-	readonly closes?: ClosesIssue
+	readonly issue?: ClosesIssue
 	/**
 	 * The merge request the branch already has, to describe again: the agent starts from its title
 	 * and description, for the branch as it was last pushed, and no loop runs when they already
@@ -47,12 +47,12 @@ export interface DescribeOptions {
  * `updateMergeRequest` as it is. It stops with the run, as the loop does.
  *
  * ```ts
- * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+ * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<MergeRequestContent> {
 	return describeChange(agent, repository, gitlabDescribe, {
-		...(options.closes === undefined ? {} : { closes: options.closes }),
+		...(options.issue === undefined ? {} : { closes: options.issue }),
 		...(options.mergeRequest === undefined ? {} : { request: options.mergeRequest }),
 		...(options.limit === undefined ? {} : { limit: options.limit }),
 	})

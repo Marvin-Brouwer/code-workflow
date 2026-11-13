@@ -23,18 +23,18 @@ The agents are the workflow repository's own; the package takes them as paramete
 
 ```ts
 // workflows/develop.mts
-import { jira } from '@mesh-flow/atlassian'
+import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
 import { succeed, verify, workflow } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { developer, writer } from '../agents.mts'
 
-export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
-	const repository = await gitlab.checkout('team/backend/api', { branch: `feature/${story.key}` })
+	const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
 
 	await developer.loop`Implement ${story} in ${repository}. Push with ${gitlab.push(repository)}, then ${succeed()}.`
 
-	const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+	const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
 
 	await gitlab.review(mergeRequest, {
 		pipelineFailed: ({ failures }) => developer.loop`
@@ -48,7 +48,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 				Make these changes in ${repository}, as you planned them: ${changes}. Push with ${gitlab.push(repository)},
 				then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}. When every item is done, ${succeed()}.
 			`
-			await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+			await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
 		},
 	})
 
@@ -60,11 +60,11 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 
 `gitlab.searchRepositories` is a tool for an agent that has to find where a change goes: it searches the projects the token's user is a member of by words in their name, path or description, and lists each with the path `gitlab.checkout` takes.
 
-`gitlab.checkout(project, { branch })` puts a checkout of the project in the workspace, in a folder named after the project's last segment, on the branch, made from the default branch when GitLab doesn't have it yet. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
+`gitlab.checkout({ repository, branch })` puts a checkout of the project in the workspace, in a folder named after the project's last segment, on the branch, made from the default branch when GitLab doesn't have it yet. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
 
 ### Merge requests
 
-`gitlab.describe(agent, repository, { closes, mergeRequest, limit })` has the agent write the title and description, from the branch's commits and diff, the project's merge request templates (the Markdown files in `.gitlab/merge_request_templates/`), and its settings that lint commit messages or titles: commitlint's, or a job in `.gitlab-ci.yml` or `.gitlab/ci/*.yml` that runs commitlint or a title check. The title is at most 255 characters. `closes` is the issue the merge request closes, by its `key`: `Fixes PROJ-7` goes in the footer, which GitLab's Jira integration acts on.
+`gitlab.describe(agent, repository, { issue, mergeRequest, limit })` has the agent write the title and description, from the branch's commits and diff, the project's merge request templates (the Markdown files in `.gitlab/merge_request_templates/`), and its settings that lint commit messages or titles: commitlint's, or a job in `.gitlab-ci.yml` or `.gitlab/ci/*.yml` that runs commitlint or a title check. The title is at most 255 characters. `issue` is the issue the merge request closes, by its `key`: `Fixes PROJ-7` goes in the footer, which GitLab's Jira integration acts on.
 
 `gitlab.openMergeRequest(repository, text)` opens the merge request of the checkout's branch onto its default branch, or takes the one that is open already, and gives it the text unless it was written for the same commit. GitLab keeps one open merge request per branch, so one onto another target fails the call, naming it. `gitlab.updateMergeRequest(mergeRequest, text)` writes new text, unless someone edited it since `describe` read it: then the person is asked whether to overwrite the edit first. A merged or closed merge request keeps its text. `gitlab.mergeRequest(ref)` reads one. A merge request is named by its project and its iid, the number after `!`: `{ repository: 'team/backend/api', number: 7 }`.
 
@@ -87,6 +87,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 ```ts
 import { webhook } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab/hooks'
+import { release } from './workflows/release.mts'
 
 const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ project: event.project.path_with_namespace }))
 export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...gitlab.triggerOptions })

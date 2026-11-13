@@ -25,7 +25,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const opened = await openMergeRequest(repository, { ...sameSite, closes: story })
 			return { opened, head: await remote.head(branch) }
@@ -47,7 +47,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await openMergeRequest(repository, sameSite)
 			return openMergeRequest(repository, secure)
@@ -65,7 +65,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await openMergeRequest(repository, sameSite)
 			await changeLogin(repository, 'SameSite=None; Secure\n')
@@ -89,7 +89,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -107,7 +107,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -128,7 +128,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -149,7 +149,7 @@ describe('updateMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const opened = await openMergeRequest(repository, sameSite)
 			const first = await updateMergeRequest(opened, secure)
