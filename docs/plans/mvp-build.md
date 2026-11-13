@@ -13,9 +13,16 @@ itself in CI, and running it against a real issue is what's left of "done when".
 differs from the plan below: `github.review` polls through a host tool with an engine-side `wait`
 instead of the durable external-event primitive, which isn't built yet (see
 [decisions](../decisions.md#engine)); commits cross between host and sandbox as git bundles; and
-the engine loads connector host tools from the packages the user adds with `mesh-flow connector`. Step 7 is built one package per PR:
-[`@mesh-flow/atlassian`](../../packages/atlassian/README.md) is built, with Jira and Confluence on
-Cloud and Data Center; gitlab, toolchain-dotnet and preset-development with `example` follow.
+the engine loads connector host tools from the packages the user adds with `mesh-flow connector`. Step 7 is built, one package per PR:
+[`@mesh-flow/atlassian`](../../packages/atlassian/README.md), with Jira and Confluence on Cloud and
+Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which shares what it has in
+common with github through [`@mesh-flow/forge`](../../packages/forge/README.md);
+[`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
+[`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
+[`examples/example`](../../examples/example), which builds and describes itself in CI with a
+sandbox image from its own Dockerfile. Running `develop` against a real story is what's left of
+"done when". A dependent repository that takes another's new NuGet packages needs the private
+registry shim, which isn't built, so `develop` runs one repository at a time for now.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
@@ -224,9 +231,9 @@ the first proof that the sandbox, engine, core and gateway work together.
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
 against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
-Until this step lands, the root `pnpm build` skips `example` (`--filter=!example` in the root
-`package.json`), because its connector and preset sketches have no `package.json` yet and its
-imports don't resolve. This step takes that filter out again.
+Until this step landed, the root `pnpm build` skipped `example` (`--filter=!example` in the root
+`package.json`), because its connector and preset sketches had no `package.json` and its imports
+didn't resolve. This step took that filter out again.
 
 ## Rules for every package
 

@@ -1,13 +1,14 @@
 /**
  * Checks what an editor shows on hover for `loop` results in the reference workflow: the resolved
- * type, not `ResultOf<[…]>`. Uses the same language service call as an editor's hover.
+ * type, not `ResultOf<[…]>`. Uses the same language service call as an editor's hover, on the
+ * example's own project, against the real `@mesh-flow/core`.
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
 
-const root = path.resolve(import.meta.dirname, '..')
-const workflow = path.resolve(root, '../../examples/example/workflows/develop.mts')
+const example = path.resolve(import.meta.dirname, '../../../examples/example')
+const workflow = path.join(example, 'workflows/develop.mts')
 
 /** Variables in develop.mts holding a `loop` result, and what hovering them must show. */
 const expectations: { variable: string; shows: (display: string) => boolean; expected: string }[] = [
@@ -19,7 +20,7 @@ const expectations: { variable: string; shows: (display: string) => boolean; exp
 	},
 ]
 
-const configPath = path.join(root, 'tsconfig.sketches.json')
+const configPath = path.join(example, 'tsconfig.json')
 const config = ts.getParsedCommandLineOfConfigFile(
 	configPath,
 	{},
@@ -37,7 +38,7 @@ const host: ts.LanguageServiceHost = {
 	getScriptFileNames: () => config.fileNames,
 	getScriptVersion: () => '1',
 	getScriptSnapshot: (fileName) => (ts.sys.fileExists(fileName) ? ts.ScriptSnapshot.fromString(readFileSync(fileName, 'utf8')) : undefined),
-	getCurrentDirectory: () => root,
+	getCurrentDirectory: () => example,
 	getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
 	fileExists: (fileName) => ts.sys.fileExists(fileName),
 	readFile: (fileName) => ts.sys.readFile(fileName),

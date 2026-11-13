@@ -1,9 +1,8 @@
 # Design
 
 Status: design converged (option C: plain async TypeScript). The sandbox and typing spikes are
-done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). Sketches of the
-reference workflow and packages live in `examples/example/` and `packages/`; they haven't been
-type-checked yet.
+done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). The reference
+workflow lives in `examples/example/`, and the packages it uses in `packages/`.
 
 ## 1. Goal
 
