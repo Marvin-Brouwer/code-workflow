@@ -12,6 +12,7 @@ export type StoryStatus = (typeof storyStatuses)[number]
  */
 export async function moveOn(story: IssueRef, status: StoryStatus): Promise<void> {
 	const { status: now } = await jira.collect(story)
-	if (storyStatuses.findIndex((known) => known === now) >= storyStatuses.indexOf(status)) return
+	// Jira matches status names without regard to case, as `jira.transition` does.
+	if (storyStatuses.findIndex((known) => known.toLowerCase() === now.toLowerCase()) >= storyStatuses.indexOf(status)) return
 	await jira.transition(story, status)
 }

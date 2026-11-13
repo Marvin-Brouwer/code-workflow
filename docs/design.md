@@ -213,7 +213,7 @@ Packages export three kinds of things, and nothing else:
 - **Tools** for agents: `jira.search`, `gitlab.searchRepositories`, `gitlab.push(repository)`.
   Every tool is also callable as a function. A tool validates its own arguments, retries its own
   transient failures and caps its own output ([Context](#context)).
-- **Checks** for `verify`: `dotnet.tests(repository)`, `codeReview(reviewer, repository, plan)`,
+- **Checks** for `verify`: `dotnet.testsPass(repository)`, `codeReview(reviewer, repository, plan)`,
   `gitlab.pipelinePasses(mergeRequest)`. Lazy: they run when `verify` asks. A check may wait on
   something external (a pipeline).
 
