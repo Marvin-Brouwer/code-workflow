@@ -25,7 +25,7 @@ export async function git(cwd: string, ...args: string[]): Promise<string> {
 	return stdout
 }
 
-/** A bare repository standing in for GitHub, with one commit on `main`, and its `file://` URL. */
+/** A bare repository standing in for GitLab, with one commit on `main`, and its `file://` URL. */
 export interface LocalRemote {
 	readonly directory: string
 	readonly url: string
