@@ -15,5 +15,5 @@ export { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '../hos
 export type { OwnReply, PostedReply, ReplyOutcome, ReviewComments } from '../host/review-comments.mts'
 export { replyToItem, type ReviewReply } from '../host/review-reply.mts'
 export { showItemsBeingRead, type ItemBeingRead, type ShowBeingReadOptions, type ShownBeingRead } from '../host/show-being-read.mts'
-export { runIdLine, signed, unsigned, withoutRunId } from '../host/signature.mts'
+export { runIdLine, signed, signedBy, unsigned, withoutRunId } from '../host/signature.mts'
 export { withUnixLineBreaks } from '../line-breaks.mts'

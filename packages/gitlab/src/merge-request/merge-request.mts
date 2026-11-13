@@ -113,9 +113,11 @@ export async function findOpenMergeRequest(repository: Repository, context?: Too
 }
 
 /**
- * The merge request that merged the checkout's branch into the default branch, when one did; the
- * latest, when several did. A run that starts over after a repository was delivered, such as one
- * whose sandbox was lost, finds it here, while the branch may be gone or hold nothing new.
+ * The merge request this run opened that merged the checkout's branch into the default branch, when
+ * there is one; the latest, when there are several. A run that starts over after a repository was
+ * delivered, such as one whose sandbox was lost, finds it here, while the branch may be gone or hold
+ * nothing new. A merge of the branch by an earlier run or by a person isn't this run's, and isn't
+ * found.
  *
  * ```ts
  * const merged = await gitlab.mergedMergeRequest(repository)

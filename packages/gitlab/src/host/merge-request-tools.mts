@@ -6,6 +6,7 @@ import {
 	replyToItem,
 	sameBody,
 	showItemsBeingRead,
+	signedBy,
 	signedDescription,
 } from '@mesh-flow/code-repository/host'
 import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
@@ -81,15 +82,24 @@ async function openOnBranch(client: GitlabClient, project: string, head: string,
 	return open
 }
 
-/** The latest merge request of the project's own branch `head` that was merged into `base`, when there is one. */
-async function mergedOnBranch(client: GitlabClient, project: string, head: string, base: string): Promise<ApiMergeRequest | undefined> {
+/**
+ * The latest merge request of the project's own branch `head` that was merged into `base` and that
+ * run `runId` signed, when there is one. Only the run's own: a branch named after a story may have
+ * been merged before, by an earlier run on the story or by a person, and that is no delivery of
+ * this run's.
+ */
+async function mergedOnBranch(
+	client: GitlabClient,
+	project: string,
+	{ head, base, runId }: { head: string; base: string; runId: string },
+): Promise<ApiMergeRequest | undefined> {
 	const listed = await client.all(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, {
 		state: 'merged',
 		source_branch: head,
 		target_branch: base,
 	})
 	return listed
-		.filter((request) => request.source_project_id === request.target_project_id)
+		.filter((request) => request.source_project_id === request.target_project_id && signedBy(request.description ?? '', runId))
 		.toSorted((one, other) => other.iid - one.iid)[0]
 }
 
@@ -160,7 +170,9 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 		hostTool(findMergeRequest, async ({ repository, head, base, state }, context) => {
 			const client = await api(context)
 			const found =
-				state === 'opened' ? await openOnBranch(client, repository, head, base) : await mergedOnBranch(client, repository, head, base)
+				state === 'opened'
+					? await openOnBranch(client, repository, head, base)
+					: await mergedOnBranch(client, repository, { head, base, runId: context.runId })
 			return found === undefined ? null : mergeRequestData(repository, found)
 		}),
 

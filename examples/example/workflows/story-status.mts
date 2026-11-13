@@ -5,19 +5,23 @@ import { jira, type JiraIssue } from '@mesh-flow/atlassian'
 
 /** The statuses a run moves a story through, in their order. */
 const storyStatuses = ['In Progress', 'In Review', 'Done'] as const
+
+/** A status the run moves a story to. */
+export type StoryStatus = (typeof storyStatuses)[number]
+
 /** Whether two status names are the same: Jira matches them without regard to case, as `jira.transition` does. */
 function sameStatus(one: string, other: string): boolean {
 	return one.toLowerCase() === other.toLowerCase()
 }
 
-/** Whether Jira counts the story's status as one of work to do, not yet started. */
+/**
+ * Whether Jira counts the story's status as work to do, not yet started: its category is To Do, named
+ * by its key, `new`, which no language renames.
+ */
 async function isToDo(story: JiraIssue): Promise<boolean> {
-	const { issues } = await jira.search({ jql: `key = ${story.key} AND statusCategory = "To Do"`, limit: 1 })
+	const { issues } = await jira.search({ jql: `key = ${story.key} AND statusCategory = new`, limit: 1 })
 	return issues.length > 0
 }
-
-/** A status the run moves a story to. */
-export type StoryStatus = (typeof storyStatuses)[number]
 
 /**
  * Moves a story on to `status`, and never back. A run that starts over from the top, and a story

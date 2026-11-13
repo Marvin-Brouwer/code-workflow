@@ -66,6 +66,11 @@ export function runIdLine(body: string): string | undefined {
 	return start === -1 ? undefined : lines[runIdLineIndex(start)]
 }
 
+/** Whether the connector's last footer in `body` names `runId`: whether that run wrote the post, or last rewrote it. */
+export function signedBy(body: string, runId: string): boolean {
+	return runIdLine(body)?.startsWith(`\`${runId}\``) ?? false
+}
+
 /**
  * `body` with `\n` line breaks and without the run id in its last connector footer, the notes next
  * to it kept: two signings of the same text by different runs compare the same.

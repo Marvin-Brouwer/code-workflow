@@ -221,21 +221,35 @@ describe('updateMergeRequest', () => {
 })
 
 describe('mergedMergeRequest', () => {
-	test('finds the latest merge request that merged the branch, after GitLab deleted the branch', async () => {
+	test('finds the merge request the run opened once it merged, and none that another run or a person merged', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
-		api.mergeRequest(projectPath, 2, { state: 'merged', source_branch: branch })
-		api.mergeRequest(projectPath, 3, { state: 'merged', source_branch: branch })
-		api.mergeRequest(projectPath, 4, { state: 'merged', source_branch: branch, source_project_id: forkProjectId })
-		api.mergeRequest(projectPath, 5, { state: 'merged', source_branch: 'feature/PROJ-8' })
-		api.mergeRequest(projectPath, 6, { state: 'opened', source_branch: branch })
+		api.mergeRequest(projectPath, 1, { state: 'merged', source_branch: branch, description: signed('Earlier.', 'run-earlier', []) })
+		api.mergeRequest(projectPath, 2, { state: 'merged', source_branch: branch, description: 'Merged by a person.' })
 
 		// Act
-		const run = await runOnGateway(gateway, async () => mergedMergeRequest(await checkout({ repository: projectPath, branch })))
-		const found = await run.result
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: projectPath, branch })
+			const before = await mergedMergeRequest(repository)
+			await changeLogin(repository, 'SameSite=None\n')
+			const opened = await openMergeRequest(repository, sameSite)
+			const signedByRun = api.mergeRequest(projectPath, opened.number, { state: 'merged' }).description
+			// From a fork, onto another branch, and the branch open again: none of them is the delivery.
+			api.mergeRequest(projectPath, 4, {
+				state: 'merged',
+				source_branch: branch,
+				source_project_id: forkProjectId,
+				description: signedByRun,
+			})
+			api.mergeRequest(projectPath, 5, { state: 'merged', source_branch: 'feature/PROJ-8', description: signedByRun })
+			api.mergeRequest(projectPath, 6, { state: 'opened', source_branch: branch, description: signedByRun })
+			return { before, opened, after: await mergedMergeRequest(repository) }
+		})
+		const { before, opened, after } = await run.result
 
 		// Assert
-		expect(found).toMatchObject({ number: 3, merged: true })
+		expect(before).toBeUndefined()
+		expect(after).toMatchObject({ number: opened.number, merged: true })
 	})
 
 	test('finds none for a branch that was never merged', async () => {

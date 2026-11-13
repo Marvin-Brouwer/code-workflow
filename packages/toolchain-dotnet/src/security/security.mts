@@ -1,6 +1,6 @@
 import { check, type Check, type Finding } from '@mesh-flow/core'
-import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 import { listPackages } from '../package-list.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 
 /** Problems whose level starts with this, such as `info` or `Information`, say nothing is wrong. */
 const informationalLevelPrefix = 'info'

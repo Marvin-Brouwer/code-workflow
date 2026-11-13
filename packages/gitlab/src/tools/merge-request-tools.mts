@@ -97,7 +97,7 @@ export const updateMergeRequest = {
 /**
  * Finds on the host the merge request of a branch onto a target branch in `state`, when it has one.
  * GitLab keeps one open merge request per branch, so an open one onto another target fails the
- * call, naming it. Of the merged ones, the latest.
+ * call, naming it. Of the merged ones, the latest that the calling run signed.
  */
 export const findMergeRequest = {
 	name: 'gitlabFindMergeRequest',

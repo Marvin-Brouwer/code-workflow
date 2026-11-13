@@ -80,6 +80,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 			throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
 		await moveOn(story, 'In Review')
 		await jira.comment(story, `Merge request for ${part.repository}: ${mergeRequest.url}`, { key: `merge-request ${part.repository}` })
+
 		// A merge request merged meanwhile has no review left to watch.
 		if (mergeRequest.merged) return mergeRequest
 

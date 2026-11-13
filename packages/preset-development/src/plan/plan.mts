@@ -56,11 +56,13 @@ export const Plan = z
 						message: `${dependency[field]} isn't one of the plan's repositories.`,
 					})
 		const cyclic = inCycle(plan.dependencies)
+		// As the plan lists it, not in the lower case the names are compared in.
+		const listed = plan.repositories.find(({ repository }) => repositoryKey(repository) === cyclic)?.repository ?? cyclic
 		if (cyclic !== undefined)
 			context.addIssue({
 				code: 'custom',
 				path: ['dependencies'],
-				message: `${cyclic} ends up depending on itself: a repository can only wait for others that don't wait for it.`,
+				message: `${listed} ends up depending on itself: a repository can only wait for others that don't wait for it.`,
 			})
 	})
 export type Plan = z.infer<typeof Plan>

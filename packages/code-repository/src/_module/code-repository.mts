@@ -45,7 +45,7 @@ export { commentMarker, isMarked, markerStart, markerValue } from '../markers.mt
 export { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin } from '../review/look-interval.mts'
 export { patientLook, type PatientLookOptions } from '../review/patient-look.mts'
 export { defaultReplyStage, GoneReply, isGoneReply, ReplyStage } from '../review/reply-stage.mts'
-export { replyTool, type ReplyInput, type AgentReply, type ReplyToolOptions } from '../review/reply-tool.mts'
+export { replyTool, type AgentReply, type ReplyInput, type ReplyToolOptions } from '../review/reply-tool.mts'
 export {
 	triageItems,
 	triageResult,

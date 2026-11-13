@@ -2,9 +2,9 @@ import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
 import { Directory, workingDirectoryOf } from '../directory.mts'
-import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 
 /** A package at a version, such as one an upstream merge published. */
 export interface PackageVersion {
