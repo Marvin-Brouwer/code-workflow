@@ -41,7 +41,12 @@ describe('pipelinePasses', () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.mergeRequest(projectPath, 3, { sha: head })
-		api.pipeline(projectPath, { sha: head, ref: 'feature', status: 'failed', jobs: [{ name: 'test', stage: 'test', status: 'failed' }] })
+		api.pipeline(projectPath, {
+			sha: head,
+			ref: 'feature',
+			status: 'failed',
+			jobs: [{ name: 'test', stage: 'test', status: 'failed', web_url: 'https://gitlab.example/jobs/1' }],
+		})
 
 		// Act
 		const run = await runOnGateway(gateway, async (context) => {
