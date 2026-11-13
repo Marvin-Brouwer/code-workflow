@@ -18,7 +18,7 @@ export interface FakeAnswer {
 /** One logged call. */
 const Arguments = z.array(z.string())
 
-const script = fileURLToPath(new URL('fake-dotnet.mjs', import.meta.url))
+const script = fileURLToPath(new URL('fake-dotnet-cli.mts', import.meta.url))
 
 /**
  * Puts a fake `dotnet` first on the `PATH` for the test, answering each command as `answers` says,
