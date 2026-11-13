@@ -1,5 +1,5 @@
 import { commentMarker, isMarked } from '@mesh-flow/forge'
-import { replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
+import { notFound, replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
 import { z } from 'zod'
 import type { ReviewItem } from '../tools/merge-request-tools.mts'
 import { GitlabRequestError, isGone, projectSegment, type GitlabClient } from './api.mts'
@@ -115,7 +115,7 @@ export function mergeRequestNotes(client: GitlabClient, project: string, number:
 		},
 		async threadOf(_kind, noteId) {
 			const discussion = (await listed()).find(({ notes }) => notes.some((note) => note.id === noteId))
-			if (discussion === undefined) throw new GitlabRequestError(`Note ${String(noteId)} isn't on ${project}!${String(number)}.`, 404)
+			if (discussion === undefined) throw new GitlabRequestError(`Note ${String(noteId)} isn't on ${project}!${String(number)}.`, notFound)
 			return discussion.id
 		},
 		isGone,

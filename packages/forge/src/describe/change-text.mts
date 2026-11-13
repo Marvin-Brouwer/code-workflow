@@ -7,11 +7,17 @@ export interface ChangeText {
 	readonly description: string
 }
 
+/**
+ * Room kept in a description for the footer the connector adds: the run's signature, its markers
+ * and what the change closes take a few hundred characters, and this leaves plenty to spare.
+ */
+export const footerRoomCharacters = 5_536
+
 /** A forge's limits on a title and a description. */
 export interface ChangeTextLimits {
 	/** The longest title the forge takes. */
 	readonly maxTitleCharacters: number
-	/** The longest description the forge takes, less room for the footer the connector adds. */
+	/** The longest description the forge takes. The agent gets less: {@link footerRoomCharacters} is kept for the footer. */
 	readonly maxDescriptionCharacters: number
 	/** What the forge calls the change, for the field descriptions: `pull request` or `merge request`. */
 	readonly request: string
@@ -30,7 +36,11 @@ export function changeTextSchema(limits: ChangeTextLimits) {
 			.max(limits.maxTitleCharacters)
 			.regex(/^[^\r\n]+$/, 'Write the title on one line.')
 			.describe(`The ${limits.request}'s title, one line`),
-		description: z.string().min(1).max(limits.maxDescriptionCharacters).describe(`The ${limits.request}'s description, in Markdown`),
+		description: z
+			.string()
+			.min(1)
+			.max(limits.maxDescriptionCharacters - footerRoomCharacters)
+			.describe(`The ${limits.request}'s description, in Markdown`),
 	})
 }
 

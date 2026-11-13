@@ -1,5 +1,5 @@
 import { HostToolTransientError } from '@mesh-flow/gateway'
-import { unauthorized, unavailable } from './github-statuses.mts'
+import { goneStatus, notFound, unauthorized, unavailable } from './github-statuses.mts'
 
 /** GitHub's answer to a missing permission, and to a rate limit, told apart by the headers. */
 const forbidden = 403
@@ -36,7 +36,7 @@ export function refusedToken(error: unknown): boolean {
 }
 
 /** GitHub's answers for something that is gone: never there, or deleted. */
-const goneStatuses = new Set([404, 410])
+const goneStatuses = new Set([notFound, goneStatus])
 
 /** Whether GitHub answered that what was asked for is gone, such as a comment deleted since. */
 export function isGone(error: unknown): boolean {

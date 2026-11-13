@@ -64,6 +64,8 @@ export interface FakePipeline {
 	mergeRequest?: number
 	/** The parents of the commit it runs on: the target and the head, for a merged results pipeline. */
 	parents?: string[]
+	/** Whether GitLab cleaned up the commit it ran on, as it does with the merge commit of an old merged results pipeline. */
+	commitGone?: boolean
 }
 
 export interface FakePackage {
@@ -386,7 +388,9 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 	inProject.get('/repository/commits/:sha', (context) => {
 		const sha = context.req.param('sha')
 		const pipeline = project(pathOf(context)).pipelines.find((listed) => listed.sha === sha)
-		return pipeline === undefined ? notFound(context) : context.json({ id: sha, parent_ids: pipeline.parents ?? [] })
+		return pipeline === undefined || pipeline.commitGone === true
+			? notFound(context)
+			: context.json({ id: sha, parent_ids: pipeline.parents ?? [] })
 	})
 	inProject.get('/packages', (context) => {
 		const type = context.req.query('package_type')

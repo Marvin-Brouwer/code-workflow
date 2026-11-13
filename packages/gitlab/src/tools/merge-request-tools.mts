@@ -95,7 +95,10 @@ export const updateMergeRequest = {
 	output: MergeRequestData.extend({ skipped: UpdateSkip.optional() }),
 }
 
-/** Finds on the host the open merge request of a branch onto a target branch, when it has one. */
+/**
+ * Finds on the host the open merge request of a branch onto a target branch, when it has one. GitLab
+ * keeps one open merge request per branch, so one onto another target fails the call, naming it.
+ */
 export const findMergeRequest = {
 	name: 'gitlabFindMergeRequest',
 	description: 'Finds the open merge request of a branch on GitLab',

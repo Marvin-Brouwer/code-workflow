@@ -1,7 +1,7 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { pipelineOnCommit, pipelinePackages, type JobFailure, type PipelineStatus } from '../tools/merge-request-tools.mts'
-import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
+import { isGone, projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 
 const ApiPipeline = z.object({ id: z.int(), sha: z.string(), status: z.string(), web_url: z.url() })
 type ApiPipeline = z.infer<typeof ApiPipeline>
@@ -58,8 +58,12 @@ async function latestPipeline(
 	)
 	for (const candidate of ofRequest.items) {
 		if (candidate.sha === sha) return candidate
-		const commit = await client.request('GET', `${project}/repository/commits/${candidate.sha}`, ApiCommit)
-		if (commit.parent_ids.includes(sha)) return candidate
+		// GitLab may have cleaned up the merge commit of an old pipeline: that one isn't the head's.
+		const commit = await client.request('GET', `${project}/repository/commits/${candidate.sha}`, ApiCommit).catch((error: unknown) => {
+			if (isGone(error)) return undefined
+			throw error
+		})
+		if (commit?.parent_ids.includes(sha) === true) return candidate
 	}
 	return undefined
 }
@@ -102,14 +106,15 @@ export function pipelineHostTools(api: ApiClient): HostTool[] {
 				const packages = await client.all(`${projectSegment(repository)}/packages`, ApiPackage, query)
 				return packages.filter((found) => found.pipeline?.id === pipeline || (found.pipelines ?? []).some((built) => built.id === pipeline))
 			}
-			// GitLab lists the packages it is done with by default, and those it is still processing only when asked.
-			const [listed, processing] = await Promise.all([ofPipeline(), ofPipeline('processing')])
-			const broken = listed.filter((found) => found.status === 'error')
+			// GitLab lists the packages it is done with by default, and those it is still processing only when
+			// asked. The ones it couldn't process are asked for too, whichever way the default goes.
+			const [listed, processing, broken] = await Promise.all([ofPipeline(), ofPipeline('processing'), ofPipeline('error')])
 			if (broken.length > 0)
 				throw new Error(
 					`GitLab couldn't process ${broken.map((found) => `${found.name} ${found.version}`).join(', ')} of pipeline ${String(pipeline)}.`,
 				)
-			return { packages: listed.map((found) => ({ name: found.name, version: found.version })), processing: processing.length }
+			const packages = listed.filter((found) => found.status !== 'error').map((found) => ({ name: found.name, version: found.version }))
+			return { packages, processing: processing.length }
 		}),
 	]
 }

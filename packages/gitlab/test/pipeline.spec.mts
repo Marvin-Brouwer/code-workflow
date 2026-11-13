@@ -55,6 +55,32 @@ describe('pipelinePasses', () => {
 		expect(await run.result).toEqual([{ source: 'pipeline: test/lint', message: 'failed (https://gitlab.example/jobs/2)' }])
 	})
 
+	test('passes over a merged results pipeline whose merge commit GitLab cleaned up', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { sha: head })
+		const failed = api.pipeline(projectPath, {
+			sha: merge,
+			ref: 'refs/merge-requests/3/merge',
+			status: 'failed',
+			mergeRequest: 3,
+			parents: [head],
+		})
+		api.pipeline(projectPath, {
+			sha: 'd'.repeat(40),
+			ref: 'refs/merge-requests/3/merge',
+			status: 'success',
+			mergeRequest: 3,
+			commitGone: true,
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, (context) => runCheck(pipelinePasses(where, quickly), context))
+
+		// Assert
+		expect(await run.result).toEqual([{ source: 'pipeline: /pipeline', message: `failed (${failed.web_url})` }])
+	})
+
 	test('reports a downstream pipeline that failed, and leaves out jobs that may fail', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()

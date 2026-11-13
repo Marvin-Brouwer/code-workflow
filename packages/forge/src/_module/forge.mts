@@ -30,6 +30,7 @@ export { readBrief, type ChangeBrief } from '../describe/brief.mts'
 export { pascalCase, type ChangeRequest, type ChangeRequestRef, type ForgeTerms } from '../describe/change-request.mts'
 export {
 	changeTextSchema,
+	footerRoomCharacters,
 	normalizedBody,
 	sameText,
 	textInPrompt,

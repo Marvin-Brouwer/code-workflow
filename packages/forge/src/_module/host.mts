@@ -7,7 +7,7 @@
  */
 export { gitRemote, type GitRemote, type GitRemoteOptions } from '../host/git-remote.mts'
 export { gitHostTools } from '../host/git-host-tools.mts'
-export { gone, notFound, unauthorized, unavailable } from '../host/http-statuses.mts'
+export { goneStatus, notFound, unauthorized, unavailable } from '../host/http-statuses.mts'
 export { oneAtATime, type OneAtATime } from '../host/one-at-a-time.mts'
 export { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '../host/retrying-fetch.mts'
 export { runIdLine, signed, unsigned, withoutRunId, withUnixLineBreaks } from '../host/signature.mts'

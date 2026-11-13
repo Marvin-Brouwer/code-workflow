@@ -15,6 +15,8 @@ describe('later', () => {
 	})
 
 	test('takes the one there is when the other is missing', () => {
+		// Arrange
+
 		// Act
 		const found = [later(undefined, 'b'), later('a', undefined), later(undefined, undefined)]
 

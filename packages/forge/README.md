@@ -20,7 +20,8 @@ import { z } from 'zod'
 declare const context: ToolContext
 
 const ProjectPath = z.string().regex(/^[\w.-]+(\/[\w.-]+)+$/)
-const { cloneRepository } = gitTools({ prefix: 'gitlab', forge: 'GitLab', repositoryTerm: 'project', repository: ProjectPath })
+const terms = { forge: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' }
+const { cloneRepository } = gitTools({ terms, repositoryTerm: 'project', repository: ProjectPath })
 
 const repository: Checkout = await checkoutRepository(
 	{
@@ -38,7 +39,7 @@ const repository: Checkout = await checkoutRepository(
 `describe`, `triage` and `review`. The connector says how its forge is read and written:
 
 ```ts
-import type { Agent } from '@mesh-flow/core'
+import { tool, type Agent } from '@mesh-flow/core'
 import {
 	branchHeadOf,
 	changeTextSchema,
@@ -49,6 +50,7 @@ import {
 	type DescribeChangeOptions,
 	type DescribeForge,
 } from '@mesh-flow/forge'
+import { z } from 'zod'
 
 interface MergeRequestRef {
 	readonly repository: string
@@ -59,7 +61,15 @@ declare const layout: ChangeRequestLayout
 declare function findOpenMergeRequest(repository: Checkout): Promise<ChangeRequest | undefined>
 declare function mergeRequest(ref: MergeRequestRef): Promise<ChangeRequest>
 
-const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_000_000, request: 'merge request' })
+/** The connector's tool that reads which commit a checkout's branch is at, which also tells an agent. */
+const branchHead = (repository: Checkout) =>
+	tool('gitlabBranchHead', {
+		description: `Reads which commit the branch of ${repository.directory} is at`,
+		input: z.object({ pushed: z.boolean() }),
+		action: ({ pushed }, context) => branchHeadOf(repository, pushed, context),
+	})
+
+const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_048_576, request: 'merge request' })
 
 const gitlabDescribe: DescribeForge<Checkout, ChangeRequest, MergeRequestRef> = {
 	terms: { forge: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' },
@@ -68,7 +78,7 @@ const gitlabDescribe: DescribeForge<Checkout, ChangeRequest, MergeRequestRef> = 
 	sameRepository: (one, other) => one === other,
 	findOpen: (repository) => findOpenMergeRequest(repository),
 	read: (ref) => mergeRequest(ref),
-	head: (repository, pushed) => branchHeadOf(repository, pushed),
+	head: (repository, pushed) => branchHead(repository)({ pushed }),
 }
 
 export function describe(agent: Agent, repository: Checkout, options: DescribeChangeOptions<MergeRequestRef, never> = {}) {

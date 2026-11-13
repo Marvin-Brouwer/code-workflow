@@ -1,13 +1,12 @@
 import { z } from 'zod'
+import type { ForgeTerms } from '../describe/change-request.mts'
 import { BranchName } from './branch-name.mts'
 import { Bundle, Sha } from './bundle-schemas.mts'
 
 /** How a forge names itself and its repositories in its git tools. */
 export interface GitToolNames<Repository extends z.ZodType<string>> {
-	/** The prefix of the tools' names, such as `github`. */
-	readonly prefix: string
-	/** The forge's name in the tools' descriptions, such as `GitHub`. */
-	readonly forge: string
+	/** The forge's terms: its name for the descriptions, and the prefix of the tools' names. */
+	readonly terms: Pick<ForgeTerms, 'forge' | 'toolPrefix'>
 	/** What the forge calls a repository, such as `repository` or `project`. */
 	readonly repositoryTerm: string
 	/** The schema of a repository's name on the forge, which also keeps it from leaving the clones' directory. */
@@ -19,10 +18,11 @@ export interface GitToolNames<Repository extends z.ZodType<string>> {
  * never the credential, the other pushes what the sandbox bundled, after which the host checks the
  * branch is at the bundle's head.
  */
-export function gitTools<Repository extends z.ZodType<string>>({ prefix, forge, repositoryTerm, repository }: GitToolNames<Repository>) {
+export function gitTools<Repository extends z.ZodType<string>>({ terms, repositoryTerm, repository }: GitToolNames<Repository>) {
+	const { forge, toolPrefix } = terms
 	return {
 		cloneRepository: {
-			name: `${prefix}Clone`,
+			name: `${toolPrefix}Clone`,
 			description: `Fetches a ${forge} ${repositoryTerm} on the host and returns it as a git bundle holding its default branch and, when it exists, the branch`,
 			input: z.object({ repository, branch: BranchName }),
 			output: z.object({
@@ -33,7 +33,7 @@ export function gitTools<Repository extends z.ZodType<string>>({ prefix, forge, 
 			}),
 		},
 		pushBundle: {
-			name: `${prefix}Push`,
+			name: `${toolPrefix}Push`,
 			description: `Pushes the commits in a git bundle to a branch of a ${forge} ${repositoryTerm}`,
 			input: z.object({ repository, branch: BranchName, bundle: Bundle }),
 			output: z.object({ head: Sha }),

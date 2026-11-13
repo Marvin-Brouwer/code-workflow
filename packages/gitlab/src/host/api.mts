@@ -1,4 +1,12 @@
-import { defaultFetchRetry, gone, notFound, retryingFetch, unauthorized, unavailable, type FetchRetryOptions } from '@mesh-flow/forge/host'
+import {
+	defaultFetchRetry,
+	goneStatus,
+	notFound,
+	retryingFetch,
+	unauthorized,
+	unavailable,
+	type FetchRetryOptions,
+} from '@mesh-flow/forge/host'
 import { HostToolTransientError, type HostToolContext } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { readSite } from './site.mts'
@@ -148,7 +156,7 @@ async function failureText(response: Response): Promise<string> {
 
 /** Whether GitLab answered that what was asked for is gone, such as a note deleted since. */
 export function isGone(error: unknown): boolean {
-	return error instanceof GitlabRequestError && (error.status === notFound || error.status === gone)
+	return error instanceof GitlabRequestError && (error.status === notFound || error.status === goneStatus)
 }
 
 /** Whether GitLab refused the token: one that's wrong, expired or revoked. */
