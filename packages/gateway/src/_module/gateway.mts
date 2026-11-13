@@ -11,6 +11,7 @@ export { openGateway, tokensPerEndpoint, type AcceptedCall, type Gateway, type G
 export { openGatewayHome, type GatewayHome } from '../gateway-home.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
+export { projectUrl } from '../project-url.mts'
 export {
 	openProviderSettings,
 	providerCredential,

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { tool, workspace, type Tool, type ToolContext, type WorkspaceFile } from '@mesh-flow/core'
 import { z } from 'zod'
 
+/** The file in the workspace the deviations are recorded in, next to the plan. */
 const deviationsFile = workspace.file('plan-deviations.md')
 
 /** What a new deviations file starts with. */

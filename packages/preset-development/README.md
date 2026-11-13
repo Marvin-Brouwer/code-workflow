@@ -7,11 +7,15 @@ A development preset for mesh-flow: what a workflow that takes a story from rese
 ```ts
 // workflows/develop.mts
 import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
-import { inDependencyOrder, propose, succeed, verify, workflow } from '@mesh-flow/core'
+import { inDependencyOrder, propose, succeed, verify, workflow, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
-import { developer, planner, reviewer } from '../agents.mts'
+
+// The workflow repository's own agents: packages ship none.
+declare const developer: Agent
+declare const planner: Agent
+declare const reviewer: Agent
 
 export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
@@ -55,3 +59,13 @@ import { deviations } from '@mesh-flow/preset-development'
 
 await deviations.record({ repository: 'team/backend/api', reason: 'The pipeline needs .NET 10', change: 'The target framework moves to net10.0' })
 ```
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/preset-development typecheck
+pnpm --filter @mesh-flow/preset-development test
+pnpm --filter @mesh-flow/preset-development build
+```
+
+Tests run with a scripted model and local git repositories, so they need no model, no token and no network. They need `git` on the machine.

@@ -1,5 +1,4 @@
-/** Where the footer of a post links to. */
-const projectUrl = 'https://github.com/Marvin-Brouwer/code-workflow'
+import { projectUrl } from '@mesh-flow/gateway'
 
 /**
  * `body` as the connector posts it, in Markdown: under it, a line in italics that says what wrote

@@ -1,6 +1,6 @@
 import { check, type Check } from '@mesh-flow/core'
 import { diagnosticLine } from '../build/diagnostics.mts'
-import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../directory.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 import { runTests } from './run-tests.mts'
 
 /**

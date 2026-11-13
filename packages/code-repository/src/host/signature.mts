@@ -1,8 +1,6 @@
+import { projectUrl } from '@mesh-flow/gateway'
 import { withUnixLineBreaks } from '../line-breaks.mts'
 import { commentMarker, markerStart } from '../markers.mts'
-
-/** Where the footer of a post links to. */
-const projectUrl = 'https://github.com/Marvin-Brouwer/code-workflow'
 
 /** The rule the footer starts with, under a blank line. */
 const footerRule = '---'

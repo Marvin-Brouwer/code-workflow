@@ -49,3 +49,13 @@ await developer.loop`Implement ${story} in ${repository}, then hand in with ${ve
 - `dotnet` runs in the same directory take turns, since they share `obj` and `bin`: under `verify(dotnet.testsPass(repository), dotnet.security(repository))`, the test run and the security check's restore and list never run at once. A stopped run is waited for until `dotnet` is gone.
 - Test projects on Microsoft.Testing.Platform's own `dotnet test` mode take `--report-trx` rather than `--logger trx`, and aren't read yet.
 - A virus scan is planned (issue #31).
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/toolchain-dotnet typecheck
+pnpm --filter @mesh-flow/toolchain-dotnet test
+pnpm --filter @mesh-flow/toolchain-dotnet build
+```
+
+Most tests run against a fake `dotnet`, so they need no .NET SDK. `test/real-sdk.spec.mts` builds and tests a real solution, and runs only where `dotnet` is on the `PATH`.

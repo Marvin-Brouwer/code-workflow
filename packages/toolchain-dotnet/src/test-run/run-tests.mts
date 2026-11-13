@@ -51,8 +51,8 @@ export async function runTests({ target, filter, abortSignal }: RunTestsOptions)
 		const buildErrors = diagnosticsIn(run.stdout).filter(
 			(diagnostic) => diagnostic.severity === 'error' && diagnostic.project !== undefined,
 		)
-		const explained = run.ok || outcome.failures.length > 0 || buildErrors.length > 0
-		return { ...outcome, succeeded: run.ok, buildErrors, ...(explained ? {} : { output: outputTail(run) }) }
+		const explained = run.succeeded || outcome.failures.length > 0 || buildErrors.length > 0
+		return { ...outcome, succeeded: run.succeeded, buildErrors, ...(explained ? {} : { output: outputTail(run) }) }
 	} finally {
 		await removeScratch(resultsDirectory)
 	}

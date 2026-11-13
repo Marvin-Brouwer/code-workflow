@@ -1,7 +1,8 @@
 import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
-import { Directory, targetOf, workingDirectoryOf, type DotnetCheckout, type DotnetTargetOptions } from '../directory.mts'
+import { Directory, workingDirectoryOf } from '../directory.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
 
@@ -64,7 +65,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 				if (current === undefined || asksFor(current.requestedVersion, wanted.version)) continue
 				// One at a time: `dotnet add` writes the project file, or Directory.Packages.props under central package management.
 				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
-				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
+				if (!added.succeeded) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
 					projectPath: project.path,
 					name: current.id,

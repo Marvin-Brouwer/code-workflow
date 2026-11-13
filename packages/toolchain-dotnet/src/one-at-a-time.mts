@@ -1,3 +1,5 @@
+import { untilAborted } from '@mesh-flow/core'
+
 /** A call that waits its turn behind the earlier calls with the same key. */
 export type OneAtATime = <T>(key: string, abortSignal: AbortSignal, call: () => Promise<T>) => Promise<T>
 
@@ -25,20 +27,5 @@ export function oneAtATime(): OneAtATime {
 		} finally {
 			resolve(undefined)
 		}
-	}
-}
-
-/** Waits for `promise`, or rejects with the signal's reason as soon as it aborts. */
-async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
-	abortSignal.throwIfAborted()
-	const { promise: aborted, reject } = Promise.withResolvers<never>()
-	const onAbort = () => {
-		reject(abortSignal.reason)
-	}
-	abortSignal.addEventListener('abort', onAbort, { once: true })
-	try {
-		return await Promise.race([promise, aborted])
-	} finally {
-		abortSignal.removeEventListener('abort', onAbort)
 	}
 }

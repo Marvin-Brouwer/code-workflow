@@ -1,6 +1,6 @@
 # `@mesh-flow/gitlab`
 
-The GitLab connector for mesh-flow, for gitlab.com and for a GitLab of your own. It gives workflows functions for code, tools for agents, a check for `verify`, and GitLab's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
+The GitLab connector for mesh-flow. A connector gives workflows one outside system; this one gives them GitLab, on gitlab.com and on a GitLab of your own: functions for code, tools for agents, a check for `verify`, and GitLab's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
 It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other code host connectors through `@mesh-flow/code-repository`, so a workflow reads the same on each.
 
@@ -24,9 +24,12 @@ The agents are the workflow repository's own; the package takes them as paramete
 ```ts
 // workflows/develop.mts
 import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
-import { succeed, verify, workflow } from '@mesh-flow/core'
+import { succeed, verify, workflow, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
-import { developer, writer } from '../agents.mts'
+
+// The workflow repository's own agents: packages ship none.
+declare const developer: Agent
+declare const writer: Agent
 
 export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)

@@ -109,7 +109,7 @@ On Data Center, a webhook has a secret, and so a signature, only on recent versi
 
 ## The host half
 
-The `host` entry point is what `mesh-flow connector add` loads: `connector`, and `atlassianHostTools` for a test that points the tools at a fake. `credentialNames('jira')` names a product's credentials.
+`@mesh-flow/atlassian/host` is what the engine loads: `connector`, with the host halves of every tool, and `atlassianHostTools` for a test that points them at a fake. `credentialNames('jira')` names a product's credentials.
 
 ```ts
 import { atlassianHostTools } from '@mesh-flow/atlassian/host'

@@ -36,10 +36,10 @@ export const build = tool('dotnetBuild', {
 		const diagnostics = diagnosticsIn(result.stdout)
 		const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error')
 		return {
-			succeeded: result.ok,
+			succeeded: result.succeeded,
 			errors,
 			warnings: diagnostics.length - errors.length,
-			...(result.ok || errors.length > 0 ? {} : { output: outputTail(result) }),
+			...(result.succeeded || errors.length > 0 ? {} : { output: outputTail(result) }),
 		}
 	},
 })
