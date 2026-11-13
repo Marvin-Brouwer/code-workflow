@@ -9,7 +9,7 @@ import {
 	type RunOutcome,
 } from '@mesh-flow/core'
 import { keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway, type HostTool } from '@mesh-flow/gateway'
-import type { Answer, CallMessage, RuntimeMessage } from '@mesh-flow/protocol'
+import type { Answer, CallMessage } from '@mesh-flow/protocol'
 import { onTestFinished } from 'vitest'
 import { temporaryDirectory } from './temporary-directory.mts'
 
@@ -78,76 +78,30 @@ export interface TestRun<T> {
 	/** The id the gateway knows the run by, which the connector signs its posts with. */
 	readonly runId: string
 	readonly workspace: string
-	readonly messages: readonly RuntimeMessage[]
-	/** The wake requests the run sent, which the channel answers right away. */
-	readonly wakes: number
 	readonly controller: AbortController
 	readonly outcome: Promise<RunOutcome>
 	/** What the body returned, or why it threw. */
 	readonly result: Promise<T>
 }
 
-/** How a test run answers what it asks a person. */
-export interface TestRunOptions {
-	/** The answers to the run's `input` requests, in the order it asks; a request past them stays unanswered. */
-	readonly inputs?: readonly unknown[]
-	/** Called as the run asks its `index`th `input`, before the answer goes back: a change a person makes while they answer. */
-	readonly onInput?: (index: number) => void
+/** A run channel that answers no request: the Atlassian functions ask no person and wait for nothing. */
+const silentChannel: RunChannel = {
+	send: () => undefined,
+	answer: (_requestId, abortSignal) =>
+		new Promise((_resolve, reject) => {
+			abortSignal.addEventListener('abort', () => {
+				reject(abortSignal.reason)
+			})
+		}),
 }
 
-/** Whether the run asked a person for input. */
-export function askedForInput(messages: readonly RuntimeMessage[]): boolean {
-	return messages.some((message) => message.type === 'request' && message.request.kind === 'input')
-}
-
-/**
- * Runs `body` as a workflow with its host tools on `gateway`, on a channel that answers every
- * wake at once, so a polling loop runs on, and every `input` request with the next of `inputs`.
- * The run is stopped when the test ends.
- */
-export async function runOnGateway<T>(
-	gateway: Gateway,
-	body: (context: { abortSignal: AbortSignal }) => Promise<T>,
-	{ inputs = [], onInput }: TestRunOptions = {},
-): Promise<TestRun<T>> {
-	const inputQueue = [...inputs]
-	let asked = 0
+/** Runs `body` as a workflow with its host tools on `gateway`. The run is stopped when the test ends. */
+export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortSignal: AbortSignal }) => Promise<T>): Promise<TestRun<T>> {
 	const workspace = path.join(await temporaryDirectory(), 'workspace')
 	const controller = new AbortController()
 	onTestFinished(() => {
 		controller.abort(new Error('The test finished.'))
 	})
-	const messages: RuntimeMessage[] = []
-	const answers = new Map<string, PromiseWithResolvers<Answer>>()
-	const slot = (id: string) => {
-		const known = answers.get(id)
-		if (known !== undefined) return known
-		const created = Promise.withResolvers<Answer>()
-		answers.set(id, created)
-		return created
-	}
-	let wakes = 0
-	const channel: RunChannel = {
-		send(message) {
-			messages.push(message)
-			if (message.type === 'request' && message.request.kind === 'wake') {
-				wakes++
-				slot(message.request.id).resolve({})
-			}
-			if (message.type === 'request' && message.request.kind === 'input') {
-				onInput?.(asked++)
-				if (inputQueue.length > 0) slot(message.request.id).resolve({ value: inputQueue.shift() })
-			}
-		},
-		answer(requestId, abortSignal) {
-			return new Promise((resolve, reject) => {
-				abortSignal.addEventListener('abort', () => {
-					reject(abortSignal.reason)
-				})
-				slot(requestId).promise.then(resolve, reject)
-			})
-		},
-	}
 	const runId = `run-${String(Date.now())}`
 	const grant = await gateway.openRun(runId, definedHostTools(), controller.signal)
 	const { promise: result, resolve, reject } = Promise.withResolvers<T>()
@@ -161,7 +115,7 @@ export async function runOnGateway<T>(
 		}
 	})
 	const outcome = runWorkflow(definition, {
-		channel,
+		channel: silentChannel,
 		abortSignal: controller.signal,
 		workspace,
 		gateway: gatewayClient(gatewayChannel(gateway, runId, controller.signal), grant, 'test', controller.signal),
@@ -174,10 +128,6 @@ export async function runOnGateway<T>(
 	return {
 		runId,
 		workspace,
-		messages,
-		get wakes() {
-			return wakes
-		},
 		controller,
 		outcome,
 		result,

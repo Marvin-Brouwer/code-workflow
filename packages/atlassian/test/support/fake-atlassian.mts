@@ -7,8 +7,11 @@ export interface FakeRequest {
 	readonly query: URLSearchParams
 	readonly authorization: string | null
 	readonly body: unknown
+	/** The request's signal, so a test sees that a stopped call stopped its request. */
+	readonly signal: AbortSignal | undefined
 }
 
+/** A comment on a fake issue. */
 export interface FakeComment {
 	id: string
 	author: string
@@ -19,6 +22,7 @@ export interface FakeComment {
 	posted?: unknown
 }
 
+/** An issue the fake holds, in the shape tests arrange it in rather than Jira's. */
 export interface FakeIssue {
 	key: string
 	summary: string
@@ -30,14 +34,16 @@ export interface FakeIssue {
 	/** The statuses the issue's workflow can move to from any status, by transition id. */
 	transitions: Record<string, string>
 	properties: Record<string, unknown>
-	links: { type: { inward: string; outward: string }; inwardIssue?: Nested; outwardIssue?: Nested }[]
+	links: { type: { inward: string; outward: string }; inwardIssue?: FakeNestedIssue; outwardIssue?: FakeNestedIssue }[]
 }
 
-interface Nested {
+/** An issue as a link names it: its key, summary and status. */
+interface FakeNestedIssue {
 	key: string
 	fields: { summary: string; status: { name: string } }
 }
 
+/** A Confluence page the fake holds. */
 export interface FakePage {
 	id: string
 	title: string
@@ -56,6 +62,10 @@ export interface FakeAtlassian {
 	readonly hanging: Set<string>
 	/** Answers the next requests with these statuses, oldest first, before serving as usual: a site that has trouble. */
 	readonly failNext: number[]
+	/** Requests, as `METHOD /path`, that are served but answered 504: an answer a proxy lost. */
+	readonly losesAnswers: Set<string>
+	/** How long each answer takes, in milliseconds: room for calls to interleave. */
+	latencyMs: number
 }
 
 /** An issue with the defaults filled in. */
@@ -94,6 +104,7 @@ export function fakeAtlassian(): FakeAtlassian {
 	const pages = new Map<string, FakePage>()
 	const hanging = new Set<string>()
 	const failNext: number[] = []
+	const losesAnswers = new Set<string>()
 	let nextCommentId = 10_000
 
 	const serveJira = (method: string, route: string, query: URLSearchParams, body: unknown): Response => {
@@ -159,11 +170,16 @@ export function fakeAtlassian(): FakeAtlassian {
 	}
 
 	const serveConfluence = (route: string, query: URLSearchParams): Response => {
-		if (route === '/content/search') {
+		if (route === '/search') {
 			const text = /text ~ "([^"]*)"/.exec(query.get('cql') ?? '')?.[1] ?? ''
 			const found = [...pages.values()].filter((page) => page.html.includes(text) || page.title.includes(text))
+			// As `/rest/api/search` answers: the content under `content`, the highlighted excerpt next to it.
 			return json(200, {
-				results: found.map((page) => ({ ...pageAnswer(page), excerpt: `@@@hl@@@${text}@@@endhl@@@ and more` })),
+				results: found.map((page) => ({
+					content: pageAnswer(page),
+					excerpt: query.get('excerpt') === 'highlight' ? `@@@hl@@@${text}@@@endhl@@@ and more` : `${text} and more`,
+					url: `/spaces/${page.space}/pages/${page.id}`,
+				})),
 				_links: {},
 			})
 		}
@@ -176,13 +192,16 @@ export function fakeAtlassian(): FakeAtlassian {
 		const method = init?.method ?? 'GET'
 		const text = typeof init?.body === 'string' ? init.body : undefined
 		const headers = new Headers(init?.headers)
+		const body: unknown = text === undefined ? undefined : JSON.parse(text)
 		requests.push({
 			method,
 			path: url.pathname,
 			query: url.searchParams,
 			authorization: headers.get('authorization'),
-			body: text === undefined ? undefined : JSON.parse(text),
+			body,
+			signal: init?.signal ?? undefined,
 		})
+		if (state.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, state.latencyMs))
 		if (hanging.has(url.pathname))
 			return new Promise<Response>((_resolve, reject) => {
 				init?.signal?.addEventListener('abort', () => {
@@ -191,15 +210,19 @@ export function fakeAtlassian(): FakeAtlassian {
 			})
 		const failure = failNext.shift()
 		if (failure !== undefined) return json(failure, { errorMessages: ['Trouble'] })
-		const body: unknown = text === undefined ? undefined : JSON.parse(text)
 		const jira = /^\/rest\/api\/[23](\/.*)$/.exec(url.pathname)?.[1]
-		const confluence = /^(?:\/wiki)?\/rest\/api(\/content.*)$/.exec(url.pathname)?.[1]
-		if (confluence !== undefined) return serveConfluence(confluence, url.searchParams)
-		if (jira !== undefined) return serveJira(method, jira, url.searchParams, body)
-		return notFound()
+		const confluence = /^(?:\/wiki|\/confluence)?\/rest\/api(\/(?:content|search).*)$/.exec(url.pathname)?.[1]
+		const served =
+			confluence !== undefined
+				? serveConfluence(confluence, url.searchParams)
+				: jira === undefined
+					? notFound()
+					: serveJira(method, jira, url.searchParams, body)
+		return losesAnswers.has(`${method} ${url.pathname}`) ? json(504, { errorMessages: ['Gateway timeout'] }) : served
 	}
 
-	return { fetch: fake, requests, issues, pages, hanging, failNext }
+	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, hanging, failNext, losesAnswers, latencyMs: 0 }
+	return state
 }
 
 function rendered(issue: FakeIssue) {

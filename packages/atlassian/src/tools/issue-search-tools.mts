@@ -2,10 +2,10 @@ import { z } from 'zod'
 import { IssueKey } from './issue-key.mts'
 
 /** The most issues a search hands back when it isn't told. */
-export const defaultSearchLimit = 20
+export const defaultIssueSearchLimit = 20
 
 /** The most issues one search hands back: Jira's own page size for a search. */
-export const maxSearchLimit = 100
+export const maxIssueSearchLimit = 100
 
 /** An issue a search found. */
 export const FoundIssue = z.object({
@@ -27,9 +27,9 @@ export const searchIssues = {
 		limit: z
 			.int()
 			.min(1)
-			.max(maxSearchLimit)
+			.max(maxIssueSearchLimit)
 			.optional()
-			.describe(`The most issues to return. Default: ${String(defaultSearchLimit)}.`),
+			.describe(`The most issues to return. Default: ${String(defaultIssueSearchLimit)}.`),
 	}),
 	output: z.object({
 		issues: z.array(FoundIssue),

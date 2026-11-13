@@ -36,3 +36,16 @@ describe('onIssueLabeled', () => {
 		expect(parameters.success).toBe(false)
 	})
 })
+
+describe('issueUpdated', () => {
+	test('takes an update without a changelog, as Jira sends for a new comment', () => {
+		// Arrange
+		const { changelog: _changelog, ...commented } = updated(null, null)
+
+		// Act
+		const parsed = jira.issueUpdated.safeParse(commented)
+
+		// Assert
+		expect(parsed.data?.changelog).toEqual({ items: [] })
+	})
+})

@@ -3,8 +3,8 @@ import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { confluence, jira } from '../src/_module/atlassian.mts'
-import { atlassianHostTools } from '../src/_module/host.mts'
-import { keyedCommentsProperty } from '../src/host/jira/jira-host-tools.mts'
+import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
+import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
 import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage } from './support/fake-atlassian.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
@@ -19,6 +19,7 @@ const deployments = [
 			'confluence/email': 'bot@example.com',
 			'confluence/token': 'cloud-token',
 		},
+		jiraUrl: 'https://example.atlassian.net',
 		jiraApi: '/rest/api/3',
 		confluenceApi: '/wiki/rest/api',
 		pageUrl: 'https://example.atlassian.net/wiki/spaces/TEAM/pages/12345',
@@ -32,18 +33,25 @@ const deployments = [
 			'confluence/url': 'https://wiki.example.com',
 			'confluence/token': 'wiki-pat',
 		},
+		jiraUrl: 'https://jira.example.com',
 		jiraApi: '/rest/api/2',
 		confluenceApi: '/rest/api',
 		pageUrl: 'https://wiki.example.com/spaces/TEAM/pages/12345',
 		authorization: 'Bearer jira-pat',
 	},
 ] as const
+const [, dataCenter] = deployments
+
+/** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
+const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
 
 /** What the fake holds before a run. */
 interface Arrangement {
 	readonly issues?: readonly FakeIssue[]
 	readonly pages?: readonly FakePage[]
 	readonly failNext?: readonly number[]
+	readonly losesAnswers?: readonly string[]
+	readonly latencyMs?: number
 }
 
 /** Runs `body` against a fake with the deployment's settings, and hands back what the fake saw. */
@@ -52,12 +60,14 @@ async function run<T>(settings: Readonly<Record<string, string>>, arrangement: A
 	for (const issue of arrangement.issues ?? []) fake.issues.set(issue.key, issue)
 	for (const page of arrangement.pages ?? []) fake.pages.set(page.id, page)
 	fake.failNext.push(...(arrangement.failNext ?? []))
-	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch }), settings)
+	for (const request of arrangement.losesAnswers ?? []) fake.losesAnswers.add(request)
+	fake.latencyMs = arrangement.latencyMs ?? 0
+	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
 	const started = await runOnGateway(gateway, body)
 	return { fake, started, result: await started.result }
 }
 
-describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi, pageUrl, authorization }) => {
+describe.each(deployments)('on $deployment', ({ settings, jiraUrl, jiraApi, confluenceApi, pageUrl, authorization }) => {
 	test('collect writes the issue as Markdown into the workspace and renders as its path', async () => {
 		// Arrange
 		const arrangement: Arrangement = {
@@ -84,7 +94,7 @@ describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi
 
 		// Assert
 		expect(result.rendered).toBe(path.join(started.workspace, 'jira', 'PROJ-7.md'))
-		expect(result.story.url).toBe(`${settings['jira/url'].replace(/\/$/, '')}/browse/PROJ-7`)
+		expect(result.story.url).toBe(`${jiraUrl}/browse/PROJ-7`)
 		expect(result.markdown).toContain('# PROJ-7: Login fails on Safari')
 		expect(result.markdown).toContain('Steps: **open** the login page.')
 		expect(result.markdown).toContain('- is blocked by PROJ-3: Session API (Done)')
@@ -132,18 +142,19 @@ describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi
 
 		// Assert
 		expect(result.again.id).toBe(result.first.id)
-		expect(result.first.url).toBe(`${settings['jira/url'].replace(/\/$/, '')}/browse/PROJ-7?focusedCommentId=${result.first.id}`)
+		expect(result.first.url).toBe(`${jiraUrl}/browse/PROJ-7?focusedCommentId=${result.first.id}`)
 		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentsProperty]).toEqual({ 'mr-api': result.first.id })
+		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.first.id })
 		const posted = JSON.stringify(fake.issues.get('PROJ-7')?.comments[0]?.posted)
 		expect(posted).toContain('two')
-		expect(posted).toContain(started.runId)
+		// On Data Center the run id is in a code span, where wiki markup's `-` is escaped.
+		expect(posted.replaceAll('\\\\-', '-')).toContain(started.runId)
 	})
 
 	test('comment with a key posts again when a person deleted the earlier one', async () => {
 		// Arrange
 		const arrangement: Arrangement = {
-			issues: [fakeIssue({ key: 'PROJ-7', properties: { [keyedCommentsProperty]: { 'mr-api': '999', other: '5' } } })],
+			issues: [fakeIssue({ key: 'PROJ-7', properties: { [keyedCommentProperty('mr-api')]: { key: 'mr-api', id: '999' } } })],
 		}
 
 		// Act
@@ -151,7 +162,63 @@ describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi
 
 		// Assert
 		expect(result.id).not.toBe('999')
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentsProperty]).toEqual({ 'mr-api': result.id, other: '5' })
+		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.id })
+	})
+
+	test('comments with different keys at once each keep their own id', async () => {
+		// Arrange
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+
+		// Act
+		const { fake, result } = await run(settings, arrangement, () =>
+			Promise.all([jira.comment('PROJ-7', 'API', { key: 'mr-api' }), jira.comment('PROJ-7', 'Web', { key: 'mr-web' })]),
+		)
+
+		// Assert
+		const [api, web] = result
+		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: api.id })
+		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-web')]).toEqual({ key: 'mr-web', id: web.id })
+	})
+
+	test('comments with one key at once post one comment', async () => {
+		// Arrange
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+
+		// Act
+		const { fake, result } = await run(settings, arrangement, () =>
+			Promise.all([jira.comment('PROJ-7', 'one', { key: 'status' }), jira.comment('PROJ-7', 'two', { key: 'status' })]),
+		)
+
+		// Assert
+		expect(result[1].id).toBe(result[0].id)
+		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
+	})
+
+	test('a comment whose answer was lost is not posted again', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7' }))
+		fake.losesAnswers.add(`POST ${jiraApi}/issue/PROJ-7/comment`)
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => jira.comment('PROJ-7', 'Picked up'))
+
+		// Assert
+		await expect(started.result).rejects.toThrow()
+		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
+	})
+
+	test('a transition whose answer was lost counts as made', async () => {
+		// Arrange
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], losesAnswers: [`POST ${jiraApi}/issue/PROJ-7/transitions`] }
+
+		// Act
+		const { fake, result } = await run(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
+
+		// Assert
+		expect(result).toEqual({ moved: true })
+		expect(fake.requests.filter((request) => request.method === 'POST' && request.path.endsWith('/transitions'))).toHaveLength(1)
 	})
 
 	test('search finds issues by JQL and says whether there are more', async () => {
@@ -169,7 +236,7 @@ describe.each(deployments)('on $deployment', ({ settings, jiraApi, confluenceApi
 					summary: 'Login fails on Safari',
 					status: 'To Do',
 					type: 'Story',
-					url: `${settings['jira/url'].replace(/\/$/, '')}/browse/PROJ-7`,
+					url: `${jiraUrl}/browse/PROJ-7`,
 				},
 			],
 			more: false,
@@ -213,7 +280,7 @@ describe('stopping', () => {
 		// Arrange
 		const fake = fakeAtlassian()
 		fake.hanging.add('/rest/api/2/issue/PROJ-7')
-		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch }), deployments[1].settings)
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch }), dataCenter.settings)
 		const started = await runOnGateway(gateway, () => jira.collect('PROJ-7'))
 		await expect.poll(() => fake.requests.length).toBe(1)
 
@@ -223,6 +290,31 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
+		await expect.poll(() => fake.requests[0]?.signal?.aborted).toBe(true)
+	})
+})
+
+describe('Confluence sites', () => {
+	test.each([
+		{
+			site: 'a Cloud site given with /wiki',
+			settings: { 'confluence/url': 'https://example.atlassian.net/wiki', 'confluence/email': 'bot@example.com' },
+			path: '/wiki/rest/api/content/12345',
+		},
+		{
+			site: 'a Data Center site under a context path',
+			settings: { 'confluence/url': 'https://example.com/confluence/' },
+			path: '/confluence/rest/api/content/12345',
+		},
+	])('$site keeps its path once', async ({ settings, path: expected }) => {
+		// Arrange
+		const arrangement: Arrangement = { pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<p>Hi</p>', version: 1 }] }
+
+		// Act
+		const { fake } = await run({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
+
+		// Assert
+		expect(fake.requests[0]?.path).toBe(expected)
 	})
 })
 
@@ -232,7 +324,7 @@ describe('trouble', () => {
 		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], failNext: [503] }
 
 		// Act
-		const { fake, result } = await run(deployments[1].settings, arrangement, () => jira.collect('PROJ-7'))
+		const { fake, result } = await run(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
 
 		// Assert
 		expect(result.key).toBe('PROJ-7')

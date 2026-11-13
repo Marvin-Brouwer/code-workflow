@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest'
-import { cqlString } from '../src/host/confluence/confluence-host-tools.mts'
 import { htmlToMarkdown } from '../src/host/html-to-markdown.mts'
 
 describe('htmlToMarkdown', () => {
@@ -20,15 +19,5 @@ describe('htmlToMarkdown', () => {
 
 		// Assert
 		expect(markdown).toEqual(['', '', ''])
-	})
-})
-
-describe('cqlString', () => {
-	test('quotes a string and escapes quotes and backslashes in it', () => {
-		// Act
-		const quoted = cqlString('say "hi" \\ bye')
-
-		// Assert
-		expect(quoted).toBe('"say \\"hi\\" \\\\ bye"')
 	})
 })

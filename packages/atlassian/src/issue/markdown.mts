@@ -1,7 +1,7 @@
 import type { IssueComment, IssueData, RelatedIssue } from '../tools/issue-tools.mts'
 
 /** The issue as Markdown: a heading with its key and summary, its facts, its description, then its relations and comments. */
-export function markdownOf(data: IssueData): string {
+export function issueMarkdownOf(data: IssueData): string {
 	const description = data.description.trim()
 	return [
 		`# ${data.key}: ${data.summary}`,

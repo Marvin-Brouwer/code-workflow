@@ -1,9 +1,13 @@
 import { HostToolTransientError } from '@mesh-flow/gateway'
 import { isNetworkError, isRateLimitError, isServerError } from 'jira.js'
 
-/** Whether a failure is one that may pass on another try: a dropped connection, a 5xx or a rate limit. */
+/**
+ * Whether a failure is one that may pass on another try: a dropped connection, a 5xx or a rate
+ * limit. A network failure that won't, such as a host name that doesn't resolve or a bad
+ * certificate, is a mistake in the settings, and doesn't.
+ */
 export function mayPass(error: unknown): boolean {
-	return isNetworkError(error) || isServerError(error) || isRateLimitError(error)
+	return (isNetworkError(error) && error.transient) || isServerError(error) || isRateLimitError(error)
 }
 
 /**

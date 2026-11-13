@@ -11,7 +11,7 @@ export type Product = 'jira' | 'confluence'
  * - `<product>/email`: the account's email on Cloud, which goes with the API token. Data Center
  *   has none: without it, the token is sent as a personal access token.
  */
-export function settingNames(product: Product) {
+export function settingNames(product: Product): Readonly<{ url: string; token: string; email: string }> {
 	return Object.freeze({ url: `${product}/url`, token: `${product}/token`, email: `${product}/email` })
 }
 

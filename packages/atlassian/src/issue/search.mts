@@ -1,4 +1,4 @@
-import { stubs } from './stubs.mts'
+import { stubs } from '../stubs.mts'
 
 /**
  * Searches Jira with JQL: a tool for agents, and a function for code. Returns keys, summaries,

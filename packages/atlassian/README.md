@@ -39,8 +39,8 @@ Set only the product a workflow uses. Every call reads the settings again, so a 
 
 ```ts
 // workflows/develop.mts
-import { succeed, workflow, workspace } from '@mesh-flow/core'
 import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { succeed, workflow, workspace } from '@mesh-flow/core'
 import { planner } from '../agents.mts'
 
 const Research = workspace.folder('research', { description: 'Research notes', minFiles: 1 })
@@ -67,7 +67,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 - `jira.dump` is the same for agents: a tool that takes a key and answers with the dump's path.
 - `jira.search` is a tool, and a function for code: it takes JQL and a `limit` (default 20, at most 100) and answers with keys, summaries, statuses, types and whether more issues match.
 - `jira.transition(issue, status)` moves an issue to a status, by name and without regard to case, through the transition of its workflow that leads there. It does nothing when the issue has that status already, and throws, naming the statuses it can move to, when no transition leads there.
-- `jira.comment(issue, body, { key })` comments in Markdown, which becomes Atlassian Document Format on Cloud and wiki markup on Data Center. With a `key`, commenting again with the same key updates the earlier comment instead of adding one, so a rerun stays tidy; the ids are kept in the issue property `mesh-flow.comments`. A comment a person deleted is posted again. Every comment ends in a line that names `@mesh-flow/*` and the run.
+- `jira.comment(issue, body, { key })` comments in Markdown, which becomes Atlassian Document Format on Cloud and wiki markup on Data Center. With a `key`, commenting again with the same key updates the earlier comment instead of adding one, so a rerun stays tidy; each key's comment id is kept in an issue property of its own, `mesh-flow.comment.<hash of the key>`. Comments with one key wait for each other, so two at once post one comment. A comment a person deleted is posted again. A run stopped between posting a comment and keeping its id posts that comment once more on its rerun. Every comment ends in a line that names `@mesh-flow/*` and the run.
 
 Each takes an issue by its key or as `collect` gave it.
 
@@ -84,8 +84,8 @@ Confluence is read through REST API v1, which Cloud and Data Center share; on Cl
 `@mesh-flow/atlassian/hooks` has Jira's events as zod schemas, with the signature Jira sends for a webhook with a secret (`x-hub-signature`) and its delivery header (`x-atlassian-webhook-identifier`) filled in, and a ready-made trigger:
 
 ```ts
-import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { jira } from '@mesh-flow/atlassian/hooks'
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
 export default defineMeshFlow({
@@ -100,6 +100,18 @@ export default defineMeshFlow({
 
 Point a Jira webhook for updated issues at it, with a secret. Jira's changelog can't be filtered by structure alone, so an update that doesn't add the label ends as a skipped run once the sandbox started; narrow the webhook in Jira with JQL, such as `labels = ai-develop`, so few others arrive. `jira.issueCreated`, `jira.issueUpdated` and `jira.commentCreated` work with `webhook` for anything else.
 
+On Data Center, a webhook has a secret, and so a signature, only on recent versions; the engine needs one, so an older site can't start runs this way. A delivery without `x-atlassian-webhook-identifier` is told apart by a hash of its body, which holds a timestamp, so a redelivery still reuses its run.
+
 ## Host
 
-The `host` entry point is what `mesh-flow connector add` loads: `connector`, and `atlassianHostTools({ fetch })` for a test that points the tools at a fake. `settingNames('jira')` names a product's settings. Requests Jira or Confluence didn't answer, or answered 502, 503 or 504, are sent up to four times; a failure that may still pass after that reaches the sandbox marked transient.
+The `host` entry point is what `mesh-flow connector add` loads: `connector`, and `atlassianHostTools` for a test that points the tools at a fake. `settingNames('jira')` names a product's settings.
+
+```ts
+import { atlassianHostTools } from '@mesh-flow/atlassian/host'
+
+// A site that answers every request with an empty object, and retries without waiting.
+const answersItself: typeof fetch = async () => new Response('{}', { headers: { 'content-type': 'application/json' } })
+const tools = atlassianHostTools({ fetch: answersItself, retry: { maxAttempts: 2, initialDelayMs: 1, backoffFactor: 1 } })
+```
+
+Reads and updates that Jira or Confluence didn't answer, or answered 502, 503 or 504, are sent up to four times (`defaultRequestRetry`); a failure that may still pass after that reaches the sandbox marked transient. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.
