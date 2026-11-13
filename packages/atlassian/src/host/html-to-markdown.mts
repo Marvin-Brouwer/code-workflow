@@ -1,18 +1,18 @@
 import TurndownService from 'turndown'
 import { linkedPerson, mentionKey, mentionRefOf, mentionText, type MentionRef, type Person, type RenderedNode } from './mention.mts'
 
-/** How rich text becomes Markdown: where its images point, and who its mentions are. */
+/** How rich text becomes Markdown: where its images and links point, and who its mentions are. */
 export interface RichTextOptions {
 	/** Where an image or link in the Markdown points, for where it pointed in the HTML. Default: where it did. */
-	readonly address?: (src: string) => string
+	readonly address?: (url: string) => string
 	/** The people the site told about, by {@link mentionKey}. A mention of anyone else keeps the name and id its link holds. */
 	readonly people?: ReadonlyMap<string, Person>
 	/** Called with each mention as the link holds it. */
 	readonly onMention?: (mention: MentionRef) => void
 }
 
-/** A turndown setup for Jira's and Confluence's rendered HTML, with its images and mentions as `options` say. */
-function converter({ address = (src) => src, people = new Map(), onMention }: RichTextOptions): TurndownService {
+/** A turndown setup for Jira's and Confluence's rendered HTML, with its addresses and mentions as `options` say. */
+function converter({ address = (url) => url, people = new Map(), onMention }: RichTextOptions): TurndownService {
 	const personNamed = (mention: MentionRef) => people.get(mentionKey(mention)) ?? linkedPerson(mention)
 	return new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
 		.addRule('table', {
@@ -31,13 +31,13 @@ function converter({ address = (src) => src, people = new Map(), onMention }: Ri
 		})
 		.addRule('link', {
 			filter: (node: RenderedNode) => node.nodeName === 'A' && (node.getAttribute('href') ?? '') !== '' && mentionRefOf(node) === undefined,
-			replacement: (content, node: RenderedNode) => `[${content}](${address(node.getAttribute('href') ?? '')})`,
+			replacement: (content, node: RenderedNode) => `[${content}](${markdownAddress(address(node.getAttribute('href') ?? ''))})`,
 		})
 		.addRule('image', {
 			filter: 'img',
 			replacement: (_content, node: RenderedNode) => {
 				const src = node.getAttribute('src') ?? ''
-				return src === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${address(src)})`
+				return src === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${markdownAddress(address(src))})`
 			},
 		})
 }
@@ -53,7 +53,7 @@ interface TableNode extends RenderedNode {
 }
 
 /** A table as HTML, with its images and links pointing where `address` says and its mentions as Markdown does them. */
-function tableHtml(table: TableNode, address: (src: string) => string, personNamed: (mention: MentionRef) => Person): string {
+function tableHtml(table: TableNode, address: (url: string) => string, personNamed: (mention: MentionRef) => Person): string {
 	// A table in a table is written as part of the outer one, which changes it once.
 	if (insideTable(table)) return ''
 	for (const image of Array.from(table.querySelectorAll('img[src]'))) {
@@ -61,8 +61,12 @@ function tableHtml(table: TableNode, address: (src: string) => string, personNam
 	}
 	for (const link of Array.from(table.querySelectorAll('a'))) {
 		const mention = mentionRefOf(link)
-		if (mention !== undefined) link.replaceWith(table.ownerDocument.createTextNode(mentionText(personNamed(mention))))
-		else if (link.getAttribute('href') !== null) link.setAttribute('href', address(link.getAttribute('href') ?? ''))
+		const href = link.getAttribute('href')
+		if (mention !== undefined) {
+			link.replaceWith(table.ownerDocument.createTextNode(mentionText(personNamed(mention))))
+		} else if (href !== null) {
+			link.setAttribute('href', address(href))
+		}
 	}
 	return table.outerHTML
 }
@@ -73,6 +77,11 @@ function insideTable(table: TableNode): boolean {
 		if (parent.nodeName === 'TABLE') return true
 	}
 	return false
+}
+
+/** An address as Markdown's parentheses can hold it, with its own parentheses escaped, as turndown's link rule does. */
+function markdownAddress(url: string): string {
+	return url.replaceAll(/[()]/g, (character) => `\\${character}`)
 }
 
 /** An image's alt text as Markdown's brackets can hold it: on one line, with its brackets escaped. */
@@ -91,7 +100,7 @@ export function mentionsIn(html: string | null | undefined): MentionRef[] {
 	return found
 }
 
-/** Rich text with its images and mentions as the HTML has them. */
+/** Rich text with its addresses and mentions as the HTML has them. */
 const asRendered = converter({})
 
 /**

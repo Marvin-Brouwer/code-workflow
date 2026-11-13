@@ -15,15 +15,17 @@ export interface IssueDataOptions {
 /**
  * An issue as the sandbox gets it, from what Jira answered: its rich text as Markdown, with each
  * image of an attachment, and each link to one, pointing at the attachment's copy next to the
- * Markdown when there is one, and every other address made whole on the site.
+ * Markdown when there is one, and every other relative address made absolute on the site. A link
+ * to a place in the same text stays as it is.
  */
 export function issueData(raw: RawIssue, siteUrl: string, { attachments, people }: IssueDataOptions): IssueData {
 	const { fields, renderedFields } = raw
 	const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]))
 	const richText: RichTextOptions = {
-		address: (src) => {
-			const attachment = byId.get(attachmentIdOf(src) ?? '')
-			return attachment?.file ?? attachment?.url ?? URL.parse(src, siteUrl)?.href ?? src
+		address: (url) => {
+			if (url.startsWith('#')) return url
+			const attachment = byId.get(attachmentIdOf(url) ?? '')
+			return attachment?.file ?? attachment?.url ?? URL.parse(url, siteUrl)?.href ?? url
 		},
 		people,
 	}

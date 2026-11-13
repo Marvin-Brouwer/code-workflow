@@ -524,10 +524,10 @@ describe('attachments', () => {
 		expect(result.story.attachments.at(-1)).toMatchObject({ url: `${dataCenter.jiraUrl}/secure/attachment/${10001 + fit}/shot-${fit}.png` })
 	})
 
-	test('a link around an image points at its copy, and a link elsewhere on the site is made whole', async () => {
+	test('a link around an image points at its copy, one on the site is made absolute, and one in the text stays', async () => {
 		// Arrange
 		const descriptionHtml =
-			'<p><a href="/secure/attachment/10001/shot.png"><img src="/secure/thumbnail/10001/shot.png"></a> <a href="/browse/PROJ-8">PROJ-8</a></p>'
+			'<p><a href="/secure/attachment/10001/shot.png"><img src="/secure/thumbnail/10001/shot.png"></a> <a href="/browse/PROJ-8">PROJ-8</a> <a href="#steps">steps</a> <a href="/wiki/Foo)">foo</a></p>'
 		const arrangement: Arrangement = {
 			issues: [
 				fakeIssue({
@@ -544,7 +544,9 @@ describe('attachments', () => {
 		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
-		expect(result.markdown).toContain(`[![](PROJ-7/10001-shot.png)](PROJ-7/10001-shot.png) [PROJ-8](${dataCenter.jiraUrl}/browse/PROJ-8)`)
+		expect(result.markdown).toContain(
+			`[![](PROJ-7/10001-shot.png)](PROJ-7/10001-shot.png) [PROJ-8](${dataCenter.jiraUrl}/browse/PROJ-8) [steps](#steps) [foo](${dataCenter.jiraUrl}/wiki/Foo\\))`,
+		)
 	})
 
 	test("an attachment whose id isn't one stays a link and is never written", async () => {
