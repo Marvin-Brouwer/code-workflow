@@ -1,7 +1,7 @@
 import type * as fsPromises from 'node:fs/promises'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { treeState } from '../src/review/tree-state.mts'
 import { gitCheckout } from './support/git-checkout.mts'
 
@@ -20,7 +20,7 @@ vi.mock('node:fs/promises', async (actual) => {
 })
 
 describe('treeState', () => {
-	it('takes an untracked file that is gone by the time it is read as not there', async () => {
+	test('takes an untracked file that is gone by the time it is read as not there', async () => {
 		// Arrange
 		const repository = await gitCheckout()
 		const abortSignal = AbortSignal.timeout(10_000)

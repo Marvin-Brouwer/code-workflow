@@ -1,7 +1,7 @@
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { agent, runCheck } from '@mesh-flow/core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import { codeReview, deviations, Plan } from '../src/_module/preset-development.mts'
 import { gitCheckout } from './support/git-checkout.mts'
 import { runBody } from './support/run-body.mts'
@@ -24,7 +24,7 @@ function planIn(workspace: string): Plan {
 }
 
 describe('deviations', () => {
-	it('records each deviation in Markdown, under one heading', async () => {
+	test('records each deviation in Markdown, under one heading', async () => {
 		// Arrange
 		const deviation = { repository: 'team/api', reason: 'A review comment on the refund handler', change: 'Refunds are queued' }
 
@@ -44,7 +44,7 @@ describe('deviations', () => {
 		)
 	})
 
-	it('records nothing once the run stopped', async () => {
+	test('records nothing once the run stopped', async () => {
 		// Arrange
 		const deviation = { repository: 'team/api', reason: 'A pipeline', change: 'Refunds are queued' }
 		const stopped = AbortSignal.abort(new Error('The run stopped.'))
@@ -58,7 +58,7 @@ describe('deviations', () => {
 })
 
 describe('codeReview', () => {
-	it("reports the reviewer's findings, each with where it is", async () => {
+	test("reports the reviewer's findings, each with where it is", async () => {
 		// Arrange
 		const repository = await gitCheckout()
 		const model = scriptedModel([
@@ -80,7 +80,7 @@ describe('codeReview', () => {
 		expect(prompt).toContain('plan-deviations.md')
 	})
 
-	it('reviews each state of the checkout in a loop of its own, untracked files included', async () => {
+	test('reviews each state of the checkout in a loop of its own, untracked files included', async () => {
 		// Arrange
 		const repository = await gitCheckout()
 		const noFindings = callsTool('succeed', { findings: [] })
@@ -102,7 +102,7 @@ describe('codeReview', () => {
 		expect(withNewFile).not.toBe(first)
 	})
 
-	it('reviews a checkout with an untracked nested repository and a dangling link', async () => {
+	test('reviews a checkout with an untracked nested repository and a dangling link', async () => {
 		// Arrange
 		const repository = await gitCheckout()
 		await mkdir(path.join(repository.directory, 'sample', '.git'), { recursive: true })
@@ -120,7 +120,7 @@ describe('codeReview', () => {
 		expect(await run.result).toEqual([])
 	})
 
-	it('settles when the run stops while the reviewer never answers', async () => {
+	test('settles when the run stops while the reviewer never answers', async () => {
 		// Arrange
 		const repository = await gitCheckout()
 		const model = scriptedModel([neverAnswers])

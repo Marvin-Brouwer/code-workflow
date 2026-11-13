@@ -18,13 +18,13 @@ async function contentOf(entryPath: string, abortSignal: AbortSignal): Promise<s
 		if (entry.isSymbolicLink()) return `link:${await readlink(entryPath)}`
 		return entry.isFile() ? await readFile(entryPath, { signal: abortSignal }) : ''
 	} catch (error) {
-		if (isGone(error)) return undefined
+		if (isMissing(error)) return undefined
 		throw error
 	}
 }
 
 /** Whether a file system error says the entry isn't there. */
-function isGone(error: unknown): boolean {
+function isMissing(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 

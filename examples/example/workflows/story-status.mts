@@ -2,6 +2,7 @@ import { jira, type IssueRef } from '@mesh-flow/atlassian'
 
 /** The statuses a run moves a story through, in their order. */
 const storyStatuses = ['In Progress', 'In Review', 'Done'] as const
+/** A status the run moves a story to. */
 export type StoryStatus = (typeof storyStatuses)[number]
 
 /**

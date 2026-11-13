@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import { deliveryOrder, Plan } from '../src/_module/preset-development.mts'
 
 const plan = {
@@ -15,7 +15,7 @@ const plan = {
 }
 
 describe('Plan', () => {
-	it('takes a plan whose dependencies name its repositories', () => {
+	test('takes a plan whose dependencies name its repositories', () => {
 		// Act
 		const parsed = Plan.safeParse(plan)
 
@@ -23,7 +23,7 @@ describe('Plan', () => {
 		expect(parsed.success).toBe(true)
 	})
 
-	it('refuses a dependency on a repository the plan does not list, and a relative path', () => {
+	test('refuses a dependency on a repository the plan does not list, and a relative path', () => {
 		// Arrange
 		const wrong = {
 			...plan,
@@ -38,7 +38,7 @@ describe('Plan', () => {
 		expect(parsed.error?.issues.map((issue) => issue.path.join('.'))).toEqual(['path', 'dependencies.0.dependsOn'])
 	})
 
-	it('refuses a repository that depends on itself, directly or through another', () => {
+	test('refuses a repository that depends on itself, directly or through another', () => {
 		// Arrange
 		const apiInCycle = "team/api ends up depending on itself: a repository can only wait for others that don't wait for it."
 		const onItself = { ...plan, dependencies: [{ repository: 'team/api', dependsOn: 'team/api', reason: 'itself' }] }
@@ -60,7 +60,7 @@ describe('Plan', () => {
 })
 
 describe('deliveryOrder', () => {
-	it('gives a node per repository, depending on what the plan says it needs first', () => {
+	test('gives a node per repository, depending on what the plan says it needs first', () => {
 		// Arrange
 		const parsed = Plan.parse(plan)
 

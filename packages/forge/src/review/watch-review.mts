@@ -56,8 +56,9 @@ export interface WatchOutcome<Request> {
 /**
  * Watches a pull or merge request until it's merged or closed, and calls the handlers as things
  * happen on it: new review items, each shown as being read first, and failed checks of a new
- * head commit, once per commit. The checks are looked at only on a look that handed no items, so a
- * head that a handler replaced is never reported. The wait between looks is on the engine's clock, where the run can be paused.
+ * head commit, once per commit. The checks are looked at only on a look that handed no items, so
+ * a head that a handler replaced is never reported. The wait between looks is on the engine's
+ * clock, where the run can be paused.
  */
 export async function watchReview<Request extends WatchedRequest, Item extends { readonly id: string }, Failure>(
 	watch: ReviewWatch<Request, Item, Failure>,
