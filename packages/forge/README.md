@@ -1,16 +1,12 @@
-# @mesh-flow/forge
+# `@mesh-flow/forge`
 
-What the mesh-flow connectors of code forges share, so `@mesh-flow/github` and `@mesh-flow/gitlab`
-work the same way: checkouts and pushes over git bundles, describing a branch, watching a review and
-sorting its comments, and on the host the clones, retries and signed posts.
+What the mesh-flow connectors of code forges share, so `@mesh-flow/github` and `@mesh-flow/gitlab` work the same way: checkouts and pushes over git bundles, describing a branch, watching a review and sorting its comments, and on the host the clones, retries and signed posts.
 
 Workflows don't use this package: they use a connector. It is for writing one.
 
 ## The sandbox's side
 
-A connector defines its git tools with `gitTools`, and checks a repository out with
-`checkoutRepository`, which clones on the host through the clone tool and reuses a checkout that is
-there already:
+A connector defines its git tools with `gitTools`, and checks a repository out with `checkoutRepository`, which clones on the host through the clone tool and reuses a checkout that is there already:
 
 ```ts
 import { hostToolStub, type ToolContext } from '@mesh-flow/core'
@@ -35,8 +31,7 @@ const repository: Checkout = await checkoutRepository(
 )
 ```
 
-`describeChange`, `triageItems` and `watchReview` hold the loops and the watch of a connector's
-`describe`, `triage` and `review`. The connector says how its forge is read and written:
+`describeChange`, `triageItems` and `watchReview` hold the loops and the watch of a connector's `describe`, `triage` and `review`. The connector says how its forge is read and written:
 
 ```ts
 import { tool, type Agent } from '@mesh-flow/core'
@@ -86,11 +81,24 @@ export function describe(agent: Agent, repository: Checkout, options: DescribeCh
 }
 ```
 
+`untilCompleted(look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
+
+```ts
+import { check } from '@mesh-flow/core'
+import { untilCompleted, type CommitChecks } from '@mesh-flow/forge'
+
+declare function pipelineOf(sha: string): Promise<CommitChecks<{ readonly name: string }>>
+
+const pipelinePasses = (sha: string) =>
+	check('pipeline', async () => {
+		const failures = await untilCompleted(() => pipelineOf(sha), { every: { seconds: 10 } })
+		return failures.map((failure) => ({ source: `pipeline: ${failure.name}`, message: 'failed' }))
+	})
+```
+
 ## The host's side
 
-`@mesh-flow/forge/host` has the bare clones that fetch and push with the credential and the host
-halves of the git tools, a `fetch` that tries again when the connection drops, one call at a time
-per key, the footer every post is signed with, and the replies to review items:
+`@mesh-flow/forge/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, a `fetch` that tries again when the connection drops, one call at a time per key, the footer every post is signed with, and the replies to review items:
 
 ```ts
 import type { GitTools } from '@mesh-flow/forge'
@@ -114,5 +122,4 @@ const fetch = retryingFetch(globalThis.fetch, defaultFetchRetry)
 const body = signed('Looks good.', context.runId, ['reply:note/12'])
 ```
 
-`replyToItem` and `showItemsBeingRead` answer review items and show them as being read, through
-the connector's `ReviewComments`: where its forge keeps replies, and how it reacts and posts.
+`replyToItem` and `showItemsBeingRead` answer review items and show them as being read, through the connector's `ReviewComments`: where its forge keeps replies, and how it reacts and posts.

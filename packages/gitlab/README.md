@@ -94,3 +94,30 @@ export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...g
 ```
 
 Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitLab as the webhook's secret token, with the webhook URL `mesh-flow serve --webhook-port` prints.
+
+## The host half
+
+`@mesh-flow/gitlab/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `gitlab/token` (`tokenCredential`) and the GitLab under `gitlab/url` (`urlCredential`, gitlab.com when it isn't set) on every call, so a changed credential counts at once, try reads again when the connection drops or GitLab answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per project in the connector's directory in the engine's home. For a test, `gitlabHostTools` points them at servers of your own:
+
+```ts
+import { gitlabHostTools } from '@mesh-flow/gitlab/host'
+
+const tools = gitlabHostTools({
+	directory: '/tmp/gitlab-host',
+	fetch: (input, init) => fetch(String(input).replace('https://gitlab.com', 'http://127.0.0.1:4010'), init),
+	remoteUrl: (project) => `file:///tmp/remotes/${project}.git`,
+	retry: { attempts: 1, firstDelayMs: 0, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 },
+})
+```
+
+`retry` sets how requests are tried again (`defaultFetchRetry`: five attempts over about fifteen seconds); a test can turn it off as above, so a failing server fails at once.
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/gitlab typecheck
+pnpm --filter @mesh-flow/gitlab test
+pnpm --filter @mesh-flow/gitlab build
+```
+
+Tests run against an in-memory GitLab API and a local bare repository, so they need no token and no network. They need `git` on the machine.

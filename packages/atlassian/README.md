@@ -102,7 +102,7 @@ Point a Jira webhook for updated issues at it, with a secret. Jira's changelog c
 
 On Data Center, a webhook has a secret, and so a signature, only on recent versions; the engine needs one, so an older site can't start runs this way. A delivery without `x-atlassian-webhook-identifier` is told apart by a hash of its body, which holds a timestamp, so a redelivery still reuses its run.
 
-## Host
+## The host half
 
 The `host` entry point is what `mesh-flow connector add` loads: `connector`, and `atlassianHostTools` for a test that points the tools at a fake. `credentialNames('jira')` names a product's credentials.
 
@@ -115,3 +115,13 @@ const tools = atlassianHostTools({ fetch: answersItself, retry: { maxAttempts: 2
 ```
 
 Reads and updates that Jira or Confluence didn't answer, or answered 502, 503 or 504, are sent up to four times (`defaultRequestRetry`); a failure that may still pass after that reaches the sandbox marked transient. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/atlassian typecheck
+pnpm --filter @mesh-flow/atlassian test
+pnpm --filter @mesh-flow/atlassian build
+```
+
+Tests run against in-memory Jira and Confluence sites, so they need no token and no network.

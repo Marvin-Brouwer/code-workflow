@@ -37,7 +37,11 @@ export interface CheckoutOptions {
 	readonly branch: string
 	/** The folder in the workspace the checkout goes in, such as the repository's own name. */
 	readonly folder: string
-	/** The repository's URL on the forge: what a reused checkout's `origin` has to be. */
+	/**
+	 * What the checkout's `origin` is set to, as git's `remote.origin.url`, and what a reused
+	 * checkout's has to be: the repository's URL on the forge, or a name that stands for it, such as
+	 * gitlab's `gitlab:team/api`. The sandbox never fetches from it; the host does.
+	 */
 	readonly remoteUrl: string
 	/** The host tool that clones the repository and hands it over as a bundle. */
 	readonly clone: (input: { repository: string; branch: string }, context: ToolContext) => Promise<ClonedBundle>

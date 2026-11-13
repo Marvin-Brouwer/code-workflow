@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { deliveryHeader, mergeRequestEvent, mergeRequestNote, pipelineEvent, signature } from '../src/hooks.mts'
+import { deliveryHeader, mergeRequestEvent, mergeRequestNote, pipelineEvent, signature, triggerOptions } from '../src/hooks.mts'
 
 const project = { id: 12, path_with_namespace: 'team/backend/api', web_url: 'https://gitlab.example/team/backend/api' }
 const mergeRequest = {
@@ -24,7 +24,11 @@ function note(noteableType: string) {
 
 describe('hooks', () => {
 	test("checks GitLab's secret token in its own header, and names deliveries by GitLab's idempotency key", () => {
+		// Act
+		const options = triggerOptions
+
 		// Assert
+		expect(options).toEqual({ signature, deliveryHeader })
 		expect(signature).toEqual({ scheme: 'secret-header', header: 'x-gitlab-token' })
 		expect(deliveryHeader).toBe('idempotency-key')
 	})

@@ -11,7 +11,7 @@ export const unauthorized = 401
 export const notFound = 404
 
 /** The answer for what was there and was deleted since. */
-export const goneStatus = 410
+export const gone = 410
 
 /** Whether a service couldn't serve the request just now: a 5xx that may pass, or a rate limit. */
 export function unavailable(status: number): boolean {
