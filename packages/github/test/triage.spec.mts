@@ -1,5 +1,5 @@
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
-import { signed } from '../src/host/signature.mts'
 import { triage, triageResult } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'

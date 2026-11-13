@@ -51,6 +51,7 @@
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
+		"@mesh-flow/code-repository": "workspace:*",
 		"@mesh-flow/core": "workspace:*",
 		"@mesh-flow/gateway": "workspace:*",
 		"@mesh-flow/git": "workspace:*",

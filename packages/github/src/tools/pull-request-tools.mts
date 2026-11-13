@@ -1,5 +1,6 @@
+import { BranchName } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { BranchName, RepositoryName } from '../repository-name.mts'
+import { RepositoryName } from '../repository-name.mts'
 import { Sha } from './git-tools.mts'
 import { PostedComment } from './issue-tools.mts'
 
