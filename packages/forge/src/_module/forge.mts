@@ -12,6 +12,7 @@ export { committer, localGit } from '../checkout/local-git.mts'
 export { commentMarker, isMarked, markerStart, markerValue } from '../markers.mts'
 export { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin } from '../review/look-interval.mts'
 export { patientLook, type PatientLookOptions } from '../review/patient-look.mts'
+export { untilCompleted, type UntilCompletedOptions } from '../review/until-completed.mts'
 export { withScratchFile } from '../scratch-file.mts'
 export { Bundle, Sha } from '../checkout/bundle-schemas.mts'
 export { gitTools, type GitToolNames, type GitTools } from '../checkout/git-tools.mts'
@@ -45,7 +46,6 @@ export {
 	triageItems,
 	triageResult,
 	type PlannedChange,
-	type ReplyStage,
 	type TriageForge,
 	type TriageItem,
 	type TriageItemsOptions,
@@ -61,3 +61,5 @@ export {
 	type WatchOutcome,
 } from '../review/watch-review.mts'
 export { BranchName } from '../checkout/branch-name.mts'
+export { defaultReplyStage, GoneReply, isGoneReply, ReplyStage } from '../review/reply-stage.mts'
+export { UpdateSkip } from '../describe/update-skip.mts'

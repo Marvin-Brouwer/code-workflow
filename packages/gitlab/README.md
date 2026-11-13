@@ -39,7 +39,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 	await gitlab.review(mergeRequest, {
 		pipelineFailed: ({ failures }) => developer.loop`
 			The pipeline of ${mergeRequest} failed: ${failures}. Fix it in ${repository}, push with ${gitlab.push(repository)},
-			and hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
+			and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
 		`,
 		async comments(comments) {
 			const changes = await gitlab.triage(developer, repository, { mergeRequest, comments })
@@ -74,7 +74,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 `gitlab.triage(agent, repository, { mergeRequest, comments })` has the agent sort a round of notes into questions, changes it will make and changes it won't, in a loop that changes nothing. It answers the questions and the declined changes, puts the plan under each change it will make, and resolves to those changes.
 
-`gitlab.pipelinePasses(mergeRequest, { every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the head commit's pipeline to complete and reports each failed job as a finding. A merged results pipeline, which runs on GitLab's merge of the head into the target, counts as the head's. A pipeline that waits on a manual job counts as completed: nothing runs until someone starts it, so `review` reports the jobs that failed before it, if any, and a check that waits for it doesn't hang. A project without CI passes once no pipeline appeared within `appearWithin` (10 minutes).
+`gitlab.pipelinePasses(mergeRequest, { checkout, every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the head commit's pipeline to complete and reports each failed job as a finding. With `checkout`, the commit is the one last pushed from that checkout: GitLab updates a merge request's head a few seconds after a push, so a check right after a push would otherwise look at the commit before it. A merged results pipeline, which runs on GitLab's merge of the head into the target, counts as the head's. A pipeline that waits on a manual job counts as completed: nothing runs until someone starts it, so `review` reports the jobs that failed before it, if any, and a check that waits for it doesn't hang. A project without CI passes once no pipeline appeared within `appearWithin` (10 minutes).
 
 ### Packages
 

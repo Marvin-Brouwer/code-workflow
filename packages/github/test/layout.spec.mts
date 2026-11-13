@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { localGit } from '@mesh-flow/forge'
+import { filesAt, lintSettingsAt, localGit, templatesAt } from '@mesh-flow/forge'
 import { describe, expect, onTestFinished, test } from 'vitest'
-import { filesAt, lintSettingsAt, templatesAt } from '../src/pull-request/repository-files.mts'
+import { githubLayout } from '../src/pull-request/layout.mts'
 import { git } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -29,14 +29,14 @@ async function committed(files: Readonly<Record<string, string>>) {
 /** The paths of the templates at `HEAD`. */
 async function templatePaths(files: Readonly<Record<string, string>>): Promise<string[]> {
 	const repositoryGit = await committed(files)
-	const templates = await templatesAt(repositoryGit, 'HEAD', await filesAt(repositoryGit, 'HEAD'))
+	const templates = await templatesAt(repositoryGit, 'HEAD', await filesAt(repositoryGit, 'HEAD', githubLayout), githubLayout)
 	return templates.map((template) => template.path)
 }
 
 /** The lint settings at `HEAD`. */
 async function lintSettings(files: Readonly<Record<string, string>>) {
 	const repositoryGit = await committed(files)
-	return lintSettingsAt(repositoryGit, 'HEAD', await filesAt(repositoryGit, 'HEAD'))
+	return lintSettingsAt(repositoryGit, 'HEAD', await filesAt(repositoryGit, 'HEAD', githubLayout), githubLayout)
 }
 
 describe('templatesAt', () => {

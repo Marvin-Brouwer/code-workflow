@@ -1,7 +1,7 @@
+import { commentMarker } from '@mesh-flow/forge'
 import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
 import type { Octokit } from '@octokit/rest'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker } from '../tools/issue-tools.mts'
 import type { ReviewItemKind } from '../tools/pull-request-tools.mts'
 import { pageSize } from './api.mts'
 import { isGone } from './transient-error.mts'

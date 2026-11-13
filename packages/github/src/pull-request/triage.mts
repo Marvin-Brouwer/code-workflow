@@ -1,13 +1,8 @@
 import type { Agent, Limit } from '@mesh-flow/core'
-import {
-	triageItems,
-	triageResult as forgeTriageResult,
-	type PlannedChange as ForgePlannedChange,
-	type TriageForge,
-} from '@mesh-flow/forge'
+import { isGoneReply, triageItems, type PlannedChange as ForgePlannedChange, type TriageForge } from '@mesh-flow/forge'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { isGoneReply, ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
+import { ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
 import { githubTerms } from './github-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
@@ -56,9 +51,4 @@ function githubTriage(pullRequest: PullRequestRef): TriageForge<ReviewItem> {
 			gone: isGoneReply(await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body, stage })),
 		}),
 	}
-}
-
-/** What the agent finishes with: every item in `comments`, once, with what it asks for and its reply. */
-export function triageResult(comments: readonly ReviewItem[]) {
-	return forgeTriageResult(comments, ReviewItemId)
 }

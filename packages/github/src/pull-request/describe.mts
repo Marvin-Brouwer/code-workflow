@@ -8,7 +8,7 @@ import { branchHead } from './branch-head.mts'
 import { githubTerms } from './github-terms.mts'
 import { PullRequestText, type PullRequestContent } from './pull-request-text.mts'
 import { findOpenPullRequest, pullRequest, type PullRequest } from './pull-request.mts'
-import { githubLayout } from './repository-files.mts'
+import { githubLayout } from './layout.mts'
 
 /** What `describe` takes besides the agent and the checkout. */
 export interface DescribeOptions {

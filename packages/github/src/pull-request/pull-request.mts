@@ -1,10 +1,10 @@
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
-import { decideOnEdit } from '@mesh-flow/forge'
+import { decideOnEdit, type UpdateSkip } from '@mesh-flow/forge'
 import { sameRepositoryName } from '../repository-name.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { PullRequestData, PullRequestRef, UpdateSkip } from '../tools/pull-request-tools.mts'
+import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
 import type { PullRequestContent, PullRequestText } from './pull-request-text.mts'
 

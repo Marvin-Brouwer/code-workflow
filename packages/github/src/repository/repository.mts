@@ -15,8 +15,6 @@ export interface Repository extends Checkout {
 	readonly defaultBranch: BranchName
 }
 
-export { origin, trackingRef } from '@mesh-flow/forge'
-
 /**
  * Checks a repository out into the workspace, on `branch`, which is made from the default branch
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential

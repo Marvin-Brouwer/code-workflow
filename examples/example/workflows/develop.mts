@@ -87,7 +87,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 				async pipelineFailed({ failures }) {
 					await developer.loop`
 						The pipeline of ${mergeRequest} failed: ${failures}.
-						Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
+						Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
 						${limit({ minutes: 45 })}
 					`
 					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))

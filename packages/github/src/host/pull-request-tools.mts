@@ -1,3 +1,4 @@
+import { defaultReplyStage, isMarked, sameText } from '@mesh-flow/forge'
 import {
 	descriptionOf,
 	footerCloses,
@@ -11,13 +12,10 @@ import {
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
-import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
-import { isMarked } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
-	defaultReplyStage,
 	findPullRequest,
 	getPullRequest,
 	openPullRequest,

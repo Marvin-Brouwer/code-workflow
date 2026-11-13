@@ -56,7 +56,8 @@ export interface WatchOutcome<Request> {
 /**
  * Watches a pull or merge request until it's merged or closed, and calls the handlers as things
  * happen on it: new review items, each shown as being read first, and failed checks of a new
- * head commit, once per commit. The wait between looks is on the engine's clock, where the run can be paused.
+ * head commit, once per commit. The checks are looked at only on a look that handed no items, so a
+ * head that a handler replaced is never reported. The wait between looks is on the engine's clock, where the run can be paused.
  */
 export async function watchReview<Request extends WatchedRequest, Item extends { readonly id: string }, Failure>(
 	watch: ReviewWatch<Request, Item, Failure>,
@@ -77,14 +78,18 @@ export async function watchReview<Request extends WatchedRequest, Item extends {
 		since = activity.until ?? since
 		const comments = activity.items.filter((item) => !handled.has(item.id))
 		for (const item of comments) handled.add(item.id)
+		let handedComments = false
 		if (comments.length > 0 && handlers.comments !== undefined) {
 			const { answered } = await look(() => watch.showBeingRead(comments))
 			// Answered before the run started over: the reviewer has the answer already, and writes a new comment if it doesn't settle it.
 			const unanswered = comments.filter((item) => !answered.includes(item.id))
 			if (unanswered.length > 0) await handlers.comments(unanswered)
+			handedComments = unanswered.length > 0
 		}
 
-		if (handlers.failed !== undefined && !reportedChecks.has(current.head.sha)) {
+		// A handler that ran may have pushed, which replaces the head read before it, and a forge may cancel
+		// that head's pipeline for it: its checks wait for the next look, which reads the head again.
+		if (handlers.failed !== undefined && !handedComments && !reportedChecks.has(current.head.sha)) {
 			const checks = await look(() => watch.checks(current.head.sha))
 			if (checks.status === 'completed') {
 				reportedChecks.add(current.head.sha)

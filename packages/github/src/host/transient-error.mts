@@ -1,5 +1,5 @@
 import { HostToolTransientError } from '@mesh-flow/gateway'
-import { goneStatus, notFound, unauthorized, unavailable } from './github-statuses.mts'
+import { goneStatus, notFound, unauthorized, unavailable } from '@mesh-flow/forge/host'
 
 /** GitHub's answer to a missing permission, and to a rate limit, told apart by the headers. */
 const forbidden = 403

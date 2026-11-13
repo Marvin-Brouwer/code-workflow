@@ -1,8 +1,8 @@
 import type { Agent, Limit } from '@mesh-flow/core'
-import { triageItems, type PlannedChange as ForgePlannedChange, type TriageForge } from '@mesh-flow/forge'
+import { isGoneReply, triageItems, type PlannedChange as ForgePlannedChange, type TriageForge } from '@mesh-flow/forge'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { isGoneReply, ReviewItemId, type MergeRequestRef, type ReviewItem } from '../tools/merge-request-tools.mts'
+import { ReviewItemId, type MergeRequestRef, type ReviewItem } from '../tools/merge-request-tools.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */

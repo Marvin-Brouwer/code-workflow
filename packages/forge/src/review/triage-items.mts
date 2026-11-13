@@ -2,14 +2,12 @@ import { limit, succeed, type Agent, type Limit } from '@mesh-flow/core'
 import { z } from 'zod'
 import type { Checkout } from '../checkout/checkout.mts'
 import type { ForgeTerms } from '../describe/change-request.mts'
+import { defaultReplyStage, type ReplyStage } from './reply-stage.mts'
 
 /** Something a reviewer said, as `triageItems` needs it: the id an agent replies to. */
 export interface TriageItem {
 	readonly id: string
 }
-
-/** The stage of a reply: a plan of what will be done, or the answer. */
-export type ReplyStage = 'plan' | 'answer'
 
 /** How a forge's connector triages: its names, what its ids look like, and how it replies. */
 export interface TriageForge<Item extends TriageItem> {
@@ -62,7 +60,7 @@ export async function triageItems<Item extends TriageItem>(
 	for (const item of comments) {
 		const sortedItem = sortedById.get(item.id)
 		if (sortedItem === undefined) throw new Error(`The agent left ${item.id} unsorted.`)
-		const { gone } = await forge.reply(item, sortedItem.reply, sortedItem.asks === 'change' ? 'plan' : 'answer')
+		const { gone } = await forge.reply(item, sortedItem.reply, sortedItem.asks === 'change' ? 'plan' : defaultReplyStage)
 		// A comment deleted since it was read asks for nothing any more.
 		if (sortedItem.asks === 'change' && !gone) changes.push({ item, plan: sortedItem.reply })
 	}

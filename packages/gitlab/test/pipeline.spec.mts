@@ -1,8 +1,10 @@
 import { runCheck } from '@mesh-flow/core'
+import { branchHeadOf } from '@mesh-flow/forge'
 import { describe, expect, test } from 'vitest'
 import { pipelinePasses } from '../src/merge-request/pipeline-passes.mts'
 import { publishedPackages } from '../src/merge-request/published-packages.mts'
-import { connectedGitlab, projectPath, promptlyMs, quickRetry } from './support/connected-gitlab.mts'
+import { checkout } from '../src/repository/repository.mts'
+import { branch, connectedGitlab, projectPath, promptlyMs, quickRetry } from './support/connected-gitlab.mts'
 import { runOnGateway } from './support/test-run.mts'
 
 const where = { repository: projectPath, number: 3 }
@@ -33,6 +35,24 @@ describe('pipelinePasses', () => {
 
 		// Assert
 		expect(findings).toEqual([{ source: 'pipeline: test/test', message: 'script_failure (https://gitlab.example/jobs/1)' }])
+	})
+
+	test("with a checkout, checks the commit last pushed from it, not the head GitLab hasn't caught up with yet", async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { sha: head })
+		api.pipeline(projectPath, { sha: head, ref: 'feature', status: 'failed', jobs: [{ name: 'test', stage: 'test', status: 'failed' }] })
+
+		// Act
+		const run = await runOnGateway(gateway, async (context) => {
+			const repository = await checkout({ repository: projectPath, branch })
+			const pushed = await branchHeadOf(repository, true, context)
+			api.pipeline(projectPath, { sha: pushed, ref: branch, status: 'success' })
+			return runCheck(pipelinePasses(where, { ...quickly, checkout: repository }), context)
+		})
+
+		// Assert
+		expect(await run.result).toEqual([])
 	})
 
 	test('reports the failures of a merged results pipeline, which runs on a merge of the head into the target', async () => {

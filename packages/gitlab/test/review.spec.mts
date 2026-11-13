@@ -84,6 +84,39 @@ describe('review', () => {
 		])
 	})
 
+	test("doesn't report the pipeline of a head that the comments handler replaced, as GitLab cancels it for the new push", async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		const replaced = 'a'.repeat(40)
+		const pushed = 'b'.repeat(40)
+		const request = api.mergeRequest(projectPath, 3, { sha: replaced })
+		api.pipeline(projectPath, { sha: replaced, ref: 'feature', status: 'canceled', jobs: [] })
+		api.pipeline(projectPath, { sha: pushed, ref: 'feature', status: 'success', jobs: [] })
+		api.note(projectPath, 3, 'Rename this.')
+		const failed: unknown[] = []
+		let looksAfterPush = 0
+		api.hold = (method, requestPath) => {
+			// Merged on the second look after the push, once the pushed head's pipeline was looked at.
+			if (method === 'GET' && requestPath.endsWith('/merge_requests/3') && request.sha === pushed && ++looksAfterPush === 2)
+				request.state = 'merged'
+			return undefined
+		}
+		const handlers = {
+			comments: () => {
+				request.sha = pushed
+				return Promise.resolve()
+			},
+			pipelineFailed: (pipeline: unknown) => Promise.resolve(failed.push(pipeline)),
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, () => review(where, handlers, { every: { seconds: 0 } }))
+		await run.result
+
+		// Assert
+		expect(failed).toEqual([])
+	})
+
 	test('settles promptly when the run stops while GitLab never answers', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()

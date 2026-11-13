@@ -1,4 +1,4 @@
-import { BranchName, Sha } from '@mesh-flow/forge'
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/forge'
 import { z } from 'zod'
 import { ProjectPath } from '../project-path.mts'
 
@@ -72,13 +72,6 @@ export const openMergeRequest = {
 	output: MergeRequestData,
 }
 
-/**
- * Why `updateMergeRequest` wrote nothing. `closed`: a closed merge request keeps its text.
- * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
- */
-export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
-export type UpdateSkip = z.infer<typeof UpdateSkip>
-
 /** Gives an open merge request on the host a new title and description; a closed one is left as it is. */
 export const updateMergeRequest = {
 	name: 'gitlabUpdateMergeRequest',
@@ -131,27 +124,12 @@ export const reviewActivity = {
 	}),
 }
 
-/**
- * Whether a reply is a plan, what will be done before anything changes, or the answer: to a
- * question, or what was done.
- */
-export const ReplyStage = z.enum(['plan', 'answer'])
-export type ReplyStage = z.infer<typeof ReplyStage>
-
 /** A note that was posted or edited. */
 export const PostedNote = z.object({ id: z.int(), url: z.url() })
-
-/** A reply that found its item gone. */
-const GoneReply = z.object({ gone: z.literal(true) })
 
 /** What came of a reply: the note posted or edited, or that the item is gone, deleted since it was read. */
 export const ReplyOutcome = z.union([PostedNote, GoneReply])
 export type ReplyOutcome = z.infer<typeof ReplyOutcome>
-
-/** Whether a reply found its item gone: a note deleted since it was read. */
-export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
-	return 'gone' in outcome
-}
 
 /**
  * Replies on the host in the item's thread, with a footer naming the run and a marker in the body

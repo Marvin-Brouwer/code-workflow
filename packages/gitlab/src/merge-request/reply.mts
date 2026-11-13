@@ -1,7 +1,8 @@
 import { tool, type Tool } from '@mesh-flow/core'
+import { ReplyStage } from '@mesh-flow/forge'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
-import { ReplyStage, ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/merge-request-tools.mts'
+import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/merge-request-tools.mts'
 
 /** What the agent replies with: the item, the text, and whether it's a plan or the answer. */
 export interface ReplyInput {

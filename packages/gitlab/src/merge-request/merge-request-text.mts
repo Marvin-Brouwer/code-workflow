@@ -5,7 +5,7 @@ import type { z } from 'zod'
 const maxTitleCharacters = 255
 
 /** The longest description GitLab takes: a mebibyte's worth of characters. */
-const gitlabDescriptionCharacters = 1_048_576
+const maxDescriptionCharacters = 1_048_576
 
 /**
  * What a merge request says: its title and its description, as the agent of `describe` writes them,
@@ -13,7 +13,7 @@ const gitlabDescriptionCharacters = 1_048_576
  */
 export const MergeRequestText = changeTextSchema({
 	maxTitleCharacters,
-	maxDescriptionCharacters: gitlabDescriptionCharacters,
+	maxDescriptionCharacters,
 	request: 'merge request',
 })
 export type MergeRequestText = z.infer<typeof MergeRequestText>

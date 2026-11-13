@@ -1,10 +1,10 @@
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
-import { decideOnEdit, type ChangeText } from '@mesh-flow/forge'
+import { decideOnEdit, type UpdateSkip, type ChangeText } from '@mesh-flow/forge'
 import { sameProjectPath } from '../project-path.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { MergeRequestData, MergeRequestRef, UpdateSkip } from '../tools/merge-request-tools.mts'
+import type { MergeRequestData, MergeRequestRef } from '../tools/merge-request-tools.mts'
 import { closingField, type MergeRequestContent } from './merge-request-text.mts'
 
 /** A merge request, which renders as its URL in a prompt. */

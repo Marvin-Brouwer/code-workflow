@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { notModified, unavailable } from './github-statuses.mts'
+import { unavailable } from '@mesh-flow/forge/host'
+import { notModified } from './github-statuses.mts'
 import { keptAnswers } from './kept-answers.mts'
 
 /** How much of GitHub's answers `conditionalFetch` keeps, the least recently used going first. */

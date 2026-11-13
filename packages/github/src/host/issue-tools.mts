@@ -1,7 +1,8 @@
+import { commentMarker } from '@mesh-flow/forge'
 import { signed } from '@mesh-flow/forge/host'
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { splitRepositoryName } from '../repository-name.mts'
-import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
+import { closeIssue, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 
 /**

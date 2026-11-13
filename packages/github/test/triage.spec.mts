@@ -1,6 +1,8 @@
 import { signed } from '@mesh-flow/forge/host'
 import { describe, expect, test } from 'vitest'
-import { triage, triageResult } from '../src/pull-request/triage.mts'
+import { triageResult } from '@mesh-flow/forge'
+import { triage } from '../src/pull-request/triage.mts'
+import { ReviewItemId } from '../src/tools/pull-request-tools.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import type { ReviewItem } from '../src/tools/pull-request-tools.mts'
@@ -177,7 +179,7 @@ describe('triageResult', () => {
 		const { comments } = await reviewed()
 
 		// Act
-		const parsed = triageResult(comments).safeParse({
+		const parsed = triageResult(comments, ReviewItemId).safeParse({
 			items: [
 				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
 				{ id: 'comment/2', asks: 'change', reply: 'Will do.' },
@@ -193,7 +195,7 @@ describe('triageResult', () => {
 		const { comments } = await reviewed()
 
 		// Act
-		const parsed = triageResult(comments).safeParse({
+		const parsed = triageResult(comments, ReviewItemId).safeParse({
 			items: [
 				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
 				{ id: 'comment/1', asks: 'change', reply: 'Will do.' },

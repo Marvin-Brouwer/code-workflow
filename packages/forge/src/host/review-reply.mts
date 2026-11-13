@@ -1,6 +1,6 @@
 import { normalizedBody } from '../describe/change-text.mts'
 import { commentMarker, markerValue } from '../markers.mts'
-import type { ReplyStage } from '../review/triage-items.mts'
+import type { ReplyStage } from '../review/reply-stage.mts'
 import { answeredKey, plannedKey, reactionKey, reactionKeyName, repliedKey, replyKey, seenKey } from './reply-keys.mts'
 import type { OwnReply, ReplyOutcome, ReviewComments } from './review-comments.mts'
 import { signed, unsigned } from './signature.mts'

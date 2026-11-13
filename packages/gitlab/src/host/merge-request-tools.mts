@@ -1,4 +1,4 @@
-import { sameText } from '@mesh-flow/forge'
+import { defaultReplyStage, sameText } from '@mesh-flow/forge'
 import {
 	descriptionOf,
 	footerCloses,
@@ -170,7 +170,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 					kind: 'note',
 					commentId: noteIdOf(item),
 					body,
-					stage: stage ?? 'answer',
+					stage: stage ?? defaultReplyStage,
 					runId: context.runId,
 				})
 			}),
