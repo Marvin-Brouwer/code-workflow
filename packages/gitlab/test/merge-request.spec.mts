@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { searchRepositories } from '../src/repository/search.mts'
+import { forkProjectId } from './support/fake-gitlab.mts'
 import {
 	branch,
 	changeLogin,
@@ -98,6 +99,43 @@ describe('openMergeRequest', () => {
 		// Assert
 		expect(opened).toMatchObject({ number: firstMergeRequest, title: 'Opened meanwhile' })
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
+	})
+
+	test("opens its own merge request next to one from a fork's branch of the same name", async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, firstMergeRequest, { source_branch: branch, source_project_id: forkProjectId, title: 'From a fork' })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout(projectPath, { branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			return openMergeRequest(repository, sameSite)
+		})
+		const opened = await run.result
+
+		// Assert
+		expect(opened).toMatchObject({ number: firstMergeRequest + 1, title: sameSite.title })
+		expect(api.mergeRequest(projectPath, firstMergeRequest).title).toBe('From a fork')
+	})
+
+	test('keeps a merge request a person marked as a draft a draft when it gets new text', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout(projectPath, { branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			const opened = await openMergeRequest(repository, sameSite)
+			api.mergeRequest(projectPath, opened.number, { title: `Draft: ${sameSite.title}` })
+			await changeLogin(repository, 'SameSite=None; Secure\n')
+			return openMergeRequest(repository, secure)
+		})
+		await run.result
+
+		// Assert
+		expect(api.mergeRequest(projectPath, firstMergeRequest).title).toBe(`Draft: ${secure.title}`)
 	})
 
 	test('fails, naming it, when the branch has an open merge request onto another branch', async () => {

@@ -28,8 +28,6 @@ export function githubRemoteUrl(repository: RepositoryName): string {
 	return `https://github.com/${repository}.git`
 }
 
-export { BranchName } from '@mesh-flow/code-repository'
-
 /** Whether two repository names name the same repository: GitHub ignores case in them. */
 export function sameRepositoryName(one: string, other: string): boolean {
 	return one.toLowerCase() === other.toLowerCase()

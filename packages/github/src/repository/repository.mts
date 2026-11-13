@@ -1,7 +1,7 @@
 import { tool } from '@mesh-flow/core'
-import { checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
+import { BranchName, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
+import { githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'
 
 /**
@@ -37,7 +37,8 @@ export const checkout = tool('githubCheckout', {
 			{
 				...input,
 				folder: splitRepositoryName(input.repository).repo,
-				remoteUrl: githubRemoteUrl(input.repository),
+				// GitHub ignores case in names: a checkout of `Team/App` is one of `team/app`.
+				remote: githubRemoteUrl(input.repository.toLowerCase()),
 				clone: stubs.cloneRepository,
 			},
 			context,

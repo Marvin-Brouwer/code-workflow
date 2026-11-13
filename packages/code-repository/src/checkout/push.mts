@@ -9,7 +9,7 @@ import { trackingRef } from './tracking.mts'
 export interface Pushed {
 	/** Whether anything went up: `false` when the branch was already pushed. */
 	readonly pushed: boolean
-	/** The branch's commit on the codeHost. */
+	/** The branch's commit on the code host. */
 	readonly head: string
 }
 

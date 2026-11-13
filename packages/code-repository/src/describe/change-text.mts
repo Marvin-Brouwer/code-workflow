@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { withUnixLineBreaks } from '../line-breaks.mts'
 import { fenced } from './fenced.mts'
 
 /** The title and description of a pull or merge request. */
@@ -25,7 +26,7 @@ export interface ChangeTextLimits {
 
 /**
  * What the agent of `describe` finishes with: the title and the description, within the code host's
- * limits, so a text that is too long goes back to the agent rather than failing the run on the codeHost,
+ * limits, so a text that is too long goes back to the agent rather than failing the run on the code host,
  * and on every rerun after, since the loop keeps its result.
  */
 export function changeTextSchema(limits: ChangeTextLimits) {
@@ -74,7 +75,7 @@ export function sameText(one: ChangeText, other: ChangeText): boolean {
 
 /** Text as a code host gives it back once written, a description or a comment: with `\n` line breaks and without trailing ones. */
 export function normalizedBody(text: string): string {
-	return text.replaceAll('\r\n', '\n').trimEnd()
+	return withUnixLineBreaks(text).trimEnd()
 }
 
 /** A title and description as a prompt takes them, the description fenced. */

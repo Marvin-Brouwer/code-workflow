@@ -20,7 +20,7 @@ export interface TriageCodeHost<Item extends TriageItem> {
 	readonly reply: (item: Item, body: string, stage: ReplyStage) => Promise<{ readonly gone: boolean }>
 }
 
-/** What `triageItems` takes besides the agent, the checkout and the codeHost. */
+/** What `triageItems` takes besides the agent, the checkout and the code host. */
 export interface TriageItemsOptions<Item extends TriageItem> {
 	/** The pull or merge request the items are on, as it renders in a prompt. */
 	readonly request: unknown
@@ -45,8 +45,8 @@ const ItemAsks = z.enum(['question', 'change', 'declined'])
 /**
  * Has `agent` sort review items into questions and requests for a change, in one loop that changes
  * nothing. It answers the questions and the declined changes and puts the plan under each change
- * it will make, which it resolves to. Code posts the replies once the loop is done, one at a time and in the reviewer's order, since code hosts limit
- * bursts of writes.
+ * it will make, which it resolves to. Code posts the replies once the loop is done, one at a time
+ * and in the reviewer's order, since code hosts limit bursts of writes.
  */
 export async function triageItems<Item extends TriageItem>(
 	agent: Agent,

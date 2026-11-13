@@ -1,7 +1,8 @@
 import type { ToolContext, WaitSpec } from '@mesh-flow/core'
 import { watchReview } from '@mesh-flow/code-repository'
 import { stubs } from '../stubs.mts'
-import type { JobFailure, MergeRequestRef, ReviewItem } from '../tools/merge-request-tools.mts'
+import type { MergeRequestRef, ReviewItem } from '../tools/merge-request-tools.mts'
+import type { JobFailure } from '../tools/pipeline-tools.mts'
 import { mergeRequestOf, type MergeRequest } from './merge-request.mts'
 
 /** The pipeline of one commit failed. */

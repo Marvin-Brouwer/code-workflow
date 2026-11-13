@@ -20,20 +20,20 @@ export type ReplyOutcome = PostedReply | { readonly gone: true }
  */
 export interface ReviewComments<Kind extends string, Thread> {
 	/** The replies the connector posted where items of `kinds` are answered. */
-	ownReplies(kinds: readonly Kind[]): Promise<readonly OwnReply[]>
+	readonly ownReplies: (kinds: readonly Kind[]) => Promise<readonly OwnReply[]>
 	/** Puts 👀 on comment `commentId` and returns the reaction's id, when the code host takes one on such an item. */
-	react(kind: Kind, commentId: number): Promise<number | undefined>
+	readonly react: (kind: Kind, commentId: number) => Promise<number | undefined>
 	/** Takes reaction `reaction` off comment `commentId`. One that's gone already is fine. */
-	unreact(kind: Kind, commentId: number, reaction: number): Promise<void>
+	readonly unreact: (kind: Kind, commentId: number, reaction: number) => Promise<void>
 	/**
 	 * The thread a reply to comment `commentId` goes in, or undefined when replies to `kind` go on
 	 * the conversation. Throws an error `isGone` takes when the comment was deleted.
 	 */
-	threadOf(kind: Kind, commentId: number): Promise<Thread | undefined>
+	readonly threadOf: (kind: Kind, commentId: number) => Promise<Thread | undefined>
 	/** Whether an error says what was asked for is gone, such as a comment deleted since. */
-	isGone(error: unknown): boolean
+	readonly isGone: (error: unknown) => boolean
 	/** Replies in thread `thread`, or on the conversation. */
-	post(kind: Kind, thread: Thread | undefined, body: string): Promise<PostedReply>
+	readonly post: (kind: Kind, thread: Thread | undefined, body: string) => Promise<PostedReply>
 	/** Replaces the body of the connector's reply `commentId`, where `kind` is answered. */
-	edit(kind: Kind, commentId: number, body: string): Promise<PostedReply>
+	readonly edit: (kind: Kind, commentId: number, body: string) => Promise<PostedReply>
 }

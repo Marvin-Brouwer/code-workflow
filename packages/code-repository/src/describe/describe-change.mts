@@ -23,7 +23,7 @@ export interface DescribeCodeHost<Repository extends Checkout, Request extends C
 	readonly head: (repository: Repository, pushed: boolean) => Promise<string>
 }
 
-/** What `describeChange` takes besides the agent, the checkout and the codeHost. */
+/** What `describeChange` takes besides the agent, the checkout and the code host. */
 export interface DescribeChangeOptions<Ref, Closes> {
 	/** What the branch resolves, such as an issue, which the agent reads for the why, and which the result closes. */
 	readonly closes?: Closes

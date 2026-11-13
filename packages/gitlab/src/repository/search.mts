@@ -3,9 +3,9 @@ import { stubs } from '../stubs.mts'
 import { searchProjects } from '../tools/project-tools.mts'
 
 /**
- * The tool that searches the GitLab projects the user of the token is a member of, by words in their name, path or
- * description, for an agent that has to find where a change goes. Each project comes with its
- * path, which `gitlab.checkout` takes.
+ * The tool that searches the GitLab projects the user of the token is a member of, by words in
+ * their name, path or description, for an agent that has to find where a change goes. Each
+ * project comes with its path, which `gitlab.checkout` takes.
  *
  * ```ts
  * await planner.loop`Find the projects ${story} touches with ${gitlab.searchRepositories}.`

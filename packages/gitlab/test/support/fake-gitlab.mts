@@ -37,6 +37,9 @@ export interface FakeMergeRequest {
 	web_url: string
 	source_branch: string
 	target_branch: string
+	/** The project the branch is in: another than the target's for a merge request from a fork. */
+	source_project_id: number
+	target_project_id: number
 	sha: string
 	merge_commit_sha: string | null
 	discussions: FakeDiscussion[]
@@ -151,6 +154,12 @@ function notFound(context: Context) {
 }
 
 /** A merge request as the API answers with it: without the discussions, which have routes of their own. */
+/** The id every fake project goes by, as the target of its merge requests. */
+const ownProjectId = 1
+
+/** The id of a fork's project, as the source of a merge request from it. */
+export const forkProjectId = 2
+
 function mergeRequestJson(request: FakeMergeRequest) {
 	const { discussions: _discussions, ...fields } = request
 	return fields
@@ -189,6 +198,8 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 			web_url: `${siteUrl}/${path}/-/merge_requests/${String(iid)}`,
 			source_branch: 'feature',
 			target_branch: 'main',
+			source_project_id: ownProjectId,
+			target_project_id: ownProjectId,
 			sha: '0'.repeat(40),
 			merge_commit_sha: null,
 			discussions: [],
@@ -266,7 +277,7 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 		const body = MergeRequestBody.parse(await context.req.json())
 		// GitLab keeps one open merge request per source branch.
 		const open = [...project(path).mergeRequests.values()].some(
-			(request) => request.state === 'opened' && request.source_branch === body.source_branch,
+			(request) => request.state === 'opened' && request.source_branch === body.source_branch && request.source_project_id === ownProjectId,
 		)
 		if (open) return context.json({ message: ['Another open merge request already exists for this source branch'] }, 409)
 		const iid = project(path).mergeRequests.size + 1
