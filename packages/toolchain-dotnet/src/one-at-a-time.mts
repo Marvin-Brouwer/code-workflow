@@ -4,25 +4,27 @@ export type OneAtATime = <T>(key: string, abortSignal: AbortSignal, call: () => 
 /**
  * Runs calls with the same key one after another, and calls with different keys side by side. A
  * call that fails doesn't stop the ones queued after it. A call whose `abortSignal` aborts while it
- * waits rejects at once with the signal's reason, and is never run.
+ * waits rejects at once with the signal's reason, and is never run; one that runs is waited for,
+ * since it settles on its own once its signal aborts. Like `packages/github`'s host helper: core
+ * doesn't export one.
  */
 export function oneAtATime(): OneAtATime {
 	const lastOn = new Map<string, Promise<unknown>>()
-	return (key, abortSignal, call) => {
-		const turn = (lastOn.get(key) ?? Promise.resolve())
-			.catch(() => undefined)
-			.then(() => {
-				abortSignal.throwIfAborted()
-				return call()
-			})
+	return async (key, abortSignal, call) => {
+		const before = (lastOn.get(key) ?? Promise.resolve()).catch(() => undefined)
+		const { promise: done, resolve } = Promise.withResolvers<undefined>()
+		// The next call waits for the one before this too, should this one stop while it waits.
+		const turn = before.then(async () => done)
 		lastOn.set(key, turn)
-		// Forgotten once the turn is really over, not when its caller stops waiting: the call before it may still run.
-		void turn
-			.catch(() => undefined)
-			.finally(() => {
-				if (lastOn.get(key) === turn) lastOn.delete(key)
-			})
-		return untilAborted(turn, abortSignal)
+		void turn.finally(() => {
+			if (lastOn.get(key) === turn) lastOn.delete(key)
+		})
+		try {
+			await untilAborted(before, abortSignal)
+			return await call()
+		} finally {
+			resolve(undefined)
+		}
 	}
 }
 

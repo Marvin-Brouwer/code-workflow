@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { workingDirectoryOf } from './directory.mts'
-import { quietArguments, outputTail, runDotnet } from './run-dotnet.mts'
+import { outputTail, quietArguments, runDotnet } from './run-dotnet.mts'
 
 const Vulnerability = z.object({ severity: z.string(), advisoryurl: z.string().optional() })
 

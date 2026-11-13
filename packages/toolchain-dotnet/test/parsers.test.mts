@@ -60,10 +60,10 @@ describe('diagnosticLine', () => {
 describe('outcomeOf', () => {
 	test('adds up the results files of every test project, with the message and stack trace of each failure', () => {
 		// Act
-		const counts = outcomeOf([failingTrx, passingTrx])
+		const outcome = outcomeOf([failingTrx, passingTrx])
 
 		// Assert
-		expect(counts).toEqual({
+		expect(outcome).toEqual({
 			passed: 2,
 			failed: 1,
 			skipped: 1,
@@ -79,10 +79,10 @@ describe('outcomeOf', () => {
 
 	test("counts a timeout as failed, keeps a message that reads as a number, and takes a data-driven test's failures from its rows", () => {
 		// Act
-		const counts = outcomeOf([unusualTrx])
+		const outcome = outcomeOf([unusualTrx])
 
 		// Assert
-		expect(counts).toEqual({
+		expect(outcome).toEqual({
 			passed: 0,
 			failed: 3,
 			skipped: 0,

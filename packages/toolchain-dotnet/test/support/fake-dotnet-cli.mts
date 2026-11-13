@@ -13,6 +13,8 @@ const Answer = z.object({
 	hang: z.boolean().optional(),
 	holdMs: z.number().optional(),
 	stubbornChildPidFile: z.string().optional(),
+	ignoresStop: z.boolean().optional(),
+	pidFile: z.string().optional(),
 	killedWith: z.string().optional(),
 })
 const Answers = z.record(z.string(), Answer)
@@ -28,6 +30,8 @@ const keepAliveMs = 1000
 /** A process that ignores SIGTERM, with output of its own, as a test host stuck in its exit handlers. */
 const stubbornChild = `process.on('SIGTERM', () => undefined); setInterval(() => undefined, ${String(keepAliveMs)})`
 
+if (answer.ignoresStop === true) process.on('SIGTERM', () => undefined)
+if (answer.pidFile !== undefined) writeFileSync(answer.pidFile, String(process.pid))
 if (answer.stubbornChildPidFile !== undefined) {
 	const child = spawn(process.execPath, ['-e', stubbornChild], { stdio: 'ignore' })
 	writeFileSync(answer.stubbornChildPidFile, String(child.pid))

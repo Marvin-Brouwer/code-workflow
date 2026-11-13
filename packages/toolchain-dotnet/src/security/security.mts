@@ -39,9 +39,10 @@ export function security(repository: DotnetRepository, options: DotnetTargetOpti
 			const advisories = vulnerabilities.map(({ severity, advisoryurl }) =>
 				advisoryurl === undefined ? severity : `${severity} (${advisoryurl})`,
 			)
+			const named = version === undefined ? listed.id : `${listed.id} ${version}`
 			findings.set(key, {
 				source: findingSource,
-				message: `${kind} ${listed.id}${version === undefined ? '' : ` ${version}`} has known vulnerabilities: ${advisories.join(', ')}`,
+				message: `${kind} ${named} has known vulnerabilities: ${advisories.join(', ')}`,
 			})
 		}
 		// A source without vulnerability data, or one that couldn't be reached, is a problem of the

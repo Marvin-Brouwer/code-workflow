@@ -17,6 +17,10 @@ export interface FakeAnswer {
 	readonly holdMs?: number
 	/** Starts a process that ignores SIGTERM, and writes its pid to this file. */
 	readonly stubbornChildPidFile?: string
+	/** Ignores SIGTERM, as a `dotnet` stuck in its exit handlers. */
+	readonly ignoresStop?: boolean
+	/** Writes its own pid to this file once it started. */
+	readonly pidFile?: string
 	/** Kills itself with this signal, as the system does when it runs out of memory. */
 	readonly killedWith?: NodeJS.Signals
 }

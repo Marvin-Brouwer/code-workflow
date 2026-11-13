@@ -46,6 +46,6 @@ await developer.loop`Implement ${story} in ${repository}, then hand in with ${ve
 ### Notes
 
 - Build servers and MSBuild node reuse are off: a server that outlives the call holds its output open. Stopping the run kills `dotnet` and everything it started, outright after two seconds, and on Linux and macOS also what outlives `dotnet` itself.
-- Runs in the same directory take turns, since they share `obj` and `bin`: `verify(dotnet.tests(repository), dotnet.security(repository))` runs the tests, then the security check, rather than both at once.
+- `dotnet` runs in the same directory take turns, since they share `obj` and `bin`: under `verify(dotnet.tests(repository), dotnet.security(repository))`, the test run and the security check's restore and list never run at once. A stopped run is waited for until `dotnet` is gone.
 - Test projects on Microsoft.Testing.Platform's own `dotnet test` mode take `--report-trx` rather than `--logger trx`, and aren't read yet.
 - A virus scan is planned (issue #31).

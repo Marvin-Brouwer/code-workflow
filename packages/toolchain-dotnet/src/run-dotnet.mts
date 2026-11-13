@@ -20,8 +20,11 @@ export interface RunDotnetOptions {
 /** How long `dotnet` and what it started get after a stop before they're killed outright. */
 const forceKillAfterMs = 2_000
 
-/** How much of the output is kept: more than this fails the call. */
-const maxOutputBytes = 64 * 1024 * 1024
+/** How much of the output is kept, in MiB: more than this fails the call. */
+const maxOutputMiB = 64
+
+/** `maxOutputMiB` in bytes. */
+const maxOutputBytes = maxOutputMiB * 1024 * 1024
 
 /**
  * No telemetry, no first-run banner or workload notices, and no build servers or MSBuild nodes
@@ -43,6 +46,9 @@ export const dotnetEnvironment = {
 /** Whether processes run in groups of their own here, which a signal to the group reaches all of. */
 const hasProcessGroups = process.platform !== 'win32'
 
+/** Whether paths here ignore case, so two spellings of a directory share a turn. */
+const pathsIgnoreCase = process.platform === 'win32'
+
 /** Runs in the same directory, one at a time. */
 const inTurn = oneAtATime()
 
@@ -54,7 +60,7 @@ const inTurn = oneAtATime()
  */
 export function runDotnet(args: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
 	const resolved = path.resolve(options.cwd)
-	const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+	const key = pathsIgnoreCase ? resolved.toLowerCase() : resolved
 	return inTurn(key, options.abortSignal, () => spawnDotnet(args, options))
 }
 
@@ -96,7 +102,7 @@ async function spawnDotnet(args: readonly string[], options: RunDotnetOptions): 
 		if (result.isMaxBuffer) {
 			// execa stops `dotnet` itself only: what it started goes too, while the group still has members.
 			if (hasProcessGroups) killTree(subprocess.pid, 'SIGKILL')
-			throw new Error(`dotnet wrote more than ${String(maxOutputBytes / 1024 / 1024)} MiB of output: dotnet ${args.join(' ')}`)
+			throw new Error(`dotnet wrote more than ${String(maxOutputMiB)} MiB of output: dotnet ${args.join(' ')}`)
 		}
 		// Killed from outside, such as by the system running out of memory: it failed, as a failed exit does.
 		if (result.exitCode === undefined && result.signal !== undefined)

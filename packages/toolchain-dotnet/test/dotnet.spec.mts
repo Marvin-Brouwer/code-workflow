@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { runCheck } from '@mesh-flow/core'
 import { describe, expect, onTestFinished, test } from 'vitest'
@@ -21,6 +21,7 @@ import {
 	vulnerableList,
 } from './support/fixtures.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
+import { isRunning, written } from './support/processes.mts'
 import { toolContext } from './support/tool-context.mts'
 
 /** How soon a call that stopped has to settle. */
@@ -28,6 +29,12 @@ const promptlyMs = 1000
 
 /** Time for the fake `dotnet` to have started before the call stops. */
 const startedMs = 300
+
+/** How long a run of the fake holds on, long enough that two runs at once would overlap. */
+const holdMs = 500
+
+/** Longer than `runDotnet` waits after a stop before it kills outright. */
+const afterForceKillMs = 3_000
 
 /**
  * Starts the work, stops it once the fake `dotnet` had time to start, and resolves to how long the
@@ -325,6 +332,30 @@ describe('updatePackages', () => {
 		expect(added).toEqual([['add', '/work/api/src/Api.csproj', 'package', 'Team.Contracts', '--version', '2.4.0']])
 	})
 
+	test('names the projects relative to the checkout when the options name a solution', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await mkdir(path.join(directory, 'src'))
+		const project = path.join(directory, 'src', 'Api', 'Api.csproj')
+		const list = {
+			projects: [
+				{ path: project, frameworks: [{ framework: 'net10.0', topLevelPackages: [{ id: 'Team.Contracts', requestedVersion: '2.3.0' }] }] },
+			],
+		}
+		await fakeDotnet({ list: { stdout: JSON.stringify(list) } })
+
+		// Act
+		const updates = await updatePackages(
+			{ directory },
+			[{ name: 'Team.Contracts', version: '2.4.0' }],
+			{ target: 'src/Api.slnx' },
+			toolContext(),
+		)
+
+		// Assert
+		expect(updates.map((update) => update.project)).toEqual([path.join('src', 'Api', 'Api.csproj')])
+	})
+
 	test('settles promptly when the run stops while a package is being added', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
@@ -352,33 +383,6 @@ describe('updatePackages', () => {
 		expect(await cli.calls()).toEqual([])
 	})
 })
-
-/** Whether a process still runs. */
-async function isRunning(pid: number): Promise<boolean> {
-	try {
-		process.kill(pid, 0)
-	} catch {
-		return false
-	}
-	// A killed process whose parent is gone is a zombie until the system reaps it, which a container's init may never do.
-	const stat = await readFile(`/proc/${String(pid)}/stat`, 'utf8').catch(() => undefined)
-	return stat?.split(') ')[1]?.startsWith('Z') !== true
-}
-
-/** Resolves once `file` exists, as a fake writes it once it started. */
-async function written(file: string): Promise<string> {
-	for (;;) {
-		const text = await readFile(file, 'utf8').catch(() => '')
-		if (text !== '') return text
-		await new Promise((resolve) => setTimeout(resolve, 50))
-	}
-}
-
-/** How long a run of the fake holds on, long enough that two runs at once would overlap. */
-const holdMs = 500
-
-/** Longer than `runDotnet` waits after a stop before it kills outright. */
-const afterForceKillMs = 3_000
 
 describe('runDotnet', () => {
 	test('runs in the same directory take turns', async () => {
@@ -435,6 +439,27 @@ describe('runDotnet', () => {
 
 			// Assert
 			expect(await isRunning(child)).toBe(false)
+		},
+		afterForceKillMs * 2,
+	)
+
+	test.skipIf(process.platform === 'win32')(
+		'a stopped run settles once dotnet is gone, even when it ignores the stop',
+		async () => {
+			// Arrange
+			const directory = await temporaryDirectory()
+			const pidFile = path.join(directory, 'dotnet.pid')
+			await fakeDotnet({ build: { hang: true, ignoresStop: true, pidFile } })
+			const controller = new AbortController()
+			const running = runDotnet(['build'], { cwd: directory, abortSignal: controller.signal })
+			const dotnet = Number(await written(pidFile))
+
+			// Act
+			controller.abort(new Error('The run stopped.'))
+			await expect(running).rejects.toThrow('The run stopped.')
+
+			// Assert
+			expect(await isRunning(dotnet)).toBe(false)
 		},
 		afterForceKillMs * 2,
 	)

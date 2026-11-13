@@ -49,6 +49,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 		directory: Directory,
 		packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1) })),
 	}),
+	// The projects by their full paths: `updatePackages` makes them relative to the checkout.
 	action: async ({ directory, packages }, { abortSignal }): Promise<readonly PackageUpdate[]> => {
 		if (packages.length === 0) return []
 		const cwd = workingDirectoryOf(directory)
@@ -63,7 +64,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
 				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
-					project: path.relative(cwd, project.path),
+					project: project.path,
 					name: current.id,
 					...(current.requestedVersion === undefined ? {} : { from: current.requestedVersion }),
 					to: wanted.version,
@@ -86,11 +87,12 @@ const updateTool = tool('dotnetUpdatePackages', {
  * await dotnet.updatePackages(repository, upstream.flatMap((dependency) => dependency.packages))
  * ```
  */
-export function updatePackages(
+export async function updatePackages(
 	repository: DotnetRepository,
 	packages: readonly PackageVersion[],
 	options: DotnetTargetOptions = {},
 	context?: ToolContext,
 ): Promise<readonly PackageUpdate[]> {
-	return updateTool({ directory: targetOf(repository, options), packages: [...packages] }, context)
+	const updates = await updateTool({ directory: targetOf(repository, options), packages: [...packages] }, context)
+	return updates.map((update) => ({ ...update, project: path.relative(repository.directory, update.project) }))
 }
