@@ -4,12 +4,21 @@ import type { IssueRef } from '../issue/issue.mts'
 
 export { normalizedBody, sameText, textInPrompt, type BasedOn } from '@mesh-flow/forge'
 
+/** The longest title GitHub takes. */
+const maxTitleCharacters = 256
+
+/** The longest body GitHub takes. */
+const githubBodyCharacters = 65_536
+
 /**
  * What a pull request says: its title and its description, as the agent of `describe` writes them,
- * within GitHub's limits: a title of 256 characters, and a body of 60 000 less room for the footer
- * the connector adds.
+ * within GitHub's limits, less the room for the footer.
  */
-export const PullRequestText = changeTextSchema({ maxTitleCharacters: 256, maxDescriptionCharacters: 60_000, request: 'pull request' })
+export const PullRequestText = changeTextSchema({
+	maxTitleCharacters,
+	maxDescriptionCharacters: githubBodyCharacters,
+	request: 'pull request',
+})
 export type PullRequestText = z.infer<typeof PullRequestText>
 
 /**

@@ -13,3 +13,6 @@ const atLeastOneLookMs = 1
 export function looksWithin(duration: WaitSpec, every: WaitSpec): number {
 	return Math.ceil(durationMs(duration) / Math.max(durationMs(every), atLeastOneLookMs))
 }
+
+/** How long a watch waits for a pipeline or checks to appear on a fresh commit, when no duration is given. */
+export const defaultAppearWithin: WaitSpec = { minutes: 10 }

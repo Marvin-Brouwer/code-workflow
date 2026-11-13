@@ -1,9 +1,9 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
-import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
+import type { GitTools } from '../checkout/git-tools.mts'
 import type { GitRemote } from './git-remote.mts'
 
-/** The host halves of the git tools: they hold the credential, the sandbox holds the commits. */
-export function gitHostTools(remote: GitRemote): HostTool[] {
+/** The host halves of a forge's git tools: they hold the credential, the sandbox holds the commits. */
+export function gitHostTools(remote: GitRemote, { cloneRepository, pushBundle }: GitTools): HostTool[] {
 	return [
 		hostTool(cloneRepository, async ({ repository, branch }, context) => {
 			const fetched = await remote.fetchBundle(repository, branch, context)

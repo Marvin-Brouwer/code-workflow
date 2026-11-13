@@ -1,5 +1,13 @@
+import {
+	defaultFetchRetry,
+	goneStatus,
+	notFound,
+	retryingFetch,
+	unauthorized,
+	unavailable,
+	type FetchRetryOptions,
+} from '@mesh-flow/forge/host'
 import { HostToolTransientError, type HostToolContext } from '@mesh-flow/gateway'
-import { defaultFetchRetry, retryingFetch, unavailable, type FetchRetryOptions } from '@mesh-flow/forge/host'
 import { z } from 'zod'
 import { readSite } from './site.mts'
 
@@ -128,6 +136,9 @@ async function listOf(response: Response, path: string): Promise<unknown[]> {
 	return listed.data
 }
 
+/** The most of a failure's body that goes into its error, such as a proxy's whole error page. */
+const maxFailureTextCharacters = 500
+
 /** What GitLab said about a failure: its `message` or `error`, or the body as it is. */
 async function failureText(response: Response): Promise<string> {
 	const text = await response.text()
@@ -140,15 +151,15 @@ async function failureText(response: Response): Promise<string> {
 	} catch {
 		// Not JSON, such as a proxy's error page: the text says what there is to say.
 	}
-	return text.slice(0, 500)
+	return text.slice(0, maxFailureTextCharacters)
 }
 
 /** Whether GitLab answered that what was asked for is gone, such as a note deleted since. */
 export function isGone(error: unknown): boolean {
-	return error instanceof GitlabRequestError && (error.status === 404 || error.status === 410)
+	return error instanceof GitlabRequestError && (error.status === notFound || error.status === goneStatus)
 }
 
 /** Whether GitLab refused the token: one that's wrong, expired or revoked. */
 export function refusedToken(error: unknown): boolean {
-	return error instanceof GitlabRequestError && error.status === 401
+	return error instanceof GitlabRequestError && error.status === unauthorized
 }

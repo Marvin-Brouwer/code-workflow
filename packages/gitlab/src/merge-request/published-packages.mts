@@ -1,5 +1,5 @@
 import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
-import { defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
+import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef, PackageType, PublishedPackage } from '../tools/merge-request-tools.mts'
 
@@ -13,7 +13,21 @@ export interface PublishedPackagesOptions {
 	readonly toleratedOutage?: WaitSpec
 }
 
-const defaultAppearWithin: WaitSpec = { minutes: 10 }
+/**
+ * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
+ * name and version after the upload, in the background. Fails when that takes more than `looks`.
+ */
+async function processedPackages(
+	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
+	{ every, looks, url }: { readonly every: WaitSpec; readonly looks: number; readonly url: string },
+): Promise<readonly PublishedPackage[]> {
+	for (let look = 0; ; look++) {
+		const { packages, processing } = await list()
+		if (processing === 0) return packages
+		if (look >= looks) throw new Error(`GitLab is still processing ${String(processing)} package(s) of ${url}.`)
+		await wait(every)
+	}
+}
 
 /**
  * The packages of `type` that the merge of a merge request published: it waits for the pipeline of
@@ -45,8 +59,12 @@ export async function publishedPackages(
 		if (pipeline.status === 'completed' && pipeline.pipeline !== undefined) {
 			if (pipeline.failures.length > 0)
 				throw new Error(`The pipeline of the merge of ${merged.url} failed (${pipeline.pipeline.url}), so its packages aren't published.`)
-			const { id } = pipeline.pipeline
-			return look(() => stubs.pipelinePackages({ repository: on.repository, pipeline: id, type }, context))
+			const { id, url } = pipeline.pipeline
+			return processedPackages(() => look(() => stubs.pipelinePackages({ repository: on.repository, pipeline: id, type }, context)), {
+				every,
+				looks: looksForPipelineToAppear,
+				url,
+			})
 		}
 		if (pipeline.status === 'none' && ++looksWithoutPipeline > looksForPipelineToAppear)
 			throw new Error(`No pipeline ran on the merge of ${merged.url} (${mergedSha}), so it published nothing.`)

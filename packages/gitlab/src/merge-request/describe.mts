@@ -6,8 +6,8 @@ import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 import { branchHead } from './branch-head.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 import { gitlabLayout } from './layout.mts'
-import { findOpenMergeRequest, mergeRequest, type MergeRequest } from './merge-request.mts'
 import { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request-text.mts'
+import { findOpenMergeRequest, mergeRequest, type MergeRequest } from './merge-request.mts'
 
 /** What `describe` takes besides the agent and the checkout. */
 export interface DescribeOptions {

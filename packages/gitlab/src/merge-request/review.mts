@@ -77,7 +77,7 @@ export async function review(
 			read: async () => mergeRequestOf(await stubs.getMergeRequest(where, context)),
 			activity: (since) => stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context),
 			showBeingRead: (items) => stubs.showBeingRead({ ...where, items: items.map((item) => item.id) }, context),
-			checks: (sha) => stubs.pipelineOnCommit({ repository: on.repository, sha }, context),
+			checks: (sha) => stubs.pipelineOnCommit({ repository: on.repository, sha, mergeRequest: on.number }, context),
 		},
 		{
 			...(handlers.comments === undefined ? {} : { comments: handlers.comments }),

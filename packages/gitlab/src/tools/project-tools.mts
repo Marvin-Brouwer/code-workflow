@@ -13,10 +13,10 @@ export const FoundProject = z.object({
 })
 export type FoundProject = z.infer<typeof FoundProject>
 
-/** Searches on the host the projects the token can see. */
+/** Searches on the host the projects the user of the token is a member of. */
 export const searchProjects = {
 	name: 'gitlabSearchProjects',
-	description: 'Searches the GitLab projects the token can see by name, path or description',
+	description: 'Searches the GitLab projects the user of the token is a member of by name, path or description',
 	input: z.object({
 		query: z.string().min(1).describe('Words in the name, path or description'),
 		limit: z.int().min(1).max(100).default(20).describe('The most projects to list'),

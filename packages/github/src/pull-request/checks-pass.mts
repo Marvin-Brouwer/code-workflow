@@ -1,8 +1,7 @@
 import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
+import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { defaultLookEvery, defaultToleratedOutage, looksWithin } from '@mesh-flow/forge'
-import { patientLook } from '@mesh-flow/forge'
 
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {
@@ -19,8 +18,6 @@ export interface ChecksPassOptions {
 	 */
 	readonly toleratedOutage?: WaitSpec
 }
-
-const defaultAppearWithin: WaitSpec = { minutes: 10 }
 
 /**
  * A check for `verify`: waits for the checks on the pull request's head commit to complete, and

@@ -41,8 +41,8 @@ const customaryTitleCharacters = 72
 
 /**
  * Has `agent` write the title and description of the pull or merge request for a checkout's branch,
- * in one loop, as a connector's `describe` does: see `describe` of `@mesh-flow/github` for what it
- * reads first, what it skips and what it refuses. `closes` renders in the prompt where the agent
+ * in one loop, from the branch's commits and diff, the repository's templates and the settings
+ * that lint its commit messages or titles. `closes` renders in the prompt where the agent
  * reads it, so it has to be a value that renders, such as an issue.
  */
 export async function describeChange<Repository extends Checkout, Request extends ChangeRequest, Ref, Closes>(

@@ -6,7 +6,8 @@
  * @module
  */
 export { gitRemote, type GitRemote, type GitRemoteOptions } from '../host/git-remote.mts'
-export { unavailable } from '../host/http-statuses.mts'
+export { gitHostTools } from '../host/git-host-tools.mts'
+export { goneStatus, notFound, unauthorized, unavailable } from '../host/http-statuses.mts'
 export { oneAtATime, type OneAtATime } from '../host/one-at-a-time.mts'
 export { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '../host/retrying-fetch.mts'
 export { runIdLine, signed, unsigned, withoutRunId, withUnixLineBreaks } from '../host/signature.mts'
@@ -14,3 +15,5 @@ export { descriptionOf, footerCloses, sameBody, signedDescription, type Descript
 export { answeredKey, plannedKey, reactionKey, reactionKeyName, repliedKey, replyKey, seenKey } from '../host/reply-keys.mts'
 export type { OwnReply, PostedReply, ReplyOutcome, ReviewComments } from '../host/review-comments.mts'
 export { replyToItem, type ReviewReply } from '../host/review-reply.mts'
+export { showItemsBeingRead, type ItemBeingRead, type ShowBeingReadOptions, type ShownBeingRead } from '../host/show-being-read.mts'
+export { later } from '../host/later.mts'

@@ -1,20 +1,15 @@
 import { sameText } from '@mesh-flow/forge'
 import {
-	answeredKey,
 	descriptionOf,
 	footerCloses,
+	later,
 	oneAtATime,
-	reactionKey,
-	repliedKey,
-	replyKey,
 	replyToItem,
 	sameBody,
-	seenKey,
-	signed,
+	showItemsBeingRead,
 	signedDescription,
 } from '@mesh-flow/forge/host'
-import { commentMarker } from '@mesh-flow/forge'
-import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
+import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import {
 	findMergeRequest,
@@ -26,9 +21,8 @@ import {
 	updateMergeRequest,
 	type MergeRequestData,
 } from '../tools/merge-request-tools.mts'
-import { refusedToken, type ApiClient, type GitlabClient } from './api.mts'
+import { GitlabRequestError, projectSegment, refusedToken, type ApiClient, type GitlabClient } from './api.mts'
 import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
-import { projectSegment } from './api.mts'
 
 /** A merge request as GitLab's API has it, in the fields the tools pass on. */
 const ApiMergeRequest = z.object({
@@ -68,21 +62,43 @@ function mergeRequestData(repository: string, data: ApiMergeRequest): MergeReque
 	}
 }
 
-/** The latest of two moments, either of which may be missing. */
-function later(seen: string | undefined, latest: string | undefined): string | undefined {
-	if (seen === undefined) return latest
-	if (latest === undefined) return seen
-	return new Date(seen).getTime() >= new Date(latest).getTime() ? seen : latest
-}
-
-/** The open merge request of branch `head` onto `base`, when there is one. */
+/**
+ * The open merge request of branch `head` onto `base`, when there is one. GitLab keeps one open
+ * merge request per source branch, whatever its target: one onto another branch, such as after a
+ * reviewer changed its target, can't be opened again or reused, so it fails the call, naming it.
+ */
 async function openOnBranch(client: GitlabClient, project: string, head: string, base: string): Promise<ApiMergeRequest | undefined> {
 	const { items } = await client.firstPage(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, 1, {
 		state: 'opened',
 		source_branch: head,
-		target_branch: base,
 	})
-	return items[0]
+	const open = items[0]
+	if (open !== undefined && open.target_branch !== base)
+		throw new Error(`${head} already has an open merge request onto ${open.target_branch}, not ${base}: ${open.web_url}`)
+	return open
+}
+
+/** GitLab's answer to a merge request opened for a branch that has one open already, as when two runs open it at once. */
+const conflict = 409
+
+/** What opening a merge request takes. */
+interface NewMergeRequest {
+	readonly source_branch: string
+	readonly target_branch: string
+	readonly title: string
+	readonly description: string
+}
+
+/** Opens a merge request, or takes the one another call opened for the branch meanwhile. */
+async function opened(client: GitlabClient, project: string, body: NewMergeRequest): Promise<ApiMergeRequest> {
+	try {
+		return await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body })
+	} catch (error) {
+		if (!(error instanceof GitlabRequestError && error.status === conflict)) throw error
+		const meanwhile = await openOnBranch(client, project, body.source_branch, body.target_branch)
+		if (meanwhile === undefined) throw error
+		return meanwhile
+	}
 }
 
 /** The host halves of the merge request tools. */
@@ -94,9 +110,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			const existing = await openOnBranch(client, repository, head, base)
 			if (existing === undefined) {
-				const created = await client.request('POST', `${projectSegment(repository)}/merge_requests`, ApiMergeRequest, {
-					body: { source_branch: head, target_branch: base, title, description: signedBody },
-				})
+				const created = await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
 				return mergeRequestData(repository, created)
 			}
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
@@ -164,33 +178,11 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(showBeingRead, async ({ repository, number, items }, context) => {
 			const comments = mergeRequestNotes(await api(context), repository, number)
-			const replies = await comments.ownReplies(['note'])
-			const hasReply = (key: string) => replies.some((reply) => reply.body.includes(commentMarker(key)))
-			const shown: string[] = []
-			const answered: string[] = []
-			// One at a time: GitLab limits bursts of writes, and a round of review can bring many items.
-			for (const item of items) {
-				const noteId = noteIdOf(item)
-				// An answer replaced the reading reply, or is a reply of its own when there was none.
-				if (hasReply(answeredKey(item)) || hasReply(repliedKey(item))) {
-					answered.push(item)
-					continue
-				}
-				try {
-					const reaction = await comments.react('note', noteId)
-					if (!hasReply(seenKey(item))) {
-						const thread = await comments.threadOf('note', noteId)
-						const reactionKeys = reaction === undefined ? [] : [reactionKey(reaction)]
-						await comments.post('note', thread, signed(readingNote, context.runId, [replyKey, seenKey(item), ...reactionKeys]))
-					}
-					shown.push(item)
-				} catch (error) {
-					// A deleted note just isn't shown. What may pass is tried again, and a stopped call or a bad
-					// token is no reason to say the items were shown.
-					if (isTransient(error) || context.abortSignal.aborted || refusedToken(error)) throw error
-				}
-			}
-			return { shown, answered }
+			const toShow = items.map((item) => {
+				const commentId = noteIdOf(item)
+				return { item, kind: 'note' as const, commentId, note: readingNote, thread: () => comments.threadOf('note', commentId) }
+			})
+			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),
 	]
 }

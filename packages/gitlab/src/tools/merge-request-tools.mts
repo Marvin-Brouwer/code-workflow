@@ -95,7 +95,10 @@ export const updateMergeRequest = {
 	output: MergeRequestData.extend({ skipped: UpdateSkip.optional() }),
 }
 
-/** Finds on the host the open merge request of a branch onto a target branch, when it has one. */
+/**
+ * Finds on the host the open merge request of a branch onto a target branch, when it has one. GitLab
+ * keeps one open merge request per branch, so one onto another target fails the call, naming it.
+ */
 export const findMergeRequest = {
 	name: 'gitlabFindMergeRequest',
 	description: 'Finds the open merge request of a branch on GitLab',
@@ -190,13 +193,15 @@ export type PipelineStatus = z.infer<typeof PipelineStatus>
 
 /**
  * Reads on the host the latest pipeline of a commit, on `ref` when one is named, and the jobs of it
- * that failed. A pipeline waiting on a manual job counts as completed: nothing runs until someone
- * starts it.
+ * that failed. With a merge request, a merged results pipeline counts too: it runs on a commit that
+ * merges the head into the target, not on the head itself. A pipeline waiting on a manual job
+ * counts as completed: nothing runs until someone starts it. A commit GitLab hasn't filled in yet,
+ * all zeros, has its pipeline still to come.
  */
 export const pipelineOnCommit = {
 	name: 'gitlabPipeline',
 	description: 'Reads the latest pipeline of a commit on GitLab and its failed jobs',
-	input: z.object({ repository: ProjectPath, sha: Sha, ref: BranchName.optional() }),
+	input: z.object({ repository: ProjectPath, sha: Sha, ref: BranchName.optional(), mergeRequest: z.int().min(1).optional() }),
 	output: z.object({
 		status: PipelineStatus,
 		failures: z.array(JobFailure),
@@ -218,5 +223,9 @@ export const pipelinePackages = {
 	name: 'gitlabPipelinePackages',
 	description: "Lists the packages a pipeline published to a GitLab project's package registry",
 	input: z.object({ repository: ProjectPath, pipeline: z.int().positive(), type: PackageType }),
-	output: z.array(PublishedPackage),
+	output: z.object({
+		packages: z.array(PublishedPackage),
+		/** How many of the pipeline's packages GitLab is still processing, such as a NuGet package whose name and version it hasn't read yet. */
+		processing: z.int().min(0),
+	}),
 }
