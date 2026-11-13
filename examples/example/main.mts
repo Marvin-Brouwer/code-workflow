@@ -8,8 +8,8 @@
  * so restores work and the agents can build and test, and nothing else: Jira, Confluence and
  * GitLab are only spoken to from the host, through the gateway.
  */
-import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { jira } from '@mesh-flow/atlassian/hooks'
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
 /** The image the Dockerfile builds, as pushed to Docker Hub: put your account in. */

@@ -4,8 +4,8 @@
  * inside it. While the run waits for a person or for GitLab, the sandbox can be paused; the answer
  * resumes it and the await resolves in the same stack.
  */
-import { fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
 import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
