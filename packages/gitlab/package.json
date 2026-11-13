@@ -9,7 +9,7 @@
 		"mesh-flow",
 		"workflow"
 	],
-	"homepage": "https://gitlab.com/Marvin-Brouwer/code-workflow/tree/main/packages/gitlab#readme",
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/gitlab#readme",
 	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
 	"license": "MIT",
 	"repository": {

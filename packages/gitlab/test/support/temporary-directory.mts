@@ -5,7 +5,7 @@ import { onTestFinished } from 'vitest'
 
 /** A fresh directory, removed when the test ends. */
 export async function temporaryDirectory(): Promise<string> {
-	const directory = await mkdtemp(path.join(tmpdir(), 'mesh-flow-github-test-'))
+	const directory = await mkdtemp(path.join(tmpdir(), 'mesh-flow-gitlab-test-'))
 	onTestFinished(() => rm(directory, { recursive: true, force: true, maxRetries: 5 }))
 	return directory
 }
