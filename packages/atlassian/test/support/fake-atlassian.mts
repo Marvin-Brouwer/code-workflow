@@ -35,6 +35,17 @@ export interface FakeIssue {
 	transitions: Record<string, string>
 	properties: Record<string, unknown>
 	links: { type: { inward: string; outward: string }; inwardIssue?: FakeNestedIssue; outwardIssue?: FakeNestedIssue }[]
+	attachments: FakeAttachment[]
+}
+
+/** A file attached to a fake issue, served at `/secure/attachment/<id>/<filename>` unless `content` says otherwise. */
+export interface FakeAttachment {
+	id: string
+	filename: string
+	mimeType: string
+	bytes: Uint8Array
+	/** Where Jira says the bytes are; by default on the site. */
+	content?: string
 }
 
 /** An issue as a link names it: its key, summary and status. */
@@ -58,6 +69,8 @@ export interface FakeAtlassian {
 	readonly requests: FakeRequest[]
 	readonly issues: Map<string, FakeIssue>
 	readonly pages: Map<string, FakePage>
+	/** The people Jira and Confluence know, by account id or username. Without an email, the site keeps it private. */
+	readonly users: Map<string, { displayName: string; email?: string }>
 	/** Paths whose requests never get an answer, until their signal aborts: a site that hangs. */
 	readonly hanging: Set<string>
 	/** Answers the next requests with these statuses, oldest first, before serving as usual: a site that has trouble. */
@@ -80,6 +93,7 @@ export function fakeIssue(issue: Partial<FakeIssue> & { key: string }): FakeIssu
 		transitions: { '11': 'To Do', '21': 'In Progress', '31': 'Done' },
 		properties: {},
 		links: [],
+		attachments: [],
 		...issue,
 	}
 }
@@ -102,12 +116,21 @@ export function fakeAtlassian(): FakeAtlassian {
 	const requests: FakeRequest[] = []
 	const issues = new Map<string, FakeIssue>()
 	const pages = new Map<string, FakePage>()
+	const users = new Map<string, { displayName: string; email?: string }>()
 	const hanging = new Set<string>()
 	const failNext: number[] = []
 	const losesAnswers = new Set<string>()
 	let nextCommentId = 10_000
 
+	const user = (query: URLSearchParams, email: 'emailAddress' | 'email'): Response => {
+		const found = users.get(query.get('accountId') ?? query.get('username') ?? '')
+		return found === undefined
+			? notFound()
+			: json(200, { displayName: found.displayName, ...(found.email === undefined ? {} : { [email]: found.email }) })
+	}
+
 	const serveJira = (method: string, route: string, query: URLSearchParams, body: unknown): Response => {
+		if (method === 'GET' && route === '/user') return user(query, 'emailAddress')
 		if (method === 'POST' && route === '/search/jql') return search(SearchBody.parse(body).jql, 'cloud')
 		if (method === 'GET' && route === '/search') return search(query.get('jql') ?? '', 'data-center')
 		const match = /^\/issue\/([^/]+)(\/.*)?$/.exec(route)
@@ -170,6 +193,7 @@ export function fakeAtlassian(): FakeAtlassian {
 	}
 
 	const serveConfluence = (route: string, query: URLSearchParams): Response => {
+		if (route === '/user') return user(query, 'email')
 		if (route === '/search') {
 			const text = /text ~ "([^"]*)"/.exec(query.get('cql') ?? '')?.[1] ?? ''
 			const found = [...pages.values()].filter((page) => page.html.includes(text) || page.title.includes(text))
@@ -210,8 +234,13 @@ export function fakeAtlassian(): FakeAtlassian {
 			})
 		const failure = failNext.shift()
 		if (failure !== undefined) return json(failure, { errorMessages: ['Trouble'] })
+		const attachmentId = /^\/secure\/attachment\/(\d+)\//.exec(url.pathname)?.[1]
+		if (attachmentId !== undefined) {
+			const attachment = [...issues.values()].flatMap((issue) => issue.attachments).find(({ id }) => id === attachmentId)
+			return attachment === undefined ? notFound() : new Response(attachment.bytes, { headers: { 'content-type': attachment.mimeType } })
+		}
 		const jira = /^\/rest\/api\/[23](\/.*)$/.exec(url.pathname)?.[1]
-		const confluence = /^(?:\/wiki|\/confluence)?\/rest\/api(\/(?:content|search).*)$/.exec(url.pathname)?.[1]
+		const confluence = /^(?:\/wiki|\/confluence)?\/rest\/api(\/(?:content|search|user).*)$/.exec(url.pathname)?.[1]
 		const served =
 			confluence !== undefined
 				? serveConfluence(confluence, url.searchParams)
@@ -221,7 +250,7 @@ export function fakeAtlassian(): FakeAtlassian {
 		return losesAnswers.has(`${method} ${url.pathname}`) ? json(504, { errorMessages: ['Gateway timeout'] }) : served
 	}
 
-	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, hanging, failNext, losesAnswers, latencyMs: 0 }
+	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, users, hanging, failNext, losesAnswers, latencyMs: 0 }
 	return state
 }
 
@@ -244,6 +273,13 @@ function rendered(issue: FakeIssue) {
 			},
 			issuelinks: issue.links,
 			subtasks: [],
+			attachment: issue.attachments.map((attachment) => ({
+				id: attachment.id,
+				filename: attachment.filename,
+				mimeType: attachment.mimeType,
+				size: attachment.bytes.byteLength,
+				content: attachment.content ?? `/secure/attachment/${attachment.id}/${attachment.filename}`,
+			})),
 		},
 		renderedFields: {
 			description: issue.descriptionHtml,

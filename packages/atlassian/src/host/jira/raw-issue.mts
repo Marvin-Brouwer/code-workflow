@@ -16,6 +16,16 @@ const NestedIssue = z.object({
 })
 export type NestedIssue = z.infer<typeof NestedIssue>
 
+/** A file attached to an issue: `content` is where its bytes are, on the site. */
+export const RawAttachment = z.object({
+	id: z.string(),
+	filename: z.string(),
+	mimeType: z.string().default('application/octet-stream'),
+	size: z.number().default(0),
+	content: z.string(),
+})
+export type RawAttachment = z.infer<typeof RawAttachment>
+
 /** A comment as Jira lists it in an issue's `comment` field. */
 const RawComment = z.object({ id: z.string(), author: Person, created: Time })
 
@@ -48,6 +58,7 @@ export const RawIssue = z.object({
 			)
 			.default([]),
 		subtasks: z.array(NestedIssue).default([]),
+		attachment: z.array(RawAttachment).default([]),
 	}),
 	/** The rich text fields as HTML, which Jira renders the same way on Cloud and Data Center. */
 	renderedFields: z
@@ -76,6 +87,7 @@ export const issueFields = [
 	'comment',
 	'issuelinks',
 	'subtasks',
+	'attachment',
 ]
 
 /** The fields a search asks for, for each issue it finds. */

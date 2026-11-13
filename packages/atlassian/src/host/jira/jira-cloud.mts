@@ -55,6 +55,11 @@ export function jiraCloud(config: ClientConfig & { readonly host: string }): Jir
 					(await client.issueProperties.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value,
 				undefined,
 			),
+		async user({ accountId }, abortSignal) {
+			if (accountId === undefined) return undefined
+			const user = await client.users.getUser({ accountId }, { signal: abortSignal })
+			return { name: user.displayName, email: user.emailAddress }
+		},
 		async setProperty(key, name, value, abortSignal) {
 			await client.issueProperties.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},

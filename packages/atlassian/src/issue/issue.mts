@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
@@ -27,7 +29,10 @@ export type IssueRef = IssueKey | { readonly key: IssueKey }
 /** Where collected issues are dumped, for agents to read. */
 const issuesFolder = workspace.folder('jira', { description: 'the Jira issues this run read, one Markdown file each' })
 
-/** A collected issue: what Jira has, and its Markdown dump in the workspace, which is how it appears in a prompt. */
+/**
+ * A collected issue: what Jira has, and its Markdown dump in the workspace, which is how it appears
+ * in a prompt. Its attachments carry no bytes: the images are files next to the dump.
+ */
 export interface JiraIssue extends IssueData {
 	/** The dump, relative to the workspace. */
 	readonly path: string
@@ -46,11 +51,19 @@ export interface JiraIssue extends IssueData {
  * ```
  */
 export async function collect(issue: IssueRef, context?: ToolContext): Promise<JiraIssue> {
-	const data = await stubs.getIssue({ key: keyOf(issue) }, context)
+	const { attachments, ...data } = await stubs.getIssue({ key: keyOf(issue) }, context)
 	const file = workspace.file(`${issuesFolder.path}/${data.key}.md`)
-	await file.write(issueMarkdownOf(data))
 	const location = file.location()
-	return Object.freeze({ ...data, path: file.path, [toPrompt]: () => location })
+	// The images go next to the Markdown, which links to them by these paths.
+	for (const { file: relative, data: base64 } of attachments) {
+		if (relative === undefined || base64 === undefined) continue
+		const image = path.join(path.dirname(location), relative)
+		await mkdir(path.dirname(image), { recursive: true })
+		await writeFile(image, Buffer.from(base64, 'base64'))
+	}
+	const listed = attachments.map(({ data: _bytes, ...attachment }) => attachment)
+	await file.write(issueMarkdownOf({ ...data, attachments: listed }))
+	return Object.freeze({ ...data, attachments: listed, path: file.path, [toPrompt]: () => location })
 }
 
 /**

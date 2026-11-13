@@ -3,7 +3,7 @@ import { createClient, type Client } from 'jira.js/core'
 import { defaultRequestRetry, type AtlassianHostOptions } from '../host-options.mts'
 import { readSite } from '../site.mts'
 import type { ConfluenceSite } from './confluence-site.mts'
-import { RawPage, RawSearch } from './raw-page.mts'
+import { RawPage, RawSearch, RawUser } from './raw-page.mts'
 
 /** A Confluence site for one call, with the credentials from the credential store. */
 export type ConfluenceApi = (context: HostToolContext) => Promise<ConfluenceSite>
@@ -52,5 +52,11 @@ function confluenceSite(client: Client, url: string): ConfluenceSite {
 				schema: RawSearch,
 				signal: abortSignal,
 			}),
+		async user({ accountId, username }, abortSignal) {
+			const searchParams = accountId === undefined ? (username === undefined ? undefined : { username }) : { accountId }
+			if (searchParams === undefined) return undefined
+			const user = await client.sendRequest({ url: '/rest/api/user', searchParams, schema: RawUser, signal: abortSignal })
+			return { name: user.displayName, email: user.email }
+		},
 	}
 }

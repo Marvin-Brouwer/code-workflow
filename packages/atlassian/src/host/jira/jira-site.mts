@@ -1,3 +1,4 @@
+import type { UserLookup } from '../people.mts'
 import type { RawFoundIssue, RawIssue } from './raw-issue.mts'
 
 /** A transition of an issue's workflow, and the status it leads to. */
@@ -31,6 +32,8 @@ export interface JiraSite {
 	readonly updateComment: (key: string, commentId: string, markdown: string, abortSignal: AbortSignal) => Promise<boolean>
 	/** An issue property's value, or `undefined` when the issue has none by that name. */
 	readonly property: (key: string, name: string, abortSignal: AbortSignal) => Promise<unknown>
+	/** Who a mention names, by account id on Cloud and username on Data Center. */
+	readonly user: UserLookup
 	/** Sets an issue property, replacing its value. */
 	readonly setProperty: (key: string, name: string, value: Record<string, unknown>, abortSignal: AbortSignal) => Promise<void>
 }

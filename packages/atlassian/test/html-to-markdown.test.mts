@@ -13,7 +13,7 @@ describe('htmlToMarkdown', () => {
 		expect(markdown).toBe('## Steps\n\n-   Open `/login`\n\n<table><tbody><tr><td>a</td></tr></tbody></table>')
 	})
 
-	test('writes a mention as @Name, as Jira Cloud, Jira Data Center and Confluence render it', () => {
+	test('writes a mention as an @mention call with the id the link holds, as Jira Cloud, Jira Data Center and Confluence render it', () => {
 		// Arrange
 		const mentions = [
 			'<p>Ask <a href="https://example.atlassian.net/secure/ViewProfile.jspa?accountId=5b10" class="user-hover" data-account-id="5b10">@Rita Reporter</a>.</p>',
@@ -22,10 +22,14 @@ describe('htmlToMarkdown', () => {
 		]
 
 		// Act
-		const markdown = mentions.map(htmlToMarkdown)
+		const markdown = mentions.map((html) => htmlToMarkdown(html))
 
 		// Assert
-		expect(markdown).toEqual(['Ask @Rita Reporter.', 'Ask @Rita Reporter.', 'Ask @Rita Reporter.'])
+		expect(markdown).toEqual([
+			'Ask `@mention({ name: "Rita Reporter", id: "5b10" })`.',
+			'Ask `@mention({ name: "Rita Reporter", id: "rita" })`.',
+			'Ask `@mention({ name: "Rita Reporter", id: "5b10" })`.',
+		])
 	})
 
 	test('is empty for no rich text', () => {
