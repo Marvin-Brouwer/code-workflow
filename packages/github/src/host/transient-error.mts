@@ -30,7 +30,10 @@ export function markedTransient(error: unknown): unknown {
 	return unavailable(error.status) || rateLimited ? new HostToolTransientError(error.message, { cause: error }) : error
 }
 
-/** Whether GitHub refused the token: one that's wrong, expired or revoked. */
+/**
+ * Whether GitHub refused the token: one that's wrong, expired or revoked, which it answers with a
+ * 401. A 403 is not one: a locked conversation answers that too.
+ */
 export function refusedToken(error: unknown): boolean {
 	return isRequestFailure(error) && error.status === unauthorized
 }
