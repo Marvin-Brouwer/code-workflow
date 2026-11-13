@@ -1,45 +1,43 @@
+import { withFrontmatter } from '../frontmatter.mts'
 import type { IssueComment, IssueData, RelatedIssue } from '../tools/issue-tools.mts'
 
-/** The issue as Markdown: a heading with its key and summary, its facts, its description, then its relations and comments. */
+/**
+ * The issue as Markdown: its facts and relations as frontmatter, then a heading with its key and
+ * summary, its description and its comments.
+ */
 export function issueMarkdownOf(data: IssueData): string {
 	const description = data.description.trim()
-	return [
+	const metadata = {
+		key: data.key,
+		summary: data.summary,
+		url: data.url,
+		type: data.type,
+		status: data.status,
+		priority: data.priority,
+		assignee: data.assignee,
+		reporter: data.reporter,
+		labels: data.labels,
+		components: data.components,
+		parent: data.parent === null ? null : related(data.parent),
+		created: data.created,
+		updated: data.updated,
+		links: data.links.map((link) => ({ relation: link.relation, ...related(link) })),
+		subtasks: data.subtasks.map(related),
+	}
+	const body = [
 		`# ${data.key}: ${data.summary}`,
-		'',
-		`- URL: ${data.url}`,
-		`- Type: ${data.type}`,
-		`- Status: ${data.status}`,
-		`- Priority: ${data.priority ?? 'none'}`,
-		`- Assignee: ${data.assignee ?? 'unassigned'}`,
-		`- Reporter: ${data.reporter ?? 'unknown'}`,
-		`- Labels: ${listed(data.labels)}`,
-		`- Components: ${listed(data.components)}`,
-		...(data.parent === null ? [] : [`- Parent: ${related(data.parent)}`]),
-		`- Created: ${data.created}`,
-		`- Updated: ${data.updated}`,
 		'',
 		'## Description',
 		'',
 		description === '' ? '(no description)' : description,
 		'',
-		...section(
-			'Linked issues',
-			data.links.map((link) => `- ${link.relation} ${related(link)}`),
-		),
-		...section(
-			'Subtasks',
-			data.subtasks.map((subtask) => `- ${related(subtask)}`),
-		),
 		...section('Comments', data.comments.flatMap(commentLines)),
 	].join('\n')
+	return withFrontmatter(metadata, body)
 }
 
-function listed(values: readonly string[]): string {
-	return values.length === 0 ? 'none' : values.join(', ')
-}
-
-function related(issue: RelatedIssue): string {
-	return `${issue.key}: ${issue.summary} (${issue.status})`
+function related(issue: RelatedIssue): RelatedIssue {
+	return { key: issue.key, summary: issue.summary, status: issue.status }
 }
 
 /** A heading and its lines under a blank line, or nothing when there are no lines. */

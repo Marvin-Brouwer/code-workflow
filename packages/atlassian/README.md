@@ -63,7 +63,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 `JiraIssueParameters` is what a workflow on one issue takes, `{ key }`, where `jira.key` is an issue key such as `PROJ-123`; a workflow that takes more declares `{ ...JiraIssueParameters, reviewer: z.string() }`.
 
-- `jira.collect(issue)` reads the issue, with its comments, links and subtasks, and writes it as Markdown into `jira/` in the workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout. The description and comments come as Jira renders them, turned into Markdown; tables stay HTML.
+- `jira.collect(issue)` reads the issue, with its comments, links and subtasks, and writes it as Markdown into `jira/` in the workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout. The issue's metadata (key, summary, URL, type, status, priority, assignee, reporter, labels, components, parent, dates, links and subtasks) is YAML frontmatter; the body is its description and comments, as Jira renders them, turned into Markdown. Tables stay HTML, and a mention of a person is `@Name`.
 - `jira.dump` is the same for agents: a tool that takes a key and answers with the dump's path.
 - `jira.search` is a tool, and a function for code: it takes JQL and a `limit` (default 20, at most 100) and answers with keys, summaries, statuses, types and whether more issues match.
 - `jira.transition(issue, status)` moves an issue to a status, by name and without regard to case, through the transition of its workflow that leads there. It does nothing when the issue has that status already, and throws, naming the statuses it can move to, when no transition leads there.
@@ -73,7 +73,7 @@ Each takes an issue by its key or as `collect` gave it.
 
 ### Confluence
 
-- `confluence.collect(page)` reads a page, by its id or its URL, and writes it as Markdown into `confluence/` in the workspace; in a prompt it renders as that file's absolute path.
+- `confluence.collect(page)` reads a page, by its id or its URL, and writes it as Markdown into `confluence/` in the workspace, with its id, title, URL, space, version and last update as YAML frontmatter; in a prompt it renders as that file's absolute path.
 - `confluence.dump` is the same for agents.
 - `confluence.search` is a tool, and a function for code: it takes the words to look for, a space key to look in and a `limit` (default 20, at most 50), and answers with ids, titles, spaces, URLs and excerpts.
 
