@@ -25,7 +25,7 @@ export interface ChangeRequestRef {
 /** How a code host's connector names what it does, in prompts, tool names and errors. */
 export interface CodeHostTerms {
 	/** The code host, such as `GitHub`. */
-	readonly codeHost: string
+	readonly name: string
 	/** What it calls a change to merge: `pull request` or `merge request`. */
 	readonly request: string
 	/** What the connector's tool names start with, such as `github`. */

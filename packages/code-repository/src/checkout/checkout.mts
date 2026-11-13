@@ -7,8 +7,8 @@ import { localGit } from './local-git.mts'
 import { origin, trackingRef } from './tracking.mts'
 
 /**
- * A checkout of a code host's repository in the workspace, on a branch. In a prompt it renders as where
- * it is on disk, so the agent finds it from any directory, including inside another checkout.
+ * A checkout of a code host's repository in the workspace, on a branch. In a prompt it renders as
+ * where it is on disk, so the agent finds it from any directory, including inside another checkout.
  */
 export interface Checkout {
 	/** The repository as the code host names it, such as `owner/name` or `group/project`. */
@@ -26,7 +26,7 @@ export interface Checkout {
 export interface ClonedBundle {
 	readonly bundle: string
 	readonly defaultBranch: string
-	/** Whether the branch exists on the codeHost. When it doesn't, the bundle holds the default branch only. */
+	/** Whether the branch exists on the code host. When it doesn't, the bundle holds the default branch only. */
 	readonly branchExists: boolean
 }
 
@@ -38,11 +38,11 @@ export interface CheckoutOptions {
 	/** The folder in the workspace the checkout goes in, such as the repository's own name. */
 	readonly folder: string
 	/**
-	 * What the checkout's `origin` is set to, as git's `remote.origin.url`, and what a reused
-	 * checkout's has to be: the repository's URL on the code host, or a name that stands for it, such as
-	 * gitlab's `gitlab:team/api`. The sandbox never fetches from it; the host does.
+	 * What the checkout's `origin` is set to, and what a reused checkout's has to be: the repository's
+	 * URL, or a name that stands for it. The sandbox never fetches from it: clones and pushes go
+	 * through the host.
 	 */
-	readonly remoteUrl: string
+	readonly remote: string
 	/** The host tool that clones the repository and hands it over as a bundle. */
 	readonly clone: (input: { repository: string; branch: string }, context: ToolContext) => Promise<ClonedBundle>
 }
@@ -68,8 +68,10 @@ export async function checkoutRepository(options: CheckoutOptions, context: Tool
 	if (existing === 'broken') await rm(directory, { recursive: true, force: true })
 	if (existing === 'checkout') {
 		const url = (await git.remoteGetUrl(origin)).stdout.trim()
-		if (url !== options.remoteUrl)
+		// Code hosts ignore case in names: a checkout made under another case is one of the same repository.
+		if (url.toLowerCase() !== options.remote.toLowerCase())
 			throw new Error(`${folder.path} holds a checkout of another repository (${url}), so ${repository} can't go there.`)
+		if (url !== options.remote) await git.remoteSetUrl(origin, options.remote)
 		const defaultBranch = (await git.config(defaultBranchConfigKey)).stdout.trim()
 		await switchTo(git, branch, defaultBranch)
 		return checkoutOf(repository, branch, defaultBranch, folder.path, directory)
@@ -82,7 +84,7 @@ export async function checkoutRepository(options: CheckoutOptions, context: Tool
 	})
 	if (!fetched.branchExists) await git.checkout(branch, { create: true, quiet: true })
 	// The bundle is gone: the remote is only where the pushed state is tracked, under refs/remotes/origin.
-	await git.remoteSetUrl(origin, options.remoteUrl)
+	await git.remoteSetUrl(origin, options.remote)
 	await git.config(defaultBranchConfigKey, fetched.defaultBranch)
 	return checkoutOf(repository, branch, fetched.defaultBranch, folder.path, directory)
 }

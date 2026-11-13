@@ -1,7 +1,9 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
-import { pipelineOnCommit, pipelinePackages, type JobFailure, type PipelineStatus } from '../tools/merge-request-tools.mts'
-import { isGone, projectSegment, type ApiClient, type GitlabClient } from './api.mts'
+import { pipelineOnCommit, pipelinePackages, type JobFailure, type PipelineStatus } from '../tools/pipeline-tools.mts'
+import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
+import { isNoCommit } from './no-commit.mts'
+import { isGone } from './request-error.mts'
 
 const ApiPipeline = z.object({ id: z.int(), sha: z.string(), status: z.string(), web_url: z.url() })
 type ApiPipeline = z.infer<typeof ApiPipeline>
@@ -28,32 +30,42 @@ const ApiPackage = z.object({
 		.optional(),
 })
 
+/** The state of a pipeline that waits for a person to start one of its jobs. */
+const manualState = 'manual'
+
 /**
  * Pipeline states after which nothing more runs on its own. A pipeline waiting on a manual job counts:
  * nothing runs until someone starts it.
  */
-const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', 'manual'])
+const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', manualState])
+
+/** The status of a package GitLab is done processing. */
+const processedPackageStatus = 'default'
 
 /** Pipeline states whose jobs are worth listing as failures. */
 const failedStates = new Set(['failed', 'canceled'])
-
-/** A commit id GitLab hasn't filled in, as on a merge request it is still preparing. */
-const noCommit = /^0+$/
 
 /** How many of a merge request's latest pipelines are looked at for a merged results pipeline of its head. */
 const mergedResultsCandidates = 5
 
 /**
- * The latest pipeline of commit `sha`, or, for a merge request, its latest merged results pipeline
- * of `sha`: one on a commit GitLab made by merging `sha` into the target, which has `sha` as a parent.
+ * The latest pipeline of commit `sha`. For a merge request, its own latest pipeline of `sha` comes
+ * first, the one GitLab gates the merge on: a merged results pipeline, on a commit GitLab made by
+ * merging `sha` into the target, which has `sha` as a parent, or one on `sha` itself.
  */
 async function latestPipeline(
 	client: GitlabClient,
 	project: string,
 	{ sha, ref, mergeRequest }: { readonly sha: string; readonly ref?: string | undefined; readonly mergeRequest?: number | undefined },
 ): Promise<ApiPipeline | undefined> {
+	const ofRequest = mergeRequest === undefined ? undefined : await requestPipeline(client, project, sha, mergeRequest)
+	if (ofRequest !== undefined) return ofRequest
 	const { items } = await client.firstPage(`${project}/pipelines`, ApiPipeline, 1, { sha, ref, order_by: 'id', sort: 'desc' })
-	if (items[0] !== undefined || mergeRequest === undefined) return items[0]
+	return items[0]
+}
+
+/** The latest pipeline of merge request `mergeRequest` that ran on `sha`, or on a merge of it. */
+async function requestPipeline(client: GitlabClient, project: string, sha: string, mergeRequest: number): Promise<ApiPipeline | undefined> {
 	const ofRequest = await client.firstPage(
 		`${project}/merge_requests/${String(mergeRequest)}/pipelines`,
 		ApiPipeline,
@@ -75,13 +87,13 @@ async function latestPipeline(
 export function pipelineHostTools(api: ApiClient): HostTool[] {
 	return [
 		hostTool(pipelineOnCommit, async ({ repository, sha, ref, mergeRequest }, context) => {
-			if (noCommit.test(sha)) return { status: 'pending' as const, failures: [] }
+			if (isNoCommit(sha)) return { status: 'pending' as const, failures: [] }
 			const client = await api(context)
 			const project = projectSegment(repository)
 			const latest = await latestPipeline(client, project, { sha, ref, mergeRequest })
 			if (latest === undefined) return { status: 'none' as const, failures: [] }
 			const status: PipelineStatus = doneStates.has(latest.status) ? 'completed' : 'pending'
-			const pipeline = { id: latest.id, url: latest.web_url }
+			const pipeline = { id: latest.id, url: latest.web_url, waitsOnManualJob: latest.status === manualState }
 			if (status === 'pending' || !failedStates.has(latest.status)) return { status, failures: [], pipeline }
 			const path = `${project}/pipelines/${String(latest.id)}`
 			// Jobs, and the triggers of downstream pipelines, which GitLab lists apart.
@@ -116,7 +128,10 @@ export function pipelineHostTools(api: ApiClient): HostTool[] {
 				throw new Error(
 					`GitLab couldn't process ${broken.map((found) => `${found.name} ${found.version}`).join(', ')} of pipeline ${String(pipeline)}.`,
 				)
-			const packages = listed.filter((found) => found.status !== 'error').map((found) => ({ name: found.name, version: found.version }))
+			// Only the ones GitLab is done with: a package still processing, such as a temporary NuGet upload, is never handed on.
+			const packages = listed
+				.filter((found) => (found.status ?? processedPackageStatus) === processedPackageStatus)
+				.map((found) => ({ name: found.name, version: found.version }))
 			return { packages, processing: processing.length }
 		}),
 	]

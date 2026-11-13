@@ -33,8 +33,3 @@ export interface ClosesIssue {
  * `openMergeRequest` or `updateMergeRequest`.
  */
 export type MergeRequestContent = ChangeContent<ClosesIssue>
-
-/** The `closes` field of a host call for `issue`, when there is one. */
-export function closingField(issue: ClosesIssue | undefined): { closes?: string } {
-	return issue === undefined ? {} : { closes: issue.key }
-}

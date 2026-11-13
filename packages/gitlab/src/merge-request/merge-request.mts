@@ -5,7 +5,8 @@ import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestData, MergeRequestRef } from '../tools/merge-request-tools.mts'
-import { closingField, type MergeRequestContent } from './merge-request-text.mts'
+import { closingField } from './closing-reference.mts'
+import type { MergeRequestContent } from './merge-request-text.mts'
 
 /** A merge request, which renders as its URL in a prompt. */
 export interface MergeRequest extends MergeRequestData {

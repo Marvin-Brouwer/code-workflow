@@ -80,6 +80,27 @@ describe('pipelinePasses', () => {
 		expect(await run.result).toEqual([{ source: 'pipeline: test/lint', message: 'failed (https://gitlab.example/jobs/2)' }])
 	})
 
+	test("reports the merge request's own pipeline, which gates the merge, over a branch pipeline on the head", async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { sha: head })
+		api.pipeline(projectPath, { sha: head, ref: 'feature', status: 'success' })
+		api.pipeline(projectPath, {
+			sha: merge,
+			ref: 'refs/merge-requests/3/merge',
+			status: 'failed',
+			mergeRequest: 3,
+			parents: ['c'.repeat(40), head],
+			jobs: [{ name: 'lint', stage: 'test', status: 'failed', web_url: 'https://gitlab.example/jobs/2' }],
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, (context) => runCheck(pipelinePasses(where, quickly), context))
+
+		// Assert
+		expect(await run.result).toEqual([{ source: 'pipeline: test/lint', message: 'failed (https://gitlab.example/jobs/2)' }])
+	})
+
 	test('passes over a merged results pipeline whose merge commit GitLab cleaned up', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
@@ -236,6 +257,19 @@ describe('publishedPackages', () => {
 		// Assert
 		await expect(open.result).rejects.toThrow("isn't merged")
 		await expect(failed.result).rejects.toThrow('failed')
+	})
+
+	test('fails for a merge whose pipeline waits for a person to start a job', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { state: 'merged', sha: head, merge_commit_sha: merge })
+		api.pipeline(projectPath, { sha: merge, ref: 'main', status: 'manual' })
+
+		// Act
+		const run = await runOnGateway(gateway, () => publishedPackages(where, 'nuget', quickly))
+
+		// Assert
+		await expect(run.result).rejects.toThrow('waits for a person to start a job')
 	})
 
 	test('settles promptly when the run stops while the pipeline never ends', async () => {

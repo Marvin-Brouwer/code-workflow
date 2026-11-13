@@ -36,7 +36,7 @@ export const checkout = tool('gitlabCheckout', {
 			{
 				...input,
 				folder: input.repository.split('/').at(-1) ?? input.repository,
-				remoteUrl: gitlabRemoteName(input.repository),
+				remote: gitlabRemoteName(input.repository),
 				clone: stubs.cloneRepository,
 			},
 			context,

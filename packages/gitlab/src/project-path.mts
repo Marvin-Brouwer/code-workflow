@@ -23,5 +23,6 @@ export function sameProjectPath(one: string, other: string): boolean {
  * go through the host, so it names the project rather than a URL, which only the host knows.
  */
 export function gitlabRemoteName(project: ProjectPath): string {
-	return `gitlab:${project}`
+	// GitLab ignores case in paths: a checkout of `Team/Api` is one of `team/api`.
+	return `gitlab:${project.toLowerCase()}`
 }

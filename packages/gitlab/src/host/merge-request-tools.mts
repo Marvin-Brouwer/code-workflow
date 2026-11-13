@@ -20,7 +20,10 @@ import {
 	updateMergeRequest,
 	type MergeRequestData,
 } from '../tools/merge-request-tools.mts'
-import { GitlabRequestError, projectSegment, refusedToken, type ApiClient, type GitlabClient } from './api.mts'
+import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
+import { keepingDraft, withoutDraftPrefix } from './draft-title.mts'
+import { noCommit } from './no-commit.mts'
+import { GitlabRequestError, refusedToken } from './request-error.mts'
 import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
 
 /** A merge request as GitLab's API has it, in the fields the tools pass on. */
@@ -32,15 +35,18 @@ const ApiMergeRequest = z.object({
 	state: z.string(),
 	source_branch: z.string(),
 	target_branch: z.string(),
+	source_project_id: z.int(),
+	target_project_id: z.int(),
 	sha: z.string().nullable().optional(),
 	merge_commit_sha: z.string().nullable().optional(),
 	squash_commit_sha: z.string().nullable().optional(),
 })
 type ApiMergeRequest = z.infer<typeof ApiMergeRequest>
 
-/** A commit id GitLab hasn't filled in, as on a merge request it is still preparing. */
-const noCommit = '0'.repeat(40)
-
+/**
+ * A merge request as the sandbox gets it, from GitLab's answer: a locked one counts as open, and a
+ * fast-forward merge, which leaves no commit of its own, has the head as its merge commit.
+ */
 function mergeRequestData(repository: string, data: ApiMergeRequest): MergeRequestData {
 	const merged = data.state === 'merged'
 	const head = data.sha ?? noCommit
@@ -65,13 +71,11 @@ function mergeRequestData(repository: string, data: ApiMergeRequest): MergeReque
  * The open merge request of branch `head` onto `base`, when there is one. GitLab keeps one open
  * merge request per source branch, whatever its target: one onto another branch, such as after a
  * reviewer changed its target, can't be opened again or reused, so it fails the call, naming it.
+ * One from a fork's branch of the same name is someone else's, and never taken.
  */
 async function openOnBranch(client: GitlabClient, project: string, head: string, base: string): Promise<ApiMergeRequest | undefined> {
-	const { items } = await client.firstPage(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, 1, {
-		state: 'opened',
-		source_branch: head,
-	})
-	const open = items[0]
+	const listed = await client.all(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, { state: 'opened', source_branch: head })
+	const open = listed.find((request) => request.source_project_id === request.target_project_id)
 	if (open !== undefined && open.target_branch !== base)
 		throw new Error(`${head} already has an open merge request onto ${open.target_branch}, not ${base}: ${open.web_url}`)
 	return open
@@ -116,7 +120,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			const closesAlready = closes === undefined || footerCloses(existing.description, closes)
 			if (descriptionOf(existing.description).describedSha === describedSha && closesAlready) return mergeRequestData(repository, existing)
 			const updated = await client.request('PUT', mergeRequestPath(repository, existing.iid), ApiMergeRequest, {
-				body: { title, description: signedBody },
+				body: { title: keepingDraft(existing.title, title), description: signedBody },
 			})
 			return mergeRequestData(repository, updated)
 		}),
@@ -129,12 +133,15 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			// A closed merge request keeps the text it was reviewed with.
 			if (data.state === 'closed') return { ...data, skipped: 'closed' as const }
 			// Edited since the caller looked: the caller asks the person again rather than write over it.
-			const now = { title: current.title, description: data.description }
-			if (seen !== undefined && !sameText(now, seen) && !sameText(now, { title, description: body }))
+			// Marking it a draft, or ready, isn't an edit of its text.
+			const now = { title: withoutDraftPrefix(current.title), description: data.description }
+			const seenText = seen === undefined ? undefined : { ...seen, title: withoutDraftPrefix(seen.title) }
+			if (seenText !== undefined && !sameText(now, seenText) && !sameText(now, { title, description: body }))
 				return { ...data, skipped: 'edited' as const }
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			if (current.title === title && sameBody(current.description, signedBody)) return { ...data, skipped: 'unchanged' as const }
-			const updated = await client.request('PUT', where, ApiMergeRequest, { body: { title, description: signedBody } })
+			const written = keepingDraft(current.title, title)
+			if (current.title === written && sameBody(current.description, signedBody)) return { ...data, skipped: 'unchanged' as const }
+			const updated = await client.request('PUT', where, ApiMergeRequest, { body: { title: written, description: signedBody } })
 			return mergeRequestData(repository, updated)
 		}),
 

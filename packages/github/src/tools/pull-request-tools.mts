@@ -1,6 +1,6 @@
-import { GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { BranchName, RepositoryName } from '../repository-name.mts'
+import { RepositoryName } from '../repository-name.mts'
 import { PostedComment } from './issue-tools.mts'
 
 /** Names a pull request: its repository and number. */

@@ -18,7 +18,7 @@ export interface TriageCodeHost<Item extends TriageItem> {
 	readonly reply: (item: Item, body: string, stage: ReplyStage) => Promise<{ readonly gone: boolean }>
 }
 
-/** What `triageItems` takes besides the agent, the checkout and the codeHost. */
+/** What `triageItems` takes besides the agent, the checkout and the code host. */
 export interface TriageItemsOptions<Item extends TriageItem> {
 	/** The pull or merge request the items are on, as it renders in a prompt. */
 	readonly request: unknown

@@ -4,13 +4,12 @@ import {
 	findMergeRequest,
 	getMergeRequest,
 	openMergeRequest,
-	pipelineOnCommit,
-	pipelinePackages,
 	replyToReviewItem,
 	reviewActivity,
 	showBeingRead,
 	updateMergeRequest,
 } from './tools/merge-request-tools.mts'
+import { pipelineOnCommit, pipelinePackages } from './tools/pipeline-tools.mts'
 import { searchProjects } from './tools/project-tools.mts'
 
 /**

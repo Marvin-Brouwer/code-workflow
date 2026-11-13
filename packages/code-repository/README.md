@@ -4,7 +4,7 @@ What the mesh-flow connectors of code hosts share, so `@mesh-flow/github` and `@
 
 Workflows don't use this package: they use a connector. It is for writing one.
 
-## The sandbox's side
+## The sandbox half
 
 A connector defines its git tools with `gitTools`, and checks a repository out with `checkoutRepository`, which clones on the host through the clone tool and reuses a checkout that is there already:
 
@@ -16,7 +16,7 @@ import { z } from 'zod'
 declare const context: ToolContext
 
 const ProjectPath = z.string().regex(/^[\w.-]+(\/[\w.-]+)+$/)
-const terms = { codeHost: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' }
+const terms = { name: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' }
 const { cloneRepository } = gitTools({ terms, repositoryTerm: 'project', repository: ProjectPath })
 
 const repository: Checkout = await checkoutRepository(
@@ -24,7 +24,7 @@ const repository: Checkout = await checkoutRepository(
 		repository: 'group/project',
 		branch: 'fix-login',
 		folder: 'project',
-		remoteUrl: 'https://gitlab.example.com/group/project.git',
+		remote: 'gitlab:group/project',
 		clone: hostToolStub(cloneRepository),
 	},
 	context,
@@ -67,7 +67,7 @@ const branchHead = (repository: Checkout) =>
 const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_048_576, request: 'merge request' })
 
 const gitlabDescribe: DescribeCodeHost<Checkout, ChangeRequest, MergeRequestRef> = {
-	terms: { codeHost: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' },
+	terms: { name: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' },
 	layout,
 	text: MergeRequestText,
 	sameRepository: (one, other) => one === other,
@@ -96,7 +96,7 @@ const pipelinePasses = (sha: string) =>
 	})
 ```
 
-## The host's side
+## The host half
 
 `@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, a `fetch` that tries again when the connection drops, one call at a time per key, the footer every post is signed with, and the replies to review items:
 
@@ -123,3 +123,13 @@ const body = signed('Looks good.', context.runId, ['reply:note/12'])
 ```
 
 `replyToItem` and `showItemsBeingRead` answer review items and show them as being read, through the connector's `ReviewComments`: where its code host keeps replies, and how it reacts and posts.
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/code-repository typecheck
+pnpm --filter @mesh-flow/code-repository test
+pnpm --filter @mesh-flow/code-repository build
+```
+
+Tests run against local bare repositories and fake host tools, so they need no token and no network. They need `git` on the machine.

@@ -2,7 +2,8 @@ import { commentMarker, isMarked } from '@mesh-flow/code-repository'
 import { notFound, replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
 import { z } from 'zod'
 import type { ReviewItem } from '../tools/merge-request-tools.mts'
-import { GitlabRequestError, isGone, projectSegment, type GitlabClient } from './api.mts'
+import { projectSegment, type GitlabClient } from './api.mts'
+import { GitlabRequestError, isGone } from './request-error.mts'
 
 /** The kinds of item a review on GitLab brings: a comment on a line, or one on the merge request. */
 export type ReviewItemKind = ReviewItem['kind']

@@ -1,14 +1,7 @@
-import {
-	defaultFetchRetry,
-	gone,
-	notFound,
-	retryingFetch,
-	unauthorized,
-	unavailable,
-	type FetchRetryOptions,
-} from '@mesh-flow/code-repository/host'
+import { defaultFetchRetry, retryingFetch, unavailable, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import { HostToolTransientError, type HostToolContext } from '@mesh-flow/gateway'
 import { z } from 'zod'
+import { GitlabRequestError } from './request-error.mts'
 import { readSite } from './site.mts'
 
 /** How the host half reaches GitLab. */
@@ -49,17 +42,6 @@ export interface GitlabClient {
 
 /** A client for one call. */
 export type ApiClient = (context: HostToolContext) => Promise<GitlabClient>
-
-/** GitLab's answer to a request that wasn't served, with its status, so a caller can tell a 404 from the rest. */
-export class GitlabRequestError extends Error {
-	override readonly name = 'GitlabRequestError'
-	readonly status: number
-
-	constructor(message: string, status: number) {
-		super(message)
-		this.status = status
-	}
-}
 
 /** A project's path as it goes in a URL: GitLab takes `group/project` encoded as one segment. */
 export function projectSegment(project: string): string {
@@ -152,14 +134,4 @@ async function failureText(response: Response): Promise<string> {
 		// Not JSON, such as a proxy's error page: the text says what there is to say.
 	}
 	return text.slice(0, maxFailureTextCharacters)
-}
-
-/** Whether GitLab answered that what was asked for is gone, such as a note deleted since. */
-export function isGone(error: unknown): boolean {
-	return error instanceof GitlabRequestError && (error.status === notFound || error.status === gone)
-}
-
-/** Whether GitLab refused the token: one that's wrong, expired or revoked. */
-export function refusedToken(error: unknown): boolean {
-	return error instanceof GitlabRequestError && error.status === unauthorized
 }

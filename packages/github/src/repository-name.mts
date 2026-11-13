@@ -25,10 +25,9 @@ export function splitRepositoryName(full: RepositoryName): { readonly owner: str
 
 /** Where git clones `owner/name` from on GitHub. */
 export function githubRemoteUrl(repository: RepositoryName): string {
-	return `https://github.com/${repository}.git`
+	// GitHub ignores case in names: `Team/App` is `team/app`.
+	return `https://github.com/${repository.toLowerCase()}.git`
 }
-
-export { BranchName } from '@mesh-flow/code-repository'
 
 /** Whether two repository names name the same repository: GitHub ignores case in them. */
 export function sameRepositoryName(one: string, other: string): boolean {
