@@ -1,6 +1,6 @@
 export { build, type BuildResult } from './build/build.mts'
 export type { Diagnostic } from './build/diagnostics.mts'
-export type { DotnetCheckout } from './directory.mts'
+export type { DotnetCheckout, DotnetTargetOptions } from './directory.mts'
 export { updatePackages, type PackageUpdate, type PackageVersion } from './packages/update-packages.mts'
 export { security } from './security/security.mts'
 export type { TestResult } from './test-run/run-tests.mts'

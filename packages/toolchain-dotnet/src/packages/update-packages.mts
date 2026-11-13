@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
-import { Directory, workingDirectoryOf, type DotnetCheckout } from '../directory.mts'
+import { Directory, targetOf, workingDirectoryOf, type DotnetCheckout, type DotnetTargetOptions } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
 
@@ -16,12 +16,18 @@ export interface PackageUpdate {
 	/** The project, relative to the checkout. */
 	readonly project: string
 	readonly name: string
-	/** The version the project asked for before, or undefined when it named none, as a reference without a version does. */
+	/**
+	 * The version the project asked for before, or undefined when it named none, as a reference
+	 * without a version does.
+	 */
 	readonly from?: string
 	readonly to: string
 }
 
-/** A version as NuGet writes an exact one, `[2.4.0]`, or as a minimum, `2.4.0`, which both mean that version here. */
+/** A reference the update tool moved, by the project's full path: `updatePackages` makes it relative to the checkout. */
+type UpdatedReference = Omit<PackageUpdate, 'project'> & { readonly projectPath: string }
+
+/** An exact version as NuGet writes it, `[2.4.0]`. A bare `2.4.0` is a minimum, and here both mean that version (see `asksFor`). */
 const exactVersion = /^\[([^,\]]+)\]$/
 
 /** Whether a project's reference asks for `version`, written either way. */
@@ -32,11 +38,13 @@ function asksFor(requested: string | undefined, version: string): boolean {
 }
 
 /** NuGet ignores case in package ids. */
-const sameId = (one: string, other: string) => one.toLowerCase() === other.toLowerCase()
+function sameId(one: string, other: string): boolean {
+	return one.toLowerCase() === other.toLowerCase()
+}
 
 /**
- * The update as a tool, so a run's events show what it was called with. A rerun changes nothing since
- * a reference at the version is left alone.
+ * The update as a tool, so a run's events show what it was called with. A rerun changes nothing
+ * since a reference at the version is left alone.
  */
 const updateTool = tool('dotnetUpdatePackages', {
 	description: 'Moves the package references of the .NET projects in a directory to the versions given',
@@ -44,11 +52,11 @@ const updateTool = tool('dotnetUpdatePackages', {
 		directory: Directory,
 		packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1) })),
 	}),
-	action: async ({ directory, packages }, { abortSignal }): Promise<readonly PackageUpdate[]> => {
+	action: async ({ directory, packages }, { abortSignal }): Promise<readonly UpdatedReference[]> => {
 		if (packages.length === 0) return []
 		const cwd = workingDirectoryOf(directory)
 		const list = await listPackages(directory, [], abortSignal)
-		const updates: PackageUpdate[] = []
+		const updates: UpdatedReference[] = []
 		for (const project of list.projects) {
 			const referenced = (project.frameworks ?? []).flatMap((framework) => framework.topLevelPackages ?? [])
 			for (const wanted of packages) {
@@ -58,7 +66,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
 				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
-					project: path.relative(cwd, project.path),
+					projectPath: project.path,
 					name: current.id,
 					...(current.requestedVersion === undefined ? {} : { from: current.requestedVersion }),
 					to: wanted.version,
@@ -74,16 +82,19 @@ const updateTool = tool('dotnetUpdatePackages', {
  * packages an upstream merge request published, with `dotnet add package`: under central package
  * management, that writes `Directory.Packages.props`. Only packages a project references directly
  * are updated; one already at the version is left as it is, so a rerun changes nothing. No
- * packages, no work. Resolves to what was updated.
+ * packages, no work. Resolves to what was updated. `options.target` names the solution or project
+ * when the checkout has none at its root, or more than one.
  *
  * ```ts
  * await dotnet.updatePackages(repository, upstream.flat())
  * ```
  */
-export function updatePackages(
+export async function updatePackages(
 	repository: DotnetCheckout,
 	packages: readonly PackageVersion[],
+	options: DotnetTargetOptions = {},
 	context?: ToolContext,
 ): Promise<readonly PackageUpdate[]> {
-	return updateTool({ directory: repository.directory, packages: [...packages] }, context)
+	const updates = await updateTool({ directory: targetOf(repository, options), packages: [...packages] }, context)
+	return updates.map(({ projectPath, ...update }) => ({ ...update, project: path.relative(repository.directory, projectPath) }))
 }

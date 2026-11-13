@@ -4,9 +4,11 @@ import { runCheck } from '@mesh-flow/core'
 import { execa } from 'execa'
 import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
+import { dotnetEnvironment } from '../src/run-dotnet.mts'
 import { security } from '../src/security/security.mts'
 import { testsPass } from '../src/test-run/tests-pass.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
+import { toolContext } from './support/tool-context.mts'
 
 /** Whether a .NET SDK is on the `PATH`, as on GitHub's runners: these tests need the real one. */
 const hasSdk = await execa('dotnet', ['--version'], { reject: false }).then((result) => result.exitCode === 0)
@@ -14,14 +16,11 @@ const hasSdk = await execa('dotnet', ['--version'], { reject: false }).then((res
 /** Long enough for a first restore from nuget.org. */
 const sdkTimeoutMs = 180_000
 
-/** What a tool or check gets when called from code, with a signal nothing aborts. */
-const toolContext = () => ({ abortSignal: new AbortController().signal })
-
 /** A new project from one of the SDK's templates, in a directory of its own. */
 async function newProject(template: string): Promise<string> {
 	const directory = path.join(await temporaryDirectory(), 'App')
 	await execa('dotnet', ['new', template, '--output', directory, '--name', 'App'], {
-		env: { DOTNET_NOLOGO: '1', DOTNET_CLI_TELEMETRY_OPTOUT: '1' },
+		env: dotnetEnvironment,
 	})
 	return directory
 }
