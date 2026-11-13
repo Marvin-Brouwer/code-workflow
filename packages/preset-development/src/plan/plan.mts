@@ -58,7 +58,7 @@ export type Plan = z.infer<typeof Plan>
  * A repository that, through its dependencies, ends up depending on itself, when there is one:
  * such a plan has no order to deliver its repositories in.
  */
-function inCycle(dependencies: readonly { readonly repository: string; readonly dependsOn: string }[]): string | undefined {
+function inCycle(dependencies: readonly z.infer<typeof PlannedDependency>[]): string | undefined {
 	const needs = Map.groupBy(dependencies, (dependency) => dependency.repository)
 	const done = new Set<string>()
 	const visiting = new Set<string>()

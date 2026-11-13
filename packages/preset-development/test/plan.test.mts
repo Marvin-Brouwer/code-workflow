@@ -40,6 +40,7 @@ describe('Plan', () => {
 
 	it('refuses a repository that depends on itself, directly or through another', () => {
 		// Arrange
+		const apiInCycle = "team/api ends up depending on itself: a repository can only wait for others that don't wait for it."
 		const onItself = { ...plan, dependencies: [{ repository: 'team/api', dependsOn: 'team/api', reason: 'itself' }] }
 		const roundabout = {
 			...plan,
@@ -54,10 +55,7 @@ describe('Plan', () => {
 		const parsed = [Plan.safeParse(onItself), Plan.safeParse(roundabout)]
 
 		// Assert
-		expect(parsed.map((result) => result.error?.issues.map((issue) => issue.message))).toEqual([
-			["team/api ends up depending on itself: a repository can only wait for others that don't wait for it."],
-			["team/api ends up depending on itself: a repository can only wait for others that don't wait for it."],
-		])
+		expect(parsed.map((result) => result.error?.issues.map((issue) => issue.message))).toEqual([[apiInCycle], [apiInCycle]])
 	})
 })
 

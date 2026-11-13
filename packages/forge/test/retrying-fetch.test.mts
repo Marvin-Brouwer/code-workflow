@@ -99,12 +99,15 @@ describe('retryingFetch', () => {
 
 	test('times only the wait for the answer, so a slow body is read to the end', async () => {
 		// Arrange
+		// Room for the headers to come back on a busy CI runner, and a body that takes far longer than that.
+		const answerTimeoutMs = 200
+		const bodyDelayMs = 5 * answerTimeoutMs
 		const server = createServer((_request, response) => {
 			response.writeHead(200, { 'content-type': 'application/json' })
 			response.flushHeaders()
 			setTimeout(() => {
 				response.end('{"login":"mesh-flow-bot"}')
-			}, 100)
+			}, bodyDelayMs)
 		})
 		await new Promise<void>((resolve) => {
 			server.listen(0, '127.0.0.1', resolve)
@@ -117,7 +120,9 @@ describe('retryingFetch', () => {
 		if (address === null || typeof address === 'string') throw new Error('The server has no port.')
 
 		// Act
-		const response = await retryingFetch(fetch, { ...quickRetry, attemptTimeoutMs: 20 })(`http://127.0.0.1:${String(address.port)}/user`)
+		const response = await retryingFetch(fetch, { ...quickRetry, attemptTimeoutMs: answerTimeoutMs })(
+			`http://127.0.0.1:${String(address.port)}/user`,
+		)
 		const body: unknown = await response.json()
 
 		// Assert

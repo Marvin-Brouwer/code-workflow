@@ -64,36 +64,37 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		await jira.transition(story, 'In Review')
 		await jira.comment(story, `Merge request for ${repository.name}: ${mergeRequest.url}`, { key: `merge-request ${repository.name}` })
 
-		// Returns once the merge request is merged or closed. Each round of review comments is one call.
-		const outcome = mergeRequest.merged
-			? { state: 'merged' as const }
-			: await gitlab.review(mergeRequest, {
-					async comments(comments) {
-						// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
-						const changes = await gitlab.triage(reviewer, repository, { mergeRequest, comments })
-						if (changes.length === 0) return
-						await developer.loop`
-					Make these changes in ${repository}, as they were planned: ${changes}.
-					When a change goes beyond this merge request, record it with ${deviations.record}.
-					Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
-					When every item is done, hand in with ${verify(dotnet.tests(repository))}.
-					${limit({ minutes: 45 })}
-				`
-						// What was fixed after the last push, to make the tests pass, goes up too.
-						await gitlab.push(repository)({ message: `${story.key}: review changes` })
-						// `describe` runs no writer loop when the pushed commit is already described.
-						await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
-					},
-					async pipelineFailed({ failures }) {
-						await developer.loop`
-					The pipeline of ${mergeRequest} failed: ${failures}.
-					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
-					${limit({ minutes: 45 })}
-				`
-						await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
-					},
-				})
-		if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)
+		// A merge request merged meanwhile has no review left to watch.
+		if (!mergeRequest.merged) {
+			// Returns once the merge request is merged or closed. Each round of review comments is one call.
+			const outcome = await gitlab.review(mergeRequest, {
+				async comments(comments) {
+					// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
+					const changes = await gitlab.triage(reviewer, repository, { mergeRequest, comments })
+					if (changes.length === 0) return
+					await developer.loop`
+						Make these changes in ${repository}, as they were planned: ${changes}.
+						When a change goes beyond this merge request, record it with ${deviations.record}.
+						Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
+						When every item is done, hand in with ${verify(dotnet.tests(repository))}.
+						${limit({ minutes: 45 })}
+					`
+					// What was fixed after the last push, to make the tests pass, goes up too.
+					await gitlab.push(repository)({ message: `${story.key}: review changes` })
+					// `describe` runs no writer loop when the pushed commit is already described.
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+				},
+				async pipelineFailed({ failures }) {
+					await developer.loop`
+						The pipeline of ${mergeRequest} failed: ${failures}.
+						Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
+						${limit({ minutes: 45 })}
+					`
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+				},
+			})
+			if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)
+		}
 
 		// Only what another repository waits for: a project that publishes nothing has no packages to wait for.
 		if (!part.hasDependents) return []

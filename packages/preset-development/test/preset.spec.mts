@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { agent, runCheck } from '@mesh-flow/core'
 import { describe, expect, it } from 'vitest'
@@ -85,25 +85,38 @@ describe('codeReview', () => {
 		const noFindings = callsTool('succeed', { findings: [] })
 		const model = scriptedModel([noFindings, noFindings, noFindings])
 		const review = codeReview(reviewer, repository, planIn(workspaceDirectory))
-		const reviewNow = () => runBody(() => runCheck(review, { abortSignal: AbortSignal.timeout(checkTimeoutMs) }), model.models)
+		const reviewNow = async () =>
+			(await runBody(() => runCheck(review, { abortSignal: AbortSignal.timeout(checkTimeoutMs) }), model.models)).result
 
 		// Act
-		await (
-			await reviewNow()
-		).result
-		await (
-			await reviewNow()
-		).result
+		await reviewNow()
+		await reviewNow()
 		await writeFile(path.join(repository.directory, 'Refunds.cs'), 'class Refunds {}\n')
-		await (
-			await reviewNow()
-		).result
+		await reviewNow()
 
 		// Assert
 		const [first, unchanged, withNewFile] = model.requests.map((request) => /\(state (\w+)\)/.exec(textOf(request))?.[1])
 		expect(first).toBeDefined()
 		expect(unchanged).toBe(first)
 		expect(withNewFile).not.toBe(first)
+	})
+
+	it('reviews a checkout with an untracked nested repository and a dangling link', async () => {
+		// Arrange
+		const repository = await gitCheckout()
+		await mkdir(path.join(repository.directory, 'sample', '.git'), { recursive: true })
+		await writeFile(path.join(repository.directory, 'sample', '.git', 'HEAD'), 'ref: refs/heads/main\n')
+		await symlink('missing.cs', path.join(repository.directory, 'dangling.cs'))
+		const model = scriptedModel([callsTool('succeed', { findings: [] })])
+
+		// Act
+		const run = await runBody(
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
+			model.models,
+		)
+
+		// Assert
+		expect(await run.result).toEqual([])
 	})
 
 	it('settles when the run stops while the reviewer never answers', async () => {
