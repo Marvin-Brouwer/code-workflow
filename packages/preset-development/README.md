@@ -36,7 +36,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 - `Research` is a workspace folder, `research/`, for the research notes. `succeed(Research)` takes it once it holds a file, and in a later prompt it renders as the folder with its files.
 - `planFile` is `plan.md` in the workspace; in a prompt it renders as its absolute path.
-- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its name on the source host with a summary of its changes, and the `dependencies` between them, each with the reason. A dependency on a repository the plan doesn't list is refused, so the agent corrects it before the plan is proposed.
+- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its name on the code host with a summary of its changes, and the `dependencies` between them, each with the reason. A dependency on a repository the plan doesn't list is refused, so the agent corrects it before the plan is proposed.
 
 ### Delivery order
 

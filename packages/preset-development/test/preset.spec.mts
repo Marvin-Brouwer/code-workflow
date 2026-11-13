@@ -1,6 +1,7 @@
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { agent, runCheck } from '@mesh-flow/core'
+import { gitCommand } from '@mesh-flow/git'
 import { describe, expect, test } from 'vitest'
 import { codeReview, deviations, Plan } from '../src/_module/preset-development.mts'
 import { gitCheckout } from './support/git-checkout.mts'
@@ -44,6 +45,24 @@ describe('deviations', () => {
 		)
 	})
 
+	test('records a deviation once when it is recorded again, as by a loop that runs again', async () => {
+		// Arrange
+		const deviation = { repository: 'team/api', reason: 'A review comment on the refund handler', change: 'Refunds are queued' }
+
+		// Act
+		const run = await runBody(async () => {
+			await deviations.record(deviation)
+			return deviations.record(deviation)
+		})
+
+		// Assert
+		const { recordedIn } = await run.result
+		expect(await readFile(recordedIn, 'utf8')).toBe(
+			'# Deviations from the plan\n\n' +
+				'## team/api\n\n- Found: A review comment on the refund handler\n- Deviation: Refunds are queued\n\n',
+		)
+	})
+
 	test('records nothing once the run stopped', async () => {
 		// Arrange
 		const deviation = { repository: 'team/api', reason: 'A pipeline', change: 'Refunds are queued' }
@@ -74,7 +93,11 @@ describe('codeReview', () => {
 		// Assert
 		expect(await run.result).toEqual([{ source: 'code review: src/Refunds.cs:12', message: 'The refund is never saved.' }])
 		const prompt = textOf(model.requests[0])
-		expect(prompt).toContain('git diff origin/main')
+		const { stdout: base } = await gitCommand(['rev-parse', 'origin/main'], {
+			cwd: repository.directory,
+			abortSignal: AbortSignal.timeout(checkTimeoutMs),
+		})
+		expect(prompt).toContain(`git diff ${base.trim()}`)
 		// The requests are JSON, where a Windows path's backslashes are escaped.
 		expect(prompt).toContain(JSON.stringify(repository.directory).slice(1, -1))
 		expect(prompt).toContain('plan-deviations.md')

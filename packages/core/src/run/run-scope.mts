@@ -35,10 +35,11 @@ export interface Scope {
 	/** Names of the nodes around this code, outermost first, such as `inDependencyOrder` node ids. */
 	readonly names: readonly string[]
 	/**
-	 * The loops this code runs in, outermost first, when it's a tool call of an agent, and the
-	 * innermost loop's gateway endpoint when its template has host tools.
+	 * The loops this code runs in, outermost first, when it's a tool call of an agent, the
+	 * innermost loop's gateway endpoint when its template has host tools, and the signal that stops
+	 * the innermost loop, which a loop run here stops with too.
 	 */
-	readonly loop?: { readonly clocks: readonly LoopClock[]; readonly endpoint?: Endpoint }
+	readonly loop?: { readonly clocks: readonly LoopClock[]; readonly endpoint?: Endpoint; readonly abortSignal?: AbortSignal }
 }
 
 const storage = new AsyncLocalStorage<Scope>()

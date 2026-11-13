@@ -155,11 +155,10 @@ A loop can be limited as a whole, with one interpolated line at the end of the t
 the exits:
 
 ```ts
-const description = await planner.loop`
-    Write a short merge request description for the changes in ${repository},
-    based on ${plan.path}. ${succeed(gitlab.Description)}
-    ${limit({ turns: 4, minutes: 20 })}
-`;
+await developer.loop`
+	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository))}.
+	${limit({ turns: 40, minutes: 45 })}
+`
 ```
 
 - **Loop-wide only.** There are no limits per tool: a tool doesn't know how often it's reasonable
@@ -319,7 +318,7 @@ export default defineMeshFlow({
 ### Plan deviations (preset pattern)
 
 The approved `plan.md` is never rewritten. Later findings (review comments, a repository that
-turns out differently) are recorded with a `recordDeviation` tool in `plan-deviations.md`, and
+turns out differently) are recorded with `deviations.record` in `plan-deviations.md`, and
 every later task prompt reads both. Repositories delivered later in the dependency order thereby
 pick up deviations found earlier.
 
@@ -509,17 +508,17 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
    [gvisor-pause](../pocs/gvisor-pause/README.md)). Backends as in section 3.
 2. **Typing spike.** Infer `loop`'s result type from the exits in a tagged template's values,
    including `succeed(folder)`, `propose`, `verify` and no exit at all. Types only.
-3. **The plan as file plus data.** `workspace.file('plan.md', { schema: Plan })`: renders as the
-   file in prompts, gives code the validated data (repositories, dependency graph).
+3. **The plan as file plus data.** Answered: the planner writes `planFile` and proposes the data
+   with `propose(Plan)`, whose `path` is the file (`@mesh-flow/preset-development`).
 4. **Checks and the agent's latest output.** Checks run when the agent hands in; does a check ever
    need what the agent handed in?
 5. **`inDependencyOrder` failure semantics** as tests: dependents blocked, independents continue,
    partial results reported.
 6. **Opt-in `checkpoint()`** for expensive non-agent work, if reruns after a lost snapshot turn out
    too costly.
-7. **Merge request watching** (GitLab connector, on the engine's durable external-event primitive):
-   serialize handlers per merge request, drop events for superseded commits, coalesce one review
-   round.
+7. **Merge request watching** (GitLab connector): it polls with an engine-side `wait` for now,
+   one review round per look, handlers in turn. On the durable external-event primitive, once it's
+   built: drop events for superseded commits, coalesce one review round.
 8. **Hosted OAuth.** CLI-style OAuth with a localhost callback doesn't work hosted; prefer device
    flows, register own OAuth apps otherwise. Check provider terms before offering subscription
    logins (as opposed to API keys).
@@ -564,11 +563,12 @@ Out of scope for now: token and cost budgets.
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
    then the `example` workflow, both end to end from a CLI. Done: the `example` workflow delivers
-   repositories in dependency order, independent ones side by side (`inDependencyOrder`).
+   independent repositories side by side (`inDependencyOrder`); a dependent one needs the
+   registry shim to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
-5. AWS and CodeArtifact through the gateway; `checkSession`; package
-   managers beyond npm and NuGet, each with a conformance test that installs through egress, one
+5. AWS and CodeArtifact through the gateway; `checkSession`; package managers beyond npm and
+   NuGet, each with a conformance test that installs through egress, one
    per way of trusting certificates and proxies: pip (its own certifi bundle), Maven and Gradle
    (the JVM's keystore, and proxy settings as system properties instead of `HTTPS_PROXY`), Go and
    Cargo.

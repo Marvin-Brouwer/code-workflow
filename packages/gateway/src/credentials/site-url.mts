@@ -6,6 +6,7 @@
 export function siteUrl(value: string, credentialName: string, example: string): string {
 	const parsed = URL.parse(value.trim())
 	if (parsed === null || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:'))
-		throw new Error(`${credentialName} is ${value}, which isn't an http(s) URL. Set it to where the site is, such as ${example}.`)
+		// The value stays out of the error: what was stored by mistake may be a token.
+		throw new Error(`${credentialName} isn't an http(s) URL. Set it to where the site is, such as ${example}.`)
 	return parsed.href.replace(/\/+$/, '')
 }

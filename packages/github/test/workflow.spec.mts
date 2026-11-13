@@ -106,8 +106,8 @@ describe('github', () => {
 		const result = await run.result
 
 		// Assert
-		expect(result.rendered).toBe(path.join(run.workspace, 'app'))
-		expect(result.repository.directory).toBe(path.join(run.workspace, 'app'))
+		expect(result.rendered).toBe(path.join(run.workspace, 'team', 'app'))
+		expect(result.repository.directory).toBe(path.join(run.workspace, 'team', 'app'))
 		expect(result.pushed).toMatchObject({ pushed: true, head: await remote.head('fix/7') })
 		expect(result.nothing).toMatchObject({ pushed: false })
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'fix.txt'])
@@ -780,7 +780,7 @@ describe('github', () => {
 		await expect(outlasted.result).rejects.toThrow('Service Unavailable')
 	})
 
-	test('reuses a checkout for another branch, clones again over a broken one, and leaves another repository or a plain folder alone', async () => {
+	test('reuses a checkout for another branch, clones again over a broken one, puts another repository of the same name apart, and leaves another repository or a plain folder alone', async () => {
 		// Arrange
 		const { gateway } = await connected()
 
@@ -797,18 +797,20 @@ describe('github', () => {
 			await rm(path.join(first.directory, '.git', 'HEAD'))
 			const again = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			const againFiles = (await git(again.directory, 'ls-files')).split('\n')
-			const refused = await checkout({ repository: 'other/app', branch: 'fix/7' }).then(
+			const elsewhere = await checkout({ repository: 'other/app', branch: 'fix/7' })
+			await git(again.directory, 'remote', 'set-url', 'origin', 'https://github.com/other/app.git')
+			const refused = await checkout({ repository: repositoryName, branch: 'fix/7' }).then(
 				() => undefined,
 				(error: unknown) => (error instanceof Error ? error.message : String(error)),
 			)
-			const notes = workspace.folder('notes').location()
+			const notes = workspace.folder('team/notes').location()
 			await mkdir(notes, { recursive: true })
 			await writeFile(path.join(notes, 'todo.md'), 'keep me\n')
 			const kept = await checkout({ repository: 'team/notes', branch: 'fix/7' }).then(
 				() => undefined,
 				(error: unknown) => (error instanceof Error ? error.message : String(error)),
 			)
-			return { first, other, otherHead, otherFiles, backHead, againFiles, refused, kept }
+			return { first, other, otherHead, otherFiles, backHead, againFiles, elsewhere, refused, kept }
 		})
 		const result = await run.result
 
@@ -818,9 +820,10 @@ describe('github', () => {
 		expect(result.otherFiles).toEqual(['README.md'])
 		expect(result.backHead).toBe('fix/7')
 		expect(result.againFiles).toEqual(['README.md', 'fix.txt'])
+		expect(result.elsewhere.directory).toBe(path.join(run.workspace, 'other', 'app'))
 		expect(result.refused).toContain('holds a checkout of another repository')
 		expect(result.kept).toContain("holds something that isn't a checkout")
-		expect(await readFile(path.join(run.workspace, 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
+		expect(await readFile(path.join(run.workspace, 'team', 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
 	})
 
 	test("hands a comment from the same second as the last look over once, and never the run's own reply", async () => {

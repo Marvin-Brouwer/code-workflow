@@ -3,7 +3,7 @@ import type { Plan } from './plan.mts'
 
 /** One repository of a plan, as `inDependencyOrder` delivers it. */
 export interface Delivery extends DependencyNode {
-	/** The repository as the source host names it; the node's id too. */
+	/** The repository as the code host names it; the node's id too. */
 	readonly repository: string
 	/** What changes in it, as the plan says. */
 	readonly changes: string

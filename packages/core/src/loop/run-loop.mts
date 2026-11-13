@@ -106,7 +106,9 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	const { run } = eventScope
 	const model = await harness.model(agent.model, run.abortSignal)
 	const stopNow = new AbortController()
-	const abortSignal = AbortSignal.any([run.abortSignal, stopNow.signal])
+	// A loop run from a tool call of another stops with it, such as a review in a check whose loop ran out of time.
+	const enclosing = eventScope.loop?.abortSignal ?? run.abortSignal
+	const abortSignal = AbortSignal.any([run.abortSignal, enclosing, stopNow.signal])
 	const ended = loopEndSignals()
 	let outcome: LoopOutcome | undefined
 	let stop: Stop | undefined
@@ -123,10 +125,12 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	const clock = startLoopClock(minutes, () => {
 		finish({ kind: 'error', error: new LoopLimitExceeded('minutes', minutes ?? 0) }, 'now')
 	})
+	const stopped = AbortSignal.any([run.abortSignal, enclosing])
 	const onAbort = () => {
-		finish({ kind: 'error', error: run.abortSignal.reason }, 'now')
+		finish({ kind: 'error', error: stopped.reason }, 'now')
 	}
-	run.abortSignal.addEventListener('abort', onAbort, { once: true })
+	stopped.addEventListener('abort', onAbort, { once: true })
+	if (stopped.aborted) onAbort()
 	let extension: Extension | undefined
 	let endpoint: Endpoint | undefined
 	let idle: Promise<unknown> = Promise.resolve()
@@ -134,7 +138,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		endpoint = await openLoopEndpoint(template, system, eventScope, abortSignal)
 		// Every loop around this one stands still too while this one waits on a human.
 		const clocks = [...(eventScope.loop?.clocks ?? []), clock]
-		const scope: Scope = { ...eventScope, loop: endpoint === undefined ? { clocks } : { clocks, endpoint } }
+		const scope: Scope = { ...eventScope, loop: { clocks, abortSignal, ...(endpoint === undefined ? {} : { endpoint }) } }
 		const session: LoopSession = { scope, abortSignal, finish }
 		const handIns = handInExits(template)
 		const tools = loopTools(template, system, handIns, session)
@@ -195,7 +199,7 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		}
 	} finally {
 		clock.stop()
-		run.abortSignal.removeEventListener('abort', onAbort)
+		stopped.removeEventListener('abort', onAbort)
 		const installed = extension
 		if (installed !== undefined) {
 			void idle.finally(() => {

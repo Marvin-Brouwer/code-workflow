@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tool, workspace, type Tool, type ToolContext, type WorkspaceFile } from '@mesh-flow/core'
 import { z } from 'zod'
@@ -31,16 +31,27 @@ function entryOf(deviation: Deviation): string {
 	return `## ${deviation.repository}\n\n- Found: ${deviation.reason}\n- Deviation: ${deviation.change}\n\n`
 }
 
-/** Adds one deviation to the file, which starts with a heading when it's new. */
+/** Whether a file system error says the file is there already. */
+function alreadyExists(error: unknown): boolean {
+	return error instanceof Error && 'code' in error && error.code === 'EEXIST'
+}
+
+/**
+ * Adds one deviation to the file, which starts with a heading when it's new. One that is in the
+ * file already, as when a loop that recorded it runs again, is left at that.
+ */
 async function record(deviation: Deviation, { abortSignal }: ToolContext): Promise<RecordedDeviation> {
 	abortSignal.throwIfAborted()
 	const file = deviationsFile.location()
 	await mkdir(path.dirname(file), { recursive: true })
-	await appendFile(file, fileHeading, { flag: 'ax' }).catch((error: unknown) => {
-		if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+	// In one write, so a deviation another part records at the same time comes after it.
+	await writeFile(file, fileHeading, { flag: 'wx' }).catch((error: unknown) => {
+		if (!alreadyExists(error)) throw error
 	})
+	const entry = entryOf(deviation)
+	if ((await readFile(file, { encoding: 'utf8', signal: abortSignal })).includes(entry)) return { recordedIn: file }
 	abortSignal.throwIfAborted()
-	await appendFile(file, entryOf(deviation))
+	await appendFile(file, entry)
 	return { recordedIn: file }
 }
 

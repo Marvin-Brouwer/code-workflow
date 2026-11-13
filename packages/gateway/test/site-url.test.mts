@@ -21,8 +21,6 @@ describe('siteUrl', () => {
 		const read = () => siteUrl(withoutScheme, 'gitlab/url', 'https://gitlab.example.com')
 
 		// Assert
-		expect(read).toThrow(
-			"gitlab/url is gitlab.example.com, which isn't an http(s) URL. Set it to where the site is, such as https://gitlab.example.com.",
-		)
+		expect(read).toThrow("gitlab/url isn't an http(s) URL. Set it to where the site is, such as https://gitlab.example.com.")
 	})
 })

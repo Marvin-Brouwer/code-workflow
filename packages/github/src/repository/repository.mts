@@ -1,7 +1,7 @@
 import { tool } from '@mesh-flow/core'
 import { BranchName, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
+import { githubRemoteUrl, RepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'
 
 /**
@@ -20,7 +20,8 @@ export interface Repository extends Checkout {
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the repository that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
- * workflow's own that is no checkout is left alone, with an error.
+ * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
+ * at the repository's name, `owner/repo`, in lower case.
  *
  * ```ts
  * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
@@ -34,7 +35,8 @@ export const checkout = tool('githubCheckout', {
 		checkoutRepository(
 			{
 				...input,
-				folder: splitRepositoryName(input.repository).repo,
+				// The whole name, so `team/api` and `other/api` never share a folder; GitHub ignores case in it.
+				folder: input.repository.toLowerCase(),
 				remote: githubRemoteUrl(input.repository),
 				clone: stubs.cloneRepository,
 			},

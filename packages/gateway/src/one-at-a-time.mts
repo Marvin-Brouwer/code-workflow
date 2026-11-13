@@ -18,7 +18,7 @@ export function oneAtATime(): OneAtATime {
 				return call()
 			})
 		lastOn.set(key, turn)
-		// Forgotten once the turn is really over, not when its caller stops waiting: the call before it may still run.
+		// Forgotten once the turn is over, not when its caller stops waiting: the call before it may still run.
 		void turn
 			.catch(() => undefined)
 			.finally(() => {

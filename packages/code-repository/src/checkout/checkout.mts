@@ -1,4 +1,4 @@
-import { rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import type { GitClient } from '@mesh-flow/git'
@@ -77,6 +77,8 @@ export async function checkoutRepository(options: CheckoutOptions, context: Tool
 		return checkoutOf(repository, branch, defaultBranch, folder.path, directory)
 	}
 	const fetched = await options.clone({ repository, branch }, context)
+	// A folder such as `team/backend/api` is in folders of its own.
+	await mkdir(path.dirname(directory), { recursive: true })
 	await withScratchFile('clone.bundle', async (bundle) => {
 		await writeFile(bundle, Buffer.from(fetched.bundle, 'base64'))
 		const from = fetched.branchExists ? branch : fetched.defaultBranch

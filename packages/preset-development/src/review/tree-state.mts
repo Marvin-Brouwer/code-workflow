@@ -28,20 +28,41 @@ function isMissing(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
+/** What `treeState` takes besides the checkout. */
+export interface TreeStateOptions {
+	readonly abortSignal: AbortSignal
+	/** Files outside the checkout that are part of the state too, such as the deviations file. */
+	readonly files?: readonly string[]
+}
+
 /**
- * A short fingerprint of what a checkout holds against `origin/<defaultBranch>`: its commit, its
- * changes, committed or not, and its untracked files. The same changes give the same fingerprint,
- * and any change gives another, so a review loop that renders it is a loop of its own per state.
+ * A short fingerprint of what a checkout holds against where its branch left
+ * `origin/<defaultBranch>`, their merge base: its commit, its changes, committed or not, its
+ * untracked files, and `options.files`. Commits on the default branch since don't count. The same
+ * changes give the same fingerprint, and any change gives another, so a review loop that renders
+ * it is a loop of its own per state.
  */
-export async function treeState(directory: string, defaultBranch: string, abortSignal: AbortSignal): Promise<string> {
+export async function treeState(directory: string, defaultBranch: string, options: TreeStateOptions): Promise<string> {
+	const { abortSignal } = options
 	const git = async (args: readonly string[]) => (await gitCommand(args, { cwd: directory, abortSignal })).stdout
 	const head = await git(['rev-parse', 'HEAD'])
-	const diff = await git(['diff', '--binary', `origin/${defaultBranch}`])
+	const base = await mergeBase(directory, defaultBranch, abortSignal)
+	const diff = await git(['diff', '--binary', base])
 	const untracked = (await git(['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).toSorted()
 	const hash = createHash('sha256').update(head).update('\0').update(diff)
 	for (const file of untracked) {
 		const content = await contentOf(path.join(directory, file), abortSignal)
 		if (content !== undefined) hash.update(`\0${file}\0`).update(content)
 	}
+	for (const file of options.files ?? []) {
+		const content = await contentOf(file, abortSignal)
+		if (content !== undefined) hash.update(`\0${file}\0`).update(content)
+	}
 	return hash.digest('hex').slice(0, fingerprintLength)
+}
+
+/** The commit the checkout's branch left `origin/<defaultBranch>` at: what its changes are against. */
+export async function mergeBase(directory: string, defaultBranch: string, abortSignal: AbortSignal): Promise<string> {
+	const { stdout } = await gitCommand(['merge-base', `origin/${defaultBranch}`, 'HEAD'], { cwd: directory, abortSignal })
+	return stdout.trim()
 }

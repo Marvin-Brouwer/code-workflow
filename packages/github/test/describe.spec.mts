@@ -72,7 +72,7 @@ describe('describe', () => {
 		await run.result
 
 		// Assert
-		const diffFile = path.join(run.workspace, 'pull-requests/app/fix/7.diff')
+		const diffFile = path.join(run.workspace, 'pull-requests/team/app/fix/7.diff')
 		expect(prompts[0]).toContain(diffFile)
 		expect(await readFile(diffFile, 'utf8')).toContain('+SameSite=None')
 	})

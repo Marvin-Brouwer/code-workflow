@@ -1,7 +1,7 @@
 name: engine
 
-# The engine's, the build's, the protocol's, the gateway's, core's, git's, the code-repository package's and the GitHub and GitLab connectors' own checks, then one run end to end on each real backend this OS has. Lint and
-# format run repo-wide in the sandbox workflow.
+# Every package's own checks and the example apps' builds, then one run end to end on each real
+# backend this OS has. Lint and format run repo-wide in the sandbox workflow.
 on:
   pull_request:
   push:

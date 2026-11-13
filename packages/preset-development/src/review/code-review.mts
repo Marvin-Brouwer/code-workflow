@@ -2,12 +2,13 @@ import { check, succeed, type Agent, type Check, type RendersInPrompt } from '@m
 import { z } from 'zod'
 import { deviations } from '../deviations/deviations.mts'
 import type { Plan } from '../plan/plan.mts'
-import { treeState } from './tree-state.mts'
+import { mergeBase, treeState } from './tree-state.mts'
 
 /** A checkout to review, such as `gitlab.checkout` or `github.checkout` gives: it renders as where it is on disk. */
 export interface ReviewedCheckout extends RendersInPrompt {
+	/** The repository as the code host names it. */
 	readonly name: string
-	/** Where the checkout is on disk. */
+	/** The checkout on disk. */
 	readonly directory: string
 	/** The branch the changes go onto, which `origin/<defaultBranch>` tracks in the checkout. */
 	readonly defaultBranch: string
@@ -38,10 +39,12 @@ const Findings = z.object({
 export function codeReview(reviewer: Agent, repository: ReviewedCheckout, plan: Plan): Check {
 	return check('code review', async ({ abortSignal }) => {
 		// The state under review is in the prompt, so a rerun never takes a review of other changes for this one.
-		const state = await treeState(repository.directory, repository.defaultBranch, abortSignal)
+		const state = await treeState(repository.directory, repository.defaultBranch, { abortSignal, files: [deviations.location()] })
+		// Against where the branch started, so commits on the default branch since don't read as reverted.
+		const base = await mergeBase(repository.directory, repository.defaultBranch, abortSignal)
 		const { findings } = await reviewer.loop`
-			Review the changes in ${repository}, as they are now (state ${state}): what \`git diff origin/${repository.defaultBranch}\`
-			shows there, committed or not, and the new files \`git status\` lists as untracked.
+			Review the changes in ${repository}, as they are now (state ${state}): what \`git diff ${base}\` shows there,
+			committed or not, and the new files \`git status\` lists as untracked.
 			Review them against ${plan.path}, and the deviations recorded in ${deviations} when that file exists.
 			Report only real problems: bugs, missing tests, and deviations from the plan that weren't recorded. Change no file.
 			When you're done, ${succeed(Findings)}, with no findings when the changes are good.

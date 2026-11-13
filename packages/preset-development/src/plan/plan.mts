@@ -7,7 +7,7 @@ export const planFile = workspace.file('plan.md')
 
 /** One repository the plan changes. */
 const PlannedRepository = z.object({
-	name: z.string().min(1).describe('The repository as the source host names it, such as group/project'),
+	name: z.string().min(1).describe('The repository as the code host names it, such as group/project'),
 	changes: z.string().min(1).describe('What changes in this repository, in short'),
 })
 

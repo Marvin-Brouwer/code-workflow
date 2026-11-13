@@ -13,7 +13,8 @@ itself in CI, and running it against a real issue is what's left of "done when".
 differs from the plan below: `github.review` polls through a host tool with an engine-side `wait`
 instead of the durable external-event primitive, which isn't built yet (see
 [decisions](../decisions.md#engine)); commits cross between host and sandbox as git bundles; and
-the engine loads connector host tools from the packages the user adds with `mesh-flow connector`. Step 7 is built, one package per PR:
+the engine loads connector host tools from the packages the user adds with `mesh-flow connector`.
+Step 7 is built:
 [`@mesh-flow/atlassian`](../../packages/atlassian/README.md), with Jira and Confluence on Cloud and
 Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which shares what it has in
 common with `@mesh-flow/github` through [`@mesh-flow/code-repository`](../../packages/code-repository/README.md);
