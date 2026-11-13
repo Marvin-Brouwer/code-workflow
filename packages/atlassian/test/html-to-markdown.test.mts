@@ -32,6 +32,33 @@ describe('htmlToMarkdown', () => {
 		])
 	})
 
+	test('reads an id in a profile link decoded, and a `rel` only on a profile link', () => {
+		// Arrange
+		const mentions = [
+			'<p><a href="/wiki/people/557058%3Aabc" class="user-mention">Rita Reporter</a></p>',
+			'<p><a href="/display/~j.doe%40corp" class="confluence-userlink">John Doe</a></p>',
+			'<p><a href="https://example.org/" class="user-hover" rel="nofollow">Someone</a></p>',
+		]
+
+		// Act
+		const markdown = mentions.map((html) => htmlToMarkdown(html))
+
+		// Assert
+		expect(markdown).toEqual([
+			'`@mention({ name: "Rita Reporter", id: "557058:abc" })`',
+			'`@mention({ name: "John Doe", id: "j.doe@corp" })`',
+			'`@mention({ name: "Someone" })`',
+		])
+	})
+
+	test("keeps an image's alt text on one line, with its brackets escaped", () => {
+		// Act
+		const markdown = htmlToMarkdown('<p><img src="/a.png" alt="the [new]\n  login"></p>')
+
+		// Assert
+		expect(markdown).toBe('![the \\[new\\] login](/a.png)')
+	})
+
 	test('is empty for no rich text', () => {
 		// Act
 		const markdown = [htmlToMarkdown(null), htmlToMarkdown(undefined), htmlToMarkdown('  ')]

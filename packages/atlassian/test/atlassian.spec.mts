@@ -5,9 +5,9 @@ import { describe, expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
 import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
-import { maxImageBytes } from '../src/host/jira/attachments.mts'
+import { maxImageBytes, maxImageBytesPerIssue } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
-import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage } from './support/fake-atlassian.mts'
+import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage, type FakeRequest, type FakeUser } from './support/fake-atlassian.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
 const deployments = [
@@ -48,6 +48,18 @@ const deployments = [
 ] as const
 const [, dataCenter] = deployments
 
+/** The first bytes of a PNG file: enough of an image for the fake to serve. */
+const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+
+/** Whether a request read an attachment's bytes. */
+const isAttachmentRequest = (request: FakeRequest) => request.path.startsWith('/secure/attachment/')
+
+/** Collects an issue and reads back its Markdown. */
+async function collectMarkdown(key: string) {
+	const story = await jira.collect(key)
+	return { story, markdown: await readFile(story[toPrompt](), 'utf8') }
+}
+
 /** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
 const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
 
@@ -65,7 +77,7 @@ interface Arrangement {
 	readonly failNext?: readonly number[]
 	readonly losesAnswers?: readonly string[]
 	readonly latencyMs?: number
-	readonly users?: Readonly<Record<string, { displayName: string; email?: string }>>
+	readonly users?: Readonly<Record<string, FakeUser>>
 }
 
 /** Runs `body` against a fake with the deployment's settings, and hands back what the fake saw. */
@@ -127,7 +139,7 @@ describe.each(deployments)(
 
 		test("collect brings an issue's images next to its Markdown, links to them, and lists every attachment", async () => {
 			// Arrange
-			const screenshot = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+			const screenshot = pngSignature
 			const arrangement: Arrangement = {
 				issues: [
 					fakeIssue({
@@ -167,7 +179,7 @@ describe.each(deployments)(
 				],
 			})
 			expect(result.story.attachments.map((attachment) => attachment.data)).toEqual([undefined, undefined])
-			expect(fake.requests.filter((request) => request.path.startsWith('/secure/attachment/'))).toMatchObject([
+			expect(fake.requests.filter(isAttachmentRequest)).toMatchObject([
 				{ path: '/secure/attachment/10001/login%20page.png', authorization },
 			])
 		})
@@ -207,7 +219,7 @@ describe.each(deployments)(
 					{ url: 'https://files.example.org/secure/attachment/10004/elsewhere.png' },
 				],
 			})
-			expect(fake.requests.filter((request) => request.path.includes('/attachment/'))).toEqual([])
+			expect(fake.requests.filter(isAttachmentRequest)).toEqual([])
 		})
 
 		test('collect names a mentioned person by name, the email the site shows and their id', async () => {
@@ -253,6 +265,40 @@ describe.each(deployments)(
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
+		})
+
+		test("collect keeps the name and id a mention links to when the site doesn't know the person", async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>Ask ${mention('Rita Reporter')}.</p>` })],
+			}
+
+			// Act
+			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+			// Assert
+			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
+		})
+
+		test('collect points the images and mentions in a table where the rest of the text has them', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [
+					fakeIssue({
+						key: 'PROJ-7',
+						descriptionHtml: `<table><tr><td><img src="/secure/attachment/10001/shot.png"></td><td>${mention('Rita Reporter')}</td></tr></table>`,
+						attachments: [{ id: '10001', filename: 'shot.png', mimeType: 'image/png', bytes: pngSignature }],
+					}),
+				],
+				users: { [mentionId]: { displayName: 'Rita Reporter' } },
+			}
+
+			// Act
+			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+			// Assert
+			expect(result.markdown).toContain('<img src="PROJ-7/10001-shot.png">')
+			expect(result.markdown).toContain(`<td>\`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`</td>`)
 		})
 
 		test('transition moves an issue once and does nothing when it already has the status', async () => {
@@ -416,6 +462,22 @@ describe.each(deployments)(
 			expect(result.markdown).toContain(`Owner: \`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``)
 		})
 
+		test("confluence collect keeps the id a mention links to when the site doesn't know the person", async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: `<p>Owner: ${mention('Rita Reporter')}</p>`, version: 4 }],
+			}
+
+			// Act
+			const { result } = await run(settings, arrangement, async () => {
+				const page = await confluence.collect('12345')
+				return { markdown: await readFile(page[toPrompt](), 'utf8') }
+			})
+
+			// Assert
+			expect(result.markdown).toContain(`Owner: \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\``)
+		})
+
 		test('confluence collect reads a page by its URL and search strips the highlights', async () => {
 			// Arrange
 			const arrangement: Arrangement = {
@@ -445,6 +507,55 @@ describe.each(deployments)(
 		})
 	},
 )
+
+describe('attachments', () => {
+	test('an issue brings images up to its limit in all, and links to the rest', async () => {
+		// Arrange
+		const imageBytes = maxImageBytes - 1
+		const fit = Math.floor(maxImageBytesPerIssue / imageBytes)
+		const attachments = Array.from({ length: fit + 1 }, (_, index) => ({
+			id: String(10001 + index),
+			filename: `shot-${index}.png`,
+			mimeType: 'image/png',
+			bytes: new Uint8Array(imageBytes),
+		}))
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7', attachments })] }
+
+		// Act
+		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+		// Assert
+		expect(result.story.attachments.filter((attachment) => attachment.file !== undefined)).toHaveLength(fit)
+		expect(result.story.attachments.at(-1)).toMatchObject({ url: `${dataCenter.jiraUrl}/secure/attachment/${10001 + fit}/shot-${fit}.png` })
+	})
+
+	test.each([
+		{ answer: 'a 404', attachment: { status: 404 } },
+		{ answer: 'a 500', attachment: { status: 500 } },
+		{ answer: 'a sign-in page', attachment: { servedAs: 'text/html' } },
+		{ answer: 'a larger file than it said', attachment: { size: 1, bytes: new Uint8Array(maxImageBytes + 1) } },
+		{ answer: 'a file without a size, too large', attachment: { size: undefined, bytes: new Uint8Array(maxImageBytes + 1) } },
+	])('an image the site answers with $answer stays a link', async ({ attachment }) => {
+		// Arrange
+		const arrangement: Arrangement = {
+			issues: [
+				fakeIssue({
+					key: 'PROJ-7',
+					descriptionHtml: '<p><img src="/secure/attachment/10001/shot.png"></p>',
+					attachments: [{ id: '10001', filename: 'shot.png', mimeType: 'image/png', bytes: pngSignature, ...attachment }],
+				}),
+			],
+		}
+
+		// Act
+		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+		// Assert
+		expect(result.markdown).toContain(`![](${dataCenter.jiraUrl}/secure/attachment/10001/shot.png)`)
+		expect(result.story.attachments).toMatchObject([{ url: `${dataCenter.jiraUrl}/secure/attachment/10001/shot.png` }])
+		expect(fake.requests.filter(isAttachmentRequest)).toHaveLength(1)
+	})
+})
 
 describe('settings', () => {
 	test('a missing site says how to set it', async () => {
@@ -494,6 +605,45 @@ describe('stopping', () => {
 		await expect(started.result).rejects.toThrow()
 		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
 	})
+
+	test.each([
+		{
+			product: 'jira',
+			path: '/rest/api/2/user',
+			arrange: (fake: ReturnType<typeof fakeAtlassian>) =>
+				fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>${dataCenter.mention('Rita')}</p>` })),
+			collect: async (): Promise<unknown> => jira.collect('PROJ-7'),
+		},
+		{
+			product: 'confluence',
+			path: '/rest/api/user',
+			arrange: (fake: ReturnType<typeof fakeAtlassian>) =>
+				fake.pages.set('12345', {
+					id: '12345',
+					title: 'Guidelines',
+					space: 'TEAM',
+					html: `<p>${dataCenter.mention('Rita')}</p>`,
+					version: 1,
+				}),
+			collect: async (): Promise<unknown> => confluence.collect('12345'),
+		},
+	])('stopping the run settles a $product collect whose mention is never looked up', async ({ path: userPath, arrange, collect }) => {
+		// Arrange
+		const fake = fakeAtlassian()
+		arrange(fake)
+		fake.hanging.add(userPath)
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch }), dataCenter.settings)
+		const started = await runOnGateway(gateway, collect)
+		await expect.poll(() => fake.requests.length).toBe(2)
+
+		// Act
+		started.controller.abort(new Error('Stopped.'))
+
+		// Assert
+		await expect(started.outcome).resolves.toBeDefined()
+		await expect(started.result).rejects.toThrow()
+		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
+	})
 })
 
 describe('Confluence sites', () => {
@@ -518,6 +668,24 @@ describe('Confluence sites', () => {
 		// Assert
 		expect(fake.requests[0]?.path).toBe(expected)
 	})
+})
+
+test('a Data Center page names a mentioned person by their username', async () => {
+	// Arrange
+	const html = '<p>Owner: <a class="confluence-userlink" data-username="rita" href="/display/~rita">Rita Reporter</a></p>'
+	const arrangement: Arrangement = {
+		pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html, version: 1 }],
+		users: { rita: { displayName: 'Rita Reporter', email: 'rita@example.com' } },
+	}
+
+	// Act
+	const { fake, result } = await run(dataCenter.settings, arrangement, async () =>
+		readFile((await confluence.collect('12345'))[toPrompt](), 'utf8'),
+	)
+
+	// Assert
+	expect(result).toContain('Owner: `@mention({ name: "Rita Reporter", email: "rita@example.com", id: "rita" })`')
+	expect(fake.requests.find((request) => request.path === '/rest/api/user')?.query.get('username')).toBe('rita')
 })
 
 describe('trouble', () => {

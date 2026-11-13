@@ -1,7 +1,7 @@
 import { hostToolStub } from '@mesh-flow/core'
+import { searchIssues } from './tools/issue-search-tools.mts'
 import { commentOnIssue, getIssue, transitionIssue } from './tools/issue-tools.mts'
 import { getPage, searchPages } from './tools/page-tools.mts'
-import { searchIssues } from './tools/issue-search-tools.mts'
 
 /**
  * The sandbox's stubs of the host tools: what the connector's functions and tools call. Each runs

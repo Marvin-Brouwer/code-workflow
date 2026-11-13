@@ -46,6 +46,18 @@ export interface FakeAttachment {
 	bytes: Uint8Array
 	/** Where Jira says the bytes are; by default on the site. */
 	content?: string
+	/** The size Jira says it has, when it says one; by default its bytes'. */
+	size?: number | undefined
+	/** The type the file is served as; by default its `mimeType`. */
+	servedAs?: string
+	/** The status the file is served with; by default 200. */
+	status?: number
+}
+
+/** A person the fake's user lookups know. */
+export interface FakeUser {
+	displayName: string
+	email?: string
 }
 
 /** An issue as a link names it: its key, summary and status. */
@@ -70,7 +82,7 @@ export interface FakeAtlassian {
 	readonly issues: Map<string, FakeIssue>
 	readonly pages: Map<string, FakePage>
 	/** The people Jira and Confluence know, by account id or username. Without an email, the site keeps it private. */
-	readonly users: Map<string, { displayName: string; email?: string }>
+	readonly users: Map<string, FakeUser>
 	/** Paths whose requests never get an answer, until their signal aborts: a site that hangs. */
 	readonly hanging: Set<string>
 	/** Answers the next requests with these statuses, oldest first, before serving as usual: a site that has trouble. */
@@ -116,7 +128,7 @@ export function fakeAtlassian(): FakeAtlassian {
 	const requests: FakeRequest[] = []
 	const issues = new Map<string, FakeIssue>()
 	const pages = new Map<string, FakePage>()
-	const users = new Map<string, { displayName: string; email?: string }>()
+	const users = new Map<string, FakeUser>()
 	const hanging = new Set<string>()
 	const failNext: number[] = []
 	const losesAnswers = new Set<string>()
@@ -237,7 +249,11 @@ export function fakeAtlassian(): FakeAtlassian {
 		const attachmentId = /^\/secure\/attachment\/(\d+)\//.exec(url.pathname)?.[1]
 		if (attachmentId !== undefined) {
 			const attachment = [...issues.values()].flatMap((issue) => issue.attachments).find(({ id }) => id === attachmentId)
-			return attachment === undefined ? notFound() : new Response(attachment.bytes, { headers: { 'content-type': attachment.mimeType } })
+			if (attachment === undefined) return notFound()
+			return new Response(attachment.bytes, {
+				status: attachment.status ?? 200,
+				headers: { 'content-type': attachment.servedAs ?? attachment.mimeType },
+			})
 		}
 		const jira = /^\/rest\/api\/[23](\/.*)$/.exec(url.pathname)?.[1]
 		const confluence = /^(?:\/wiki|\/confluence)?\/rest\/api(\/(?:content|search|user).*)$/.exec(url.pathname)?.[1]
@@ -277,7 +293,7 @@ function rendered(issue: FakeIssue) {
 				id: attachment.id,
 				filename: attachment.filename,
 				mimeType: attachment.mimeType,
-				size: attachment.bytes.byteLength,
+				...('size' in attachment ? { size: attachment.size } : { size: attachment.bytes.byteLength }),
 				content: attachment.content ?? `/secure/attachment/${attachment.id}/${attachment.filename}`,
 			})),
 		},

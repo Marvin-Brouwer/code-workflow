@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 const Named = z.object({ name: z.string() }).nullish()
-const Person = z.object({ displayName: z.string() }).nullish()
+const RawPerson = z.object({ displayName: z.string() }).nullish()
 
 /** A time Jira gave: Cloud's client hands it over as a `Date`, Data Center's as Jira's text. Text either way. */
 const Time = z
@@ -21,13 +21,14 @@ export const RawAttachment = z.object({
 	id: z.string(),
 	filename: z.string(),
 	mimeType: z.string().default('application/octet-stream'),
-	size: z.number().default(0),
+	// Its size in bytes, when the site says.
+	size: z.number().optional(),
 	content: z.string(),
 })
 export type RawAttachment = z.infer<typeof RawAttachment>
 
 /** A comment as Jira lists it in an issue's `comment` field. */
-const RawComment = z.object({ id: z.string(), author: Person, created: Time })
+const RawComment = z.object({ id: z.string(), author: RawPerson, created: Time })
 
 /**
  * The fields of an issue this connector reads, the same on Cloud and Data Center. Loose on purpose:
@@ -40,8 +41,8 @@ export const RawIssue = z.object({
 		issuetype: Named,
 		status: Named,
 		priority: Named,
-		assignee: Person,
-		reporter: Person,
+		assignee: RawPerson,
+		reporter: RawPerson,
 		labels: z.array(z.string()).default([]),
 		components: z.array(z.object({ name: z.string() })).default([]),
 		parent: NestedIssue.nullish(),

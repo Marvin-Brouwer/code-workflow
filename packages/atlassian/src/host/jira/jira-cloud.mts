@@ -1,6 +1,7 @@
 import { createCloudClient, type ClientConfig } from 'jira.js'
 import { markdownToAdf } from 'marklassian'
 import { sentOnce } from '../host-options.mts'
+import type { Download } from './attachments.mts'
 import type { JiraSite } from './jira-site.mts'
 import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.mts'
 import { orWhenNotFound } from './when-not-found.mts'
@@ -9,7 +10,7 @@ import { orWhenNotFound } from './when-not-found.mts'
  * A Jira Cloud site, on its REST API v3. Comments go in as Atlassian Document Format, made from the
  * Markdown they're written in.
  */
-export function jiraCloud(config: ClientConfig & { readonly host: string }): JiraSite {
+export function jiraCloud(config: ClientConfig & { readonly host: string }, download: Download): JiraSite {
 	const client = createCloudClient(config)
 	// Requests that make something new are sent once: a retry after a lost answer would make it twice.
 	const once = createCloudClient({ ...config, retry: sentOnce })
@@ -55,13 +56,15 @@ export function jiraCloud(config: ClientConfig & { readonly host: string }): Jir
 					(await client.issueProperties.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value,
 				undefined,
 			),
-		async user({ accountId }, abortSignal) {
-			if (accountId === undefined) return undefined
-			const user = await client.users.getUser({ accountId }, { signal: abortSignal })
-			return { name: user.displayName, email: user.emailAddress }
-		},
 		async setProperty(key, name, value, abortSignal) {
 			await client.issueProperties.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},
+		// Who a mention names is worth one try: without an answer, the mention keeps what its link holds.
+		async user({ accountId }, abortSignal) {
+			if (accountId === undefined) return undefined
+			const user = await once.users.getUser({ accountId }, { signal: abortSignal })
+			return { name: user.displayName, email: user.emailAddress }
+		},
+		download,
 	}
 }
