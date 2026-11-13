@@ -147,7 +147,8 @@ describe.each(deployments)('on $deployment', ({ settings, jiraUrl, jiraApi, conf
 		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.first.id })
 		const posted = JSON.stringify(fake.issues.get('PROJ-7')?.comments[0]?.posted)
 		expect(posted).toContain('two')
-		expect(posted).toContain(started.runId)
+		// On Data Center the run id is in a code span, where wiki markup's `-` is escaped.
+		expect(posted.replaceAll('\\\\-', '-')).toContain(started.runId)
 	})
 
 	test('comment with a key posts again when a person deleted the earlier one', async () => {
