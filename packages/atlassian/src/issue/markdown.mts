@@ -2,8 +2,9 @@ import { withFrontmatter } from '../frontmatter.mts'
 import type { IssueComment, IssueData, RelatedIssue } from '../tools/issue-tools.mts'
 
 /**
- * The issue as Markdown: its facts and relations as frontmatter, then a heading with its key and
- * summary, its description and its comments.
+ * The issue as Markdown: its facts, relations and attachments as frontmatter, then a heading with
+ * its key and summary, its description and its comments. An attachment is listed by its `file` next
+ * to the Markdown when it was brought, and by its `url` on the site otherwise.
  */
 export function issueMarkdownOf(data: IssueData): string {
 	const description = data.description.trim()
@@ -23,6 +24,11 @@ export function issueMarkdownOf(data: IssueData): string {
 		updated: data.updated,
 		links: data.links.map((link) => ({ relation: link.relation, ...related(link) })),
 		subtasks: data.subtasks.map(related),
+		attachments: data.attachments.map(({ filename, mimeType, url, file }) => ({
+			filename,
+			mimeType,
+			...(file === undefined ? { url } : { file }),
+		})),
 	}
 	const body = [
 		`# ${data.key}: ${data.summary}`,

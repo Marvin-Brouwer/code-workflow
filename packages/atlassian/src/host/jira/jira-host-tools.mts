@@ -6,6 +6,8 @@ import { defaultIssueSearchLimit, searchIssues } from '../../tools/issue-search-
 import { oneAtATime } from '../one-at-a-time.mts'
 import { signed } from '../signature.mts'
 import { markingTransient } from '../transient-error.mts'
+import { peopleIn } from '../people.mts'
+import { issueAttachments } from './attachments.mts'
 import { issueData, issueUrl } from './issue-data.mts'
 import type { JiraApi } from './jira-api.mts'
 
@@ -27,7 +29,11 @@ export function jiraHostTools(api: JiraApi): HostTool[] {
 	return [
 		hostTool(getIssue, async ({ key }, context) => {
 			const site = await api(context)
-			return issueData(await markingTransient(() => site.issue(key, context.abortSignal)), site.url)
+			const raw = await markingTransient(() => site.issue(key, context.abortSignal))
+			const attachments = await issueAttachments(raw.key, site.url, raw.fields.attachment, site.download, context.abortSignal)
+			const richTexts = [raw.renderedFields.description, ...(raw.renderedFields.comment?.comments ?? []).map((comment) => comment.body)]
+			const people = await peopleIn(richTexts, site.user, context.abortSignal)
+			return issueData(raw, site.url, { attachments, people })
 		}),
 
 		hostTool(searchIssues, async ({ jql, limit = defaultIssueSearchLimit }, context) => {

@@ -1,6 +1,7 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { defaultPageSearchLimit, getPage, searchPages } from '../../tools/page-tools.mts'
 import { htmlToMarkdown } from '../html-to-markdown.mts'
+import { mentionKey, peopleIn } from '../people.mts'
 import { markingTransient } from '../transient-error.mts'
 import type { ConfluenceApi } from './confluence-api.mts'
 import { pageSearchCql } from './cql-string.mts'
@@ -15,6 +16,8 @@ export function confluenceHostTools(api: ConfluenceApi): HostTool[] {
 		hostTool(getPage, async ({ id }, context) => {
 			const site = await api(context)
 			const page = await markingTransient(() => site.page(id, context.abortSignal))
+			const html = page.body?.view?.value
+			const people = await peopleIn([html], site.user, context.abortSignal)
 			return {
 				id: page.id,
 				title: page.title,
@@ -22,7 +25,7 @@ export function confluenceHostTools(api: ConfluenceApi): HostTool[] {
 				url: pageUrl(site.url, page),
 				version: page.version?.number ?? 0,
 				updated: page.version?.when ?? '',
-				body: htmlToMarkdown(page.body?.view?.value),
+				body: htmlToMarkdown(html, { person: (mention) => people.get(mentionKey(mention)) ?? { name: mention.name } }),
 			}
 		}),
 

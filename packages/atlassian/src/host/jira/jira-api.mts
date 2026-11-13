@@ -4,9 +4,10 @@ import { readSiteSettings } from '../site-settings.mts'
 import { jiraCloud } from './jira-cloud.mts'
 import { jiraDataCenter } from './jira-data-center.mts'
 import type { JiraSite } from './jira-site.mts'
+import type { Download } from './attachments.mts'
 
-/** A site for one call, with the settings from the credential store. */
-export type JiraApi = (context: HostToolContext) => Promise<JiraSite>
+/** A site for one call, with the credentials from the credential store, and how to read its attachments. */
+export type JiraApi = (context: HostToolContext) => Promise<JiraSite & { readonly download: Download }>
 
 /**
  * Opens Jira for host tools: every call reads the site and token from the credential store, so a
@@ -23,8 +24,31 @@ export function jiraApi(options: AtlassianHostOptions = {}): JiraApi {
 			onSchemaMismatch: 'silent' as const,
 			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		}
-		return settings.deployment === 'cloud'
-			? jiraCloud({ ...common, auth: { type: 'basic', email: settings.email, apiToken: settings.token } })
-			: jiraDataCenter({ ...common, auth: { type: 'bearer', token: settings.token } })
+		const jira =
+			settings.deployment === 'cloud'
+				? jiraCloud({ ...common, auth: { type: 'basic', email: settings.email, apiToken: settings.token } })
+				: jiraDataCenter({ ...common, auth: { type: 'bearer', token: settings.token } })
+		const authorization =
+			settings.deployment === 'cloud'
+				? `Basic ${Buffer.from(`${settings.email}:${settings.token}`).toString('base64')}`
+				: `Bearer ${settings.token}`
+		return { ...jira, download: downloadWith(options.fetch ?? fetch, authorization) }
+	}
+}
+
+/**
+ * Reads an attachment signed in, as the API does. A file that can't be read, gone or refused or the
+ * site down, is `undefined`: the issue is still worth reading without it. A stop is thrown.
+ */
+function downloadWith(send: typeof fetch, authorization: string): Download {
+	return async (url, abortSignal) => {
+		try {
+			const response = await send(url, { headers: { authorization }, signal: abortSignal })
+			return response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined
+		} catch (error) {
+			abortSignal.throwIfAborted()
+			if (error instanceof TypeError) return undefined
+			throw error
+		}
 	}
 }

@@ -22,6 +22,21 @@ export const IssueComment = z.object({
 })
 export type IssueComment = z.infer<typeof IssueComment>
 
+/**
+ * A file attached to an issue. An image comes with its bytes, base64, and `file`, where it goes
+ * next to the issue's Markdown, which the description and comments link to; any other file, and an
+ * image too large to bring, has only its `url` on the site.
+ */
+export const IssueAttachment = z.object({
+	id: z.string(),
+	filename: z.string(),
+	mimeType: z.string(),
+	url: z.url(),
+	file: z.string().optional(),
+	data: z.base64().optional(),
+})
+export type IssueAttachment = z.infer<typeof IssueAttachment>
+
 /** An issue as Jira has it, with its description and comments as Markdown. */
 export const IssueData = z.object({
 	key: IssueKey,
@@ -41,6 +56,7 @@ export const IssueData = z.object({
 	comments: z.array(IssueComment),
 	links: z.array(IssueLink),
 	subtasks: z.array(RelatedIssue),
+	attachments: z.array(IssueAttachment),
 })
 export type IssueData = z.infer<typeof IssueData>
 

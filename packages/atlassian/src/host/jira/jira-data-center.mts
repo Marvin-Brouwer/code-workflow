@@ -54,6 +54,11 @@ export function jiraDataCenter(config: ServerClientConfig & { readonly host: str
 				async () => (await client.issues.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value,
 				undefined,
 			),
+		async user({ username }, abortSignal) {
+			if (username === undefined) return undefined
+			const user = await client.users.getUser({ username }, { signal: abortSignal })
+			return { name: user.displayName, email: user.emailAddress }
+		},
 		async setProperty(key, name, value, abortSignal) {
 			await client.issues.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},

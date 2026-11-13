@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
 import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
+import { maxImageBytes } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
 import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage } from './support/fake-atlassian.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
@@ -25,6 +26,8 @@ const deployments = [
 		confluenceApi: '/wiki/rest/api',
 		pageUrl: 'https://example.atlassian.net/wiki/spaces/TEAM/pages/12345',
 		authorization: `Basic ${Buffer.from('bot@example.com:cloud-token').toString('base64')}`,
+		mention: (name: string) => `<a href="/secure/ViewProfile.jspa?accountId=5b10" class="user-hover" data-account-id="5b10">@${name}</a>`,
+		mentionId: '5b10',
 	},
 	{
 		deployment: 'Data Center',
@@ -39,6 +42,8 @@ const deployments = [
 		confluenceApi: '/rest/api',
 		pageUrl: 'https://wiki.example.com/spaces/TEAM/pages/12345',
 		authorization: 'Bearer jira-pat',
+		mention: (name: string) => `<a href="/secure/ViewProfile.jspa?name=rita" class="user-hover" rel="rita">${name}</a>`,
+		mentionId: 'rita',
 	},
 ] as const
 const [, dataCenter] = deployments
@@ -60,6 +65,7 @@ interface Arrangement {
 	readonly failNext?: readonly number[]
 	readonly losesAnswers?: readonly string[]
 	readonly latencyMs?: number
+	readonly users?: Readonly<Record<string, { displayName: string; email?: string }>>
 }
 
 /** Runs `body` against a fake with the deployment's settings, and hands back what the fake saw. */
@@ -70,221 +76,375 @@ async function run<T>(settings: Readonly<Record<string, string>>, arrangement: A
 	fake.failNext.push(...(arrangement.failNext ?? []))
 	for (const request of arrangement.losesAnswers ?? []) fake.losesAnswers.add(request)
 	fake.latencyMs = arrangement.latencyMs ?? 0
+	for (const [id, user] of Object.entries(arrangement.users ?? {})) fake.users.set(id, user)
 	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
 	const started = await runOnGateway(gateway, body)
 	return { fake, started, result: await started.result }
 }
 
-describe.each(deployments)('on $deployment', ({ settings, jiraUrl, jiraApi, confluenceApi, pageUrl, authorization }) => {
-	test('collect writes the issue as Markdown into the workspace and renders as its path', async () => {
-		// Arrange
-		const arrangement: Arrangement = {
-			issues: [
-				fakeIssue({
-					key: 'PROJ-7',
-					labels: ['web'],
-					comments: [{ id: '1', author: 'Rita Reporter', created: '2026-11-10T10:00:00.000Z', html: '<p>Also on <em>iOS</em>.</p>' }],
-					links: [
-						{
-							type: { inward: 'is blocked by', outward: 'blocks' },
-							inwardIssue: { key: 'PROJ-3', fields: { summary: 'Session API', status: { name: 'Done' } } },
-						},
-					],
-				}),
-			],
-		}
+describe.each(deployments)(
+	'on $deployment',
+	({ settings, jiraUrl, jiraApi, confluenceApi, pageUrl, authorization, mention, mentionId }) => {
+		test('collect writes the issue as Markdown into the workspace and renders as its path', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [
+					fakeIssue({
+						key: 'PROJ-7',
+						labels: ['web'],
+						comments: [{ id: '1', author: 'Rita Reporter', created: '2026-11-10T10:00:00.000Z', html: '<p>Also on <em>iOS</em>.</p>' }],
+						links: [
+							{
+								type: { inward: 'is blocked by', outward: 'blocks' },
+								inwardIssue: { key: 'PROJ-3', fields: { summary: 'Session API', status: { name: 'Done' } } },
+							},
+						],
+					}),
+				],
+			}
 
-		// Act
-		const { fake, started, result } = await run(settings, arrangement, async () => {
-			const story = await jira.collect('PROJ-7')
-			return { story, rendered: story[toPrompt](), markdown: await readFile(story[toPrompt](), 'utf8') }
+			// Act
+			const { fake, started, result } = await run(settings, arrangement, async () => {
+				const story = await jira.collect('PROJ-7')
+				return { story, rendered: story[toPrompt](), markdown: await readFile(story[toPrompt](), 'utf8') }
+			})
+
+			// Assert
+			expect(result.rendered).toBe(path.join(started.workspace, 'jira', 'PROJ-7.md'))
+			expect(result.story.url).toBe(`${jiraUrl}/browse/PROJ-7`)
+			expect(frontmatterOf(result.markdown)).toMatchObject({
+				key: 'PROJ-7',
+				summary: 'Login fails on Safari',
+				url: `${jiraUrl}/browse/PROJ-7`,
+				labels: ['web'],
+				links: [{ relation: 'is blocked by', key: 'PROJ-3', summary: 'Session API', status: 'Done' }],
+			})
+			expect(result.markdown).toContain('# PROJ-7: Login fails on Safari')
+			expect(result.markdown).toContain('Steps: **open** the login page.')
+			expect(result.markdown).toContain('### Rita Reporter, 2026-11-10T10:00:00.000Z\n\nAlso on _iOS_.')
+			expect(fake.requests[0]).toMatchObject({ method: 'GET', path: `${jiraApi}/issue/PROJ-7`, authorization })
 		})
 
-		// Assert
-		expect(result.rendered).toBe(path.join(started.workspace, 'jira', 'PROJ-7.md'))
-		expect(result.story.url).toBe(`${jiraUrl}/browse/PROJ-7`)
-		expect(frontmatterOf(result.markdown)).toMatchObject({
-			key: 'PROJ-7',
-			summary: 'Login fails on Safari',
-			url: `${jiraUrl}/browse/PROJ-7`,
-			labels: ['web'],
-			links: [{ relation: 'is blocked by', key: 'PROJ-3', summary: 'Session API', status: 'Done' }],
-		})
-		expect(result.markdown).toContain('# PROJ-7: Login fails on Safari')
-		expect(result.markdown).toContain('Steps: **open** the login page.')
-		expect(result.markdown).toContain('### Rita Reporter, 2026-11-10T10:00:00.000Z\n\nAlso on _iOS_.')
-		expect(fake.requests[0]).toMatchObject({ method: 'GET', path: `${jiraApi}/issue/PROJ-7`, authorization })
-	})
+		test("collect brings an issue's images next to its Markdown, links to them, and lists every attachment", async () => {
+			// Arrange
+			const screenshot = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+			const arrangement: Arrangement = {
+				issues: [
+					fakeIssue({
+						key: 'PROJ-7',
+						descriptionHtml: '<p>See <img src="/secure/attachment/10001/login%20page.png" alt="login page"></p>',
+						comments: [
+							{
+								id: '1',
+								author: 'Rita Reporter',
+								created: '2026-11-10T10:00:00.000Z',
+								html: '<p><img src="/secure/thumbnail/10001/login%20page.png"></p>',
+							},
+						],
+						attachments: [
+							{ id: '10001', filename: 'login page.png', mimeType: 'image/png', bytes: screenshot },
+							{ id: '10002', filename: 'trace.har', mimeType: 'application/json', bytes: new Uint8Array([0x7b, 0x7d]) },
+						],
+					}),
+				],
+			}
 
-	test('transition moves an issue once and does nothing when it already has the status', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
+			// Act
+			const { fake, started, result } = await run(settings, arrangement, async () => {
+				const story = await jira.collect('PROJ-7')
+				return { story, markdown: await readFile(story[toPrompt](), 'utf8') }
+			})
 
-		// Act
-		const { fake, result } = await run(settings, arrangement, async () => [
-			await jira.transition('PROJ-7', 'in progress'),
-			await jira.transition({ key: 'PROJ-7' }, 'In Progress'),
-		])
-
-		// Assert
-		expect(result).toEqual([{ moved: true }, { moved: false }])
-		expect(fake.issues.get('PROJ-7')?.status).toBe('In Progress')
-		expect(fake.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
-	})
-
-	test('transition names the statuses it can move to when none is the one asked for', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
-
-		// Act
-		const outcome = run(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
-
-		// Assert
-		await expect(outcome).rejects.toThrow("PROJ-7 can't move from To Do to In Review. It can move to: In Progress, Done.")
-	})
-
-	test('comment with a key updates its earlier comment', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
-
-		// Act
-		const { fake, started, result } = await run(settings, arrangement, async () => {
-			const first = await jira.comment('PROJ-7', 'Merge request: **one**', { key: 'mr-api' })
-			const again = await jira.comment('PROJ-7', 'Merge request: **two**', { key: 'mr-api' })
-			return { first, again }
+			// Assert
+			const image = path.join(started.workspace, 'jira', 'PROJ-7', '10001-login_page.png')
+			expect(new Uint8Array(await readFile(image))).toEqual(screenshot)
+			expect(result.markdown).toContain('See ![login page](PROJ-7/10001-login_page.png)')
+			expect(result.markdown).toContain('![](PROJ-7/10001-login_page.png)')
+			expect(frontmatterOf(result.markdown)).toMatchObject({
+				attachments: [
+					{ filename: 'login page.png', mimeType: 'image/png', file: 'PROJ-7/10001-login_page.png' },
+					{ filename: 'trace.har', mimeType: 'application/json', url: `${jiraUrl}/secure/attachment/10002/trace.har` },
+				],
+			})
+			expect(result.story.attachments.map((attachment) => attachment.data)).toEqual([undefined, undefined])
+			expect(fake.requests.filter((request) => request.path.startsWith('/secure/attachment/'))).toMatchObject([
+				{ path: '/secure/attachment/10001/login%20page.png', authorization },
+			])
 		})
 
-		// Assert
-		expect(result.again.id).toBe(result.first.id)
-		expect(result.first.url).toBe(`${jiraUrl}/browse/PROJ-7?focusedCommentId=${result.first.id}`)
-		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.first.id })
-		const posted = JSON.stringify(fake.issues.get('PROJ-7')?.comments[0]?.posted)
-		expect(posted).toContain('two')
-		// On Data Center the run id is in a code span, where wiki markup's `-` is escaped.
-		expect(posted.replaceAll('\\\\-', '-')).toContain(started.runId)
-	})
+		test('collect leaves an image too large, or on another host, as a link, and never sends the token elsewhere', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [
+					fakeIssue({
+						key: 'PROJ-7',
+						descriptionHtml: '<p><img src="/secure/attachment/10003/huge.png" alt="huge"></p>',
+						attachments: [
+							{ id: '10003', filename: 'huge.png', mimeType: 'image/png', bytes: new Uint8Array(maxImageBytes + 1) },
+							{
+								id: '10004',
+								filename: 'elsewhere.png',
+								mimeType: 'image/png',
+								bytes: new Uint8Array(1),
+								content: 'https://files.example.org/secure/attachment/10004/elsewhere.png',
+							},
+						],
+					}),
+				],
+			}
 
-	test('comment with a key posts again when a person deleted the earlier one', async () => {
-		// Arrange
-		const arrangement: Arrangement = {
-			issues: [fakeIssue({ key: 'PROJ-7', properties: { [keyedCommentProperty('mr-api')]: { key: 'mr-api', id: '999' } } })],
-		}
+			// Act
+			const { fake, result } = await run(settings, arrangement, async () => {
+				const story = await jira.collect('PROJ-7')
+				return { markdown: await readFile(story[toPrompt](), 'utf8') }
+			})
 
-		// Act
-		const { fake, result } = await run(settings, arrangement, () => jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }))
-
-		// Assert
-		expect(result.id).not.toBe('999')
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.id })
-	})
-
-	test('comments with different keys at once each keep their own id', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
-
-		// Act
-		const { fake, result } = await run(settings, arrangement, () =>
-			Promise.all([jira.comment('PROJ-7', 'API', { key: 'mr-api' }), jira.comment('PROJ-7', 'Web', { key: 'mr-web' })]),
-		)
-
-		// Assert
-		const [api, web] = result
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: api.id })
-		expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-web')]).toEqual({ key: 'mr-web', id: web.id })
-	})
-
-	test('comments with one key at once post one comment', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
-
-		// Act
-		const { fake, result } = await run(settings, arrangement, () =>
-			Promise.all([jira.comment('PROJ-7', 'one', { key: 'status' }), jira.comment('PROJ-7', 'two', { key: 'status' })]),
-		)
-
-		// Assert
-		expect(result[1].id).toBe(result[0].id)
-		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
-	})
-
-	test('a comment whose answer was lost is not posted again', async () => {
-		// Arrange
-		const fake = fakeAtlassian()
-		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7' }))
-		fake.losesAnswers.add(`POST ${jiraApi}/issue/PROJ-7/comment`)
-		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
-
-		// Act
-		const started = await runOnGateway(gateway, () => jira.comment('PROJ-7', 'Picked up'))
-
-		// Assert
-		await expect(started.result).rejects.toThrow()
-		expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
-	})
-
-	test('a transition whose answer was lost counts as made', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], losesAnswers: [`POST ${jiraApi}/issue/PROJ-7/transitions`] }
-
-		// Act
-		const { fake, result } = await run(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
-
-		// Assert
-		expect(result).toEqual({ moved: true })
-		expect(fake.requests.filter((request) => request.method === 'POST' && request.path.endsWith('/transitions'))).toHaveLength(1)
-	})
-
-	test('search finds issues by JQL and says whether there are more', async () => {
-		// Arrange
-		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
-
-		// Act
-		const { result } = await run(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
-
-		// Assert
-		expect(result).toEqual({
-			issues: [
-				{
-					key: 'PROJ-7',
-					summary: 'Login fails on Safari',
-					status: 'To Do',
-					type: 'Story',
-					url: `${jiraUrl}/browse/PROJ-7`,
-				},
-			],
-			more: false,
-		})
-	})
-
-	test('confluence collect reads a page by its URL and search strips the highlights', async () => {
-		// Arrange
-		const arrangement: Arrangement = {
-			pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<h2>Commits</h2><p>Use conventional commits.</p>', version: 4 }],
-		}
-
-		// Act
-		const { fake, result } = await run(settings, arrangement, async () => {
-			const page = await confluence.collect(`${pageUrl}/Guidelines`)
-			return { page, markdown: await readFile(page[toPrompt](), 'utf8'), found: await confluence.search({ text: 'conventional' }) }
+			// Assert
+			expect(result.markdown).toContain(`![huge](${jiraUrl}/secure/attachment/10003/huge.png)`)
+			expect(frontmatterOf(result.markdown)).toMatchObject({
+				attachments: [
+					{ url: `${jiraUrl}/secure/attachment/10003/huge.png` },
+					{ url: 'https://files.example.org/secure/attachment/10004/elsewhere.png' },
+				],
+			})
+			expect(fake.requests.filter((request) => request.path.includes('/attachment/'))).toEqual([])
 		})
 
-		// Assert
-		expect(result.page.url).toBe(pageUrl)
-		expect(frontmatterOf(result.markdown)).toMatchObject({
-			id: '12345',
-			title: 'Guidelines',
-			url: pageUrl,
-			space: 'TEAM',
-			version: 4,
+		test('collect names a mentioned person by name, the email the site shows and their id', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [
+					fakeIssue({
+						key: 'PROJ-7',
+						descriptionHtml: `<p>Ask ${mention('Rita Reporter')}.</p>`,
+						comments: [
+							{ id: '1', author: 'Rita Reporter', created: '2026-11-10T10:00:00.000Z', html: `<p>${mention('Rita Reporter')} knows.</p>` },
+						],
+					}),
+				],
+				users: { [mentionId]: { displayName: 'Rita Reporter', email: 'rita@example.com' } },
+			}
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, async () => {
+				const story = await jira.collect('PROJ-7')
+				return { markdown: await readFile(story[toPrompt](), 'utf8') }
+			})
+
+			// Assert
+			const rita = `\`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``
+			expect(result.markdown).toContain(`Ask ${rita}.`)
+			expect(result.markdown).toContain(`${rita} knows.`)
+			expect(fake.requests.filter((request) => request.path === `${jiraApi}/user`)).toHaveLength(1)
 		})
-		expect(result.markdown).toContain('## Commits\n\nUse conventional commits.')
-		expect(result.found.pages).toEqual([
-			{ id: '12345', title: 'Guidelines', space: 'TEAM', url: pageUrl, excerpt: 'conventional and more' },
-		])
-		expect(fake.requests[0]?.path).toBe(`${confluenceApi}/content/12345`)
-	})
-})
+
+		test('collect leaves out the email of a person the site keeps it private for', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>Ask ${mention('Rita Reporter')}.</p>` })],
+				users: { [mentionId]: { displayName: 'Rita Reporter' } },
+			}
+
+			// Act
+			const { result } = await run(settings, arrangement, async () => {
+				const story = await jira.collect('PROJ-7')
+				return { markdown: await readFile(story[toPrompt](), 'utf8') }
+			})
+
+			// Assert
+			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
+		})
+
+		test('transition moves an issue once and does nothing when it already has the status', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, async () => [
+				await jira.transition('PROJ-7', 'in progress'),
+				await jira.transition({ key: 'PROJ-7' }, 'In Progress'),
+			])
+
+			// Assert
+			expect(result).toEqual([{ moved: true }, { moved: false }])
+			expect(fake.issues.get('PROJ-7')?.status).toBe('In Progress')
+			expect(fake.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
+		})
+
+		test('transition names the statuses it can move to when none is the one asked for', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
+
+			// Act
+			const outcome = run(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
+
+			// Assert
+			await expect(outcome).rejects.toThrow("PROJ-7 can't move from To Do to In Review. It can move to: In Progress, Done.")
+		})
+
+		test('comment with a key updates its earlier comment', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
+
+			// Act
+			const { fake, started, result } = await run(settings, arrangement, async () => {
+				const first = await jira.comment('PROJ-7', 'Merge request: **one**', { key: 'mr-api' })
+				const again = await jira.comment('PROJ-7', 'Merge request: **two**', { key: 'mr-api' })
+				return { first, again }
+			})
+
+			// Assert
+			expect(result.again.id).toBe(result.first.id)
+			expect(result.first.url).toBe(`${jiraUrl}/browse/PROJ-7?focusedCommentId=${result.first.id}`)
+			expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
+			expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.first.id })
+			const posted = JSON.stringify(fake.issues.get('PROJ-7')?.comments[0]?.posted)
+			expect(posted).toContain('two')
+			// On Data Center the run id is in a code span, where wiki markup's `-` is escaped.
+			expect(posted.replaceAll('\\\\-', '-')).toContain(started.runId)
+		})
+
+		test('comment with a key posts again when a person deleted the earlier one', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [fakeIssue({ key: 'PROJ-7', properties: { [keyedCommentProperty('mr-api')]: { key: 'mr-api', id: '999' } } })],
+			}
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, () => jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }))
+
+			// Assert
+			expect(result.id).not.toBe('999')
+			expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: result.id })
+		})
+
+		test('comments with different keys at once each keep their own id', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, () =>
+				Promise.all([jira.comment('PROJ-7', 'API', { key: 'mr-api' }), jira.comment('PROJ-7', 'Web', { key: 'mr-web' })]),
+			)
+
+			// Assert
+			const [api, web] = result
+			expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-api')]).toEqual({ key: 'mr-api', id: api.id })
+			expect(fake.issues.get('PROJ-7')?.properties[keyedCommentProperty('mr-web')]).toEqual({ key: 'mr-web', id: web.id })
+		})
+
+		test('comments with one key at once post one comment', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, () =>
+				Promise.all([jira.comment('PROJ-7', 'one', { key: 'status' }), jira.comment('PROJ-7', 'two', { key: 'status' })]),
+			)
+
+			// Assert
+			expect(result[1].id).toBe(result[0].id)
+			expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
+		})
+
+		test('a comment whose answer was lost is not posted again', async () => {
+			// Arrange
+			const fake = fakeAtlassian()
+			fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7' }))
+			fake.losesAnswers.add(`POST ${jiraApi}/issue/PROJ-7/comment`)
+			const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
+
+			// Act
+			const started = await runOnGateway(gateway, () => jira.comment('PROJ-7', 'Picked up'))
+
+			// Assert
+			await expect(started.result).rejects.toThrow()
+			expect(fake.issues.get('PROJ-7')?.comments).toHaveLength(1)
+		})
+
+		test('a transition whose answer was lost counts as made', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				issues: [fakeIssue({ key: 'PROJ-7' })],
+				losesAnswers: [`POST ${jiraApi}/issue/PROJ-7/transitions`],
+			}
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
+
+			// Assert
+			expect(result).toEqual({ moved: true })
+			expect(fake.requests.filter((request) => request.method === 'POST' && request.path.endsWith('/transitions'))).toHaveLength(1)
+		})
+
+		test('search finds issues by JQL and says whether there are more', async () => {
+			// Arrange
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
+
+			// Act
+			const { result } = await run(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
+
+			// Assert
+			expect(result).toEqual({
+				issues: [
+					{
+						key: 'PROJ-7',
+						summary: 'Login fails on Safari',
+						status: 'To Do',
+						type: 'Story',
+						url: `${jiraUrl}/browse/PROJ-7`,
+					},
+				],
+				more: false,
+			})
+		})
+
+		test('confluence collect names a mentioned person by name, the email the site shows and their id', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: `<p>Owner: ${mention('Rita Reporter')}</p>`, version: 4 }],
+				users: { [mentionId]: { displayName: 'Rita Reporter', email: 'rita@example.com' } },
+			}
+
+			// Act
+			const { result } = await run(settings, arrangement, async () => {
+				const page = await confluence.collect('12345')
+				return { markdown: await readFile(page[toPrompt](), 'utf8') }
+			})
+
+			// Assert
+			expect(result.markdown).toContain(`Owner: \`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``)
+		})
+
+		test('confluence collect reads a page by its URL and search strips the highlights', async () => {
+			// Arrange
+			const arrangement: Arrangement = {
+				pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<h2>Commits</h2><p>Use conventional commits.</p>', version: 4 }],
+			}
+
+			// Act
+			const { fake, result } = await run(settings, arrangement, async () => {
+				const page = await confluence.collect(`${pageUrl}/Guidelines`)
+				return { page, markdown: await readFile(page[toPrompt](), 'utf8'), found: await confluence.search({ text: 'conventional' }) }
+			})
+
+			// Assert
+			expect(result.page.url).toBe(pageUrl)
+			expect(frontmatterOf(result.markdown)).toMatchObject({
+				id: '12345',
+				title: 'Guidelines',
+				url: pageUrl,
+				space: 'TEAM',
+				version: 4,
+			})
+			expect(result.markdown).toContain('## Commits\n\nUse conventional commits.')
+			expect(result.found.pages).toEqual([
+				{ id: '12345', title: 'Guidelines', space: 'TEAM', url: pageUrl, excerpt: 'conventional and more' },
+			])
+			expect(fake.requests[0]?.path).toBe(`${confluenceApi}/content/12345`)
+		})
+	},
+)
 
 describe('settings', () => {
 	test('a missing site says how to set it', async () => {
@@ -312,6 +472,27 @@ describe('stopping', () => {
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
 		await expect.poll(() => fake.requests[0]?.signal?.aborted).toBe(true)
+	})
+
+	test('stopping the run settles a collect whose image never arrives', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set(
+			'PROJ-7',
+			fakeIssue({ key: 'PROJ-7', attachments: [{ id: '10001', filename: 'shot.png', mimeType: 'image/png', bytes: new Uint8Array(1) }] }),
+		)
+		fake.hanging.add('/secure/attachment/10001/shot.png')
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch }), dataCenter.settings)
+		const started = await runOnGateway(gateway, () => jira.collect('PROJ-7'))
+		await expect.poll(() => fake.requests.length).toBe(2)
+
+		// Act
+		started.controller.abort(new Error('Stopped.'))
+
+		// Assert
+		await expect(started.outcome).resolves.toBeDefined()
+		await expect(started.result).rejects.toThrow()
+		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
 	})
 })
 
