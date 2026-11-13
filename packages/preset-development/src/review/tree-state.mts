@@ -28,6 +28,13 @@ function isMissing(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
+/** A checkout's state, and the commit its changes are against. */
+export interface TreeState {
+	readonly fingerprint: string
+	/** The merge base of the branch and `origin/<defaultBranch>`. */
+	readonly base: string
+}
+
 /** What `treeState` takes besides the checkout. */
 export interface TreeStateOptions {
 	readonly abortSignal: AbortSignal
@@ -42,7 +49,7 @@ export interface TreeStateOptions {
  * changes give the same fingerprint, and any change gives another, so a review loop that renders
  * it is a loop of its own per state.
  */
-export async function treeState(directory: string, defaultBranch: string, options: TreeStateOptions): Promise<string> {
+export async function treeState(directory: string, defaultBranch: string, options: TreeStateOptions): Promise<TreeState> {
 	const { abortSignal } = options
 	const git = async (args: readonly string[]) => (await gitCommand(args, { cwd: directory, abortSignal })).stdout
 	const head = await git(['rev-parse', 'HEAD'])
@@ -50,19 +57,17 @@ export async function treeState(directory: string, defaultBranch: string, option
 	const diff = await git(['diff', '--binary', base])
 	const untracked = (await git(['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).toSorted()
 	const hash = createHash('sha256').update(head).update('\0').update(diff)
-	for (const file of untracked) {
-		const content = await contentOf(path.join(directory, file), abortSignal)
-		if (content !== undefined) hash.update(`\0${file}\0`).update(content)
+	const addEntry = async (name: string, entryPath: string) => {
+		const content = await contentOf(entryPath, abortSignal)
+		if (content !== undefined) hash.update(`\0${name}\0`).update(content)
 	}
-	for (const file of options.files ?? []) {
-		const content = await contentOf(file, abortSignal)
-		if (content !== undefined) hash.update(`\0${file}\0`).update(content)
-	}
-	return hash.digest('hex').slice(0, fingerprintLength)
+	for (const file of untracked) await addEntry(file, path.join(directory, file))
+	for (const file of options.files ?? []) await addEntry(file, file)
+	return { fingerprint: hash.digest('hex').slice(0, fingerprintLength), base }
 }
 
 /** The commit the checkout's branch left `origin/<defaultBranch>` at: what its changes are against. */
-export async function mergeBase(directory: string, defaultBranch: string, abortSignal: AbortSignal): Promise<string> {
+async function mergeBase(directory: string, defaultBranch: string, abortSignal: AbortSignal): Promise<string> {
 	const { stdout } = await gitCommand(['merge-base', `origin/${defaultBranch}`, 'HEAD'], { cwd: directory, abortSignal })
 	return stdout.trim()
 }

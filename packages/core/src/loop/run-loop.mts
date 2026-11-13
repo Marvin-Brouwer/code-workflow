@@ -106,9 +106,10 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	const { run } = eventScope
 	const model = await harness.model(agent.model, run.abortSignal)
 	const stopNow = new AbortController()
-	// A loop run from a tool call of another stops with it, such as a review in a check whose loop ran out of time.
-	const enclosing = eventScope.loop?.abortSignal ?? run.abortSignal
-	const abortSignal = AbortSignal.any([run.abortSignal, enclosing, stopNow.signal])
+	// A loop run from a tool call of another stops with it, such as a review in a check whose loop ran
+	// out of time. The other loop's signal stops with the run too.
+	const stopped = eventScope.loop?.abortSignal ?? run.abortSignal
+	const abortSignal = AbortSignal.any([stopped, stopNow.signal])
 	const ended = loopEndSignals()
 	let outcome: LoopOutcome | undefined
 	let stop: Stop | undefined
@@ -125,7 +126,6 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 	const clock = startLoopClock(minutes, () => {
 		finish({ kind: 'error', error: new LoopLimitExceeded('minutes', minutes ?? 0) }, 'now')
 	})
-	const stopped = AbortSignal.any([run.abortSignal, enclosing])
 	const onAbort = () => {
 		finish({ kind: 'error', error: stopped.reason }, 'now')
 	}

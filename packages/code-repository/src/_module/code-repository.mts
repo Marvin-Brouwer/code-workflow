@@ -16,6 +16,7 @@ export { untilCompleted, type UntilCompletedOptions } from '../review/until-comp
 export { withScratchFile } from '../scratch-file.mts'
 export { Bundle, Sha } from '../checkout/bundle-schemas.mts'
 export { gitTools, type GitToolNames, type GitTools } from '../checkout/git-tools.mts'
+export { checkoutFolder } from '../checkout/checkout-folder.mts'
 export { checkoutRepository, type Checkout, type CheckoutOptions, type ClonedBundle } from '../checkout/checkout.mts'
 export { branchHeadOf, pushCheckout, type PushBundle, type Pushed } from '../checkout/push.mts'
 export { origin, trackingRef } from '../checkout/tracking.mts'

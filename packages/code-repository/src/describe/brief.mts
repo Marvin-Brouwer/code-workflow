@@ -51,7 +51,7 @@ function diffFilePath(repository: Checkout, terms: CodeHostTerms): string {
 		const safe = segment.replace(notInFileNames, '-')
 		return notAFileOnWindows.test(safe) ? `${safe}-` : safe
 	})
-	return `${diffsFolder(terms).path}/${repository.path}/${segments.join('/')}.diff`
+	return `${diffsFolder(terms).path}/${repository.name.toLowerCase()}/${segments.join('/')}.diff`
 }
 
 /**

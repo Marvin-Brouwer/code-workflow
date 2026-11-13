@@ -36,15 +36,24 @@ function alreadyExists(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'EEXIST'
 }
 
+/** The record before the latest: records take turns, so the heading and the check for a repeat hold with parts side by side. */
+let lastRecord: Promise<unknown> = Promise.resolve()
+
+/** Records a deviation once the records before it are done. */
+async function record(deviation: Deviation, context: ToolContext): Promise<RecordedDeviation> {
+	const turn = lastRecord.catch(() => undefined).then(async () => recordNow(deviation, context))
+	lastRecord = turn
+	return turn
+}
+
 /**
  * Adds one deviation to the file, which starts with a heading when it's new. One that is in the
  * file already, as when a loop that recorded it runs again, is left at that.
  */
-async function record(deviation: Deviation, { abortSignal }: ToolContext): Promise<RecordedDeviation> {
+async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Promise<RecordedDeviation> {
 	abortSignal.throwIfAborted()
 	const file = deviationsFile.location()
 	await mkdir(path.dirname(file), { recursive: true })
-	// In one write, so a deviation another part records at the same time comes after it.
 	await writeFile(file, fileHeading, { flag: 'wx' }).catch((error: unknown) => {
 		if (!alreadyExists(error)) throw error
 	})

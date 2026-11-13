@@ -1,5 +1,5 @@
 import { tool } from '@mesh-flow/core'
-import { BranchName, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
+import { BranchName, checkoutFolder, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { gitlabRemoteName, ProjectPath } from '../project-path.mts'
 import { stubs } from '../stubs.mts'
@@ -21,7 +21,7 @@ export interface Repository extends Checkout {
  * reaches the sandbox. A checkout of the project that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
  * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
- * at the project's whole path, in lower case.
+ * at the project's whole path, in lower case, under `repositories/`.
  *
  * ```ts
  * const repository = await gitlab.checkout({ repository: 'team/api', branch: `feature/${story.key}` })
@@ -35,8 +35,7 @@ export const checkout = tool('gitlabCheckout', {
 		checkoutRepository(
 			{
 				...input,
-				// The whole path, so `team/backend/api` and `team/frontend/api` never share a folder; GitLab ignores case in it.
-				folder: input.repository.toLowerCase(),
+				folder: checkoutFolder(input.repository),
 				remote: gitlabRemoteName(input.repository),
 				clone: stubs.cloneRepository,
 			},

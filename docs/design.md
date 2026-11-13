@@ -568,10 +568,9 @@ Out of scope for now: token and cost budgets.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
 5. AWS and CodeArtifact through the gateway; `checkSession`; package managers beyond npm and
-   NuGet, each with a conformance test that installs through egress, one
-   per way of trusting certificates and proxies: pip (its own certifi bundle), Maven and Gradle
-   (the JVM's keystore, and proxy settings as system properties instead of `HTTPS_PROXY`), Go and
-   Cargo.
+   NuGet, each with a conformance test that installs through egress, one per way of trusting
+   certificates and proxies: pip (its own certifi bundle), Maven and Gradle (the JVM's keystore,
+   and proxy settings as system properties instead of `HTTPS_PROXY`), Go and Cargo.
 6. UI, settings wizard, credential store.
 7. Hosted, multi-user.
 

@@ -49,7 +49,8 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 	// Starts each repository once the repositories it depends on are merged, with the packages
 	// their merges published. Independent repositories don't wait for each other.
-	// `upstream` is typed: it holds what the callback returns, which TypeScript can't infer it from.
+	// `upstream` is typed by hand: it holds what the callback returns, and TypeScript can't infer that
+	// from a callback that also returns `[]`.
 	await inDependencyOrder(deliveryOrder(plan), async (part, upstream: readonly (readonly gitlab.PublishedPackage[])[]) => {
 		const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
 		await dotnet.updatePackages(repository, upstream.flat())

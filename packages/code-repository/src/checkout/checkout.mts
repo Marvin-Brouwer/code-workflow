@@ -77,7 +77,7 @@ export async function checkoutRepository(options: CheckoutOptions, context: Tool
 		return checkoutOf(repository, branch, defaultBranch, folder.path, directory)
 	}
 	const fetched = await options.clone({ repository, branch }, context)
-	// A folder such as `team/backend/api` is in folders of its own.
+	// The folder may be nested, such as `repositories/team/backend/api`, so its parent folders are made first.
 	await mkdir(path.dirname(directory), { recursive: true })
 	await withScratchFile('clone.bundle', async (bundle) => {
 		await writeFile(bundle, Buffer.from(fetched.bundle, 'base64'))
