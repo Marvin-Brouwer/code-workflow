@@ -23,13 +23,31 @@ importers:
 
   examples/example:
     dependencies:
+      '@mesh-flow/atlassian':
+        specifier: workspace:*
+        version: link:../../packages/atlassian
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mesh-flow/gitlab':
+        specifier: workspace:*
+        version: link:../../packages/gitlab
+      '@mesh-flow/preset-development':
+        specifier: workspace:*
+        version: link:../../packages/preset-development
+      '@mesh-flow/toolchain-dotnet':
+        specifier: workspace:*
+        version: link:../../packages/toolchain-dotnet
     devDependencies:
       '@mesh-flow/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
 
   examples/github-issue:
     dependencies:
