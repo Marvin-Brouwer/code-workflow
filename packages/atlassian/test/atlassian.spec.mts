@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
+import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
 import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
@@ -44,6 +45,13 @@ const [, dataCenter] = deployments
 
 /** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
 const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
+
+/** The YAML between the `---` lines a written issue or page starts with. */
+function frontmatterOf(markdown: string): unknown {
+	const [, yaml] = /^---\n([\s\S]*?)\n---\n/.exec(markdown) ?? []
+	if (yaml === undefined) throw new Error('The Markdown has no frontmatter.')
+	return parse(yaml)
+}
 
 /** What the fake holds before a run. */
 interface Arrangement {
@@ -95,9 +103,15 @@ describe.each(deployments)('on $deployment', ({ settings, jiraUrl, jiraApi, conf
 		// Assert
 		expect(result.rendered).toBe(path.join(started.workspace, 'jira', 'PROJ-7.md'))
 		expect(result.story.url).toBe(`${jiraUrl}/browse/PROJ-7`)
+		expect(frontmatterOf(result.markdown)).toMatchObject({
+			key: 'PROJ-7',
+			summary: 'Login fails on Safari',
+			url: `${jiraUrl}/browse/PROJ-7`,
+			labels: ['web'],
+			links: [{ relation: 'is blocked by', key: 'PROJ-3', summary: 'Session API', status: 'Done' }],
+		})
 		expect(result.markdown).toContain('# PROJ-7: Login fails on Safari')
 		expect(result.markdown).toContain('Steps: **open** the login page.')
-		expect(result.markdown).toContain('- is blocked by PROJ-3: Session API (Done)')
 		expect(result.markdown).toContain('### Rita Reporter, 2026-11-10T10:00:00.000Z\n\nAlso on _iOS_.')
 		expect(fake.requests[0]).toMatchObject({ method: 'GET', path: `${jiraApi}/issue/PROJ-7`, authorization })
 	})
@@ -257,6 +271,13 @@ describe.each(deployments)('on $deployment', ({ settings, jiraUrl, jiraApi, conf
 
 		// Assert
 		expect(result.page.url).toBe(pageUrl)
+		expect(frontmatterOf(result.markdown)).toMatchObject({
+			id: '12345',
+			title: 'Guidelines',
+			url: pageUrl,
+			space: 'TEAM',
+			version: 4,
+		})
 		expect(result.markdown).toContain('## Commits\n\nUse conventional commits.')
 		expect(result.found.pages).toEqual([
 			{ id: '12345', title: 'Guidelines', space: 'TEAM', url: pageUrl, excerpt: 'conventional and more' },
