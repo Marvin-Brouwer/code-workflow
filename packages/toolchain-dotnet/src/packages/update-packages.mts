@@ -24,6 +24,9 @@ export interface PackageUpdate {
 	readonly to: string
 }
 
+/** A reference the update tool moved, by the project's full path: `updatePackages` makes it relative to the checkout. */
+type UpdatedReference = Omit<PackageUpdate, 'project'> & { readonly projectPath: string }
+
 /** An exact version as NuGet writes it, `[2.4.0]`. A bare `2.4.0` is a minimum, and here both mean that version (see `asksFor`). */
 const exactVersion = /^\[([^,\]]+)\]$/
 
@@ -49,12 +52,11 @@ const updateTool = tool('dotnetUpdatePackages', {
 		directory: Directory,
 		packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1) })),
 	}),
-	// The projects by their full paths: `updatePackages` makes them relative to the checkout.
-	action: async ({ directory, packages }, { abortSignal }): Promise<readonly PackageUpdate[]> => {
+	action: async ({ directory, packages }, { abortSignal }): Promise<readonly UpdatedReference[]> => {
 		if (packages.length === 0) return []
 		const cwd = workingDirectoryOf(directory)
 		const list = await listPackages(directory, [], abortSignal)
-		const updates: PackageUpdate[] = []
+		const updates: UpdatedReference[] = []
 		for (const project of list.projects) {
 			const referenced = (project.frameworks ?? []).flatMap((framework) => framework.topLevelPackages ?? [])
 			for (const wanted of packages) {
@@ -64,7 +66,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
 				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
-					project: project.path,
+					projectPath: project.path,
 					name: current.id,
 					...(current.requestedVersion === undefined ? {} : { from: current.requestedVersion }),
 					to: wanted.version,
@@ -94,5 +96,5 @@ export async function updatePackages(
 	context?: ToolContext,
 ): Promise<readonly PackageUpdate[]> {
 	const updates = await updateTool({ directory: targetOf(repository, options), packages: [...packages] }, context)
-	return updates.map((update) => ({ ...update, project: path.relative(repository.directory, update.project) }))
+	return updates.map(({ projectPath, ...update }) => ({ ...update, project: path.relative(repository.directory, projectPath) }))
 }

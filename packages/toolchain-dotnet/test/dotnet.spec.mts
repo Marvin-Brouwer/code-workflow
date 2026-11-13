@@ -20,8 +20,8 @@ import {
 	unversionedVulnerableList,
 	vulnerableList,
 } from './support/fixtures.mts'
-import { temporaryDirectory } from './support/temporary-directory.mts'
 import { isRunning, written } from './support/processes.mts'
+import { temporaryDirectory } from './support/temporary-directory.mts'
 import { toolContext } from './support/tool-context.mts'
 
 /** How soon a call that stopped has to settle. */
@@ -452,14 +452,14 @@ describe('runDotnet', () => {
 			await fakeDotnet({ build: { hang: true, ignoresStop: true, pidFile } })
 			const controller = new AbortController()
 			const running = runDotnet(['build'], { cwd: directory, abortSignal: controller.signal })
-			const dotnet = Number(await written(pidFile))
+			const dotnetPid = Number(await written(pidFile))
 
 			// Act
 			controller.abort(new Error('The run stopped.'))
 			await expect(running).rejects.toThrow('The run stopped.')
 
 			// Assert
-			expect(await isRunning(dotnet)).toBe(false)
+			expect(await isRunning(dotnetPid)).toBe(false)
 		},
 		afterForceKillMs * 2,
 	)

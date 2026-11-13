@@ -14,7 +14,7 @@ export function oneAtATime(): OneAtATime {
 		const before = (lastOn.get(key) ?? Promise.resolve()).catch(() => undefined)
 		const { promise: done, resolve } = Promise.withResolvers<undefined>()
 		// The next call waits for the one before this too, should this one stop while it waits.
-		const turn = before.then(async () => done)
+		const turn = before.then(() => done)
 		lastOn.set(key, turn)
 		void turn.finally(() => {
 			if (lastOn.get(key) === turn) lastOn.delete(key)
