@@ -9,6 +9,7 @@ export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, typ
 export { openGateway, tokensPerEndpoint, type AcceptedCall, type Gateway, type GatewayOptions, type InterruptedCall } from '../gateway.mts'
 export { openGatewayHome, type GatewayHome } from '../gateway-home.mts'
 export { knownKinds } from '../providers/model-apis.mts'
+export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export {
 	openProviderSettings,
 	providerCredential,

@@ -1,6 +1,6 @@
 import { setTimeout } from 'node:timers/promises'
 import { describe, expect, test } from 'vitest'
-import { oneAtATime } from '../src/host/one-at-a-time.mts'
+import { oneAtATime } from '../src/one-at-a-time.mts'
 
 /** Long enough for a call that didn't wait its turn to have started. */
 const waitMs = 20

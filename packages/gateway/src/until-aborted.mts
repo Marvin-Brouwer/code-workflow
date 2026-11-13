@@ -4,6 +4,8 @@
  * stop.
  */
 export async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
+	// Nobody waits for the work any more: its own failure, such as the stop it saw too, is no rejection to report.
+	promise.catch(() => undefined)
 	abortSignal.throwIfAborted()
 	const { promise: aborted, reject } = Promise.withResolvers<never>()
 	const onAbort = () => {

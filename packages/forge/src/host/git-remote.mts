@@ -1,9 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { HostToolContext } from '@mesh-flow/gateway'
+import { oneAtATime, type HostToolContext } from '@mesh-flow/gateway'
 import { gitClient, type GitClient } from '@mesh-flow/git'
 import { withScratchFile } from '../scratch-file.mts'
-import { oneAtATime } from './one-at-a-time.mts'
 
 /** Where the host clones live and how it reaches the forge over git. */
 export interface GitRemoteOptions {
