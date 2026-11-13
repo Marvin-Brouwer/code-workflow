@@ -29,10 +29,12 @@ export async function peopleIn(
 	const queue = [...mentioned]
 	while (queue.length > 0) {
 		const round = queue.splice(0, lookupsAtOnce)
-		const answers = await Promise.all(round.map(([, mention]) => askSite(lookup, mention, abortSignal)))
-		round.forEach(([key, mention], index) => {
-			people.set(key, { name: answers[index]?.name ?? mention.name, email: answers[index]?.email, id: mentionIdOf(mention) })
-		})
+		await Promise.all(
+			round.map(async ([key, mention]) => {
+				const details = await askSite(lookup, mention, abortSignal)
+				people.set(key, { name: details?.name ?? mention.name, email: details?.email, id: mentionIdOf(mention) })
+			}),
+		)
 	}
 	return people
 }

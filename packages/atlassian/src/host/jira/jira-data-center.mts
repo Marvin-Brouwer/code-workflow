@@ -12,7 +12,7 @@ import { orWhenNotFound } from './when-not-found.mts'
  */
 export function jiraDataCenter(config: ServerClientConfig & { readonly host: string }, download: Download): JiraSite {
 	const client = createServerClient(config)
-	// Requests that make something new are sent once: a retry after a lost answer would make it twice.
+	// Requests that make something new are sent once, as a retry after a lost answer would make it twice, and so are user lookups.
 	const once = createServerClient({ ...config, retry: sentOnce })
 	return {
 		url: config.host,

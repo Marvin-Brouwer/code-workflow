@@ -7,7 +7,15 @@ import { confluence, jira } from '../src/_module/atlassian.mts'
 import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
 import { maxImageBytes, maxImageBytesPerIssue } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
-import { fakeAtlassian, fakeIssue, type FakeIssue, type FakePage, type FakeRequest, type FakeUser } from './support/fake-atlassian.mts'
+import {
+	fakeAtlassian,
+	fakeIssue,
+	type FakeAtlassian,
+	type FakeIssue,
+	type FakePage,
+	type FakeRequest,
+	type FakeUser,
+} from './support/fake-atlassian.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
 const deployments = [
@@ -139,7 +147,6 @@ describe.each(deployments)(
 
 		test("collect brings an issue's images next to its Markdown, links to them, and lists every attachment", async () => {
 			// Arrange
-			const screenshot = pngSignature
 			const arrangement: Arrangement = {
 				issues: [
 					fakeIssue({
@@ -154,7 +161,7 @@ describe.each(deployments)(
 							},
 						],
 						attachments: [
-							{ id: '10001', filename: 'login page.png', mimeType: 'image/png', bytes: screenshot },
+							{ id: '10001', filename: 'login page.png', mimeType: 'image/png', bytes: pngSignature },
 							{ id: '10002', filename: 'trace.har', mimeType: 'application/json', bytes: new Uint8Array([0x7b, 0x7d]) },
 						],
 					}),
@@ -162,14 +169,11 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, async () => {
-				const story = await jira.collect('PROJ-7')
-				return { story, markdown: await readFile(story[toPrompt](), 'utf8') }
-			})
+			const { fake, started, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const image = path.join(started.workspace, 'jira', 'PROJ-7', '10001-login_page.png')
-			expect(new Uint8Array(await readFile(image))).toEqual(screenshot)
+			expect(new Uint8Array(await readFile(image))).toEqual(pngSignature)
 			expect(result.markdown).toContain('See ![login page](PROJ-7/10001-login_page.png)')
 			expect(result.markdown).toContain('![](PROJ-7/10001-login_page.png)')
 			expect(frontmatterOf(result.markdown)).toMatchObject({
@@ -206,10 +210,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => {
-				const story = await jira.collect('PROJ-7')
-				return { markdown: await readFile(story[toPrompt](), 'utf8') }
-			})
+			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`![huge](${jiraUrl}/secure/attachment/10003/huge.png)`)
@@ -238,10 +239,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => {
-				const story = await jira.collect('PROJ-7')
-				return { markdown: await readFile(story[toPrompt](), 'utf8') }
-			})
+			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const rita = `\`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``
@@ -258,10 +256,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, async () => {
-				const story = await jira.collect('PROJ-7')
-				return { markdown: await readFile(story[toPrompt](), 'utf8') }
-			})
+			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
@@ -529,6 +524,47 @@ describe('attachments', () => {
 		expect(result.story.attachments.at(-1)).toMatchObject({ url: `${dataCenter.jiraUrl}/secure/attachment/${10001 + fit}/shot-${fit}.png` })
 	})
 
+	test('a link around an image points at its copy, and a link elsewhere on the site is made whole', async () => {
+		// Arrange
+		const descriptionHtml =
+			'<p><a href="/secure/attachment/10001/shot.png"><img src="/secure/thumbnail/10001/shot.png"></a> <a href="/browse/PROJ-8">PROJ-8</a></p>'
+		const arrangement: Arrangement = {
+			issues: [
+				fakeIssue({
+					key: 'PROJ-7',
+					descriptionHtml,
+					attachments: [
+						{ id: '10001', filename: 'shot.png', mimeType: 'image/png', bytes: pngSignature, servedAs: 'application/octet-stream' },
+					],
+				}),
+			],
+		}
+
+		// Act
+		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+		// Assert
+		expect(result.markdown).toContain(`[![](PROJ-7/10001-shot.png)](PROJ-7/10001-shot.png) [PROJ-8](${dataCenter.jiraUrl}/browse/PROJ-8)`)
+	})
+
+	test("an attachment whose id isn't one stays a link and is never written", async () => {
+		// Arrange
+		const arrangement: Arrangement = {
+			issues: [
+				fakeIssue({ key: 'PROJ-7', attachments: [{ id: '../x', filename: 'shot.png', mimeType: 'image/png', bytes: pngSignature }] }),
+			],
+		}
+
+		// Act
+		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+
+		// Assert
+		expect(result.story.attachments).toEqual([
+			{ id: '../x', filename: 'shot.png', mimeType: 'image/png', url: `${dataCenter.jiraUrl}/secure/x/shot.png` },
+		])
+		expect(fake.requests.filter(isAttachmentRequest)).toEqual([])
+	})
+
 	test.each([
 		{ answer: 'a 404', attachment: { status: 404 } },
 		{ answer: 'a 500', attachment: { status: 500 } },
@@ -610,14 +646,14 @@ describe('stopping', () => {
 		{
 			product: 'jira',
 			path: '/rest/api/2/user',
-			arrange: (fake: ReturnType<typeof fakeAtlassian>) =>
+			arrange: (fake: FakeAtlassian) =>
 				fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>${dataCenter.mention('Rita')}</p>` })),
 			collect: async (): Promise<unknown> => jira.collect('PROJ-7'),
 		},
 		{
 			product: 'confluence',
 			path: '/rest/api/user',
-			arrange: (fake: ReturnType<typeof fakeAtlassian>) =>
+			arrange: (fake: FakeAtlassian) =>
 				fake.pages.set('12345', {
 					id: '12345',
 					title: 'Guidelines',

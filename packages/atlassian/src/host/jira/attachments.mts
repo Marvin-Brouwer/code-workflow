@@ -14,7 +14,7 @@ export type Download = (url: string, maxBytes: number, abortSignal: AbortSignal)
 const unsafeFileNameCharacters = /[^\w.-]/g
 
 /** What Jira's attachment ids look like: they go into a path, so anything else is never written. */
-const attachmentId = /^\d+$/
+const numericAttachmentId = /^\d+$/
 
 /** Where an attachment goes next to `<key>.md`: a folder named after the issue, the file named by its id and name. */
 export function attachmentFile(key: string, attachment: RawAttachment): string {
@@ -44,7 +44,7 @@ export async function issueAttachments(
 		const allowedBytes = Math.min(maxImageBytes, remainingBytes)
 		const worthBringing =
 			attachment.mimeType.startsWith('image/') &&
-			attachmentId.test(attachment.id) &&
+			numericAttachmentId.test(attachment.id) &&
 			(attachment.size ?? 0) <= allowedBytes &&
 			url.origin === site
 		const bytes = worthBringing ? await download(url.href, allowedBytes, abortSignal) : undefined

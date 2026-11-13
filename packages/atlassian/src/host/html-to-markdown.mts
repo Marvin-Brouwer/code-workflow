@@ -3,8 +3,8 @@ import { linkedPerson, mentionKey, mentionRefOf, mentionText, type MentionRef, t
 
 /** How rich text becomes Markdown: where its images point, and who its mentions are. */
 export interface RichTextOptions {
-	/** Where an image in the Markdown points, for where it pointed in the HTML. Default: where it did. */
-	readonly imageSource?: (src: string) => string
+	/** Where an image or link in the Markdown points, for where it pointed in the HTML. Default: where it did. */
+	readonly address?: (src: string) => string
 	/** The people the site told about, by {@link mentionKey}. A mention of anyone else keeps the name and id its link holds. */
 	readonly people?: ReadonlyMap<string, Person>
 	/** Called with each mention as the link holds it. */
@@ -12,13 +12,13 @@ export interface RichTextOptions {
 }
 
 /** A turndown setup for Jira's and Confluence's rendered HTML, with its images and mentions as `options` say. */
-function converter({ imageSource = (src) => src, people = new Map(), onMention }: RichTextOptions): TurndownService {
+function converter({ address = (src) => src, people = new Map(), onMention }: RichTextOptions): TurndownService {
 	const personNamed = (mention: MentionRef) => people.get(mentionKey(mention)) ?? linkedPerson(mention)
 	return new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
 		.addRule('table', {
 			filter: 'table',
 			// Its cells were read already, so the mentions in it are found; the HTML it stays gets the same images and names.
-			replacement: (_content, node: TableNode) => `\n\n${tableHtml(node, imageSource, personNamed)}\n\n`,
+			replacement: (_content, node: TableNode) => `\n\n${tableHtml(node, address, personNamed)}\n\n`,
 		})
 		.addRule('mention', {
 			filter: (node: RenderedNode) => mentionRefOf(node) !== undefined,
@@ -29,11 +29,15 @@ function converter({ imageSource = (src) => src, people = new Map(), onMention }
 				return mentionText(personNamed(mention))
 			},
 		})
+		.addRule('link', {
+			filter: (node: RenderedNode) => node.nodeName === 'A' && (node.getAttribute('href') ?? '') !== '' && mentionRefOf(node) === undefined,
+			replacement: (content, node: RenderedNode) => `[${content}](${address(node.getAttribute('href') ?? '')})`,
+		})
 		.addRule('image', {
 			filter: 'img',
 			replacement: (_content, node: RenderedNode) => {
 				const src = node.getAttribute('src') ?? ''
-				return src === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${imageSource(src)})`
+				return src === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${address(src)})`
 			},
 		})
 }
@@ -48,26 +52,33 @@ interface TableNode extends RenderedNode {
 	replaceWith(node: unknown): void
 }
 
-/** A table as HTML, with its images pointing where `imageSource` says and its mentions as Markdown does them. */
-function tableHtml(table: TableNode, imageSource: (src: string) => string, personNamed: (mention: MentionRef) => Person): string {
+/** A table as HTML, with its images and links pointing where `address` says and its mentions as Markdown does them. */
+function tableHtml(table: TableNode, address: (src: string) => string, personNamed: (mention: MentionRef) => Person): string {
 	// A table in a table is written as part of the outer one, which changes it once.
-	for (let parent = table.parentNode; parent !== null; parent = parent.parentNode) if (parent.nodeName === 'TABLE') return ''
-	for (const image of Array.from(table.querySelectorAll('img[src]')))
-		image.setAttribute('src', imageSource(image.getAttribute('src') ?? ''))
+	if (insideTable(table)) return ''
+	for (const image of Array.from(table.querySelectorAll('img[src]'))) {
+		image.setAttribute('src', address(image.getAttribute('src') ?? ''))
+	}
 	for (const link of Array.from(table.querySelectorAll('a'))) {
 		const mention = mentionRefOf(link)
 		if (mention !== undefined) link.replaceWith(table.ownerDocument.createTextNode(mentionText(personNamed(mention))))
+		else if (link.getAttribute('href') !== null) link.setAttribute('href', address(link.getAttribute('href') ?? ''))
 	}
 	return table.outerHTML
+}
+
+/** Whether a table is inside another one. */
+function insideTable(table: TableNode): boolean {
+	for (let parent = table.parentNode; parent !== null; parent = parent.parentNode) {
+		if (parent.nodeName === 'TABLE') return true
+	}
+	return false
 }
 
 /** An image's alt text as Markdown's brackets can hold it: on one line, with its brackets escaped. */
 function altText(alt: string): string {
 	return alt.replaceAll(/\s+/g, ' ').replaceAll(/[\\[\]]/g, (character) => `\\${character}`)
 }
-
-/** Rich text with its images and mentions as the HTML has them. */
-const asRendered = converter({})
 
 /**
  * The mentions in rendered rich text, as the links hold them, so the site can be asked who each is
@@ -79,6 +90,9 @@ export function mentionsIn(html: string | null | undefined): MentionRef[] {
 	converter({ onMention: (mention) => found.push(mention) }).turndown(html)
 	return found
 }
+
+/** Rich text with its images and mentions as the HTML has them. */
+const asRendered = converter({})
 
 /**
  * Turns the HTML Jira and Confluence render their rich text to into Markdown for agents to read;

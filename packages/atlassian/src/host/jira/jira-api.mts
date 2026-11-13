@@ -48,7 +48,9 @@ function downloadWith(send: typeof fetch, authorization: string): Download {
 		try {
 			const response = await send(url, { headers: { authorization }, signal: abortSignal })
 			const declared = Number(response.headers.get('content-length') ?? 0)
-			const isImage = (response.headers.get('content-type') ?? '').startsWith('image/')
+			const type = response.headers.get('content-type') ?? ''
+			// The attachment is listed as an image; a site may still serve it as plain bytes, but never as a page.
+			const isImage = type.startsWith('image/') || type.startsWith('application/octet-stream')
 			if (!response.ok || !isImage || declared > maxBytes || response.body === null) {
 				await response.body?.cancel()
 				return undefined
