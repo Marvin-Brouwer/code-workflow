@@ -31,7 +31,8 @@ const issuesFolder = workspace.folder('jira', { description: 'the Jira issues th
 
 /**
  * A collected issue: what Jira has, and its Markdown dump in the workspace, which is how it appears
- * in a prompt. Its attachments carry no bytes: the images are files next to the dump.
+ * in a prompt. Its attachments carry no bytes: the images are files next to the dump, and an
+ * attachment's `file` is where, relative to the dump's folder.
  */
 export interface JiraIssue extends IssueData {
 	/** The dump, relative to the workspace. */
@@ -55,15 +56,18 @@ export async function collect(issue: IssueRef, context?: ToolContext): Promise<J
 	const file = workspace.file(`${issuesFolder.path}/${data.key}.md`)
 	const location = file.location()
 	// The images go next to the Markdown, which links to them by these paths.
+	const folder = path.dirname(location)
 	for (const { file: relative, data: base64 } of attachments) {
 		if (relative === undefined || base64 === undefined) continue
-		const image = path.join(path.dirname(location), relative)
+		const image = path.resolve(folder, relative)
+		if (!image.startsWith(path.join(folder, data.key) + path.sep))
+			throw new Error(`${data.key}'s attachment ${relative} would be written outside its folder.`)
 		await mkdir(path.dirname(image), { recursive: true })
 		await writeFile(image, Buffer.from(base64, 'base64'))
 	}
-	const listed = attachments.map(({ data: _bytes, ...attachment }) => attachment)
-	await file.write(issueMarkdownOf({ ...data, attachments: listed }))
-	return Object.freeze({ ...data, attachments: listed, path: file.path, [toPrompt]: () => location })
+	const collected = { ...data, attachments: attachments.map(({ data: _bytes, ...attachment }) => attachment) }
+	await file.write(issueMarkdownOf(collected))
+	return Object.freeze({ ...collected, path: file.path, [toPrompt]: () => location })
 }
 
 /**

@@ -1,5 +1,6 @@
 import { createServerClient, type ServerClientConfig } from 'jira.js'
 import { sentOnce } from '../host-options.mts'
+import type { Download } from './attachments.mts'
 import type { JiraSite } from './jira-site.mts'
 import { markdownToWiki } from './markdown-to-wiki.mts'
 import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.mts'
@@ -9,9 +10,9 @@ import { orWhenNotFound } from './when-not-found.mts'
  * A Jira Data Center site, on its REST API v2. Comments go in as wiki markup, made from the
  * Markdown they're written in, since Data Center has no Atlassian Document Format.
  */
-export function jiraDataCenter(config: ServerClientConfig & { readonly host: string }): JiraSite {
+export function jiraDataCenter(config: ServerClientConfig & { readonly host: string }, download: Download): JiraSite {
 	const client = createServerClient(config)
-	// Requests that make something new are sent once: a retry after a lost answer would make it twice.
+	// Requests that make something new are sent once, as a retry after a lost answer would make it twice, and so are user lookups.
 	const once = createServerClient({ ...config, retry: sentOnce })
 	return {
 		url: config.host,
@@ -54,13 +55,15 @@ export function jiraDataCenter(config: ServerClientConfig & { readonly host: str
 				async () => (await client.issues.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value,
 				undefined,
 			),
-		async user({ username }, abortSignal) {
-			if (username === undefined) return undefined
-			const user = await client.users.getUser({ username }, { signal: abortSignal })
-			return { name: user.displayName, email: user.emailAddress }
-		},
 		async setProperty(key, name, value, abortSignal) {
 			await client.issues.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},
+		// Who a mention names is worth one try: without an answer, the mention keeps what its link holds.
+		async user({ username }, abortSignal) {
+			if (username === undefined) return undefined
+			const user = await once.users.getUser({ username }, { signal: abortSignal })
+			return { name: user.displayName, email: user.emailAddress }
+		},
+		download,
 	}
 }

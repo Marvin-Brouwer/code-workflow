@@ -1,9 +1,10 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { createClient, type Client } from 'jira.js/core'
-import { defaultRequestRetry, type AtlassianHostOptions } from '../host-options.mts'
+import { defaultRequestRetry, sentOnce, type AtlassianHostOptions } from '../host-options.mts'
 import { readSite } from '../site.mts'
 import type { ConfluenceSite } from './confluence-site.mts'
-import { RawPage, RawSearch, RawUser } from './raw-page.mts'
+import { RawPage, RawSearch } from './raw-page.mts'
+import { RawUser } from './raw-user.mts'
 
 /** A Confluence site for one call, with the credentials from the credential store. */
 export type ConfluenceApi = (context: HostToolContext) => Promise<ConfluenceSite>
@@ -24,18 +25,23 @@ export function confluenceApi(options: AtlassianHostOptions = {}): ConfluenceApi
 	return async (context) => {
 		const site = await readSite('confluence', context)
 		const url = site.deployment === 'cloud' && !site.url.endsWith('/wiki') ? `${site.url}/wiki` : site.url
-		const client = createClient({
+		const config = {
 			host: url,
 			retry: options.retry ?? defaultRequestRetry,
 			auth:
-				site.deployment === 'cloud' ? { type: 'basic', email: site.email, apiToken: site.token } : { type: 'bearer', token: site.token },
+				site.deployment === 'cloud'
+					? ({ type: 'basic', email: site.email, apiToken: site.token } as const)
+					: ({ type: 'bearer', token: site.token } as const),
 			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-		})
-		return confluenceSite(client, url)
+		}
+		const client = createClient(config)
+		// Who a mention names is worth one try: without an answer, the mention keeps what its link holds.
+		const once = createClient({ ...config, retry: sentOnce })
+		return confluenceSite(client, once, url)
 	}
 }
 
-function confluenceSite(client: Client, url: string): ConfluenceSite {
+function confluenceSite(client: Client, once: Client, url: string): ConfluenceSite {
 	return {
 		url,
 		page: (id, abortSignal) =>
@@ -53,10 +59,13 @@ function confluenceSite(client: Client, url: string): ConfluenceSite {
 				signal: abortSignal,
 			}),
 		async user({ accountId, username }, abortSignal) {
-			const searchParams = accountId === undefined ? (username === undefined ? undefined : { username }) : { accountId }
-			if (searchParams === undefined) return undefined
-			const user = await client.sendRequest({ url: '/rest/api/user', searchParams, schema: RawUser, signal: abortSignal })
-			return { name: user.displayName, email: user.email }
+			const lookup = async (searchParams: Record<string, string>) => {
+				const user = await once.sendRequest({ url: '/rest/api/user', searchParams, schema: RawUser, signal: abortSignal })
+				return { name: user.displayName, email: user.email }
+			}
+			if (accountId !== undefined) return lookup({ accountId })
+			if (username !== undefined) return lookup({ username })
+			return undefined
 		},
 	}
 }

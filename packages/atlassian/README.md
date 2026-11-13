@@ -40,8 +40,10 @@ Set only the product a workflow uses. Every call reads the settings again, so a 
 ```ts
 // workflows/develop.mts
 import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
-import { succeed, workflow, workspace } from '@mesh-flow/core'
-import { planner } from '../agents.mts'
+import { succeed, workflow, workspace, type Agent } from '@mesh-flow/core'
+
+// The workflow repository's own agent: packages ship none.
+declare const planner: Agent
 
 const Research = workspace.folder('research', { description: 'Research notes', minFiles: 1 })
 
@@ -63,7 +65,10 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 `JiraIssueParameters` is what a workflow on one issue takes, `{ key }`, where `jira.key` is an issue key such as `PROJ-123`; a workflow that takes more declares `{ ...JiraIssueParameters, reviewer: z.string() }`.
 
-- `jira.collect(issue)` reads the issue, with its comments, links and subtasks, and writes it as Markdown into `jira/` in the workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout. The issue's metadata (key, summary, URL, type, status, priority, assignee, reporter, labels, components, parent, dates, links and subtasks) is YAML frontmatter; the body is its description and comments, as Jira renders them, turned into Markdown. Tables stay HTML. A mention of a person is `` `@mention({ name: "Rita Reporter", email: "rita@example.com", id: "5b10" })` ``: the connector asks the site who it is, the email is left out where the site keeps it private (as Cloud often does), and `id` is the account id on Cloud and the username on Data Center. An image attachment, up to 5 MB and 20 MB per issue, is brought into the workspace next to the issue's file, in a folder named after the issue, and the description and comments link to that copy; every attachment is listed in the frontmatter, by its `file` when it was brought and by its `url` on the site otherwise. Only files on the site itself are read, so the token never goes elsewhere.
+- `jira.collect(issue)` reads the issue, with its comments, links and subtasks, and writes it as Markdown into `jira/` in the workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout.
+  - The issue's metadata (key, summary, URL, type, status, priority, assignee, reporter, labels, components, parent, dates, links, subtasks and attachments) is YAML frontmatter. The body is its description and comments, as Jira renders them, turned into Markdown; tables stay HTML.
+  - A mention of a person is `` `@mention({ name: "Rita Reporter", email: "rita@example.com", id: "5b10" })` ``. The connector asks the site who it is; the email is left out where the site keeps it private, as Cloud often does, and `id` is the account id on Cloud and the username on Data Center. A person the site can't tell about keeps the name and id the mention links to.
+  - Image attachments of up to 5 MB each, and 20 MB per issue in all, are brought into the workspace next to the issue's file, in a folder named after the issue, and the description and comments link to that copy, in tables too. Every attachment is listed in the frontmatter: by its `file`, relative to the issue's file, when it was brought, and by its `url` on the site otherwise. Only files on the site itself are read, so the token never goes elsewhere.
 - `jira.dump` is the same for agents: a tool that takes a key and answers with the dump's path.
 - `jira.search` is a tool, and a function for code: it takes JQL and a `limit` (default 20, at most 100) and answers with keys, summaries, statuses, types and whether more issues match.
 - `jira.transition(issue, status)` moves an issue to a status, by name and without regard to case, through the transition of its workflow that leads there. It does nothing when the issue has that status already, and throws, naming the statuses it can move to, when no transition leads there.

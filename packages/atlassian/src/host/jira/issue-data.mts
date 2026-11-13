@@ -1,30 +1,33 @@
 import type { IssueAttachment, IssueData, IssueLink, RelatedIssue } from '../../tools/issue-tools.mts'
-import { htmlToMarkdown, type Person, type RichTextOptions } from '../html-to-markdown.mts'
-import { mentionKey } from '../people.mts'
+import { htmlToMarkdown, type RichTextOptions } from '../html-to-markdown.mts'
+import type { Person } from '../mention.mts'
 import { attachmentIdOf } from './attachments.mts'
 import type { NestedIssue, RawIssue } from './raw-issue.mts'
 
+/** What an issue's data takes besides Jira's answer: what the host read of its attachments and mentions. */
+export interface IssueDataOptions {
+	/** The issue's attachments, as `issueAttachments` brought them. */
+	readonly attachments: readonly IssueAttachment[]
+	/** The people its rich text mentions, as `peopleIn` found them. */
+	readonly people: ReadonlyMap<string, Person>
+}
+
 /**
  * An issue as the sandbox gets it, from what Jira answered: its rich text as Markdown, with each
- * image of an attachment pointing at the attachment's copy next to the Markdown when there is one,
- * and at the site otherwise.
+ * image of an attachment, and each link to one, pointing at the attachment's copy next to the
+ * Markdown when there is one, and every other relative address made absolute on the site. A link
+ * to a place in the same text stays as it is.
  */
-export function issueData(
-	raw: RawIssue,
-	siteUrl: string,
-	{
-		attachments = [],
-		people = new Map(),
-	}: { readonly attachments?: readonly IssueAttachment[]; readonly people?: ReadonlyMap<string, Person> } = {},
-): IssueData {
+export function issueData(raw: RawIssue, siteUrl: string, { attachments, people }: IssueDataOptions): IssueData {
 	const { fields, renderedFields } = raw
 	const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]))
 	const richText: RichTextOptions = {
-		imageSource: (src) => {
-			const attachment = byId.get(attachmentIdOf(src) ?? '')
-			return attachment?.file ?? attachment?.url ?? new URL(src, siteUrl).href
+		address: (url) => {
+			if (url.startsWith('#')) return url
+			const attachment = byId.get(attachmentIdOf(url) ?? '')
+			return attachment?.file ?? attachment?.url ?? URL.parse(url, siteUrl)?.href ?? url
 		},
-		person: (mention) => people.get(mentionKey(mention)) ?? { name: mention.name, id: mention.accountId ?? mention.username },
+		people,
 	}
 	const renderedComments = new Map((renderedFields.comment?.comments ?? []).map((comment) => [comment.id, comment.body]))
 	return {
