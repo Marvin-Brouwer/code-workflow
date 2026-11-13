@@ -68,8 +68,10 @@ export async function checkoutRepository(options: CheckoutOptions, context: Tool
 	if (existing === 'broken') await rm(directory, { recursive: true, force: true })
 	if (existing === 'checkout') {
 		const url = (await git.remoteGetUrl(origin)).stdout.trim()
-		if (url !== options.remote)
+		// Code hosts ignore case in names: a checkout made under another case is one of the same repository.
+		if (url.toLowerCase() !== options.remote.toLowerCase())
 			throw new Error(`${folder.path} holds a checkout of another repository (${url}), so ${repository} can't go there.`)
+		if (url !== options.remote) await git.remoteSetUrl(origin, options.remote)
 		const defaultBranch = (await git.config(defaultBranchConfigKey)).stdout.trim()
 		await switchTo(git, branch, defaultBranch)
 		return checkoutOf(repository, branch, defaultBranch, folder.path, directory)

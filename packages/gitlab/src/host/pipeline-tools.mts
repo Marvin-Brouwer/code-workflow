@@ -37,7 +37,7 @@ const manualState = 'manual'
 const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', manualState])
 
 /** The status of a package GitLab is done processing. */
-const doneStatus = 'default'
+const processedPackageStatus = 'default'
 
 /** Pipeline states whose jobs are worth listing as failures. */
 const failedStates = new Set(['failed', 'canceled'])
@@ -127,7 +127,7 @@ export function pipelineHostTools(api: ApiClient): HostTool[] {
 				)
 			// Only the ones GitLab is done with: a package still processing, such as a temporary NuGet upload, is never handed on.
 			const packages = listed
-				.filter((found) => (found.status ?? doneStatus) === doneStatus)
+				.filter((found) => (found.status ?? processedPackageStatus) === processedPackageStatus)
 				.map((found) => ({ name: found.name, version: found.version }))
 			return { packages, processing: processing.length }
 		}),

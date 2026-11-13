@@ -6,5 +6,5 @@ export const noCommit = '0'.repeat(shaLength)
 
 /** Whether `sha` is {@link noCommit}. */
 export function isNoCommit(sha: string): boolean {
-	return /^0+$/.test(sha)
+	return sha === noCommit
 }

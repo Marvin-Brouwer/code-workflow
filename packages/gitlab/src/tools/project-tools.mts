@@ -17,7 +17,7 @@ export type FoundProject = z.infer<typeof FoundProject>
 const maxProjectSearchLimit = 100
 
 /** How many projects a search lists when no limit is given. */
-export const defaultProjectSearchLimit = 20
+const defaultProjectSearchLimit = 20
 
 /** Searches on the host the projects the user of the token is a member of. */
 export const searchProjects = {

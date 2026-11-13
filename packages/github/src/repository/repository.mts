@@ -37,8 +37,7 @@ export const checkout = tool('githubCheckout', {
 			{
 				...input,
 				folder: splitRepositoryName(input.repository).repo,
-				// GitHub ignores case in names: a checkout of `Team/App` is one of `team/app`.
-				remote: githubRemoteUrl(input.repository.toLowerCase()),
+				remote: githubRemoteUrl(input.repository),
 				clone: stubs.cloneRepository,
 			},
 			context,

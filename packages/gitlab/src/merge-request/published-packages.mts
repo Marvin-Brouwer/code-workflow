@@ -4,6 +4,9 @@ import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 import type { PackageType, PublishedPackage } from '../tools/pipeline-tools.mts'
 
+/** How long GitLab may take to process uploaded packages, when no duration is given. */
+const defaultProcessWithin: WaitSpec = { minutes: 10 }
+
 /** Options of `publishedPackages`. */
 export interface PublishedPackagesOptions {
 	/** How long to wait between looks while the pipeline runs. Default: 10 seconds. */
@@ -52,7 +55,7 @@ export async function publishedPackages(
 ): Promise<readonly PublishedPackage[]> {
 	const every = options.every ?? defaultLookEvery
 	const looksForPipelineToAppear = looksWithin(options.appearWithin ?? defaultAppearWithin, every)
-	const looksForProcessing = looksWithin(options.processWithin ?? defaultAppearWithin, every)
+	const looksForProcessing = looksWithin(options.processWithin ?? defaultProcessWithin, every)
 	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	const merged = await look(() => stubs.getMergeRequest({ repository: on.repository, number: on.number }, context))
 	if (!merged.merged || merged.mergedSha === undefined) throw new Error(`${merged.url} isn't merged, so it published nothing.`)
