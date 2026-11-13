@@ -14,8 +14,11 @@ describe('siteUrl', () => {
 	})
 
 	test('refuses what is no http(s) URL, naming the credential', () => {
+		// Arrange
+		const withoutScheme = 'gitlab.example.com'
+
 		// Act
-		const read = () => siteUrl('gitlab.example.com', 'gitlab/url', 'https://gitlab.example.com')
+		const read = () => siteUrl(withoutScheme, 'gitlab/url', 'https://gitlab.example.com')
 
 		// Assert
 		expect(read).toThrow(
