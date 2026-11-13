@@ -1,4 +1,4 @@
-import { signed } from '@mesh-flow/forge/host'
+import { signed } from '@mesh-flow/code-repository/host'
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { splitRepositoryName } from '../repository-name.mts'
 import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'

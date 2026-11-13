@@ -1,5 +1,5 @@
 import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
-import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
+import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/code-repository'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 

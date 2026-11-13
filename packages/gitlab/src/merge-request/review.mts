@@ -1,5 +1,5 @@
 import type { ToolContext, WaitSpec } from '@mesh-flow/core'
-import { watchReview } from '@mesh-flow/forge'
+import { watchReview } from '@mesh-flow/code-repository'
 import { stubs } from '../stubs.mts'
 import type { JobFailure, MergeRequestRef, ReviewItem } from '../tools/merge-request-tools.mts'
 import { mergeRequestOf, type MergeRequest } from './merge-request.mts'

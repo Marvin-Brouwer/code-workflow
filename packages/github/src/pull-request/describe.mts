@@ -1,5 +1,5 @@
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeForge } from '@mesh-flow/forge'
+import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Issue } from '../issue/issue.mts'
 import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
@@ -67,7 +67,7 @@ export async function describe(agent: Agent, repository: Repository, options: De
 }
 
 /** How `describe` reads GitHub. */
-const githubDescribe: DescribeForge<Repository, PullRequest, PullRequestRef> = {
+const githubDescribe: DescribeCodeHost<Repository, PullRequest, PullRequestRef> = {
 	terms: githubTerms,
 	layout: githubLayout,
 	text: PullRequestText,

@@ -1,5 +1,5 @@
 import { tool, type Tool } from '@mesh-flow/core'
-import { pushCheckout, type Pushed } from '@mesh-flow/forge'
+import { pushCheckout, type Pushed } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import type { Repository } from './repository.mts'

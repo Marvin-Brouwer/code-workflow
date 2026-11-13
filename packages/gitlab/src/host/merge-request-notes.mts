@@ -1,5 +1,5 @@
-import { commentMarker, isMarked } from '@mesh-flow/forge'
-import { notFound, replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
+import { commentMarker, isMarked } from '@mesh-flow/code-repository'
+import { notFound, replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
 import { z } from 'zod'
 import type { ReviewItem } from '../tools/merge-request-tools.mts'
 import { GitlabRequestError, isGone, projectSegment, type GitlabClient } from './api.mts'

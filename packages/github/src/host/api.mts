@@ -1,4 +1,4 @@
-import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '@mesh-flow/forge/host'
+import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { Octokit } from '@octokit/rest'
 import { conditionalFetch, defaultConditionalFetch } from './conditional-fetch.mts'

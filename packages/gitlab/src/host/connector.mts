@@ -1,4 +1,4 @@
-import { gitHostTools } from '@mesh-flow/forge/host'
+import { gitHostTools } from '@mesh-flow/code-repository/host'
 import { connectorHost, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
 import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
 import { gitlabApi, type GitlabApiOptions } from './api.mts'

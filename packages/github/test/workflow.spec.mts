@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
-import { defaultFetchRetry, signed, type FetchRetryOptions } from '@mesh-flow/forge/host'
+import { defaultFetchRetry, signed, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'

@@ -1,4 +1,4 @@
-import { BranchName } from '@mesh-flow/forge'
+import { BranchName } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { ProjectPath } from '../project-path.mts'
 

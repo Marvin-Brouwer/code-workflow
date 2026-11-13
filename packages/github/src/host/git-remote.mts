@@ -1,4 +1,4 @@
-import { gitRemote as forgeGitRemote, type GitRemote } from '@mesh-flow/forge/host'
+import { gitRemote as sharedGitRemote, type GitRemote } from '@mesh-flow/code-repository/host'
 import { basicAuthHeaderEnv } from '@mesh-flow/git'
 import { githubRemoteUrl, splitRepositoryName } from '../repository-name.mts'
 import { requireToken } from './api.mts'
@@ -15,7 +15,7 @@ export interface GitRemoteOptions {
 
 /** Clones of GitHub repositories on the host, under `options.directory`, fetched and pushed with the GitHub token. */
 export function gitRemote(options: GitRemoteOptions): GitRemote {
-	return forgeGitRemote({
+	return sharedGitRemote({
 		directory: options.directory,
 		remoteUrl: options.remoteUrl ?? githubRemoteUrl,
 		cloneSegments: (repository) => {

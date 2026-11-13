@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { localGit } from '@mesh-flow/forge'
+import { localGit } from '@mesh-flow/code-repository'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { filesAt, lintSettingsAt, templatesAt } from '../src/pull-request/repository-files.mts'
 import { git } from './support/local-remote.mts'

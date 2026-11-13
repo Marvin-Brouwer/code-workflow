@@ -1,4 +1,4 @@
-import { sameText } from '@mesh-flow/forge'
+import { sameText } from '@mesh-flow/code-repository'
 import {
 	descriptionOf,
 	footerCloses,
@@ -8,7 +8,7 @@ import {
 	sameBody,
 	showItemsBeingRead,
 	signedDescription,
-} from '@mesh-flow/forge/host'
+} from '@mesh-flow/code-repository/host'
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import {

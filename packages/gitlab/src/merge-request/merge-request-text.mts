@@ -1,4 +1,4 @@
-import { changeTextSchema, type ChangeContent } from '@mesh-flow/forge'
+import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
 
 /** The longest title GitLab takes. */

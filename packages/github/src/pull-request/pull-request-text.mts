@@ -1,8 +1,8 @@
-import { changeTextSchema, type ChangeContent } from '@mesh-flow/forge'
+import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
 
-export { normalizedBody, sameText, textInPrompt, type BasedOn } from '@mesh-flow/forge'
+export { normalizedBody, sameText, textInPrompt, type BasedOn } from '@mesh-flow/code-repository'
 
 /** The longest title GitHub takes. */
 const maxTitleCharacters = 256

@@ -3,10 +3,10 @@ import {
 	lintSettingsAt as lintSettingsIn,
 	templatesAt as templatesIn,
 	type ChangeRequestLayout,
-} from '@mesh-flow/forge'
+} from '@mesh-flow/code-repository'
 import type { GitClient } from '@mesh-flow/git'
 
-export { filesInPrompt, type RepositoryFile } from '@mesh-flow/forge'
+export { filesInPrompt, type RepositoryFile } from '@mesh-flow/code-repository'
 
 /** Where GitHub looks for a pull request template, lower case: the root, `.github/` and `docs/`. */
 const templateRoots = ['', '.github/', 'docs/']

@@ -1,4 +1,4 @@
-import { gitTools } from '@mesh-flow/forge'
+import { gitTools } from '@mesh-flow/code-repository'
 import { gitlabTerms } from '../merge-request/gitlab-terms.mts'
 import { ProjectPath } from '../project-path.mts'
 

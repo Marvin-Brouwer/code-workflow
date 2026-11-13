@@ -1,4 +1,4 @@
-import { Bundle, gitTools, Sha } from '@mesh-flow/forge'
+import { Bundle, gitTools, Sha } from '@mesh-flow/code-repository'
 import { githubTerms } from '../pull-request/github-terms.mts'
 import { RepositoryName } from '../repository-name.mts'
 

@@ -1,4 +1,4 @@
-import { signed } from '@mesh-flow/forge/host'
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
 import { reply } from '../src/merge-request/reply.mts'
 import { review } from '../src/merge-request/review.mts'

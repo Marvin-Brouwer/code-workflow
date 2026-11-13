@@ -1,4 +1,4 @@
-import type { ForgeTerms } from '@mesh-flow/forge'
+import type { CodeHostTerms } from '@mesh-flow/code-repository'
 
 /** How the GitLab connector names what it does, in prompts, tool names and errors. */
-export const gitlabTerms: ForgeTerms = Object.freeze({ forge: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' })
+export const gitlabTerms: CodeHostTerms = Object.freeze({ codeHost: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' })

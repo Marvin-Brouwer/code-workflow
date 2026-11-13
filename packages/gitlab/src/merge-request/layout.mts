@@ -1,4 +1,4 @@
-import type { ChangeRequestLayout } from '@mesh-flow/forge'
+import type { ChangeRequestLayout } from '@mesh-flow/code-repository'
 
 /** Where GitLab keeps merge request templates, lower case: one Markdown file per template. */
 const templateFolder = '.gitlab/merge_request_templates/'

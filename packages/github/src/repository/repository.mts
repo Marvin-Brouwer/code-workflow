@@ -1,5 +1,5 @@
 import { tool } from '@mesh-flow/core'
-import { checkoutRepository, type Checkout } from '@mesh-flow/forge'
+import { checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'
@@ -15,7 +15,7 @@ export interface Repository extends Checkout {
 	readonly defaultBranch: BranchName
 }
 
-export { origin, trackingRef } from '@mesh-flow/forge'
+export { origin, trackingRef } from '@mesh-flow/code-repository'
 
 /**
  * Checks a repository out into the workspace, on `branch`, which is made from the default branch

@@ -1,4 +1,4 @@
-import { signed } from '@mesh-flow/forge/host'
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
 import { mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
 import { checkout } from '../src/repository/repository.mts'
