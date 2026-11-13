@@ -2,10 +2,14 @@ import { check, type Check, type Finding } from '@mesh-flow/core'
 import type { DotnetRepository } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 
+/** The level of a problem of the list that says nothing is wrong. */
+const informational = 'info'
+
 /**
  * A check for `verify`: lists the packages of the checkout, transitive ones too, that have a known
  * vulnerability, with `dotnet list package --vulnerable --include-transitive`, and reports each as
- * a finding with its severity and advisory, once per package and version. The vulnerabilities come
+ * a finding with its severity and advisory, once per package and version. A problem the list
+ * reports, such as a source without vulnerability data, fails the check. The vulnerabilities come
  * from the NuGet sources the checkout restores from.
  *
  * ```ts
@@ -36,8 +40,13 @@ export function security(repository: DotnetRepository): Check {
 			})
 		}
 		// A source without vulnerability data, or one that couldn't be reached, is a problem of the
-		// list: without this, nothing found would read as nothing vulnerable.
-		const problems = (list.problems ?? []).map((problem) => ({ source: 'package audit', message: problem.text }))
-		return [...problems, ...findings.values()]
+		// list: nothing found would then read as nothing vulnerable. It is the environment's, which an
+		// agent can't fix, so it fails the check as a failed restore does.
+		const problems = (list.problems ?? []).filter((problem) => problem.level !== informational)
+		if (problems.length > 0)
+			throw new Error(
+				`dotnet list package couldn't tell which packages are vulnerable:\n${problems.map((problem) => problem.text).join('\n')}`,
+			)
+		return [...findings.values()]
 	})
 }

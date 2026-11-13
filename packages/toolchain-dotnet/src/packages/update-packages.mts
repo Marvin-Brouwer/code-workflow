@@ -26,7 +26,9 @@ const exactVersion = /^\[([^,\]]+)\]$/
 
 /** Whether a project's reference asks for `version`, written either way. */
 function asksFor(requested: string | undefined, version: string): boolean {
-	return requested !== undefined && (exactVersion.exec(requested.trim())?.[1] ?? requested.trim()) === version
+	if (requested === undefined) return false
+	const trimmed = requested.trim()
+	return (exactVersion.exec(trimmed)?.[1] ?? trimmed) === version
 }
 
 /** NuGet ignores case in package ids. */

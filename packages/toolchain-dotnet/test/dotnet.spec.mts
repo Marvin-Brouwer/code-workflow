@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { runCheck } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
@@ -6,7 +7,6 @@ import { security } from '../src/security/security.mts'
 import { test as testTool } from '../src/test-run/test.mts'
 import { tests } from '../src/test-run/tests-check.mts'
 import { fakeDotnet } from './support/fake-dotnet.mts'
-import { existsSync } from 'node:fs'
 import {
 	auditProblemList,
 	brokenBuild,
@@ -24,7 +24,6 @@ const promptlyMs = 1000
 /** Time for the fake `dotnet` to have started before the call stops. */
 const startedMs = 300
 
-/** What a tool or check gets when called from code, with a signal nothing aborts. */
 /**
  * Starts the work, stops it once the fake `dotnet` had time to start, and resolves to how long the
  * work took to settle after the stop, having checked it rejected with the stop's reason.
@@ -39,6 +38,7 @@ async function settleAfterStop(start: (context: { abortSignal: AbortSignal }) =>
 	return performance.now() - started
 }
 
+/** What a tool or check gets when called from code, with a signal nothing aborts. */
 const toolContext = () => ({ abortSignal: new AbortController().signal })
 
 describe('build', () => {
@@ -138,7 +138,8 @@ describe('test and tests', () => {
 		const checkSettledMs = await settleAfterStop((context) => runCheck(tests({ directory }), context))
 
 		// Assert
-		expect([toolSettledMs, checkSettledMs].every((settledMs) => settledMs < promptlyMs)).toBe(true)
+		expect(toolSettledMs).toBeLessThan(promptlyMs)
+		expect(checkSettledMs).toBeLessThan(promptlyMs)
 		const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
 		expect(results).toHaveLength(2)
 		expect(results.filter((folder) => existsSync(folder))).toEqual([])
@@ -195,18 +196,16 @@ describe('security', () => {
 		expect(calls[1]).toEqual(['list', directory, 'package', '--vulnerable', '--include-transitive', '--format', 'json'])
 	})
 
-	test('reports what kept the list from telling whether a package is vulnerable', async () => {
+	test('fails, saying why, when the list could not tell whether a package is vulnerable', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await fakeDotnet({ list: { stdout: auditProblemList } })
 
 		// Act
-		const findings = await runCheck(security({ directory }), toolContext())
+		const checking = runCheck(security({ directory }), toolContext())
 
 		// Assert
-		expect(findings).toEqual([
-			{ source: 'package audit', message: 'The source https://feed.example/v3/index.json has no vulnerability data.' },
-		])
+		await expect(checking).rejects.toThrow('The source https://feed.example/v3/index.json has no vulnerability data.')
 	})
 
 	test('settles promptly when the run stops while the restore never ends', async () => {

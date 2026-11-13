@@ -130,7 +130,7 @@ export const unusualTrx = `<?xml version="1.0" encoding="utf-8"?>
 </TestRun>
 `
 
-/** What \`dotnet test\` writes for a failed test whose message has a line that looks like an MSBuild error. */
+/** What `dotnet test` writes for a failed test whose message has a line that looks like an MSBuild error. */
 export const failingTestOutput = [
 	'  Failed Api.Tests.LoginTests.SetsSameSite [12 ms]',
 	'  Error Message:',
@@ -138,7 +138,7 @@ export const failingTestOutput = [
 	'',
 ].join('\n')
 
-/** What \`dotnet list package --vulnerable --format json\` writes when a source has no vulnerability data. */
+/** What `dotnet list package --vulnerable --format json` writes when a source has no vulnerability data. */
 export const auditProblemList = JSON.stringify({
 	version: 1,
 	parameters: '--vulnerable',

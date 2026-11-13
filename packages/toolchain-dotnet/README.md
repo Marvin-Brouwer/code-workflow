@@ -31,7 +31,7 @@ await developer.loop`
 ### Checks for `verify`
 
 - `dotnet.tests(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
-- `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A problem the list reports, such as a source without vulnerability data, is a finding too, and a restore that fails fails the check: nothing can be told about the packages then.
+- `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A problem the list reports, such as a source without vulnerability data, and a restore that fails, fail the check: nothing can be told about the packages then, and an agent can't fix the environment.
 
 ### Packages
 

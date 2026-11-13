@@ -4,6 +4,7 @@ import { runCheck } from '@mesh-flow/core'
 import { execa } from 'execa'
 import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
+import { security } from '../src/security/security.mts'
 import { tests } from '../src/test-run/tests-check.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -58,6 +59,41 @@ describe.runIf(hasSdk)('the real SDK', () => {
 
 			// Assert
 			expect(findings).toMatchObject([{ source: 'test: App.UnitTest1.Adds' }])
+		},
+		sdkTimeoutMs,
+	)
+
+	test(
+		'tests reports the compiler error of a broken xUnit project as a build finding',
+		async () => {
+			// Arrange
+			const directory = await newProject('xunit')
+			await writeFile(
+				path.join(directory, 'UnitTest1.cs'),
+				'namespace App;\n\npublic class UnitTest1\n{\n\t[Fact]\n\tpublic void Adds() { }\n',
+			)
+
+			// Act
+			const findings = await runCheck(tests({ directory }), toolContext())
+
+			// Assert
+			expect(findings.length).toBeGreaterThan(0)
+			expect(findings.map((finding) => finding.source)).toEqual(findings.map(() => 'build'))
+		},
+		sdkTimeoutMs,
+	)
+
+	test(
+		'security passes a fresh console app',
+		async () => {
+			// Arrange
+			const directory = await newProject('console')
+
+			// Act
+			const findings = await runCheck(security({ directory }), toolContext())
+
+			// Assert
+			expect(findings).toEqual([])
 		},
 		sdkTimeoutMs,
 	)

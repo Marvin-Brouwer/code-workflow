@@ -36,6 +36,7 @@ const Text = z
 	.optional()
 	.transform((value) => (typeof value === 'object' ? (value['#text'] ?? '') : (value ?? '')))
 
+/** A test's result as the TRX file has it, with the rows of a data-driven test inside it. */
 interface UnitTestResult {
 	readonly testName: string
 	readonly outcome: string
@@ -54,11 +55,11 @@ const UnitTestResult: z.ZodType<UnitTestResult> = z.lazy(() =>
 )
 
 /** Outcomes that aren't a failure: the test passed, or didn't run. Any other, such as `Timeout` or `Aborted`, is one. */
-const notFailed = new Set(['Passed', 'NotExecuted', 'Inconclusive'])
+const notFailedOutcomes = new Set(['Passed', 'NotExecuted', 'Inconclusive'])
 
 /** The failures of a result: those of its data rows when it has them, else its own. */
 function failuresOf(result: UnitTestResult): TestFailure[] {
-	if (notFailed.has(result.outcome)) return []
+	if (notFailedOutcomes.has(result.outcome)) return []
 	const rows = (result.InnerResults ?? []).flatMap((inner) => inner.UnitTestResult ?? []).flatMap(failuresOf)
 	if (rows.length > 0) return rows
 	const error = result.Output?.ErrorInfo

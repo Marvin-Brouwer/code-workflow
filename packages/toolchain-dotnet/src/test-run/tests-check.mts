@@ -5,8 +5,8 @@ import { runTests } from './run-tests.mts'
 
 /**
  * A check for `verify`: runs every test of the checkout with `dotnet test`, and reports each build
- * error and each failed test as a finding. A run that fails for another
- * reason is a finding with the end of its output.
+ * error and each failed test as a finding. A run that fails for another reason is a finding with
+ * the end of its output.
  *
  * ```ts
  * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.tests(repository))}.`

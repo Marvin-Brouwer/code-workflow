@@ -59,9 +59,7 @@ describe('countsOf', () => {
 			],
 		})
 	})
-})
 
-describe('countsOf, for the outcomes besides Failed', () => {
 	test("counts a timeout as failed, keeps a message that reads as a number, and takes a data-driven test's failures from its rows", () => {
 		// Act
 		const counts = countsOf([unusualTrx])
