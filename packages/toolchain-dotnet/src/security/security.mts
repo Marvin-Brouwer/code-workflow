@@ -2,8 +2,8 @@ import { check, type Check, type Finding } from '@mesh-flow/core'
 import type { DotnetRepository } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 
-/** The level of a problem of the list that says nothing is wrong. */
-const informational = 'info'
+/** The level of a problem of the list that says nothing is wrong, as `info` or `Information`. */
+const informationalLevel = 'info'
 
 /**
  * A check for `verify`: lists the packages of the checkout, transitive ones too, that have a known
@@ -42,7 +42,7 @@ export function security(repository: DotnetRepository): Check {
 		// A source without vulnerability data, or one that couldn't be reached, is a problem of the
 		// list: nothing found would then read as nothing vulnerable. It is the environment's, which an
 		// agent can't fix, so it fails the check as a failed restore does.
-		const problems = (list.problems ?? []).filter((problem) => problem.level !== informational)
+		const problems = (list.problems ?? []).filter((problem) => problem.level?.toLowerCase().startsWith(informationalLevel) !== true)
 		if (problems.length > 0)
 			throw new Error(
 				`dotnet list package couldn't tell which packages are vulnerable:\n${problems.map((problem) => problem.text).join('\n')}`,

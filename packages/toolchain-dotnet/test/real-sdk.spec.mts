@@ -77,8 +77,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			const findings = await runCheck(tests({ directory }), toolContext())
 
 			// Assert
-			expect(findings.length).toBeGreaterThan(0)
-			expect(findings.map((finding) => finding.source)).toEqual(findings.map(() => 'build'))
+			expect(new Set(findings.map((finding) => finding.source))).toEqual(new Set(['build']))
 		},
 		sdkTimeoutMs,
 	)
