@@ -10,10 +10,10 @@ const fingerprintLength = 16
  * What an untracked entry holds, for the fingerprint: a file's content, a link's target, and
  * nothing more than the name for anything else, such as a nested repository's directory.
  */
-async function contentOf(file: string, abortSignal: AbortSignal): Promise<string | Buffer> {
-	const entry = await lstat(file)
-	if (entry.isSymbolicLink()) return `link:${await readlink(file)}`
-	return entry.isFile() ? readFile(file, { signal: abortSignal }) : ''
+async function contentOf(entryPath: string, abortSignal: AbortSignal): Promise<string | Buffer> {
+	const entry = await lstat(entryPath)
+	if (entry.isSymbolicLink()) return `link:${await readlink(entryPath)}`
+	return entry.isFile() ? readFile(entryPath, { signal: abortSignal }) : ''
 }
 
 /**

@@ -12,7 +12,9 @@ const setupTimeoutMs = 10_000
 export async function gitCheckout(): Promise<ReviewedCheckout> {
 	const directory = await temporaryDirectory()
 	const abortSignal = AbortSignal.timeout(setupTimeoutMs)
-	const git = async (...args: string[]) => gitCommand(args, { cwd: directory, abortSignal })
+	const git = async (...args: string[]) => {
+		await gitCommand(args, { cwd: directory, abortSignal })
+	}
 	await git('init', '--quiet', '--initial-branch=main')
 	await writeFile(path.join(directory, 'README.md'), '# api\n')
 	await git('add', '.')
