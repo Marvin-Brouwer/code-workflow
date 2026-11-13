@@ -75,7 +75,8 @@ describe('codeReview', () => {
 		expect(await run.result).toEqual([{ source: 'code review: src/Refunds.cs:12', message: 'The refund is never saved.' }])
 		const prompt = textOf(model.requests[0])
 		expect(prompt).toContain('git diff origin/main')
-		expect(prompt).toContain(repository.directory)
+		// The requests are JSON, where a Windows path's backslashes are escaped.
+		expect(prompt).toContain(JSON.stringify(repository.directory).slice(1, -1))
 		expect(prompt).toContain('plan-deviations.md')
 	})
 
