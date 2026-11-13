@@ -7,9 +7,12 @@ The .NET toolchain for mesh-flow: tools an agent checks its own work with, check
 Everything takes a checkout by where it is on disk, `{ directory }`, which a connector's checkout is, such as `gitlab.checkout`'s:
 
 ```ts
-import { succeed, verify } from '@mesh-flow/core'
+import { verify, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
+
+declare const developer: Agent
+declare const story: { readonly key: string }
 
 const repository = await gitlab.checkout('team/backend/api', { branch: `feature/${story.key}` })
 await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
@@ -23,12 +26,12 @@ await developer.loop`
 ### Tools for agents
 
 - `dotnet.build` runs `dotnet build` on a directory, or a solution or project in it, and hands back `{ succeeded, errors, warnings }`: each error with its code, file, line and column, once, though MSBuild repeats it per target framework. A failure without an error in MSBuild's form, such as a missing SDK, comes with the end of the output.
-- `dotnet.test` runs `dotnet test`, all tests or those a `--filter` expression picks, and hands back the counts and each failed test with its message and stack trace. The failures are read from a TRX results file per test project rather than from the console, whose form differs per test framework. When the build fails, its errors come back instead.
+- `dotnet.test` runs `dotnet test`, all tests or those a `--filter` expression picks, and hands back the counts and each failed test with its message and stack trace: one that timed out or was aborted too, and each failed row of a data-driven test. The failures are read from a TRX results file per test project rather than from the console, whose form differs per test framework. When the build fails, its errors come back instead.
 
 ### Checks for `verify`
 
 - `dotnet.tests(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
-- `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A restore that fails fails the check, since nothing can be told about the packages then.
+- `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A problem the list reports, such as a source without vulnerability data, and a restore that fails, fail the check: nothing can be told about the packages then, and an agent can't fix the environment.
 
 ### Packages
 

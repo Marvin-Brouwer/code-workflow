@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { diagnosticLine, diagnosticsIn } from '../src/build/diagnostics.mts'
 import { countsOf } from '../src/test-run/trx.mts'
-import { brokenBuild, failingTrx, passingTrx } from './support/fixtures.mts'
+import { brokenBuild, failingTrx, passingTrx, unusualTrx } from './support/fixtures.mts'
 
 describe('diagnosticsIn', () => {
 	test("reads MSBuild's errors and warnings once each, with the file, the line and the project", () => {
@@ -56,6 +56,23 @@ describe('countsOf', () => {
 					message: 'Assert.Equal() Failure: Expected "None", Actual "Lax"',
 					stackTrace: 'at Api.Tests.LoginTests.SetsSameSite() in /work/api/tests/LoginTests.cs:line 21',
 				},
+			],
+		})
+	})
+
+	test("counts a timeout as failed, keeps a message that reads as a number, and takes a data-driven test's failures from its rows", () => {
+		// Act
+		const counts = countsOf([unusualTrx])
+
+		// Assert
+		expect(counts).toEqual({
+			passed: 0,
+			failed: 3,
+			skipped: 0,
+			failures: [
+				{ name: 'Api.Tests.SlowTests.Waits', message: 'Timeout' },
+				{ name: 'Api.Tests.CodeTests.Pads', message: '007' },
+				{ name: 'Api.Tests.RowTests.Adds (2, 2)', message: 'Expected 4, got 5' },
 			],
 		})
 	})

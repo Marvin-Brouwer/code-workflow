@@ -97,7 +97,7 @@ export const referencedList = JSON.stringify({
 		{
 			path: '/work/api/tests/Api.Tests.csproj',
 			frameworks: [
-				{ framework: 'net10.0', topLevelPackages: [{ id: 'team.contracts', requestedVersion: '2.4.0', resolvedVersion: '2.4.0' }] },
+				{ framework: 'net10.0', topLevelPackages: [{ id: 'team.contracts', requestedVersion: '[2.4.0]', resolvedVersion: '2.4.0' }] },
 			],
 		},
 		{
@@ -105,4 +105,43 @@ export const referencedList = JSON.stringify({
 			frameworks: [{ framework: 'net10.0', topLevelPackages: [{ id: 'Spectre.Console', requestedVersion: '0.49.1' }] }],
 		},
 	],
+})
+
+/** A test results file with a test that timed out, one that failed with a message that reads as a number, and a data-driven test whose second row failed. */
+export const unusualTrx = `<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="3" name="run" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results>
+    <UnitTestResult testId="e" testName="Api.Tests.SlowTests.Waits" outcome="Timeout" />
+    <UnitTestResult testId="f" testName="Api.Tests.CodeTests.Pads" outcome="Failed">
+      <Output><ErrorInfo><Message>007</Message></ErrorInfo></Output>
+    </UnitTestResult>
+    <UnitTestResult testId="g" testName="Api.Tests.RowTests.Adds" outcome="Failed">
+      <InnerResults>
+        <UnitTestResult testId="g1" testName="Api.Tests.RowTests.Adds (1, 2)" outcome="Passed" />
+        <UnitTestResult testId="g2" testName="Api.Tests.RowTests.Adds (2, 2)" outcome="Failed">
+          <Output><ErrorInfo><Message>Expected 4, got 5</Message></ErrorInfo></Output>
+        </UnitTestResult>
+      </InnerResults>
+    </UnitTestResult>
+  </Results>
+  <ResultSummary outcome="Failed">
+    <Counters total="3" executed="3" passed="0" failed="2" timeout="1" notExecuted="0" />
+  </ResultSummary>
+</TestRun>
+`
+
+/** What `dotnet test` writes for a failed test whose message has a line that looks like an MSBuild error. */
+export const failingTestOutput = [
+	'  Failed Api.Tests.LoginTests.SetsSameSite [12 ms]',
+	'  Error Message:',
+	'   Expected: error: not found',
+	'',
+].join('\n')
+
+/** What `dotnet list package --vulnerable --format json` writes when a source has no vulnerability data. */
+export const auditProblemList = JSON.stringify({
+	version: 1,
+	parameters: '--vulnerable',
+	problems: [{ level: 'warning', text: 'The source https://feed.example/v3/index.json has no vulnerability data.' }],
+	projects: [{ path: '/work/api/src/Api.csproj', frameworks: [] }],
 })

@@ -32,6 +32,8 @@ const environment = {
 	DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
 	DOTNET_CLI_USE_MSBUILD_SERVER: '0',
 	MSBUILDDISABLENODEREUSE: '1',
+	// The terminal logger's output, with its escape codes and its own layout, isn't MSBuild's canonical form.
+	MSBUILDTERMINALLOGGER: 'off',
 	UseSharedCompilation: 'false',
 }
 
@@ -81,6 +83,7 @@ export async function runDotnet(args: readonly string[], options: RunDotnetOptio
 	}
 }
 
+/** The reason the call was stopped, as an error to throw. */
 function stoppedWith(abortSignal: AbortSignal): Error {
 	return abortSignal.reason instanceof Error ? abortSignal.reason : new Error('The call was stopped.')
 }
@@ -96,7 +99,13 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals = 'SIGTERM'): 
 	}
 }
 
+/** No logo, and no build servers: a server that outlives the call holds its output open. */
+export const noBuildServerArguments = ['-nologo', '--disable-build-servers']
+
+/** Enough of the end of the output to show what went wrong, without the whole log. */
+const tailLineCount = 30
+
 /** The last lines of a command's output, for a finding when nothing more specific says what went wrong. */
-export function outputTail(result: DotnetResult, lines = 30): string {
-	return `${result.stdout}\n${result.stderr}`.trim().split(/\r?\n/).slice(-lines).join('\n')
+export function outputTail(result: DotnetResult, lineCount = tailLineCount): string {
+	return `${result.stdout}\n${result.stderr}`.trim().split(/\r?\n/).slice(-lineCount).join('\n')
 }

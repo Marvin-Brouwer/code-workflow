@@ -18,7 +18,10 @@ const [command = ''] = args
 appendFileSync(z.string().parse(process.env.FAKE_DOTNET_LOG), `${JSON.stringify(args)}\n`)
 const answers = Answers.parse(JSON.parse(readFileSync(z.string().parse(process.env.FAKE_DOTNET_SCRIPT), 'utf8')))
 const answer = answers[command] ?? { exitCode: 0 }
-if (answer.hang === true) setInterval(() => undefined, 1000)
+/** Any interval keeps the process alive until it is killed. */
+const keepAliveMs = 1000
+
+if (answer.hang === true) setInterval(() => undefined, keepAliveMs)
 else {
 	const results = args[args.indexOf('--results-directory') + 1] ?? '.'
 	for (const [index, trx] of (answer.trx ?? []).entries()) writeFileSync(path.join(results, `run-${String(index)}.trx`), trx)
