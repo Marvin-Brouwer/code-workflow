@@ -15,8 +15,7 @@
 		"examples/example/",
 		"packages/atlassian/",
 		"packages/gitlab/",
-		"packages/preset-development/",
-		"packages/toolchain-dotnet/"
+		"packages/preset-development/"
 	],
 	"overrides": [
 		{

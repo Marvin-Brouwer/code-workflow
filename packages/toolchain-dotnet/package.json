@@ -1,0 +1,61 @@
+{
+	"name": "@mesh-flow/toolchain-dotnet",
+	"version": "0.0.0",
+	"description": "The .NET toolchain for mesh-flow workflows: build and test tools for agents, test and vulnerability checks for verify, and package updates for code",
+	"keywords": [
+		"agents",
+		"dotnet",
+		"mesh-flow",
+		"nuget",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/toolchain-dotnet#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/toolchain-dotnet"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/dotnet.mts",
+			"types": "./dist/dotnet.d.mts",
+			"import": "./dist/dotnet.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*",
+		"@nodable/entities": "^3.1.0",
+		"execa": "^10.2.1",
+		"fast-xml-parser": "^5.12.0",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^22.20.5",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=22.18"
+	}
+}
