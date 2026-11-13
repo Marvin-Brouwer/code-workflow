@@ -34,7 +34,10 @@ function asksFor(requested: string | undefined, version: string): boolean {
 /** NuGet ignores case in package ids. */
 const sameId = (one: string, other: string) => one.toLowerCase() === other.toLowerCase()
 
-/** The update as a tool, so a run's events show what it was called with. A rerun changes nothing since a reference at the version is left alone. */
+/**
+ * The update as a tool, so a run's events show what it was called with. A rerun changes nothing since
+ * a reference at the version is left alone.
+ */
 const updateTool = tool('dotnetUpdatePackages', {
 	description: 'Moves the package references of the .NET projects in a directory to the versions given',
 	input: z.object({

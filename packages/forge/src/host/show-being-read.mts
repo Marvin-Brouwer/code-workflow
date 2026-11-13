@@ -21,7 +21,10 @@ export interface ShowBeingReadOptions {
 	/** The run whose footer signs the reading replies. */
 	readonly runId: string
 	readonly abortSignal: AbortSignal
-	/** Whether an error, besides one that may pass, says something is wrong with the call rather than with one item, such as a refused token. */
+	/**
+	 * Whether an error, besides one that may pass, says something is wrong with the call rather than
+	 * with one item, such as a refused token.
+	 */
 	readonly failsCall: (error: unknown) => boolean
 }
 

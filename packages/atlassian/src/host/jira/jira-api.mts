@@ -1,11 +1,11 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { defaultRequestRetry, type AtlassianHostOptions } from '../host-options.mts'
-import { readSiteSettings } from '../site-settings.mts'
+import { readSite } from '../site.mts'
 import { jiraCloud } from './jira-cloud.mts'
 import { jiraDataCenter } from './jira-data-center.mts'
 import type { JiraSite } from './jira-site.mts'
 
-/** A site for one call, with the settings from the credential store. */
+/** A site for one call, with the credentials from the credential store. */
 export type JiraApi = (context: HostToolContext) => Promise<JiraSite>
 
 /**
@@ -15,16 +15,16 @@ export type JiraApi = (context: HostToolContext) => Promise<JiraSite>
  */
 export function jiraApi(options: AtlassianHostOptions = {}): JiraApi {
 	return async (context) => {
-		const settings = await readSiteSettings('jira', context)
+		const site = await readSite('jira', context)
 		const common = {
-			host: settings.url,
+			host: site.url,
 			retry: options.retry ?? defaultRequestRetry,
 			// A site's custom configuration often differs from Atlassian's schema; the connector reads what it needs itself.
 			onSchemaMismatch: 'silent' as const,
 			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		}
-		return settings.deployment === 'cloud'
-			? jiraCloud({ ...common, auth: { type: 'basic', email: settings.email, apiToken: settings.token } })
-			: jiraDataCenter({ ...common, auth: { type: 'bearer', token: settings.token } })
+		return site.deployment === 'cloud'
+			? jiraCloud({ ...common, auth: { type: 'basic', email: site.email, apiToken: site.token } })
+			: jiraDataCenter({ ...common, auth: { type: 'bearer', token: site.token } })
 	}
 }

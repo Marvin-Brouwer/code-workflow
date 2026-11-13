@@ -7,7 +7,7 @@ import { jiraHostTools } from './jira/jira-host-tools.mts'
 
 /**
  * The host halves of every Jira and Confluence tool, with each product's site and token from the
- * credential store (see `settingNames`).
+ * credential store (see `credentialNames`).
  */
 export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool[] {
 	return [...jiraHostTools(jiraApi(options)), ...confluenceHostTools(confluenceApi(options))]

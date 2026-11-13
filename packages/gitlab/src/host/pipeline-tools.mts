@@ -28,7 +28,10 @@ const ApiPackage = z.object({
 		.optional(),
 })
 
-/** Pipeline states after which nothing more runs on its own. A pipeline waiting on a manual job counts: nothing runs until someone starts it. */
+/**
+ * Pipeline states after which nothing more runs on its own. A pipeline waiting on a manual job counts:
+ * nothing runs until someone starts it.
+ */
 const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', 'manual'])
 
 /** Pipeline states whose jobs are worth listing as failures. */

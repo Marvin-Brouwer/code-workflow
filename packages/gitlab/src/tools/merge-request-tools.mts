@@ -49,7 +49,10 @@ export const ReviewItem = z.object({
 })
 export type ReviewItem = z.infer<typeof ReviewItem>
 
-/** What a merge request closes when it merges: an issue in the project (`#7`), in another (`group/project#7`), or a Jira issue (`PROJ-7`). */
+/**
+ * What a merge request closes when it merges: an issue in the project (`#7`), in another
+ * (`group/project#7`), or a Jira issue (`PROJ-7`).
+ */
 export const ClosingReference = z.string().regex(/^(([\w.-]+\/)+[\w.-]+)?#\d+$|^[A-Z][A-Z0-9_]+-[1-9]\d*$/)
 
 /**
@@ -81,7 +84,10 @@ export const updateMergeRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: ClosingReference.optional(),
-		/** What the merge request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		/**
+		 * What the merge request said when it was last looked at: when it says something else now,
+		 * someone edited it since, and nothing is written.
+		 */
 		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
 	/** With `skipped` when nothing was written. */

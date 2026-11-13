@@ -12,7 +12,7 @@ Install the package where `mesh-flow serve` runs, add it as a connector and set 
 pnpm add @mesh-flow/gitlab
 mesh-flow connector add @mesh-flow/gitlab
 mesh-flow credential set gitlab/token < token.txt
-mesh-flow credential set gitlab/url # https://gitlab.example.com
+echo 'https://gitlab.example.com' | mesh-flow credential set gitlab/url
 ```
 
 The sandbox image needs `git` next to `node`.

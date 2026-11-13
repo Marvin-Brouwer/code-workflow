@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
-import { commentOnIssue, getIssue, transitionIssue } from '../../tools/issue-tools.mts'
 import { defaultIssueSearchLimit, searchIssues } from '../../tools/issue-search-tools.mts'
+import { commentOnIssue, getIssue, transitionIssue } from '../../tools/issue-tools.mts'
 import { signed } from '../signature.mts'
-import { markingTransient } from '../transient-error.mts'
+import { withTransientFailures } from '../transient-error.mts'
 import { issueData, issueUrl } from './issue-data.mts'
 import type { JiraApi } from './jira-api.mts'
 
@@ -26,12 +26,12 @@ export function jiraHostTools(api: JiraApi): HostTool[] {
 	return [
 		hostTool(getIssue, async ({ key }, context) => {
 			const site = await api(context)
-			return issueData(await markingTransient(() => site.issue(key, context.abortSignal)), site.url)
+			return issueData(await withTransientFailures(() => site.issue(key, context.abortSignal)), site.url)
 		}),
 
 		hostTool(searchIssues, async ({ jql, limit = defaultIssueSearchLimit }, context) => {
 			const site = await api(context)
-			const found = await markingTransient(() => site.search(jql, limit, context.abortSignal))
+			const found = await withTransientFailures(() => site.search(jql, limit, context.abortSignal))
 			return {
 				issues: found.issues.map((issue) => ({
 					key: issue.key,
@@ -47,20 +47,20 @@ export function jiraHostTools(api: JiraApi): HostTool[] {
 		hostTool(transitionIssue, async ({ key, status }, context) => {
 			const site = await api(context)
 			const { abortSignal } = context
-			const issue = await markingTransient(() => site.issue(key, abortSignal))
+			const issue = await withTransientFailures(() => site.issue(key, abortSignal))
 			const current = issue.fields.status?.name ?? ''
 			if (sameStatus(current, status)) return { status: current, moved: false }
-			const transitions = await markingTransient(() => site.transitions(key, abortSignal))
+			const transitions = await withTransientFailures(() => site.transitions(key, abortSignal))
 			const leading = transitions.find((transition) => sameStatus(transition.to, status))
 			if (leading === undefined) {
 				const reachable = transitions.map((transition) => transition.to).join(', ') || 'none'
 				throw new Error(`${key} can't move from ${current} to ${status}. It can move to: ${reachable}.`)
 			}
 			try {
-				await markingTransient(() => site.moveIssue(key, leading.id, abortSignal))
+				await withTransientFailures(() => site.moveIssue(key, leading.id, abortSignal))
 			} catch (error) {
 				// The move may have happened though its answer was lost: then the issue has the status.
-				const after = await markingTransient(() => site.issue(key, abortSignal)).catch(() => undefined)
+				const after = await withTransientFailures(() => site.issue(key, abortSignal)).catch(() => undefined)
 				if (!sameStatus(after?.fields.status?.name ?? '', status)) throw error
 			}
 			return { status: leading.to, moved: true }
@@ -71,16 +71,16 @@ export function jiraHostTools(api: JiraApi): HostTool[] {
 			const { abortSignal } = context
 			const markdown = signed(body, context.runId)
 			const posted = (id: string) => ({ id, url: `${issueUrl(site.url, key)}?focusedCommentId=${id}` })
-			if (commentKey === undefined) return posted(await markingTransient(() => site.addComment(key, markdown, abortSignal)))
+			if (commentKey === undefined) return posted(await withTransientFailures(() => site.addComment(key, markdown, abortSignal)))
 			const property = keyedCommentProperty(commentKey)
 			return oneCommentAtATime(`${site.url} ${key} ${property}`, abortSignal, async () => {
-				const recorded = KeyedComment.safeParse(await markingTransient(() => site.property(key, property, abortSignal)))
+				const recorded = KeyedComment.safeParse(await withTransientFailures(() => site.property(key, property, abortSignal)))
 				const earlier = recorded.success && recorded.data.key === commentKey ? recorded.data.id : undefined
-				if (earlier !== undefined && (await markingTransient(() => site.updateComment(key, earlier, markdown, abortSignal))))
+				if (earlier !== undefined && (await withTransientFailures(() => site.updateComment(key, earlier, markdown, abortSignal))))
 					return posted(earlier)
 				// No comment with this key yet, or a person deleted it: post a new one and remember it.
-				const id = await markingTransient(() => site.addComment(key, markdown, abortSignal))
-				await markingTransient(() => site.setProperty(key, property, { key: commentKey, id }, abortSignal))
+				const id = await withTransientFailures(() => site.addComment(key, markdown, abortSignal))
+				await withTransientFailures(() => site.setProperty(key, property, { key: commentKey, id }, abortSignal))
 				return posted(id)
 			})
 		}),

@@ -6,7 +6,10 @@ import { runIdLine, signed, unsigned, withoutRunId } from './signature.mts'
 /** The name of the marker on a description this package wrote: `described:<sha>`, the commit it was written for. */
 const describedKeyName = 'described'
 
-/** A pull or merge request's description without the connector's footer, and the commit it was written for, by its marker, when there is one. */
+/**
+ * A pull or merge request's description without the connector's footer, and the commit it was written
+ * for, by its marker, when there is one.
+ */
 export function descriptionOf(body: string | null | undefined): { description: string; describedSha?: string } {
 	if (body === null || body === undefined) return { description: '' }
 	const sha = markerValue(body, describedKeyName)

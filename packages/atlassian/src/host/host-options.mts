@@ -1,7 +1,8 @@
 /**
  * How Jira and Confluence requests are sent again when the site didn't answer, or answered 502, 503
  * or 504. Reads and updates are; requests that make something new, a comment or a transition, are
- * sent once.
+ * sent once. The shape is jira.js's own retry setting, which it is handed to as it is, so it
+ * differs from the `FetchRetryOptions` of the forge connectors, which retry on their own.
  */
 export interface RequestRetry {
 	/** Sends of one request at most, the first one included. */

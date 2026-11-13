@@ -271,7 +271,7 @@ describe('settings', () => {
 		const outcome = run({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
 
 		// Assert
-		await expect(outcome).rejects.toThrow('There is no jira site. Set it with `mesh-flow credential set jira/url`.')
+		await expect(outcome).rejects.toThrow('There is no Jira site. Set it with `mesh-flow credential set jira/url`.')
 	})
 })
 

@@ -5,6 +5,7 @@
  * @module
  */
 export { CredentialName, openCredentialStore, type CredentialReader, type CredentialStore } from '../credentials/credential-store.mts'
+export { siteUrl } from '../credentials/site-url.mts'
 export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, type StoreKey } from '../credentials/store-key.mts'
 export { openGateway, tokensPerEndpoint, type AcceptedCall, type Gateway, type GatewayOptions, type InterruptedCall } from '../gateway.mts'
 export { openGatewayHome, type GatewayHome } from '../gateway-home.mts'

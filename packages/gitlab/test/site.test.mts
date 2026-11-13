@@ -55,6 +55,6 @@ describe('readSite', () => {
 		const read = readSite(context)
 
 		// Assert
-		await expect(read).rejects.toThrow("isn't a URL")
+		await expect(read).rejects.toThrow("isn't an http(s) URL")
 	})
 })

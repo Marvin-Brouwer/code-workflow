@@ -1,11 +1,11 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { createClient, type Client } from 'jira.js/core'
 import { defaultRequestRetry, type AtlassianHostOptions } from '../host-options.mts'
-import { readSiteSettings } from '../site-settings.mts'
+import { readSite } from '../site.mts'
 import type { ConfluenceSite } from './confluence-site.mts'
 import { RawPage, RawSearch } from './raw-page.mts'
 
-/** A Confluence site for one call, with the settings from the credential store. */
+/** A Confluence site for one call, with the credentials from the credential store. */
 export type ConfluenceApi = (context: HostToolContext) => Promise<ConfluenceSite>
 
 /** What a read of a page expands: its rendered body, space and version. */
@@ -22,15 +22,13 @@ const searchExpand = 'content.space'
  */
 export function confluenceApi(options: AtlassianHostOptions = {}): ConfluenceApi {
 	return async (context) => {
-		const settings = await readSiteSettings('confluence', context)
-		const url = settings.deployment === 'cloud' && !settings.url.endsWith('/wiki') ? `${settings.url}/wiki` : settings.url
+		const site = await readSite('confluence', context)
+		const url = site.deployment === 'cloud' && !site.url.endsWith('/wiki') ? `${site.url}/wiki` : site.url
 		const client = createClient({
 			host: url,
 			retry: options.retry ?? defaultRequestRetry,
 			auth:
-				settings.deployment === 'cloud'
-					? { type: 'basic', email: settings.email, apiToken: settings.token }
-					: { type: 'bearer', token: settings.token },
+				site.deployment === 'cloud' ? { type: 'basic', email: site.email, apiToken: site.token } : { type: 'bearer', token: site.token },
 			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 		})
 		return confluenceSite(client, url)

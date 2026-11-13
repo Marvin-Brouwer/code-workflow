@@ -43,8 +43,8 @@ const ItemAsks = z.enum(['question', 'change', 'declined'])
 /**
  * Has `agent` sort review items into questions and requests for a change, in one loop that changes
  * nothing. It answers the questions and the declined changes and puts the plan under each change
- * it will make, which it resolves to. Code posts the replies once the loop is done, one at a time and in the reviewer's order, since forges limit
- * bursts of writes.
+ * it will make, which it resolves to. Code posts the replies once the loop is done, one at a time
+ * and in the reviewer's order, since forges limit bursts of writes.
  */
 export async function triageItems<Item extends TriageItem>(
 	agent: Agent,

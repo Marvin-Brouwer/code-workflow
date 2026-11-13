@@ -88,7 +88,10 @@ export const updatePullRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
-		/** What the pull request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		/**
+		 * What the pull request said when it was last looked at: when it says something else now,
+		 * someone edited it since, and nothing is written.
+		 */
 		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
 	/** With `skipped` when nothing was written. */
