@@ -1,5 +1,5 @@
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
-import { decideOnEdit, type UpdateSkip, type ChangeText } from '@mesh-flow/forge'
+import { decideOnEdit, type UpdateSkip, type ChangeText } from '@mesh-flow/code-repository'
 import { sameProjectPath } from '../project-path.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'

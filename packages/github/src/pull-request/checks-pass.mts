@@ -1,5 +1,5 @@
 import { check, type Check, type WaitSpec } from '@mesh-flow/core'
-import { branchHeadOf, untilCompleted } from '@mesh-flow/forge'
+import { branchHeadOf, untilCompleted } from '@mesh-flow/code-repository'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'

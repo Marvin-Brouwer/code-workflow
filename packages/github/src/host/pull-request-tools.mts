@@ -1,5 +1,13 @@
-import { defaultReplyStage, isMarked, sameText } from '@mesh-flow/forge'
-import { descriptionOf, footerCloses, later, replyToItem, sameBody, showItemsBeingRead, signedDescription } from '@mesh-flow/forge/host'
+import { defaultReplyStage, isMarked, sameText } from '@mesh-flow/code-repository'
+import {
+	descriptionOf,
+	footerCloses,
+	later,
+	replyToItem,
+	sameBody,
+	showItemsBeingRead,
+	signedDescription,
+} from '@mesh-flow/code-repository/host'
 import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'

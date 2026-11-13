@@ -2,7 +2,7 @@
 
 The GitLab connector for mesh-flow, for gitlab.com and for a GitLab of your own. It gives workflows functions for code, tools for agents, a check for `verify`, and GitLab's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
-It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other forge connectors through `@mesh-flow/forge`, so a workflow reads the same on each.
+It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other code host connectors through `@mesh-flow/code-repository`, so a workflow reads the same on each.
 
 ## Setup
 

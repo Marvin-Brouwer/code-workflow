@@ -1,5 +1,5 @@
-import { commentMarker } from '@mesh-flow/forge'
-import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/forge/host'
+import { commentMarker } from '@mesh-flow/code-repository'
+import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
 import type { Octokit } from '@octokit/rest'
 import { splitRepositoryName } from '../repository-name.mts'
 import type { ReviewItemKind } from '../tools/pull-request-tools.mts'

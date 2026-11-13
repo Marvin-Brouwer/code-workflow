@@ -1,5 +1,5 @@
 import { tool } from '@mesh-flow/core'
-import { checkoutRepository, type Checkout } from '@mesh-flow/forge'
+import { checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { BranchName, githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'

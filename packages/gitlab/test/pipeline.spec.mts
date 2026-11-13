@@ -1,5 +1,5 @@
 import { runCheck } from '@mesh-flow/core'
-import { branchHeadOf } from '@mesh-flow/forge'
+import { branchHeadOf } from '@mesh-flow/code-repository'
 import { describe, expect, test } from 'vitest'
 import { pipelinePasses } from '../src/merge-request/pipeline-passes.mts'
 import { publishedPackages } from '../src/merge-request/published-packages.mts'

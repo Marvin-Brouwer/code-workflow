@@ -1,5 +1,5 @@
 import type { Agent, Limit } from '@mesh-flow/core'
-import { isGoneReply, triageItems, type PlannedChange as ForgePlannedChange, type TriageForge } from '@mesh-flow/forge'
+import { isGoneReply, triageItems, type PlannedChange as SharedPlannedChange, type TriageCodeHost } from '@mesh-flow/code-repository'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import { ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
@@ -16,7 +16,7 @@ export interface TriageOptions {
 }
 
 /** An item that asks for a change, and what the agent said it will do about it. */
-export type PlannedChange = ForgePlannedChange<ReviewItem>
+export type PlannedChange = SharedPlannedChange<ReviewItem>
 
 /**
  * Has `agent` sort review items into questions and requests for a change, in one loop that changes
@@ -43,7 +43,7 @@ export function triage(agent: Agent, repository: Repository, options: TriageOpti
 }
 
 /** How `triage` replies on GitHub. */
-function githubTriage(pullRequest: PullRequestRef): TriageForge<ReviewItem> {
+function githubTriage(pullRequest: PullRequestRef): TriageCodeHost<ReviewItem> {
 	return {
 		terms: githubTerms,
 		itemId: ReviewItemId,

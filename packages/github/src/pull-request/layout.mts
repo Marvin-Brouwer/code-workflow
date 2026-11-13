@@ -1,4 +1,4 @@
-import type { ChangeRequestLayout } from '@mesh-flow/forge'
+import type { ChangeRequestLayout } from '@mesh-flow/code-repository'
 
 /** Where GitHub looks for a pull request template, lower case: the root, `.github/` and `docs/`. */
 const templateRoots = ['', '.github/', 'docs/']

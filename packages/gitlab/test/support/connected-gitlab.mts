@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/forge/host'
+import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import { gitlabHostTools } from '../../src/host/connector.mts'
 import type { Repository } from '../../src/repository/repository.mts'
 import { fakeGitlab } from './fake-gitlab.mts'

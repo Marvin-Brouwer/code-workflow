@@ -1,5 +1,5 @@
-import { triageResult } from '@mesh-flow/forge'
-import { signed } from '@mesh-flow/forge/host'
+import { triageResult } from '@mesh-flow/code-repository'
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
 import { triage } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'

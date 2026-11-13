@@ -145,6 +145,40 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/code-repository:
+    dependencies:
+      '@mesh-flow/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mesh-flow/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@mesh-flow/git':
+        specifier: workspace:*
+        version: link:../git
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@mesh-flow/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      execa:
+        specifier: ^10.2.1
+        version: 10.2.1
+      tsdown:
+        specifier: ^0.23.4
+        version: 0.23.7(tsx@4.23.15)(typescript@6.0.3)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/core:
     dependencies:
       '@earendil-works/chord':
@@ -249,40 +283,6 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  packages/forge:
-    dependencies:
-      '@mesh-flow/core':
-        specifier: workspace:*
-        version: link:../core
-      '@mesh-flow/gateway':
-        specifier: workspace:*
-        version: link:../gateway
-      '@mesh-flow/git':
-        specifier: workspace:*
-        version: link:../git
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@mesh-flow/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@types/node':
-        specifier: ^22.20.5
-        version: 22.20.5
-      execa:
-        specifier: ^10.2.1
-        version: 10.2.1
-      tsdown:
-        specifier: ^0.23.4
-        version: 0.23.7(tsx@4.23.15)(typescript@6.0.3)
-      typescript:
-        specifier: ~6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^5.1.0
-        version: 5.1.0(@types/node@22.20.5)(vite@8.3.6(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
-
   packages/gateway:
     dependencies:
       '@earendil-works/pi-ai':
@@ -344,12 +344,12 @@ importers:
 
   packages/github:
     dependencies:
+      '@mesh-flow/code-repository':
+        specifier: workspace:*
+        version: link:../code-repository
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
-      '@mesh-flow/forge':
-        specifier: workspace:*
-        version: link:../forge
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -390,12 +390,12 @@ importers:
 
   packages/gitlab:
     dependencies:
+      '@mesh-flow/code-repository':
+        specifier: workspace:*
+        version: link:../code-repository
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
-      '@mesh-flow/forge':
-        specifier: workspace:*
-        version: link:../forge
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway

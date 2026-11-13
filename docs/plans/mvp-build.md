@@ -16,7 +16,7 @@ instead of the durable external-event primitive, which isn't built yet (see
 the engine loads connector host tools from the packages the user adds with `mesh-flow connector`. Step 7 is built, one package per PR:
 [`@mesh-flow/atlassian`](../../packages/atlassian/README.md), with Jira and Confluence on Cloud and
 Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which shares what it has in
-common with `@mesh-flow/github` through [`@mesh-flow/forge`](../../packages/forge/README.md);
+common with `@mesh-flow/github` through [`@mesh-flow/code-repository`](../../packages/code-repository/README.md);
 [`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
 [`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
 [`examples/example`](../../examples/example), which builds and describes itself in CI, and

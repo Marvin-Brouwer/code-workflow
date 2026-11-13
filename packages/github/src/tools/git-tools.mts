@@ -1,4 +1,4 @@
-import { gitTools } from '@mesh-flow/forge'
+import { gitTools } from '@mesh-flow/code-repository'
 import { githubTerms } from '../pull-request/github-terms.mts'
 import { RepositoryName } from '../repository-name.mts'
 

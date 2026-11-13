@@ -1,5 +1,5 @@
 import { tool, type Tool } from '@mesh-flow/core'
-import { branchHeadOf } from '@mesh-flow/forge'
+import { branchHeadOf } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import type { Repository } from '../repository/repository.mts'
 

@@ -1,4 +1,4 @@
-import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/forge'
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { ProjectPath } from '../project-path.mts'
 

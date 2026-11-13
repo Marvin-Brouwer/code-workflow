@@ -1,5 +1,5 @@
 import { tool, type Tool } from '@mesh-flow/core'
-import { ReplyStage } from '@mesh-flow/forge'
+import { ReplyStage } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/merge-request-tools.mts'

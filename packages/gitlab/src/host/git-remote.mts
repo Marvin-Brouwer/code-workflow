@@ -1,4 +1,4 @@
-import { gitRemote as forgeGitRemote, type GitRemote } from '@mesh-flow/forge/host'
+import { gitRemote as sharedGitRemote, type GitRemote } from '@mesh-flow/code-repository/host'
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { basicAuthHeaderEnv } from '@mesh-flow/git'
 import { readSite } from './site.mts'
@@ -15,7 +15,7 @@ export interface GitRemoteOptions {
 
 /** Clones of GitLab projects on the host, under `options.directory`, fetched and pushed with the GitLab token. */
 export function gitRemote(options: GitRemoteOptions): GitRemote {
-	return forgeGitRemote({
+	return sharedGitRemote({
 		directory: options.directory,
 		remoteUrl: options.remoteUrl ?? (async (project, context) => `${(await readSite(context)).url}/${project}.git`),
 		// The path's segments were checked by `ProjectPath`: none is `.` or `..`.

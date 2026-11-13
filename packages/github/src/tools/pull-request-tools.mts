@@ -1,4 +1,4 @@
-import { GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/forge'
+import { GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { BranchName, RepositoryName } from '../repository-name.mts'
 import { PostedComment } from './issue-tools.mts'

@@ -1,5 +1,5 @@
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeForge } from '@mesh-flow/forge'
+import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import { sameProjectPath } from '../project-path.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
@@ -59,7 +59,7 @@ export function describe(agent: Agent, repository: Repository, options: Describe
 }
 
 /** How `describe` reads GitLab. */
-const gitlabDescribe: DescribeForge<Repository, MergeRequest, MergeRequestRef> = {
+const gitlabDescribe: DescribeCodeHost<Repository, MergeRequest, MergeRequestRef> = {
 	terms: gitlabTerms,
 	layout: gitlabLayout,
 	text: MergeRequestText,

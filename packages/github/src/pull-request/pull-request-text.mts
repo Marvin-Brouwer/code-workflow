@@ -1,4 +1,4 @@
-import { changeTextSchema, type ChangeContent } from '@mesh-flow/forge'
+import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
 

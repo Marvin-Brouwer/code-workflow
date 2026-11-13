@@ -6,4 +6,4 @@
  */
 export { tokenCredential, urlCredential } from '../host/site.mts'
 export { connector, gitlabHostTools, type GitlabHostOptions } from '../host/connector.mts'
-export { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/forge/host'
+export { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
