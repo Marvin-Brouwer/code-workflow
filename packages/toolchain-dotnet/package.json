@@ -9,7 +9,7 @@
 		"nuget",
 		"workflow"
 	],
-	"homepage": "https://toolchain-dotnet.com/Marvin-Brouwer/code-workflow/tree/main/packages/toolchain-dotnet#readme",
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/toolchain-dotnet#readme",
 	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
 	"license": "MIT",
 	"repository": {
