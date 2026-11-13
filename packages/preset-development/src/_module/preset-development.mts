@@ -6,7 +6,7 @@
  *
  * @module
  */
-export { deviations } from '../deviations/deviations.mts'
+export { deviations, type Deviation, type Deviations, type Recorded } from '../deviations/deviations.mts'
 export { deliveryOrder, type Delivery } from '../plan/delivery-order.mts'
 export { Plan, planFile } from '../plan/plan.mts'
 export { Research } from '../research/research.mts'

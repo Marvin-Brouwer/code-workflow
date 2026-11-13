@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { tool, workspace } from '@mesh-flow/core'
+import { tool, workspace, type Tool, type WorkspaceFile } from '@mesh-flow/core'
 import { z } from 'zod'
 
 const deviationsFile = workspace.file('plan-deviations.md')
@@ -11,7 +11,17 @@ const Deviation = z.object({
 	reason: z.string().min(1).describe('What was found, and where: a review comment, a pipeline, the implementation'),
 	change: z.string().min(1).describe('How the work now deviates from the plan'),
 })
-type Deviation = z.infer<typeof Deviation>
+export type Deviation = z.infer<typeof Deviation>
+
+/** Where `deviations.record` put a deviation. */
+export interface Recorded {
+	readonly recordedIn: string
+}
+
+/** The deviations file, with the tool that adds one. */
+export interface Deviations extends WorkspaceFile {
+	readonly record: Tool<Deviation, Recorded>
+}
 
 /** What a deviation looks like in the file. */
 function entryOf(deviation: Deviation): string {
@@ -19,7 +29,7 @@ function entryOf(deviation: Deviation): string {
 }
 
 /** Adds one deviation to the file, which starts with a heading when it's new. */
-async function record(deviation: Deviation): Promise<{ readonly recordedIn: string }> {
+async function record(deviation: Deviation): Promise<Recorded> {
 	const file = deviationsFile.location()
 	await mkdir(path.dirname(file), { recursive: true })
 	await appendFile(file, `# Deviations from the plan\n\n`, { flag: 'wx' }).catch((error: unknown) => {
@@ -40,7 +50,7 @@ async function record(deviation: Deviation): Promise<{ readonly recordedIn: stri
  * `
  * ```
  */
-export const deviations = Object.freeze({
+export const deviations: Deviations = Object.freeze({
 	...deviationsFile,
 	record: tool('recordDeviation', {
 		description: 'Records how the work deviates from the approved plan, and why, next to the plan',
