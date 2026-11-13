@@ -1,7 +1,7 @@
 import { tool, type Tool } from '@mesh-flow/core'
+import { branchHeadOf } from '@mesh-flow/forge'
 import { z } from 'zod'
-import { localGit } from '../repository/local-git.mts'
-import { trackingRef, type Repository } from '../repository/repository.mts'
+import type { Repository } from '../repository/repository.mts'
 
 /**
  * The tool that reads which commit a checkout's branch is at: the checkout's `HEAD`, or with
@@ -11,11 +11,6 @@ export function branchHead(repository: Repository): Tool<{ pushed: boolean }, st
 	return tool('githubBranchHead', {
 		description: `Reads which commit the branch of ${repository.directory} is at`,
 		input: z.object({ pushed: z.boolean() }),
-		action: async ({ pushed }, { abortSignal }) => {
-			const git = localGit(repository.directory, abortSignal)
-			const tracking = trackingRef(repository.branch)
-			const head = pushed && (await git.hasRef(tracking)) ? tracking : 'HEAD'
-			return (await git.revParse(head)).stdout.trim()
-		},
+		action: ({ pushed }, context) => branchHeadOf(repository, pushed, context),
 	})
 }

@@ -1,3 +1,4 @@
+export { commentMarker, isMarked, markerStart, markerValue } from '@mesh-flow/forge'
 import { z } from 'zod'
 import { RepositoryName } from '../repository-name.mts'
 
@@ -25,28 +26,6 @@ export type IssueData = z.infer<typeof IssueData>
 /** A comment that was posted or updated. */
 export const PostedComment = z.object({ id: z.int(), url: z.url() })
 export type PostedComment = z.infer<typeof PostedComment>
-
-/** What every marker this package leaves in a comment starts with. */
-export const markerStart = '<!-- mesh-flow:'
-
-/** Mixed into a comment's body to find it again, so posting it twice updates it instead. */
-export function commentMarker(key: string): string {
-	return `${markerStart}${key} -->`
-}
-
-/** What marker `name:<value>` in a comment's body holds, if the body has one: the last one, which the connector wrote last. */
-export function markerValue(body: string, name: string): string | undefined {
-	const start = `${markerStart}${name}:`
-	const from = body.lastIndexOf(start)
-	if (from === -1) return undefined
-	const end = body.indexOf(' -->', from + start.length)
-	return end === -1 ? undefined : body.slice(from + start.length, end)
-}
-
-/** Whether a comment's body carries a marker: this package wrote it, so it isn't a reviewer's. */
-export function isMarked(body: string | null | undefined): boolean {
-	return body?.includes(markerStart) ?? false
-}
 
 /** Reads an issue on the host; the sandbox gets its fields, never the credential. */
 export const getIssue = {

@@ -1,11 +1,8 @@
+import { Bundle, Sha } from '@mesh-flow/forge'
 import { z } from 'zod'
 import { BranchName, RepositoryName } from '../repository-name.mts'
 
-/** A git bundle, base64: how commits cross between the host and the sandbox without a credential. */
-export const Bundle = z.base64()
-
-/** A commit id. */
-export const Sha = z.string().regex(/^[0-9a-f]{40}$/)
+export { Bundle, Sha }
 
 /** Clones on the host; the sandbox gets a bundle, never the credential. */
 export const cloneRepository = {

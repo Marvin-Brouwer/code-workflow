@@ -52,6 +52,7 @@
 	},
 	"dependencies": {
 		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/forge": "workspace:*",
 		"@mesh-flow/gateway": "workspace:*",
 		"@mesh-flow/git": "workspace:*",
 		"@octokit/rest": "^22.0.1",

@@ -1,7 +1,7 @@
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { Octokit } from '@octokit/rest'
 import { conditionalFetch, defaultConditionalFetch } from './conditional-fetch.mts'
-import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from './retrying-fetch.mts'
+import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '@mesh-flow/forge/host'
 import { markedTransient } from './transient-error.mts'
 
 /** The name of the GitHub token in the gateway's credential store: `mesh-flow credential set github/token`. */

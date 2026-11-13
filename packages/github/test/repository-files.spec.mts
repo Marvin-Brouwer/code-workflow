@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { filesAt, lintSettingsAt, templatesAt } from '../src/pull-request/repository-files.mts'
-import { localGit } from '../src/repository/local-git.mts'
+import { localGit } from '@mesh-flow/forge'
 import { git } from './support/local-remote.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
