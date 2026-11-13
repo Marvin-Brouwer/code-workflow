@@ -51,6 +51,7 @@ function diffFilePath(repository: Checkout, terms: CodeHostTerms): string {
 		const safe = segment.replace(notInFileNames, '-')
 		return notAFileOnWindows.test(safe) ? `${safe}-` : safe
 	})
+	// By the repository's name, in lower case as its checkout's folder is, but not under `repositories/`.
 	return `${diffsFolder(terms).path}/${repository.name.toLowerCase()}/${segments.join('/')}.diff`
 }
 

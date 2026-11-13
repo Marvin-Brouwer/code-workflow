@@ -38,8 +38,8 @@ const Findings = z.object({
  */
 export function codeReview(reviewer: Agent, repository: ReviewedCheckout, plan: Plan): Check {
 	return check('code review', async ({ abortSignal }) => {
-		// The state under review is in the prompt, so a rerun never takes a review of other changes for this one.
-		// Against where the branch started, so commits on the default branch since don't read as reverted.
+		// The state and the merge base are in the prompt, so a rerun never takes a review of other changes,
+		// and commits on the default branch since don't read as reverted.
 		const { fingerprint: state, base } = await treeState(repository.directory, repository.defaultBranch, {
 			abortSignal,
 			files: [deviations.location()],

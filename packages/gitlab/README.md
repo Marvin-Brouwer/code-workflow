@@ -60,7 +60,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 `gitlab.searchRepositories` is a tool for an agent that has to find where a change goes: it searches the projects the token's user is a member of by words in their name, path or description, and lists each with the path `gitlab.checkout` takes.
 
-`gitlab.checkout({ repository, branch })` puts a checkout of the project in the workspace, on the branch, made from the default branch when GitLab doesn't have it yet. Its folder is `repositories/` and the project's whole path in lower case, so `team/backend/api` and `team/frontend/api` never share one. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
+`gitlab.checkout({ repository, branch })` puts a checkout of the project in the workspace, on the branch, made from the default branch when GitLab doesn't have it yet. Its folder is `repositories/<project path>` in lower case, so `team/backend/api` and `team/frontend/api` never share one. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
 
 ### Merge requests
 

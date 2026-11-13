@@ -140,11 +140,13 @@ describe('test and tests', () => {
 	test('settles promptly when the run stops while the tests never end, and leaves no results behind', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
+		// Runs in one directory take turns, and the first run's dotnet may still be stopping when the check starts.
+		const otherDirectory = await temporaryDirectory()
 		const cli = await fakeDotnet({ test: { hang: true } })
 
 		// Act
 		const toolSettledMs = await settleAfterStop((context) => testTool({ directory }, context))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory }), context))
+		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: otherDirectory }), context))
 
 		// Assert
 		expect(toolSettledMs).toBeLessThan(promptlyMs)

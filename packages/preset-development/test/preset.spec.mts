@@ -45,6 +45,26 @@ describe('deviations', () => {
 		)
 	})
 
+	test('records deviations made side by side under one heading', async () => {
+		// Arrange
+		const deviation = { repository: 'team/api', reason: 'A review comment on the refund handler', change: 'Refunds are queued' }
+		const other = { repository: 'team/web', reason: 'A pipeline', change: 'Refunds show as pending' }
+
+		// Act
+		const run = await runBody(async () => {
+			const [recorded] = await Promise.all([deviations.record(deviation), deviations.record(other), deviations.record(deviation)])
+			return recorded
+		})
+
+		// Assert
+		const { recordedIn } = await run.result
+		expect(await readFile(recordedIn, 'utf8')).toBe(
+			'# Deviations from the plan\n\n' +
+				'## team/api\n\n- Found: A review comment on the refund handler\n- Deviation: Refunds are queued\n\n' +
+				'## team/web\n\n- Found: A pipeline\n- Deviation: Refunds show as pending\n\n',
+		)
+	})
+
 	test('records a deviation once when it is recorded again, as by a loop that runs again', async () => {
 		// Arrange
 		const deviation = { repository: 'team/api', reason: 'A review comment on the refund handler', change: 'Refunds are queued' }

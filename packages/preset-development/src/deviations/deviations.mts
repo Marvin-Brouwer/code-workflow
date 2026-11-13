@@ -36,12 +36,16 @@ function alreadyExists(error: unknown): boolean {
 	return error instanceof Error && 'code' in error && error.code === 'EEXIST'
 }
 
-/** The record before the latest: records take turns, so the heading and the check for a repeat hold with parts side by side. */
+/**
+ * The latest record. The next one waits for it, so the heading and the check for a repeat hold
+ * while parts record side by side. A caller that stops isn't held up by the wait: a tool's call
+ * settles on its signal.
+ */
 let lastRecord: Promise<unknown> = Promise.resolve()
 
 /** Records a deviation once the records before it are done. */
 async function record(deviation: Deviation, context: ToolContext): Promise<RecordedDeviation> {
-	const turn = lastRecord.catch(() => undefined).then(async () => recordNow(deviation, context))
+	const turn = lastRecord.catch(() => undefined).then(() => recordNow(deviation, context))
 	lastRecord = turn
 	return turn
 }

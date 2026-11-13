@@ -10,7 +10,7 @@ A connector defines its git tools with `gitTools`, and checks a repository out w
 
 ```ts
 import { hostToolStub, type ToolContext } from '@mesh-flow/core'
-import { checkoutRepository, gitTools, type Checkout } from '@mesh-flow/code-repository'
+import { checkoutFolder, checkoutRepository, gitTools, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 
 declare const context: ToolContext
@@ -23,7 +23,7 @@ const repository: Checkout = await checkoutRepository(
 	{
 		repository: 'group/project',
 		branch: 'fix-login',
-		folder: 'project',
+		folder: checkoutFolder('group/project'),
 		remote: 'gitlab:group/project',
 		clone: hostToolStub(cloneRepository),
 	},
