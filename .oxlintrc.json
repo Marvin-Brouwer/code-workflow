@@ -13,8 +13,7 @@
 		"**/node_modules/",
 		"**/dist/",
 		"examples/example/",
-		"packages/preset-development/",
-		"packages/toolchain-dotnet/"
+		"packages/preset-development/"
 	],
 	"overrides": [
 		{

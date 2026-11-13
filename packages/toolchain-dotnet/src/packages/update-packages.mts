@@ -1,0 +1,77 @@
+import path from 'node:path'
+import { tool, type ToolContext } from '@mesh-flow/core'
+import { z } from 'zod'
+import { Directory, workingDirectoryOf, type DotnetRepository } from '../directory.mts'
+import { listPackages } from '../package-list.mts'
+import { outputTail, runDotnet } from '../run-dotnet.mts'
+
+/** A package at a version, such as one an upstream merge published. */
+export interface PackageVersion {
+	readonly name: string
+	readonly version: string
+}
+
+/** A package reference that `updatePackages` moved to another version. */
+export interface PackageUpdate {
+	/** The project, relative to the checkout. */
+	readonly project: string
+	readonly name: string
+	readonly from: string
+	readonly to: string
+}
+
+/** NuGet ignores case in package ids. */
+const sameId = (one: string, other: string) => one.toLowerCase() === other.toLowerCase()
+
+/** The update as a tool, so a run that starts over finds it done. */
+const updateTool = tool('dotnetUpdatePackages', {
+	description: 'Moves the package references of the .NET projects in a directory to the versions given',
+	input: z.object({
+		directory: Directory,
+		packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1) })),
+	}),
+	action: async ({ directory, packages }, { abortSignal }): Promise<readonly PackageUpdate[]> => {
+		if (packages.length === 0) return []
+		const list = await listPackages(directory, [], abortSignal)
+		const updates: PackageUpdate[] = []
+		for (const project of list.projects) {
+			const referenced = (project.frameworks ?? []).flatMap((framework) => framework.topLevelPackages ?? [])
+			for (const wanted of packages) {
+				const current = referenced.find((listed) => sameId(listed.id, wanted.name))
+				if (current === undefined || current.requestedVersion === wanted.version) continue
+				// One at a time: `dotnet add` writes the project file, or Directory.Packages.props under central package management.
+				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], {
+					cwd: workingDirectoryOf(directory),
+					abortSignal,
+				})
+				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
+				updates.push({
+					project: path.relative(workingDirectoryOf(directory), project.path),
+					name: current.id,
+					from: current.requestedVersion ?? '',
+					to: wanted.version,
+				})
+			}
+		}
+		return updates
+	},
+})
+
+/**
+ * Moves the package references of the checkout's projects to the versions given, such as the
+ * packages an upstream merge request published, with `dotnet add package`: under central package
+ * management, that writes `Directory.Packages.props`. Only packages a project references directly
+ * are updated; one already at the version is left as it is, so a rerun changes nothing. No
+ * packages, no work. Resolves to what was updated.
+ *
+ * ```ts
+ * await dotnet.updatePackages(repository, upstream.flatMap((dependency) => dependency.packages))
+ * ```
+ */
+export function updatePackages(
+	repository: DotnetRepository,
+	packages: readonly PackageVersion[],
+	context?: ToolContext,
+): Promise<readonly PackageUpdate[]> {
+	return updateTool({ directory: repository.directory, packages: [...packages] }, context)
+}
