@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
-import { Directory, workingDirectoryOf, type DotnetRepository } from '../directory.mts'
+import { Directory, targetOf, workingDirectoryOf, type DotnetRepository, type DotnetTargetOptions } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
 
@@ -16,12 +16,15 @@ export interface PackageUpdate {
 	/** The project, relative to the checkout. */
 	readonly project: string
 	readonly name: string
-	/** The version the project asked for before, or undefined when it named none, as a reference without a version does. */
+	/**
+	 * The version the project asked for before, or undefined when it named none, as a reference
+	 * without a version does.
+	 */
 	readonly from?: string
 	readonly to: string
 }
 
-/** A version as NuGet writes an exact one, `[2.4.0]`, or as a minimum, `2.4.0`, which both mean that version here. */
+/** An exact version as NuGet writes it, `[2.4.0]`. A bare `2.4.0` is a minimum, and here both mean that version (see `asksFor`). */
 const exactVersion = /^\[([^,\]]+)\]$/
 
 /** Whether a project's reference asks for `version`, written either way. */
@@ -32,9 +35,14 @@ function asksFor(requested: string | undefined, version: string): boolean {
 }
 
 /** NuGet ignores case in package ids. */
-const sameId = (one: string, other: string) => one.toLowerCase() === other.toLowerCase()
+function sameId(one: string, other: string): boolean {
+	return one.toLowerCase() === other.toLowerCase()
+}
 
-/** The update as a tool, so a run's events show what it was called with. A rerun changes nothing since a reference at the version is left alone. */
+/**
+ * The update as a tool, so a run's events show what it was called with. A rerun changes nothing
+ * since a reference at the version is left alone.
+ */
 const updateTool = tool('dotnetUpdatePackages', {
 	description: 'Moves the package references of the .NET projects in a directory to the versions given',
 	input: z.object({
@@ -71,7 +79,8 @@ const updateTool = tool('dotnetUpdatePackages', {
  * packages an upstream merge request published, with `dotnet add package`: under central package
  * management, that writes `Directory.Packages.props`. Only packages a project references directly
  * are updated; one already at the version is left as it is, so a rerun changes nothing. No
- * packages, no work. Resolves to what was updated.
+ * packages, no work. Resolves to what was updated. `options.target` names the solution or project
+ * when the checkout has none at its root, or more than one.
  *
  * ```ts
  * await dotnet.updatePackages(repository, upstream.flatMap((dependency) => dependency.packages))
@@ -80,7 +89,8 @@ const updateTool = tool('dotnetUpdatePackages', {
 export function updatePackages(
 	repository: DotnetRepository,
 	packages: readonly PackageVersion[],
+	options: DotnetTargetOptions = {},
 	context?: ToolContext,
 ): Promise<readonly PackageUpdate[]> {
-	return updateTool({ directory: repository.directory, packages: [...packages] }, context)
+	return updateTool({ directory: targetOf(repository, options), packages: [...packages] }, context)
 }

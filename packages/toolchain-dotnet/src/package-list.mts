@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { workingDirectoryOf } from './directory.mts'
-import { noBuildServerArguments, outputTail, runDotnet } from './run-dotnet.mts'
+import { quietArguments, outputTail, runDotnet } from './run-dotnet.mts'
 
 const Vulnerability = z.object({ severity: z.string(), advisoryurl: z.string().optional() })
 
@@ -41,9 +41,18 @@ type PackageList = z.infer<typeof PackageList>
  */
 export async function listPackages(target: string, options: readonly string[], abortSignal: AbortSignal): Promise<PackageList> {
 	const cwd = workingDirectoryOf(target)
-	const restored = await runDotnet(['restore', target, ...noBuildServerArguments], { cwd, abortSignal })
+	const restored = await runDotnet(['restore', target, ...quietArguments], { cwd, abortSignal })
 	if (!restored.ok) throw new Error(`dotnet restore failed:\n${outputTail(restored)}`)
 	const listed = await runDotnet(['list', target, 'package', ...options, '--format', 'json'], { cwd, abortSignal })
 	if (!listed.ok) throw new Error(`dotnet list package failed:\n${outputTail(listed)}`)
-	return PackageList.parse(JSON.parse(listed.stdout))
+	return PackageList.parse(parsedJson(listed.stdout, () => `dotnet list package wrote no JSON:\n${outputTail(listed)}`))
+}
+
+/** `text` as JSON, or an error that says what was written instead. */
+function parsedJson(text: string, describe: () => string): unknown {
+	try {
+		return JSON.parse(text)
+	} catch (error) {
+		throw new Error(describe(), { cause: error })
+	}
 }

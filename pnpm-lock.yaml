@@ -336,6 +336,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@nodable/entities':
+        specifier: ^3.1.0
+        version: 3.1.0
       execa:
         specifier: ^10.2.1
         version: 10.2.1

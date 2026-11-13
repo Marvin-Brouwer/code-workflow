@@ -1,7 +1,7 @@
 import { tool } from '@mesh-flow/core'
 import { z } from 'zod'
 import { Directory, workingDirectoryOf } from '../directory.mts'
-import { noBuildServerArguments, outputTail, runDotnet } from '../run-dotnet.mts'
+import { outputTail, quietBuildArguments, runDotnet } from '../run-dotnet.mts'
 import { diagnosticsIn, type Diagnostic } from './diagnostics.mts'
 
 /** What a build came to: whether it succeeded, its errors, and how many warnings it had. */
@@ -12,9 +12,6 @@ export interface BuildResult {
 	/** The end of the output, for a failure without an error in MSBuild's form, such as a missing SDK. */
 	readonly output?: string
 }
-
-/** The arguments that keep MSBuild's output to what matters, and no build servers behind. */
-export const quietBuildArguments = [...noBuildServerArguments, '-clp:NoSummary']
 
 /**
  * The tool that builds the solution or project in a directory with `dotnet build`, for an agent to

@@ -13,6 +13,12 @@ export interface FakeAnswer {
 	readonly trx?: readonly string[]
 	/** Never exits, as a build that hangs. */
 	readonly hang?: boolean
+	/** Exits after this long, with nothing written. */
+	readonly holdMs?: number
+	/** Starts a process that ignores SIGTERM, and writes its pid to this file. */
+	readonly stubbornChildPidFile?: string
+	/** Kills itself with this signal, as the system does when it runs out of memory. */
+	readonly killedWith?: NodeJS.Signals
 }
 
 /** One logged call. */

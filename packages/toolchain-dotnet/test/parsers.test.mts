@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { diagnosticLine, diagnosticsIn } from '../src/build/diagnostics.mts'
-import { countsOf } from '../src/test-run/trx.mts'
-import { brokenBuild, failingTrx, passingTrx, unusualTrx } from './support/fixtures.mts'
+import { outcomeOf } from '../src/test-run/trx.mts'
+import { brokenBuild, failingTrx, passingTrx, unusualTrx, windowsTrx } from './support/fixtures.mts'
 
 describe('diagnosticsIn', () => {
 	test("reads MSBuild's errors and warnings once each, with the file, the line and the project", () => {
@@ -36,14 +36,31 @@ describe('diagnosticsIn', () => {
 				project: '/work/api/Api.sln',
 			},
 		])
-		expect(diagnostics[0] === undefined ? '' : diagnosticLine(diagnostics[0])).toBe('/work/api/src/Login.cs(12,34): CS1002: ; expected')
 	})
 })
 
-describe('countsOf', () => {
+describe('diagnosticLine', () => {
+	test('writes a diagnostic as MSBuild does, with its file and position', () => {
+		// Act
+		const line = diagnosticLine({ severity: 'error', code: 'CS1002', message: '; expected', file: '/work/a.cs', line: 12, column: 34 })
+
+		// Assert
+		expect(line).toBe('/work/a.cs(12,34): CS1002: ; expected')
+	})
+
+	test('writes a diagnostic without a file or a line as its code and message', () => {
+		// Act
+		const line = diagnosticLine({ severity: 'error', code: 'MSB1003', message: 'Specify a project or solution file.' })
+
+		// Assert
+		expect(line).toBe('MSB1003: Specify a project or solution file.')
+	})
+})
+
+describe('outcomeOf', () => {
 	test('adds up the results files of every test project, with the message and stack trace of each failure', () => {
 		// Act
-		const counts = countsOf([failingTrx, passingTrx])
+		const counts = outcomeOf([failingTrx, passingTrx])
 
 		// Assert
 		expect(counts).toEqual({
@@ -62,7 +79,7 @@ describe('countsOf', () => {
 
 	test("counts a timeout as failed, keeps a message that reads as a number, and takes a data-driven test's failures from its rows", () => {
 		// Act
-		const counts = countsOf([unusualTrx])
+		const counts = outcomeOf([unusualTrx])
 
 		// Assert
 		expect(counts).toEqual({
@@ -75,5 +92,19 @@ describe('countsOf', () => {
 				{ name: 'Api.Tests.RowTests.Adds (2, 2)', message: 'Expected 4, got 5' },
 			],
 		})
+	})
+
+	test('reads the line breaks of a results file written on Windows', () => {
+		// Act
+		const { failures } = outcomeOf([windowsTrx])
+
+		// Assert
+		expect(failures).toEqual([
+			{
+				name: 'Api.Tests.LoginTests.SetsSameSite',
+				message: 'Expected "None"\r\nActual "Lax"',
+				stackTrace: 'at One() in C:\\work\\LoginTests.cs:line 21\r\nat Two() in C:\\work\\LoginTests.cs:line 30',
+			},
+		])
 	})
 })

@@ -130,6 +130,33 @@ export const unusualTrx = `<?xml version="1.0" encoding="utf-8"?>
 </TestRun>
 `
 
+/** A list with a vulnerable package that has neither a requested nor a resolved version. */
+export const unversionedVulnerableList = JSON.stringify({
+	version: 1,
+	projects: [
+		{
+			path: '/work/api/src/Api.csproj',
+			frameworks: [{ framework: 'net10.0', topLevelPackages: [{ id: 'Newtonsoft.Json', vulnerabilities: [{ severity: 'High' }] }] }],
+		},
+	],
+})
+
+/** A test results file as vstest writes it on Windows: each carriage return as a character reference. */
+export const windowsTrx = `<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="4" name="run" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results>
+    <UnitTestResult testId="h" testName="Api.Tests.LoginTests.SetsSameSite" outcome="Failed">
+      <Output><ErrorInfo><Message>Expected "None"&#xD;
+Actual "Lax"</Message><StackTrace>at One() in C:\\work\\LoginTests.cs:line 21&#xD;
+at Two() in C:\\work\\LoginTests.cs:line 30</StackTrace></ErrorInfo></Output>
+    </UnitTestResult>
+  </Results>
+  <ResultSummary outcome="Failed">
+    <Counters total="1" executed="1" passed="0" failed="1" />
+  </ResultSummary>
+</TestRun>
+`
+
 /** What `dotnet test` writes for a failed test whose message has a line that looks like an MSBuild error. */
 export const failingTestOutput = [
 	'  Failed Api.Tests.LoginTests.SetsSameSite [12 ms]',

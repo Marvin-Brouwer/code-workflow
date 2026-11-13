@@ -1,3 +1,4 @@
+import { EntityDecoder, XML } from '@nodable/entities'
 import { XMLParser } from 'fast-xml-parser'
 import { z } from 'zod'
 
@@ -10,7 +11,7 @@ export interface TestFailure {
 }
 
 /** What a test run came to, from its results files. */
-export interface TestCounts {
+export interface TestOutcome {
 	readonly passed: number
 	readonly failed: number
 	readonly skipped: number
@@ -28,6 +29,8 @@ const parser = new XMLParser({
 	// A message such as `007` stays text.
 	parseTagValue: false,
 	trimValues: false,
+	// XML's own entities, and character references: TRX writes each carriage return in a message or stack trace as `&#xD;`.
+	entityDecoder: new EntityDecoder({ namedEntities: XML, numericAllowed: true }),
 })
 
 /** Text that may be missing, an element's text, or text with attributes beside it. */
@@ -95,7 +98,7 @@ const Trx = z.object({
 })
 
 /** The counts and failures of one or more test results files (TRX), one per test project. */
-export function countsOf(files: readonly string[]): TestCounts {
+export function outcomeOf(files: readonly string[]): TestOutcome {
 	let passed = 0
 	let failed = 0
 	let skipped = 0

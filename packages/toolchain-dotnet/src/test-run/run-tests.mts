@@ -1,14 +1,13 @@
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { quietBuildArguments } from '../build/build.mts'
 import { diagnosticsIn, type Diagnostic } from '../build/diagnostics.mts'
 import { workingDirectoryOf } from '../directory.mts'
-import { outputTail, runDotnet } from '../run-dotnet.mts'
-import { countsOf, type TestCounts } from './trx.mts'
+import { outputTail, quietBuildArguments, runDotnet } from '../run-dotnet.mts'
+import { outcomeOf, type TestOutcome } from './trx.mts'
 
 /** What a test run came to: the counts and failures, or the build errors that kept the tests from running. */
-export interface TestResult extends TestCounts {
+export interface TestResult extends TestOutcome {
 	readonly succeeded: boolean
 	/** The build's errors: the tests don't run when it fails. */
 	readonly buildErrors: readonly Diagnostic[]
@@ -30,7 +29,7 @@ export interface RunTestsOptions {
  * directory, and reads the failures from those: the console's form differs per test framework.
  */
 export async function runTests({ target, filter, abortSignal }: RunTestsOptions): Promise<TestResult> {
-	const results = await mkdtemp(path.join(tmpdir(), 'mesh-flow-dotnet-test-'))
+	const resultsDirectory = await mkdtemp(path.join(tmpdir(), 'mesh-flow-dotnet-results-'))
 	try {
 		const run = await runDotnet(
 			[
@@ -39,27 +38,27 @@ export async function runTests({ target, filter, abortSignal }: RunTestsOptions)
 				'--logger',
 				'trx',
 				'--results-directory',
-				results,
+				resultsDirectory,
 				...(filter === undefined ? [] : ['--filter', filter]),
 				...quietBuildArguments,
 			],
 			{ cwd: workingDirectoryOf(target), abortSignal },
 		)
-		const files = (await readdir(results, { recursive: true })).filter((file) => file.endsWith('.trx'))
-		const counts = countsOf(await Promise.all(files.map((file) => readFile(path.join(results, file), 'utf8'))))
+		const files = (await readdir(resultsDirectory, { recursive: true })).filter((file) => file.endsWith('.trx'))
+		const outcome = outcomeOf(await Promise.all(files.map((file) => readFile(path.join(resultsDirectory, file), 'utf8'))))
 		// MSBuild's console logger names the project after each of its errors. A line of a test's own
 		// output that only looks like one, such as `Expected: error: not found`, names none.
 		const buildErrors = diagnosticsIn(run.stdout).filter(
 			(diagnostic) => diagnostic.severity === 'error' && diagnostic.project !== undefined,
 		)
-		const explained = run.ok || counts.failures.length > 0 || buildErrors.length > 0
-		return { ...counts, succeeded: run.ok, buildErrors, ...(explained ? {} : { output: outputTail(run) }) }
+		const explained = run.ok || outcome.failures.length > 0 || buildErrors.length > 0
+		return { ...outcome, succeeded: run.ok, buildErrors, ...(explained ? {} : { output: outputTail(run) }) }
 	} finally {
-		await removeScratch(results)
+		await removeScratch(resultsDirectory)
 	}
 }
 
-/** How often removing the scratch directory is tried while a test host that is being stopped still holds a file in it. */
+/** How many more times removing the scratch directory is tried while a test host that is being stopped still holds a file in it. */
 const removeRetries = 5
 
 /**
