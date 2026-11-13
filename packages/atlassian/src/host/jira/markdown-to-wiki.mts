@@ -6,8 +6,8 @@ const fencedCode = /^(```|~~~)([\w+-]*)[ \t]*\n([\s\S]*?)\n\1[ \t]*$/gm
 /** A code span: what's between one backtick and the next on the line. */
 const codeSpan = /`([^`\n]+)`/g
 
-/** What wiki markup reads as formatting even inside `{{...}}`, and so is escaped with a backslash in a code span. */
-const wikiFormatting = /[*_+\-^~?{}[\]|]/g
+/** What wiki markup reads as formatting even inside `{{...}}`, and the backslash itself, so each is escaped with one in a code span. */
+const wikiFormatting = /[\\*_+\-^~?{}[\]|]/g
 
 /** What a placeholder starts with: letters only, which jira2md leaves alone. */
 const placeholderPrefix = 'MESHFLOWCODE'

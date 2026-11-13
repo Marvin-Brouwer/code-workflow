@@ -23,9 +23,9 @@ describe('markdownToWiki', () => {
 
 	test('escapes formatting in a code span, and takes tilde fences as code blocks', () => {
 		// Act
-		const wiki = markdownToWiki('Match `**/*_test.mts` or `a}}b`.\n\n~~~\nx*y*\n~~~')
+		const wiki = markdownToWiki('Match `**/*_test.mts` or `a}}b` in `C:\\`.\n\n~~~\nx*y*\n~~~')
 
 		// Assert
-		expect(wiki).toBe('Match {{\\*\\*/\\*\\_test.mts}} or {{a\\}\\}b}}.\n\n{code}\nx*y*\n{code}')
+		expect(wiki).toBe('Match {{\\*\\*/\\*\\_test.mts}} or {{a\\}\\}b}} in {{C:\\\\}}.\n\n{code}\nx*y*\n{code}')
 	})
 })
