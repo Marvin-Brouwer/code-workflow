@@ -43,5 +43,10 @@ export const dump = tool('confluenceDump', {
 /**
  * Searches Confluence pages by their text: a tool for agents, and a function for code. Returns ids,
  * titles, spaces and excerpts; `confluence.dump` reads one.
+ *
+ * ```ts
+ * const { pages } = await confluence.search({ text: 'release process', space: 'TEAM' })
+ * await planner.loop`Research ${story}. Find the team's guidelines with ${confluence.search} and read them with ${confluence.dump}.`
+ * ```
  */
 export const search = stubs.searchPages

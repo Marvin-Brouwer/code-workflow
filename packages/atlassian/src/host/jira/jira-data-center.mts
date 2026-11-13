@@ -1,7 +1,9 @@
-import { createServerClient, isNotFoundError, type ServerClientConfig } from 'jira.js'
-import J2M from 'jira2md'
+import { createServerClient, type ServerClientConfig } from 'jira.js'
+import { markdownToWiki } from './markdown-to-wiki.mts'
+import { sentOnce } from '../host-options.mts'
 import type { JiraSite } from './jira-site.mts'
 import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.mts'
+import { orWhenNotFound } from './when-not-found.mts'
 
 /**
  * A Jira Data Center site, on its REST API v2. Comments go in as wiki markup, made from the
@@ -9,6 +11,8 @@ import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.
  */
 export function jiraDataCenter(config: ServerClientConfig & { readonly host: string }): JiraSite {
 	const client = createServerClient(config)
+	// Requests that make something new are sent once: a retry after a lost answer would make it twice.
+	const once = createServerClient({ ...config, retry: sentOnce })
 	return {
 		url: config.host,
 		async issue(key, abortSignal) {
@@ -29,34 +33,27 @@ export function jiraDataCenter(config: ServerClientConfig & { readonly host: str
 				transition.id === undefined || transition.to?.name === undefined ? [] : [{ id: transition.id, to: transition.to.name }],
 			)
 		},
-		async transition(key, transitionId, abortSignal) {
-			await client.issues.doTransition({ issueIdOrKey: key, transition: { id: transitionId } }, { signal: abortSignal })
+		async moveIssue(key, transitionId, abortSignal) {
+			await once.issues.doTransition({ issueIdOrKey: key, transition: { id: transitionId } }, { signal: abortSignal })
 		},
 		async addComment(key, markdown, abortSignal) {
-			const comment = await client.issues.addComment({ issueIdOrKey: key, body: J2M.to_jira(markdown) }, { signal: abortSignal })
+			const comment = await once.issues.addComment({ issueIdOrKey: key, body: markdownToWiki(markdown) }, { signal: abortSignal })
 			if (comment.id === undefined) throw new Error(`Jira added a comment to ${key} without an id.`)
 			return comment.id
 		},
-		async updateComment(key, commentId, markdown, abortSignal) {
-			try {
+		updateComment: (key, commentId, markdown, abortSignal) =>
+			orWhenNotFound(async () => {
 				await client.issues.updateComment(
-					{ issueIdOrKey: key, id: commentId, body: { body: J2M.to_jira(markdown) } },
+					{ issueIdOrKey: key, id: commentId, body: { body: markdownToWiki(markdown) } },
 					{ signal: abortSignal },
 				)
 				return true
-			} catch (error) {
-				if (isNotFoundError(error)) return false
-				throw error
-			}
-		},
-		async property(key, name, abortSignal) {
-			try {
-				return (await client.issues.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value
-			} catch (error) {
-				if (isNotFoundError(error)) return undefined
-				throw error
-			}
-		},
+			}, false),
+		property: (key, name, abortSignal) =>
+			orWhenNotFound(
+				async () => (await client.issues.getIssueProperty({ issueIdOrKey: key, propertyKey: name }, { signal: abortSignal })).value,
+				undefined,
+			),
 		async setProperty(key, name, value, abortSignal) {
 			await client.issues.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},

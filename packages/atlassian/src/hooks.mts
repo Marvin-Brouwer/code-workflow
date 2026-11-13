@@ -24,12 +24,15 @@ const ChangeItem = z.object({ field: z.string(), fromString: z.string().nullable
 export const issueCreated = z.object({ webhookEvent: z.literal('jira:issue_created'), issue: Issue, user: User })
 export type IssueCreated = z.infer<typeof issueCreated>
 
-/** The `jira:issue_updated` event, with what changed. */
+/**
+ * The `jira:issue_updated` event, with what changed. An update that changed no field, such as one
+ * Jira sends for a new comment or worklog, comes without a changelog, and reads as one with no items.
+ */
 export const issueUpdated = z.object({
 	webhookEvent: z.literal('jira:issue_updated'),
 	issue: Issue,
 	user: User,
-	changelog: z.object({ items: z.array(ChangeItem) }),
+	changelog: z.object({ items: z.array(ChangeItem) }).default({ items: [] }),
 })
 export type IssueUpdated = z.infer<typeof issueUpdated>
 

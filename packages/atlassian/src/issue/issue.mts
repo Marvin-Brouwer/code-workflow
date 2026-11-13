@@ -3,11 +3,10 @@ import { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import { IssueKey } from '../tools/issue-key.mts'
 import type { IssueData, PostedComment } from '../tools/issue-tools.mts'
-import { markdownOf } from './markdown.mts'
+import { issueMarkdownOf } from './markdown.mts'
 
 /** Names an issue by its key, such as `PROJ-123`: the `key` parameter of a workflow. */
 export const key = IssueKey
-export type { IssueKey }
 
 /**
  * The parameters of a workflow that works on one Jira issue, `{ key }`, so a workflow declares
@@ -49,7 +48,7 @@ export interface JiraIssue extends IssueData {
 export async function collect(issue: IssueRef, context?: ToolContext): Promise<JiraIssue> {
 	const data = await stubs.getIssue({ key: keyOf(issue) }, context)
 	const file = workspace.file(`${issuesFolder.path}/${data.key}.md`)
-	await file.write(markdownOf(data))
+	await file.write(issueMarkdownOf(data))
 	const location = file.location()
 	return Object.freeze({ ...data, path: file.path, [toPrompt]: () => location })
 }

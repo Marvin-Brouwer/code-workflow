@@ -4,5 +4,6 @@
  *
  * @module
  */
-export { atlassianHostTools, connector, type AtlassianHostOptions } from '../host/connector.mts'
+export { atlassianHostTools, connector } from '../host/connector.mts'
+export { defaultRequestRetry, type AtlassianHostOptions, type RequestRetry } from '../host/host-options.mts'
 export { settingNames, type Product } from '../host/site-settings.mts'
