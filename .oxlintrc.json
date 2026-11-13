@@ -9,12 +9,7 @@
 		"builtin": true,
 		"node": true
 	},
-	"ignorePatterns": [
-		"**/node_modules/",
-		"**/dist/",
-		"examples/example/",
-		"packages/preset-development/"
-	],
+	"ignorePatterns": ["**/node_modules/", "**/dist/", "examples/example/"],
 	"overrides": [
 		{
 			"files": ["pocs/loop-typing/test/**/*.mts"],
