@@ -5,11 +5,15 @@ A development preset for mesh-flow: what a workflow that takes a story from rese
 ## Usage
 
 ```ts
+// workflows/develop.mts
+import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
 import { inDependencyOrder, propose, succeed, verify, workflow } from '@mesh-flow/core'
+import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research } from '@mesh-flow/preset-development'
+import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { developer, planner, reviewer } from '../agents.mts'
 
-export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
 
 	const research = await planner.loop`Research ${story}. Write your notes in ${Research}, then ${succeed(Research)}.`
@@ -47,5 +51,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 The approved plan stays as it was approved; what turns out different later is recorded next to it, in `plan-deviations.md` in the workspace. `deviations` renders as that file in a prompt, and `deviations.record` is the tool that adds one, `{ repository, reason, change }`, in Markdown. It's a function for code too:
 
 ```ts
-await deviations.record({ repository: repository.name, reason: 'The pipeline needs .NET 10', change: 'The target framework moves to net10.0' })
+import { deviations } from '@mesh-flow/preset-development'
+
+await deviations.record({ repository: 'team/backend/api', reason: 'The pipeline needs .NET 10', change: 'The target framework moves to net10.0' })
 ```

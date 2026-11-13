@@ -10,6 +10,7 @@ export interface ReviewedCheckout extends RendersInPrompt {
 	readonly defaultBranch: string
 }
 
+/** What the reviewer hands in: each real problem, with where it is. */
 const Findings = z.object({
 	findings: z.array(
 		z.object({

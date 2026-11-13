@@ -13,7 +13,7 @@ const PlannedRepository = z.object({
 
 /** One edge of the dependency graph: `repository` needs `dependsOn` merged and published first. */
 const PlannedDependency = z.object({
-	repository: z.string().min(1),
+	repository: z.string().min(1).describe('The repository that needs it'),
 	dependsOn: z.string().min(1).describe('The repository that has to be merged and published first'),
 	reason: z.string().min(1).describe('What it needs from it, such as a new package version or an API contract'),
 })

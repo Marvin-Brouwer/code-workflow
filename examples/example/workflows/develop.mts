@@ -11,6 +11,9 @@ import { codeReview, deliveryOrder, deviations, Plan, planFile, Research } from 
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { developer, planner, reviewer, writer } from '../agents.mts'
 
+/** The one Jira comment the run keeps up to date with how far it got. */
+const progressComment = { key: 'progress' }
+
 export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
 	await jira.transition(story, 'In Progress')
@@ -32,7 +35,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		When the proposal is rejected, revise the plan with the feedback and propose it again.
 		If the story can't be planned with the information available, ${fail}.
 	`
-	await jira.comment(story, `The plan is approved, for ${plan.repositories.map(({ name }) => name).join(', ')}.`, { key: 'progress' })
+	await jira.comment(story, `The plan is approved, for ${plan.repositories.map(({ name }) => name).join(', ')}.`, progressComment)
 
 	// Starts each repository once the repositories it depends on are merged, with the packages
 	// their merges published. Independent repositories don't wait for each other.
@@ -90,5 +93,5 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 	})
 
 	await jira.transition(story, 'Done')
-	await jira.comment(story, 'Every merge request is merged.', { key: 'progress' })
+	await jira.comment(story, 'Every merge request is merged.', progressComment)
 })

@@ -4,6 +4,7 @@
  */
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
 
+/** Researches the story and writes the plan. */
 export const planner = agent({
 	model: 'claude-opus-5-5',
 	reasoning: 'high',
@@ -14,6 +15,7 @@ export const planner = agent({
 	`,
 })
 
+/** Implements the plan in each repository, and answers the review. */
 export const developer = agent({
 	model: 'claude-sonnet-5-5',
 	reasoning: 'medium',
@@ -24,6 +26,7 @@ export const developer = agent({
 	`,
 })
 
+/** Reviews each repository's change against the plan. */
 export const reviewer = agent({
 	model: 'claude-sonnet-5-5',
 	reasoning: 'medium',

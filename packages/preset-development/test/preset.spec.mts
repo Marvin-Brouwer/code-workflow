@@ -10,6 +10,12 @@ const reviewer = agent({ model: modelId })
 
 const repository: ReviewedCheckout = { name: 'team/api', defaultBranch: 'main', [toPrompt]: () => '/workspace/api' }
 
+/** Long enough for a scripted review. */
+const checkTimeoutMs = 10_000
+
+/** The workspace the review's plan is in; the scripted reviewer never reads it. */
+const workspaceDirectory = '/workspace'
+
 function planIn(workspace: string): Plan {
 	return Plan.parse({
 		path: path.join(workspace, 'plan.md'),
@@ -49,7 +55,7 @@ describe('codeReview', () => {
 
 		// Act
 		const run = await runBody(
-			() => runCheck(codeReview(reviewer, repository, planIn(process.cwd())), { abortSignal: AbortSignal.timeout(10_000) }),
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
 			model.models,
 		)
 
@@ -65,7 +71,7 @@ describe('codeReview', () => {
 		// Arrange
 		const model = scriptedModel([neverAnswers])
 		const run = await runBody(
-			() => runCheck(codeReview(reviewer, repository, planIn(process.cwd())), { abortSignal: AbortSignal.timeout(10_000) }),
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
 			model.models,
 		)
 		await expect.poll(() => model.requests.length).toBe(1)

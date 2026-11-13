@@ -12,6 +12,9 @@ import { jira } from '@mesh-flow/atlassian/hooks'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
+/** The Jira label that starts a run for a story. */
+const startLabel = 'ai-develop'
+
 /** The image the Dockerfile builds, as pushed to Docker Hub: put your account in. */
 const sandboxImage = '<account>/mesh-flow-example:dotnet10'
 
@@ -20,7 +23,7 @@ export default defineMeshFlow({
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),
-		// A Jira webhook: labelling a story `ai-develop` starts a run for it.
-		jira.onIssueLabeled(develop, 'ai-develop'),
+		// A Jira webhook: labelling a story with the start label starts a run for it.
+		jira.onIssueLabeled(develop, startLabel),
 	],
 })
