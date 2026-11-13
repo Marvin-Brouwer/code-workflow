@@ -16,7 +16,7 @@ instead of the durable external-event primitive, which isn't built yet (see
 the engine loads connector host tools from the packages the user adds with `mesh-flow connector`. Step 7 is built, one package per PR:
 [`@mesh-flow/atlassian`](../../packages/atlassian/README.md), with Jira and Confluence on Cloud and
 Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which shares what it has in
-common with github through [`@mesh-flow/forge`](../../packages/forge/README.md);
+common with `@mesh-flow/github` through [`@mesh-flow/forge`](../../packages/forge/README.md);
 [`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
 [`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
 [`examples/example`](../../examples/example), which builds and describes itself in CI, and
@@ -27,7 +27,7 @@ is, a dependent repository's restore fails, so only plans whose repositories don
 other run through. Independent repositories run side by side.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
-sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
+repositories in dependency order, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
 
 ## Before it starts

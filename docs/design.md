@@ -563,10 +563,11 @@ Out of scope for now: token and cost budgets.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
-   then the `example` workflow, both end to end from a CLI with sequential repositories.
+   then the `example` workflow, both end to end from a CLI. Done: the `example` workflow delivers
+   repositories in dependency order, independent ones side by side (`inDependencyOrder`).
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
-4. `inDependencyOrder` with concurrency.
-5. GitLab review watching; AWS and CodeArtifact through the gateway; `checkSession`; package
+4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
+5. AWS and CodeArtifact through the gateway; `checkSession`; package
    managers beyond npm and NuGet, each with a conformance test that installs through egress, one
    per way of trusting certificates and proxies: pip (its own certifi bundle), Maven and Gradle
    (the JVM's keystore, and proxy settings as system properties instead of `HTTPS_PROXY`), Go and

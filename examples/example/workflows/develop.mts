@@ -10,13 +10,14 @@ import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { developer, planner, reviewer, writer } from '../agents.mts'
+import { moveOn } from './story-status.mts'
 
 /** The one Jira comment the run keeps up to date with how far it got. */
 const progressComment = { key: 'progress' }
 
 export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
-	await jira.transition(story, 'In Progress')
+	await moveOn(story, 'In Progress')
 
 	const research = await planner.loop`
 		Do preliminary research for ${story}.
@@ -36,6 +37,9 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		If the story can't be planned with the information available, ${fail}.
 	`
 	await jira.comment(story, `The plan is approved, for ${plan.repositories.map(({ name }) => name).join(', ')}.`, progressComment)
+	// A merge request that closes the story moves it to Done when it merges, through GitLab's Jira
+	// integration. With more than one repository, the run moves it once every merge request is merged.
+	const closing = plan.repositories.length === 1 ? { issue: story } : {}
 
 	// Starts each repository once the repositories it depends on are merged, with the packages
 	// their merges published. Independent repositories don't wait for each other.
@@ -57,11 +61,11 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		// Code commits and pushes what was handed in, so `describe` reads the work as it was verified.
 		await gitlab.push(repository)({ message: `${story.key}: ${part.changes}` })
 
-		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
+		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, closing))
 		// A merge request merged or closed meanwhile is given back as it is, not opened again.
 		if (mergeRequest.state === 'closed' && !mergeRequest.merged)
 			throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
-		await jira.transition(story, 'In Review')
+		await moveOn(story, 'In Review')
 		await jira.comment(story, `Merge request for ${repository.name}: ${mergeRequest.url}`, { key: `merge-request ${repository.name}` })
 
 		// A merge request merged meanwhile has no review left to watch.
@@ -82,7 +86,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 					// What was fixed after the last push, to make the tests pass, goes up too.
 					await gitlab.push(repository)({ message: `${story.key}: review changes` })
 					// `describe` runs no writer loop when the pushed commit is already described.
-					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { ...closing, mergeRequest }))
 				},
 				async pipelineFailed({ failures }) {
 					await developer.loop`
@@ -90,7 +94,8 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 						Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
 						${limit({ minutes: 45 })}
 					`
-					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
+					await gitlab.push(repository)({ message: `${story.key}: pipeline fix` })
+					await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { ...closing, mergeRequest }))
 				},
 			})
 			if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)
@@ -105,6 +110,6 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		return published
 	})
 
-	await jira.transition(story, 'Done')
+	await moveOn(story, 'Done')
 	await jira.comment(story, 'Every merge request is merged.', progressComment)
 })
