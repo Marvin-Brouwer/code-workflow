@@ -1,7 +1,8 @@
+import { gitHostTools } from '@mesh-flow/forge/host'
 import { connectorHost, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
+import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
 import { gitlabApi, type GitlabApiOptions } from './api.mts'
 import { gitRemote, type GitRemoteOptions } from './git-remote.mts'
-import { gitHostTools } from './git-tools.mts'
 import { mergeRequestHostTools } from './merge-request-tools.mts'
 import { pipelineHostTools } from './pipeline-tools.mts'
 import { projectHostTools } from './project-tools.mts'
@@ -16,7 +17,12 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
  */
 export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
 	const api = gitlabApi(options)
-	return [...projectHostTools(api), ...mergeRequestHostTools(api), ...pipelineHostTools(api), ...gitHostTools(gitRemote(options))]
+	return [
+		...projectHostTools(api),
+		...mergeRequestHostTools(api),
+		...pipelineHostTools(api),
+		...gitHostTools(gitRemote(options), { cloneRepository, pushBundle }),
+	]
 }
 
 /** The GitLab connector's host half, as `mesh-flow connector add @mesh-flow/gitlab` loads it. */

@@ -5,7 +5,7 @@ import { answeredKey, plannedKey, reactionKey, reactionKeyName, repliedKey, repl
 import type { OwnReply, ReplyOutcome, ReviewComments } from './review-comments.mts'
 import { signed, unsigned } from './signature.mts'
 
-/** A reply to review item `item`, the comment `commentId` of `kind`, as `replyToReviewItem` posts it. */
+/** A reply to review item `item`, the comment `commentId` of `kind`, as `replyToItem` posts it. */
 export interface ReviewReply<Kind extends string> {
 	readonly item: string
 	readonly kind: Kind

@@ -78,6 +78,44 @@ describe('openMergeRequest', () => {
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 
+	test('takes the merge request another run opened for the branch meanwhile', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.hold = (method, requestPath) => {
+			if (method === 'POST' && requestPath.endsWith('/merge_requests') && api.project(projectPath).mergeRequests.size === 0)
+				api.mergeRequest(projectPath, firstMergeRequest, { source_branch: branch, target_branch: 'main', title: 'Opened meanwhile' })
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout(projectPath, { branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			return openMergeRequest(repository, sameSite)
+		})
+		const opened = await run.result
+
+		// Assert
+		expect(opened).toMatchObject({ number: firstMergeRequest, title: 'Opened meanwhile' })
+		expect(api.project(projectPath).mergeRequests.size).toBe(1)
+	})
+
+	test('fails, naming it, when the branch has an open merge request onto another branch', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		const other = api.mergeRequest(projectPath, firstMergeRequest, { source_branch: branch, target_branch: 'release' })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout(projectPath, { branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			return openMergeRequest(repository, sameSite)
+		})
+
+		// Assert
+		await expect(run.result).rejects.toThrow(`onto release, not main: ${other.web_url}`)
+	})
+
 	test('settles promptly when the run stops while GitLab never answers', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()

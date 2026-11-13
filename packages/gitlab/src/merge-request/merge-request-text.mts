@@ -1,12 +1,24 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/forge'
 import type { z } from 'zod'
 
+/** The longest title GitLab takes. */
+const maxTitleCharacters = 255
+
+/** The longest description GitLab takes: a mebibyte's worth of characters. */
+const gitlabDescriptionCharacters = 1_048_576
+
+/** Room left in the description for the footer the connector adds: the signature and what it closes. */
+const footerRoom = 48_576
+
 /**
  * What a merge request says: its title and its description, as the agent of `describe` writes them,
- * within GitLab's limits: a title of 255 characters, and a description of a million less room for
- * the footer the connector adds.
+ * within GitLab's limits, less the room for the footer.
  */
-export const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_000_000, request: 'merge request' })
+export const MergeRequestText = changeTextSchema({
+	maxTitleCharacters,
+	maxDescriptionCharacters: gitlabDescriptionCharacters - footerRoom,
+	request: 'merge request',
+})
 export type MergeRequestText = z.infer<typeof MergeRequestText>
 
 /**

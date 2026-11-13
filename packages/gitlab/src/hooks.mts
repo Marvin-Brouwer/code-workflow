@@ -4,8 +4,12 @@ import { z } from 'zod'
 /** How GitLab signs a delivery: the webhook's secret token itself, in `x-gitlab-token`. */
 export const signature: WebhookSignature = Object.freeze({ scheme: 'secret-header', header: 'x-gitlab-token' })
 
-/** The header GitLab names each delivery in, so a redelivery reuses its run. */
-export const deliveryHeader = 'x-gitlab-event-uuid'
+/**
+ * The header GitLab names each delivery in, the same on its retries and on a resend by hand, so a
+ * redelivery reuses its run. GitLab sends it since 17.4; without it, the engine tells deliveries
+ * apart by a hash of the body.
+ */
+export const deliveryHeader = 'idempotency-key'
 
 /** The options every GitLab webhook trigger gets. */
 export const triggerOptions = Object.freeze({ signature, deliveryHeader })

@@ -14,7 +14,8 @@ interface RequestFailure {
 
 /**
  * A failure from Octokit, marked as a {@link HostToolTransientError} when it may pass on another
- * try: a dropped connection, GitHub being unavailable, a rate limit (429, or a 403 that says so).
+ * try: a dropped connection, which Octokit reports as a 500, GitHub being unavailable, a rate
+ * limit (429, or a 403 that says so).
  * Anything else, such as a bad token, a missing permission, a 404 or an aborted request, comes back
  * as it is.
  */

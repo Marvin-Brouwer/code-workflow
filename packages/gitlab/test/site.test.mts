@@ -15,18 +15,46 @@ async function contextWith(stored: Record<string, string>): Promise<HostToolCont
 
 describe('readSite', () => {
 	test('goes to gitlab.com when no URL is set', async () => {
-		expect(await readSite(await contextWith({ [tokenCredential]: 'glpat-1' }))).toEqual({ url: 'https://gitlab.com', token: 'glpat-1' })
+		// Arrange
+		const context = await contextWith({ [tokenCredential]: 'glpat-1' })
+
+		// Act
+		const site = await readSite(context)
+
+		// Assert
+		expect(site).toEqual({ url: 'https://gitlab.com', token: 'glpat-1' })
 	})
 
 	test('takes a GitLab of your own, without the slash at the end', async () => {
-		const site = await readSite(await contextWith({ [tokenCredential]: 'glpat-1', [urlCredential]: 'https://gitlab.example.com/' }))
+		// Arrange
+		const context = await contextWith({ [tokenCredential]: 'glpat-1', [urlCredential]: 'https://gitlab.example.com/' })
+
+		// Act
+		const site = await readSite(context)
+
+		// Assert
 		expect(site.url).toBe('https://gitlab.example.com')
 	})
 
-	test('says how to set the token when there is none, and what is wrong with a URL that is none', async () => {
-		await expect(readSite(await contextWith({}))).rejects.toThrow('mesh-flow credential set gitlab/token')
-		await expect(readSite(await contextWith({ [tokenCredential]: 'glpat-1', [urlCredential]: 'gitlab.example.com' }))).rejects.toThrow(
-			"isn't a URL",
-		)
+	test('says how to set the token when there is none', async () => {
+		// Arrange
+		const context = await contextWith({})
+
+		// Act
+		const read = readSite(context)
+
+		// Assert
+		await expect(read).rejects.toThrow('mesh-flow credential set gitlab/token')
+	})
+
+	test('says what is wrong with a URL that is none', async () => {
+		// Arrange
+		const context = await contextWith({ [tokenCredential]: 'glpat-1', [urlCredential]: 'gitlab.example.com' })
+
+		// Act
+		const read = readSite(context)
+
+		// Assert
+		await expect(read).rejects.toThrow("isn't a URL")
 	})
 })

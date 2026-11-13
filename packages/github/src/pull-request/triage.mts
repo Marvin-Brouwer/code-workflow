@@ -7,8 +7,8 @@ import {
 } from '@mesh-flow/forge'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { githubTerms } from './github-terms.mts'
 import { isGoneReply, ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
+import { githubTerms } from './github-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
 export interface TriageOptions {

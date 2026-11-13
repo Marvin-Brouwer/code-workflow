@@ -1,9 +1,12 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { pipelineOnCommit, pipelinePackages, type JobFailure, type PipelineStatus } from '../tools/merge-request-tools.mts'
-import { projectSegment, type ApiClient } from './api.mts'
+import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 
-const ApiPipeline = z.object({ id: z.int(), status: z.string(), web_url: z.url() })
+const ApiPipeline = z.object({ id: z.int(), sha: z.string(), status: z.string(), web_url: z.url() })
+type ApiPipeline = z.infer<typeof ApiPipeline>
+
+const ApiCommit = z.object({ parent_ids: z.array(z.string()) })
 
 const ApiJob = z.object({
 	name: z.string(),
@@ -17,6 +20,7 @@ const ApiJob = z.object({
 const ApiPackage = z.object({
 	name: z.string(),
 	version: z.string(),
+	status: z.string().optional(),
 	pipeline: z.object({ id: z.int() }).nullable().optional(),
 	pipelines: z
 		.array(z.object({ id: z.int() }))
@@ -30,14 +34,44 @@ const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', 'manual'
 /** Pipeline states whose jobs are worth listing as failures. */
 const failedStates = new Set(['failed', 'canceled'])
 
+/** A commit id GitLab hasn't filled in, as on a merge request it is still preparing. */
+const noCommit = /^0+$/
+
+/** How many of a merge request's latest pipelines are looked at for a merged results pipeline of its head. */
+const mergedResultsCandidates = 5
+
+/**
+ * The latest pipeline of commit `sha`, or, for a merge request, its latest merged results pipeline
+ * of `sha`: one on a commit GitLab made by merging `sha` into the target, which has `sha` as a parent.
+ */
+async function latestPipeline(
+	client: GitlabClient,
+	project: string,
+	{ sha, ref, mergeRequest }: { readonly sha: string; readonly ref?: string | undefined; readonly mergeRequest?: number | undefined },
+): Promise<ApiPipeline | undefined> {
+	const { items } = await client.firstPage(`${project}/pipelines`, ApiPipeline, 1, { sha, ref, order_by: 'id', sort: 'desc' })
+	if (items[0] !== undefined || mergeRequest === undefined) return items[0]
+	const ofRequest = await client.firstPage(
+		`${project}/merge_requests/${String(mergeRequest)}/pipelines`,
+		ApiPipeline,
+		mergedResultsCandidates,
+	)
+	for (const candidate of ofRequest.items) {
+		if (candidate.sha === sha) return candidate
+		const commit = await client.request('GET', `${project}/repository/commits/${candidate.sha}`, ApiCommit)
+		if (commit.parent_ids.includes(sha)) return candidate
+	}
+	return undefined
+}
+
 /** The host halves of the pipeline and package tools. */
 export function pipelineHostTools(api: ApiClient): HostTool[] {
 	return [
-		hostTool(pipelineOnCommit, async ({ repository, sha, ref }, context) => {
+		hostTool(pipelineOnCommit, async ({ repository, sha, ref, mergeRequest }, context) => {
+			if (noCommit.test(sha)) return { status: 'pending' as const, failures: [] }
 			const client = await api(context)
 			const project = projectSegment(repository)
-			const { items } = await client.firstPage(`${project}/pipelines`, ApiPipeline, 1, { sha, ref, order_by: 'id', sort: 'desc' })
-			const latest = items[0]
+			const latest = await latestPipeline(client, project, { sha, ref, mergeRequest })
 			if (latest === undefined) return { status: 'none' as const, failures: [] }
 			const status: PipelineStatus = doneStates.has(latest.status) ? 'completed' : 'pending'
 			const pipeline = { id: latest.id, url: latest.web_url }
@@ -63,14 +97,19 @@ export function pipelineHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(pipelinePackages, async ({ repository, pipeline, type }, context) => {
 			const client = await api(context)
-			const packages = await client.all(`${projectSegment(repository)}/packages`, ApiPackage, {
-				package_type: type,
-				order_by: 'created_at',
-				sort: 'desc',
-			})
-			return packages
-				.filter((found) => found.pipeline?.id === pipeline || (found.pipelines ?? []).some((built) => built.id === pipeline))
-				.map((found) => ({ name: found.name, version: found.version }))
+			const ofPipeline = async (status?: string) => {
+				const query = { package_type: type, order_by: 'created_at', sort: 'desc', ...(status === undefined ? {} : { status }) }
+				const packages = await client.all(`${projectSegment(repository)}/packages`, ApiPackage, query)
+				return packages.filter((found) => found.pipeline?.id === pipeline || (found.pipelines ?? []).some((built) => built.id === pipeline))
+			}
+			// GitLab lists the packages it is done with by default, and those it is still processing only when asked.
+			const [listed, processing] = await Promise.all([ofPipeline(), ofPipeline('processing')])
+			const broken = listed.filter((found) => found.status === 'error')
+			if (broken.length > 0)
+				throw new Error(
+					`GitLab couldn't process ${broken.map((found) => `${found.name} ${found.version}`).join(', ')} of pipeline ${String(pipeline)}.`,
+				)
+			return { packages: listed.map((found) => ({ name: found.name, version: found.version })), processing: processing.length }
 		}),
 	]
 }

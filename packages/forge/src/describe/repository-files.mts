@@ -1,6 +1,6 @@
 import type { GitClient } from '@mesh-flow/git'
-import { capped } from '@mesh-flow/forge'
-import { fenced } from '@mesh-flow/forge'
+import { capped } from './capped.mts'
+import { fenced } from './fenced.mts'
 
 /** A file of the repository as the merge target has it. */
 export interface RepositoryFile {

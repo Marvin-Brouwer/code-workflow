@@ -1,8 +1,8 @@
+import { signed } from '@mesh-flow/forge/host'
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { splitRepositoryName } from '../repository-name.mts'
 import { closeIssue, commentMarker, commentOnIssue, getIssue, labelIssue, type IssueData } from '../tools/issue-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
-import { signed } from '@mesh-flow/forge/host'
 
 /**
  * The marker key of a comment posted without a key, which is never looked up to update. A caller's

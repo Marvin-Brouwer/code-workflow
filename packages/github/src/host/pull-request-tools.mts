@@ -1,9 +1,19 @@
-import { hostTool, isTransient, type HostTool } from '@mesh-flow/gateway'
+import {
+	descriptionOf,
+	footerCloses,
+	later,
+	oneAtATime,
+	replyToItem,
+	sameBody,
+	showItemsBeingRead,
+	signedDescription,
+} from '@mesh-flow/forge/host'
+import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
 import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker, isMarked } from '../tools/issue-tools.mts'
+import { isMarked } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
@@ -21,20 +31,6 @@ import {
 	type ReviewItem,
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
-import {
-	answeredKey,
-	descriptionOf,
-	footerCloses,
-	oneAtATime,
-	reactionKey,
-	repliedKey,
-	replyKey,
-	replyToItem,
-	sameBody,
-	seenKey,
-	signed,
-	signedDescription,
-} from '@mesh-flow/forge/host'
 import { pullRequestComments, readingNote } from './pull-request-comments.mts'
 import { refusedToken } from './transient-error.mts'
 
@@ -77,13 +73,6 @@ const verdicts: Record<string, ReviewItem['verdict']> = {
 const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'error'])
 
 const secondMs = 1_000
-
-/** The latest of two moments, either of which may be missing. */
-function later(seen: string | undefined, latest: string | undefined): string | undefined {
-	if (seen === undefined) return latest
-	if (latest === undefined) return seen
-	return seen.localeCompare(latest) >= 0 ? seen : latest
-}
 
 /** The open pull request of branch `head` onto `base`, when there is one. */
 async function openOnBranch(
@@ -221,33 +210,13 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 
 		hostTool(showBeingRead, async ({ repository, number, items }, context) => {
 			const comments = pullRequestComments(await api(context), repository, number)
-			const replies = await comments.ownReplies(items.map((listed) => parseItemId(listed.id).kind))
-			const hasReply = (key: string) => replies.some((reply) => reply.body.includes(commentMarker(key)))
-			const shown: string[] = []
-			const answered: string[] = []
-			// One at a time: GitHub limits bursts of writes, and a round of review can bring many items.
-			for (const { id: item, url, thread } of items) {
+			const toShow = items.map(({ id: item, url, thread }) => {
 				const { kind, id: commentId } = parseItemId(item)
-				// An answer replaced the reading reply, or is a reply of its own when there was none.
-				if (hasReply(answeredKey(item)) || hasReply(repliedKey(item))) {
-					answered.push(item)
-					continue
-				}
-				try {
-					const reaction = await comments.react(kind, commentId)
-					if (!hasReply(seenKey(item))) {
-						const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
-						const reactionKeys = reaction === undefined ? [] : [reactionKey(reaction)]
-						await comments.post(kind, threadId, signed(readingNote(kind, url), context.runId, [replyKey, seenKey(item), ...reactionKeys]))
-					}
-					shown.push(item)
-				} catch (error) {
-					// A deleted comment or a locked conversation just isn't shown. What may pass is tried again, and a
-					// stopped call or a bad token is no reason to say the items were shown.
-					if (isTransient(error) || context.abortSignal.aborted || refusedToken(error)) throw error
-				}
-			}
-			return { shown, answered }
+				// A reply to a comment on a line goes in its thread; everything else is answered on the conversation.
+				const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
+				return { item, kind, commentId, note: readingNote(kind, url), thread: () => Promise.resolve(threadId) }
+			})
+			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),
 
 		hostTool(checksOnRef, async ({ repository, ref }, context) => {

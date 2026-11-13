@@ -35,6 +35,55 @@ describe('pipelinePasses', () => {
 		expect(findings).toEqual([{ source: 'pipeline: test/test', message: 'script_failure (https://gitlab.example/jobs/1)' }])
 	})
 
+	test('reports the failures of a merged results pipeline, which runs on a merge of the head into the target', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { sha: head })
+		api.pipeline(projectPath, {
+			sha: merge,
+			ref: 'refs/merge-requests/3/merge',
+			status: 'failed',
+			mergeRequest: 3,
+			parents: ['c'.repeat(40), head],
+			jobs: [{ name: 'lint', stage: 'test', status: 'failed', web_url: 'https://gitlab.example/jobs/2' }],
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, (context) => runCheck(pipelinePasses(where, quickly), context))
+
+		// Assert
+		expect(await run.result).toEqual([{ source: 'pipeline: test/lint', message: 'failed (https://gitlab.example/jobs/2)' }])
+	})
+
+	test('reports a downstream pipeline that failed, and leaves out jobs that may fail', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { sha: head })
+		api.pipeline(projectPath, {
+			sha: head,
+			ref: 'feature',
+			status: 'failed',
+			jobs: [{ name: 'flaky', stage: 'test', status: 'failed', web_url: 'https://gitlab.example/jobs/3', allow_failure: true }],
+			bridges: [
+				{
+					name: 'deploy',
+					stage: 'deploy',
+					status: 'failed',
+					web_url: 'https://gitlab.example/jobs/4',
+					failure_reason: 'downstream_pipeline_failure',
+				},
+			],
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, (context) => runCheck(pipelinePasses(where, quickly), context))
+
+		// Assert
+		expect(await run.result).toEqual([
+			{ source: 'pipeline: deploy/deploy', message: 'downstream_pipeline_failure (https://gitlab.example/jobs/4)' },
+		])
+	})
+
 	test('passes a project without CI once no pipeline appeared in time', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
@@ -82,6 +131,44 @@ describe('publishedPackages', () => {
 
 		// Assert
 		expect(await run.result).toEqual([{ name: 'Team.Api.Client', version: '1.4.0' }])
+	})
+
+	test('waits for GitLab to process the packages of the pipeline before listing them', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { state: 'merged', sha: head, merge_commit_sha: merge })
+		const onMerge = api.pipeline(projectPath, { sha: merge, ref: 'main', status: 'success' })
+		const uploaded = { name: 'Team.Api.Client', version: '1.4.0', package_type: 'nuget', pipeline_id: onMerge.id, status: 'processing' }
+		api.project(projectPath).packages.push(uploaded)
+		let looks = 0
+		api.hold = (_method, requestPath) => {
+			if (requestPath.endsWith('/packages') && ++looks === 3) uploaded.status = 'default'
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, () =>
+			publishedPackages(where, 'nuget', { every: { seconds: 0 }, appearWithin: { seconds: 1 } }),
+		)
+
+		// Assert
+		expect(await run.result).toEqual([{ name: 'Team.Api.Client', version: '1.4.0' }])
+	})
+
+	test('fails for a package GitLab could not process', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 3, { state: 'merged', sha: head, merge_commit_sha: merge })
+		const onMerge = api.pipeline(projectPath, { sha: merge, ref: 'main', status: 'success' })
+		api
+			.project(projectPath)
+			.packages.push({ name: 'Team.Api.Client', version: '1.4.0', package_type: 'nuget', pipeline_id: onMerge.id, status: 'error' })
+
+		// Act
+		const run = await runOnGateway(gateway, () => publishedPackages(where, 'nuget', quickly))
+
+		// Assert
+		await expect(run.result).rejects.toThrow("couldn't process Team.Api.Client 1.4.0")
 	})
 
 	test('fails for a merge request that is not merged, and for a merge whose pipeline failed', async () => {

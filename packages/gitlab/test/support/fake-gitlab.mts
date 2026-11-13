@@ -58,6 +58,12 @@ export interface FakePipeline {
 	status: string
 	web_url: string
 	jobs: FakeJob[]
+	/** The triggers of downstream pipelines, which GitLab lists apart from the jobs. */
+	bridges?: FakeJob[]
+	/** The merge request a merge request pipeline runs for. */
+	mergeRequest?: number
+	/** The parents of the commit it runs on: the target and the head, for a merged results pipeline. */
+	parents?: string[]
 }
 
 export interface FakePackage {
@@ -65,7 +71,12 @@ export interface FakePackage {
 	version: string
 	package_type: string
 	pipeline_id: number
+	/** GitLab's status of the package: `default` once processed, `processing` while it reads it, `error` when that failed. */
+	status?: string
 }
+
+/** The package statuses GitLab lists when it isn't asked for one. */
+const listedStatuses = new Set(['default', 'deprecated', 'error'])
 
 /** What the fake holds for one project. */
 export interface FakeProject {
@@ -251,6 +262,11 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 	inProject.post('/merge_requests', async (context) => {
 		const path = pathOf(context)
 		const body = MergeRequestBody.parse(await context.req.json())
+		// GitLab keeps one open merge request per source branch.
+		const open = [...project(path).mergeRequests.values()].some(
+			(request) => request.state === 'opened' && request.source_branch === body.source_branch,
+		)
+		if (open) return context.json({ message: ['Another open merge request already exists for this source branch'] }, 409)
 		const iid = project(path).mergeRequests.size + 1
 		const made = mergeRequest(path, iid, {
 			title: body.title,
@@ -338,10 +354,7 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 		const found = project(pathOf(context))
 			.pipelines.filter((pipeline) => (sha === undefined || pipeline.sha === sha) && (ref === undefined || pipeline.ref === ref))
 			.toSorted((one, other) => other.id - one.id)
-		return paged(
-			context,
-			found.map(({ jobs: _jobs, ...pipeline }) => pipeline),
-		)
+		return paged(context, found.map(pipelineJson))
 	})
 	const pipelineOf = (context: Context) =>
 		project(pathOf(context)).pipelines.find((pipeline) => pipeline.id === Number(context.req.param('pipeline')))
@@ -354,16 +367,42 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 			pipeline.jobs.filter((job) => scope === undefined || job.status === scope),
 		)
 	})
-	inProject.get('/pipelines/:pipeline/bridges', (context) => (pipelineOf(context) === undefined ? notFound(context) : paged(context, [])))
+	inProject.get('/pipelines/:pipeline/bridges', (context) => {
+		const pipeline = pipelineOf(context)
+		if (pipeline === undefined) return notFound(context)
+		const scope = context.req.query('scope[]')
+		return paged(
+			context,
+			(pipeline.bridges ?? []).filter((bridge) => scope === undefined || bridge.status === scope),
+		)
+	})
+	inProject.get('/merge_requests/:iid/pipelines', (context) => {
+		const iid = Number(context.req.param('iid'))
+		const found = project(pathOf(context))
+			.pipelines.filter((pipeline) => pipeline.mergeRequest === iid)
+			.toSorted((one, other) => other.id - one.id)
+		return paged(context, found.map(pipelineJson))
+	})
+	inProject.get('/repository/commits/:sha', (context) => {
+		const sha = context.req.param('sha')
+		const pipeline = project(pathOf(context)).pipelines.find((listed) => listed.sha === sha)
+		return pipeline === undefined ? notFound(context) : context.json({ id: sha, parent_ids: pipeline.parents ?? [] })
+	})
 	inProject.get('/packages', (context) => {
 		const type = context.req.query('package_type')
-		const found = project(pathOf(context)).packages.filter((listed) => type === undefined || listed.package_type === type)
+		const status = context.req.query('status')
+		const found = project(pathOf(context)).packages.filter(
+			(listed) =>
+				(type === undefined || listed.package_type === type) &&
+				(status === undefined ? listedStatuses.has(listed.status ?? 'default') : (listed.status ?? 'default') === status),
+		)
 		return paged(
 			context,
 			found.map((listed) => ({
 				name: listed.name,
 				version: listed.version,
 				package_type: listed.package_type,
+				status: listed.status ?? 'default',
 				pipeline: { id: listed.pipeline_id },
 			})),
 		)
@@ -433,6 +472,11 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 		},
 		close,
 	}
+}
+
+/** A pipeline as GitLab lists it. */
+function pipelineJson(pipeline: FakePipeline) {
+	return { id: pipeline.id, sha: pipeline.sha, ref: pipeline.ref, status: pipeline.status, web_url: pipeline.web_url }
 }
 
 /** A commit id for a branch name, the same every time. */

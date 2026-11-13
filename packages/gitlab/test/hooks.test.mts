@@ -23,9 +23,10 @@ function note(noteableType: string) {
 }
 
 describe('hooks', () => {
-	test("checks GitLab's secret token in its own header, and names deliveries by GitLab's event id", () => {
+	test("checks GitLab's secret token in its own header, and names deliveries by GitLab's idempotency key", () => {
+		// Assert
 		expect(signature).toEqual({ scheme: 'secret-header', header: 'x-gitlab-token' })
-		expect(deliveryHeader).toBe('x-gitlab-event-uuid')
+		expect(deliveryHeader).toBe('idempotency-key')
 	})
 
 	test('takes a merge request event of the action asked for, and no other', () => {

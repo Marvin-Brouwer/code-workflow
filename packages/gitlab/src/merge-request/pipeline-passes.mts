@@ -1,5 +1,5 @@
 import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
-import { defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
+import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/forge'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 
@@ -18,8 +18,6 @@ export interface PipelinePassesOptions {
 	 */
 	readonly toleratedOutage?: WaitSpec
 }
-
-const defaultAppearWithin: WaitSpec = { minutes: 10 }
 
 /**
  * A check for `verify`: waits for the pipeline of the merge request's head commit to complete, and
@@ -41,7 +39,7 @@ export function pipelinePasses(on: MergeRequestRef, options: PipelinePassesOptio
 		for (;;) {
 			const pipeline = await look(async () => {
 				const { head } = await stubs.getMergeRequest(where, context)
-				return stubs.pipelineOnCommit({ repository: on.repository, sha: head.sha }, context)
+				return stubs.pipelineOnCommit({ repository: on.repository, sha: head.sha, mergeRequest: on.number }, context)
 			})
 			if (pipeline.status === 'none') looksWithoutPipeline++
 			const done = pipeline.status === 'completed' || (pipeline.status === 'none' && looksWithoutPipeline > looksForPipelineToAppear)
