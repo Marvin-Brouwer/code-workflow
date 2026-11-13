@@ -95,13 +95,14 @@ export const updateMergeRequest = {
 }
 
 /**
- * Finds on the host the open merge request of a branch onto a target branch, when it has one. GitLab
- * keeps one open merge request per branch, so one onto another target fails the call, naming it.
+ * Finds on the host the merge request of a branch onto a target branch in `state`, when it has one.
+ * GitLab keeps one open merge request per branch, so an open one onto another target fails the
+ * call, naming it. Of the merged ones, the latest.
  */
 export const findMergeRequest = {
 	name: 'gitlabFindMergeRequest',
-	description: 'Finds the open merge request of a branch on GitLab',
-	input: z.object({ repository: ProjectPath, head: BranchName, base: BranchName }),
+	description: 'Finds the open or the merged merge request of a branch on GitLab',
+	input: z.object({ repository: ProjectPath, head: BranchName, base: BranchName, state: z.enum(['opened', 'merged']) }),
 	output: MergeRequestData.nullable(),
 }
 

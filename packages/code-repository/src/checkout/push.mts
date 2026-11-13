@@ -19,7 +19,8 @@ export type PushBundle = (input: { repository: string; branch: string; bundle: s
 /**
  * Commits every change in the checkout with `message` and pushes the branch. The commits go to the
  * host as a git bundle of what the remote doesn't have yet (on top of the default branch for a new
- * branch), and the host pushes them with the credential.
+ * branch), and the host pushes them with the credential. A new branch that holds nothing the
+ * default branch doesn't fails the push, naming it.
  */
 export async function pushCheckout(repository: Checkout, message: string, pushBundle: PushBundle, context: ToolContext): Promise<Pushed> {
 	const { directory, branch, defaultBranch } = repository
@@ -35,6 +36,9 @@ export async function pushCheckout(repository: Checkout, message: string, pushBu
 	// A new branch is bundled on top of the default branch, which the host has: never the whole history.
 	const base = tracked ? tracking : trackingRef(defaultBranch)
 	const range = (await git.hasRef(base)) ? `${base}..${branch}` : branch
+	// Git makes no bundle of nothing, and a branch with nothing on top of the default branch has nothing for review.
+	if (!tracked && (await git.log('--format=%H', range)).stdout.trim() === '')
+		throw new Error(`${branch} in ${repository.name} has no commits on top of ${defaultBranch}, so there is nothing to push.`)
 	return withScratchFile('push.bundle', async (file) => {
 		await git.bundleCreate(file, [range], { quiet: true })
 		const bundle = (await readFile(file)).toString('base64')

@@ -4,6 +4,7 @@ import { Sha } from '../checkout/bundle-schemas.mts'
 import type { Checkout } from '../checkout/checkout.mts'
 import { localGit } from '../checkout/local-git.mts'
 import { trackingRef } from '../checkout/tracking.mts'
+import { filePathOf } from '../file-path.mts'
 import { capped } from './capped.mts'
 import { pascalCase, type CodeHostTerms } from './change-request.mts'
 import { filesAt, lintSettingsAt, templatesAt, type ChangeRequestLayout, type RepositoryFile } from './repository-files.mts'
@@ -39,20 +40,10 @@ const statWidthColumns = 160
 /** One commit per bullet: its subject, then its body indented two spaces. */
 const commitLogFormat = '- %s%n%w(0,2,2)%b'
 
-/** Characters git allows in a branch name and Windows doesn't in a file name. */
-const notInFileNames = /[<>:"|?*\\]/g
-
-/** A path segment Windows takes as a device, or trims the end of: `con`, `aux`, `com1`, or one ending in a dot or a space. */
-const notAFileOnWindows = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$|[. ]$/i
-
-/** Where in the workspace the diff of the branch goes: its path with each segment safe as a file name on Windows too. */
+/** Where in the workspace the diff of the branch goes: by the repository and the branch, each safe as a path on Windows too. */
 function diffFilePath(repository: Checkout, terms: CodeHostTerms): string {
-	const segments = repository.branch.split('/').map((segment) => {
-		const safe = segment.replace(notInFileNames, '-')
-		return notAFileOnWindows.test(safe) ? `${safe}-` : safe
-	})
 	// By the repository's name, in lower case as its checkout's folder is, but not under `repositories/`.
-	return `${diffsFolder(terms).path}/${repository.name.toLowerCase()}/${segments.join('/')}.diff`
+	return `${diffsFolder(terms).path}/${filePathOf(repository.name.toLowerCase())}/${filePathOf(repository.branch)}.diff`
 }
 
 /**

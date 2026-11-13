@@ -1,5 +1,5 @@
 import type { DependencyNode } from '@mesh-flow/core'
-import type { Plan } from './plan.mts'
+import { repositoryKey, type Plan } from './plan.mts'
 
 /** One repository of a plan, as `inDependencyOrder` delivers it. */
 export interface Delivery extends DependencyNode {
@@ -23,15 +23,17 @@ export interface Delivery extends DependencyNode {
  * ```
  */
 export function deliveryOrder(plan: Plan): readonly Delivery[] {
-	return plan.repositories.map((repository) => ({
-		id: repository.name,
-		repository: repository.name,
-		changes: repository.changes,
-		dependsOn: [
-			...new Set(
-				plan.dependencies.filter((dependency) => dependency.repository === repository.name).map((dependency) => dependency.dependsOn),
-			),
-		],
-		hasDependents: plan.dependencies.some((dependency) => dependency.dependsOn === repository.name),
+	// A dependency may spell a name in another case than the plan lists it: the ids are as listed.
+	const listed = new Map(plan.repositories.map(({ repository }) => [repositoryKey(repository), repository]))
+	const edges = plan.dependencies.map((dependency) => ({
+		needs: repositoryKey(dependency.repository),
+		dependsOn: listed.get(repositoryKey(dependency.dependsOn)) ?? dependency.dependsOn,
+	}))
+	return plan.repositories.map(({ repository, changes }) => ({
+		id: repository,
+		repository,
+		changes,
+		dependsOn: [...new Set(edges.filter(({ needs }) => needs === repositoryKey(repository)).map(({ dependsOn }) => dependsOn))],
+		hasDependents: edges.some(({ dependsOn }) => dependsOn === repository),
 	}))
 }

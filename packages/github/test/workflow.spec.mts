@@ -138,6 +138,20 @@ describe('github', () => {
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'earlier.txt', 'later.txt'])
 	})
 
+	test('refuses to push a new branch that holds nothing the default branch does not, naming it', async () => {
+		// Arrange
+		const { remote, gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () =>
+			push(await checkout({ repository: repositoryName, branch: 'fix/7' }))({ message: 'Nothing' }),
+		)
+
+		// Assert
+		await expect(run.result).rejects.toThrow('fix/7 in team/app has no commits on top of main, so there is nothing to push.')
+		await expect(remote.head('fix/7')).rejects.toThrow()
+	})
+
 	test("watches a pull request: hands new review items to the handler with eyes on them, leaves the run's own out, and ends when it is merged", async () => {
 		// Arrange
 		const { api, gateway } = await connected()

@@ -1,6 +1,6 @@
 import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
-import { mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
+import { mergedMergeRequest, mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { searchRepositories } from '../src/repository/search.mts'
 import { forkProjectId } from './support/fake-gitlab.mts'
@@ -217,6 +217,38 @@ describe('updateMergeRequest', () => {
 		// Assert
 		expect(updated.skipped).toBe('closed')
 		expect(read).toMatchObject({ state: 'closed', merged: true, title: 'Merged' })
+	})
+})
+
+describe('mergedMergeRequest', () => {
+	test('finds the latest merge request that merged the branch, after GitLab deleted the branch', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 2, { state: 'merged', source_branch: branch })
+		api.mergeRequest(projectPath, 3, { state: 'merged', source_branch: branch })
+		api.mergeRequest(projectPath, 4, { state: 'merged', source_branch: branch, source_project_id: forkProjectId })
+		api.mergeRequest(projectPath, 5, { state: 'merged', source_branch: 'feature/PROJ-8' })
+		api.mergeRequest(projectPath, 6, { state: 'opened', source_branch: branch })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => mergedMergeRequest(await checkout({ repository: projectPath, branch })))
+		const found = await run.result
+
+		// Assert
+		expect(found).toMatchObject({ number: 3, merged: true })
+	})
+
+	test('finds none for a branch that was never merged', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 2, { state: 'closed', source_branch: branch })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => mergedMergeRequest(await checkout({ repository: projectPath, branch })))
+		const found = await run.result
+
+		// Assert
+		expect(found).toBeUndefined()
 	})
 })
 

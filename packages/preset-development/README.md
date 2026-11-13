@@ -36,7 +36,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 - `Research` is a workspace folder, `research/`, for the research notes. `succeed(Research)` takes it once it holds a file, and in a later prompt it renders as the folder with its files.
 - `planFile` is `plan.md` in the workspace; in a prompt it renders as its absolute path.
-- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its name on the code host with a summary of its changes, and the `dependencies` between them, each with the reason. A dependency on a repository the plan doesn't list is refused, so the agent corrects it before the plan is proposed.
+- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its `repository`, its name on the code host, with a summary of its changes, and the `dependencies` between them: a repository that builds against packages another one publishes depends on it, with the reason. Names are compared in lower case, as code hosts compare them. A dependency on a repository the plan doesn't list is refused, so the agent corrects it before the plan is proposed.
 
 ### Delivery order
 
@@ -44,7 +44,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 ### Code review
 
-`codeReview(reviewer, repository, plan)` is a check for `verify`: the reviewer reviews what `git diff origin/<default branch>` shows in the checkout, committed or not, and its untracked files, against the plan and its deviations, and each real problem it reports is a finding, `code review: <where>`. It takes any checkout that renders as its directory and has `name`, `directory` and `defaultBranch`, such as `gitlab.checkout` and `github.checkout` give. Each state of the checkout gets a review of its own, so a rerun never takes the review of other changes for this one.
+`codeReview(reviewer, repository, plan)` is a check for `verify`: the reviewer reviews what the checkout changes against where its branch left the default branch, committed or not, and its untracked files, against the plan and its deviations, and each real problem it reports is a finding, `code review: <where>`. It takes any checkout that renders as its directory and has `name`, `directory` and `defaultBranch`, such as `gitlab.checkout` and `github.checkout` give. Each state of the checkout gets a review of its own, so a rerun never takes the review of other changes for this one.
 
 ### Deviations
 

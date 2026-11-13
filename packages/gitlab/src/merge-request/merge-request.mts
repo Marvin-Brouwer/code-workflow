@@ -109,8 +109,31 @@ export async function mergeRequest(ref: MergeRequestRef, context?: ToolContext):
 
 /** The open merge request of the checkout's branch onto the default branch, when it has one. */
 export async function findOpenMergeRequest(repository: Repository, context?: ToolContext): Promise<MergeRequest | undefined> {
+	return branchMergeRequest(repository, 'opened', context)
+}
+
+/**
+ * The merge request that merged the checkout's branch into the default branch, when one did; the
+ * latest, when several did. A run that starts over after a repository was delivered, such as one
+ * whose sandbox was lost, finds it here, while the branch may be gone or hold nothing new.
+ *
+ * ```ts
+ * const merged = await gitlab.mergedMergeRequest(repository)
+ * const mergeRequest = merged ?? (await deliver(repository))
+ * ```
+ */
+export async function mergedMergeRequest(repository: Repository, context?: ToolContext): Promise<MergeRequest | undefined> {
+	return branchMergeRequest(repository, 'merged', context)
+}
+
+/** The checkout's branch's merge request onto the default branch in `state`, when it has one. */
+async function branchMergeRequest(
+	repository: Repository,
+	state: 'opened' | 'merged',
+	context?: ToolContext,
+): Promise<MergeRequest | undefined> {
 	const found = await stubs.findMergeRequest(
-		{ repository: repository.name, head: repository.branch, base: repository.defaultBranch },
+		{ repository: repository.name, head: repository.branch, base: repository.defaultBranch, state },
 		context,
 	)
 	return found === null ? undefined : mergeRequestOf(found)

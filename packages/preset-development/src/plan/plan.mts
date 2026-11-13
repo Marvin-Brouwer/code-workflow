@@ -7,16 +7,27 @@ export const planFile = workspace.file('plan.md')
 
 /** One repository the plan changes. */
 const PlannedRepository = z.object({
-	name: z.string().min(1).describe('The repository as the code host names it, such as group/project'),
+	repository: z.string().min(1).describe('The repository as the code host names it, such as group/project'),
 	changes: z.string().min(1).describe('What changes in this repository, in short'),
 })
 
-/** One edge of the dependency graph: `repository` needs `dependsOn` merged and published first. */
+/**
+ * One edge of the dependency graph: `repository` builds against packages that `dependsOn` publishes,
+ * so `dependsOn` has to be merged, and its packages published, first.
+ */
 const PlannedDependency = z.object({
 	repository: z.string().min(1).describe('The repository that needs it'),
-	dependsOn: z.string().min(1).describe('The repository that has to be merged and published first'),
-	reason: z.string().min(1).describe('What it needs from it, such as a new package version or an API contract'),
+	dependsOn: z.string().min(1).describe('The repository whose packages it needs, merged and published first'),
+	reason: z.string().min(1).describe('Which of its packages it needs, and for what'),
 })
+
+/**
+ * A repository's name as the plan compares it: in lower case, since code hosts ignore case in
+ * names, and so do the checkout folders.
+ */
+export function repositoryKey(repository: string): string {
+	return repository.toLowerCase()
+}
 
 /**
  * A development plan, as the planner proposes it with `propose(Plan)`: the plan itself is a
@@ -33,12 +44,12 @@ export const Plan = z
 		dependencies: z.array(PlannedDependency).describe('The dependency graph between the repositories; empty when they are independent'),
 	})
 	.superRefine((plan, context) => {
-		const names = new Set(plan.repositories.map((repository) => repository.name))
+		const names = new Set(plan.repositories.map(({ repository }) => repositoryKey(repository)))
 		if (names.size !== plan.repositories.length)
 			context.addIssue({ code: 'custom', path: ['repositories'], message: 'List every repository once.' })
 		for (const [index, dependency] of plan.dependencies.entries())
 			for (const field of ['repository', 'dependsOn'] as const)
-				if (!names.has(dependency[field]))
+				if (!names.has(repositoryKey(dependency[field])))
 					context.addIssue({
 						code: 'custom',
 						path: ['dependencies', index, field],
@@ -59,23 +70,23 @@ export type Plan = z.infer<typeof Plan>
  * such a plan has no order to deliver its repositories in.
  */
 function inCycle(dependencies: readonly z.infer<typeof PlannedDependency>[]): string | undefined {
-	const needs = Map.groupBy(dependencies, (dependency) => dependency.repository)
+	const needs = Map.groupBy(dependencies, (dependency) => repositoryKey(dependency.repository))
 	const done = new Set<string>()
 	const visiting = new Set<string>()
-	const visit = (name: string): string | undefined => {
-		if (visiting.has(name)) return name
-		if (done.has(name)) return undefined
-		visiting.add(name)
-		for (const { dependsOn } of needs.get(name) ?? []) {
-			const found = visit(dependsOn)
+	const visit = (key: string): string | undefined => {
+		if (visiting.has(key)) return key
+		if (done.has(key)) return undefined
+		visiting.add(key)
+		for (const { dependsOn } of needs.get(key) ?? []) {
+			const found = visit(repositoryKey(dependsOn))
 			if (found !== undefined) return found
 		}
-		visiting.delete(name)
-		done.add(name)
+		visiting.delete(key)
+		done.add(key)
 		return undefined
 	}
 	for (const { repository } of dependencies) {
-		const found = visit(repository)
+		const found = visit(repositoryKey(repository))
 		if (found !== undefined) return found
 	}
 	return undefined

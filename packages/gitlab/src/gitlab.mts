@@ -1,6 +1,7 @@
 export { describe, type DescribeOptions } from './merge-request/describe.mts'
 export { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request/merge-request-text.mts'
 export {
+	mergedMergeRequest,
 	mergeRequest,
 	openMergeRequest,
 	updateMergeRequest,

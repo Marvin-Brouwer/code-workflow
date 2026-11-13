@@ -81,6 +81,18 @@ async function openOnBranch(client: GitlabClient, project: string, head: string,
 	return open
 }
 
+/** The latest merge request of the project's own branch `head` that was merged into `base`, when there is one. */
+async function mergedOnBranch(client: GitlabClient, project: string, head: string, base: string): Promise<ApiMergeRequest | undefined> {
+	const listed = await client.all(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, {
+		state: 'merged',
+		source_branch: head,
+		target_branch: base,
+	})
+	return listed
+		.filter((request) => request.source_project_id === request.target_project_id)
+		.toSorted((one, other) => other.iid - one.iid)[0]
+}
+
 /** GitLab's answer to a merge request opened for a branch that has one open already, as when two runs open it at once. */
 const conflict = 409
 
@@ -145,8 +157,10 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			return mergeRequestData(repository, updated)
 		}),
 
-		hostTool(findMergeRequest, async ({ repository, head, base }, context) => {
-			const found = await openOnBranch(await api(context), repository, head, base)
+		hostTool(findMergeRequest, async ({ repository, head, base, state }, context) => {
+			const client = await api(context)
+			const found =
+				state === 'opened' ? await openOnBranch(client, repository, head, base) : await mergedOnBranch(client, repository, head, base)
 			return found === undefined ? null : mergeRequestData(repository, found)
 		}),
 

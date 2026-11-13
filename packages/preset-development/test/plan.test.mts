@@ -4,9 +4,9 @@ import { deliveryOrder, Plan } from '../src/_module/preset-development.mts'
 const plan = {
 	path: '/workspace/plan.md',
 	repositories: [
-		{ name: 'team/contracts', changes: 'Add the refund event' },
-		{ name: 'team/api', changes: 'Publish refunds' },
-		{ name: 'team/docs', changes: 'Describe refunds' },
+		{ repository: 'team/contracts', changes: 'Add the refund event' },
+		{ repository: 'team/api', changes: 'Publish refunds' },
+		{ repository: 'team/docs', changes: 'Describe refunds' },
 	],
 	dependencies: [
 		{ repository: 'team/api', dependsOn: 'team/contracts', reason: 'the new event type' },
@@ -36,6 +36,17 @@ describe('Plan', () => {
 
 		// Assert
 		expect(parsed.error?.issues.map((issue) => issue.path.join('.'))).toEqual(['path', 'dependencies.0.dependsOn'])
+	})
+
+	test('refuses a repository listed twice in another case, as code hosts ignore case in names', () => {
+		// Arrange
+		const twice = { ...plan, repositories: [...plan.repositories, { repository: 'Team/API', changes: 'Publish refunds again' }] }
+
+		// Act
+		const parsed = Plan.safeParse(twice)
+
+		// Assert
+		expect(parsed.error?.issues.map((issue) => issue.message)).toEqual(['List every repository once.'])
 	})
 
 	test('refuses a repository that depends on itself, directly or through another', () => {
@@ -72,6 +83,24 @@ describe('deliveryOrder', () => {
 			{ id: 'team/contracts', repository: 'team/contracts', changes: 'Add the refund event', dependsOn: [], hasDependents: true },
 			{ id: 'team/api', repository: 'team/api', changes: 'Publish refunds', dependsOn: ['team/contracts'], hasDependents: false },
 			{ id: 'team/docs', repository: 'team/docs', changes: 'Describe refunds', dependsOn: [], hasDependents: false },
+		])
+	})
+
+	test('matches a dependency to the repository it names in another case', () => {
+		// Arrange
+		const parsed = Plan.parse({
+			...plan,
+			dependencies: [{ repository: 'Team/API', dependsOn: 'TEAM/contracts', reason: 'the new event type' }],
+		})
+
+		// Act
+		const order = deliveryOrder(parsed)
+
+		// Assert
+		expect(order.map(({ id, dependsOn, hasDependents }) => ({ id, dependsOn, hasDependents }))).toEqual([
+			{ id: 'team/contracts', dependsOn: [], hasDependents: true },
+			{ id: 'team/api', dependsOn: ['team/contracts'], hasDependents: false },
+			{ id: 'team/docs', dependsOn: [], hasDependents: false },
 		])
 	})
 })

@@ -19,7 +19,7 @@ const workspaceDirectory = '/workspace'
 function planIn(workspace: string): Plan {
 	return Plan.parse({
 		path: path.join(workspace, 'plan.md'),
-		repositories: [{ name: 'team/api', changes: 'Publish refunds' }],
+		repositories: [{ repository: 'team/api', changes: 'Publish refunds' }],
 		dependencies: [],
 	})
 }
