@@ -44,7 +44,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 ### Code review
 
-`codeReview(reviewer, repository, plan)` is a check for `verify`: the reviewer reviews what `git diff origin/<default branch>` shows in the checkout, committed or not, against the plan and its deviations, and each real problem it reports is a finding, `code review: <where>`. It takes any checkout that renders as its directory and has `name` and `defaultBranch`, such as `gitlab.checkout` and `github.checkout` give. Each hand-in is a review of its own.
+`codeReview(reviewer, repository, plan)` is a check for `verify`: the reviewer reviews what `git diff origin/<default branch>` shows in the checkout, committed or not, and its untracked files, against the plan and its deviations, and each real problem it reports is a finding, `code review: <where>`. It takes any checkout that renders as its directory and has `name`, `directory` and `defaultBranch`, such as `gitlab.checkout` and `github.checkout` give. Each state of the checkout gets a review of its own, so a rerun never takes the review of other changes for this one.
 
 ### Deviations
 

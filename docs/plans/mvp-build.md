@@ -19,10 +19,12 @@ Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which share
 common with github through [`@mesh-flow/forge`](../../packages/forge/README.md);
 [`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
 [`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
-[`examples/example`](../../examples/example), which builds and describes itself in CI with a
-sandbox image from its own Dockerfile. Running `develop` against a real story is what's left of
-"done when". A dependent repository that takes another's new NuGet packages needs the private
-registry shim, which isn't built, so `develop` runs one repository at a time for now.
+[`examples/example`](../../examples/example), which builds and describes itself in CI, and
+names a sandbox image built from its own Dockerfile (built and pushed by hand, not in CI).
+Running `develop` against a real story is what's left of "done when". A dependent repository that
+takes another's new NuGet packages needs the private registry shim, which isn't built: until it
+is, a dependent repository's restore fails, so only plans whose repositories don't depend on each
+other run through. Independent repositories run side by side.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
 sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
@@ -230,7 +232,9 @@ the first proof that the sandbox, engine, core and gateway work together.
 ### 7. The other connectors and `example`
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
-against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
+for plans whose repositories don't depend on each other. `inDependencyOrder` runs independent
+repositories side by side; a dependent one waits for the packages its dependencies' merges
+publish, which it can only restore once the registry shim is built.
 Until this step landed, the root `pnpm build` skipped `example` (`--filter=!example` in the root
 `package.json`), because its connector and preset sketches had no `package.json` and its imports
 didn't resolve. This step took that filter out again.

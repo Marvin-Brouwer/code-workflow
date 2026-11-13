@@ -44,5 +44,39 @@ export const Plan = z
 						path: ['dependencies', index, field],
 						message: `${dependency[field]} isn't one of the plan's repositories.`,
 					})
+		const cyclic = inCycle(plan.dependencies)
+		if (cyclic !== undefined)
+			context.addIssue({
+				code: 'custom',
+				path: ['dependencies'],
+				message: `${cyclic} ends up depending on itself: a repository can only wait for others that don't wait for it.`,
+			})
 	})
 export type Plan = z.infer<typeof Plan>
+
+/**
+ * A repository that, through its dependencies, ends up depending on itself, when there is one:
+ * such a plan has no order to deliver its repositories in.
+ */
+function inCycle(dependencies: readonly { readonly repository: string; readonly dependsOn: string }[]): string | undefined {
+	const needs = Map.groupBy(dependencies, (dependency) => dependency.repository)
+	const done = new Set<string>()
+	const visiting = new Set<string>()
+	const visit = (name: string): string | undefined => {
+		if (visiting.has(name)) return name
+		if (done.has(name)) return undefined
+		visiting.add(name)
+		for (const { dependsOn } of needs.get(name) ?? []) {
+			const found = visit(dependsOn)
+			if (found !== undefined) return found
+		}
+		visiting.delete(name)
+		done.add(name)
+		return undefined
+	}
+	for (const { repository } of dependencies) {
+		const found = visit(repository)
+		if (found !== undefined) return found
+	}
+	return undefined
+}

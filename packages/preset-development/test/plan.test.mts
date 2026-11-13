@@ -37,6 +37,28 @@ describe('Plan', () => {
 		// Assert
 		expect(parsed.error?.issues.map((issue) => issue.path.join('.'))).toEqual(['path', 'dependencies.0.dependsOn'])
 	})
+
+	it('refuses a repository that depends on itself, directly or through another', () => {
+		// Arrange
+		const onItself = { ...plan, dependencies: [{ repository: 'team/api', dependsOn: 'team/api', reason: 'itself' }] }
+		const roundabout = {
+			...plan,
+			dependencies: [
+				{ repository: 'team/api', dependsOn: 'team/contracts', reason: 'the new event type' },
+				{ repository: 'team/contracts', dependsOn: 'team/docs', reason: 'the wording' },
+				{ repository: 'team/docs', dependsOn: 'team/api', reason: 'the endpoints' },
+			],
+		}
+
+		// Act
+		const parsed = [Plan.safeParse(onItself), Plan.safeParse(roundabout)]
+
+		// Assert
+		expect(parsed.map((result) => result.error?.issues.map((issue) => issue.message))).toEqual([
+			["team/api ends up depending on itself: a repository can only wait for others that don't wait for it."],
+			["team/api ends up depending on itself: a repository can only wait for others that don't wait for it."],
+		])
+	})
 })
 
 describe('deliveryOrder', () => {

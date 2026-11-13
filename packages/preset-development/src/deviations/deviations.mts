@@ -36,7 +36,7 @@ async function record(deviation: Deviation, { abortSignal }: ToolContext): Promi
 	abortSignal.throwIfAborted()
 	const file = deviationsFile.location()
 	await mkdir(path.dirname(file), { recursive: true })
-	await appendFile(file, fileHeading, { flag: 'wx' }).catch((error: unknown) => {
+	await appendFile(file, fileHeading, { flag: 'ax' }).catch((error: unknown) => {
 		if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
 	})
 	abortSignal.throwIfAborted()

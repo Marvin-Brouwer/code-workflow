@@ -433,6 +433,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/git':
+        specifier: workspace:*
+        version: link:../git
       zod:
         specifier: ^4.6.7
         version: 4.6.7

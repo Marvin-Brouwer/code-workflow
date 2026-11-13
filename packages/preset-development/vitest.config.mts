@@ -10,6 +10,7 @@ export default defineConfig({
 		alias: {
 			'@mesh-flow/protocol': source('../protocol/src/_module/protocol.mts'),
 			'@mesh-flow/core': source('../core/src/_module/core.mts'),
+			'@mesh-flow/git': source('../git/src/_module/git.mts'),
 		},
 	},
 	test: {

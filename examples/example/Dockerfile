@@ -18,7 +18,9 @@ RUN curl --fail --silent --show-error --location https://dot.net/v1/dotnet-insta
 	&& ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
 	&& rm /tmp/dotnet-install.sh
 
+# Package signatures are checked without the revocation hosts, which the egress doesn't allow.
 ENV DOTNET_ROOT=/usr/share/dotnet \
 	DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 	DOTNET_NOLOGO=1 \
-	DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+	DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+	NUGET_CERT_REVOCATION_MODE=offline

@@ -54,42 +54,54 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 			Record any deviation from the plan with ${deviations.record}.
 			${limit({ minutes: 120 })}
 		`
+		// Code commits and pushes what was handed in, so `describe` reads the work as it was verified.
+		await gitlab.push(repository)({ message: `${story.key}: ${part.changes}` })
 
 		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
-		// A merge request closed meanwhile is given back as it is, not opened again.
-		if (mergeRequest.state === 'closed') throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
+		// A merge request merged or closed meanwhile is given back as it is, not opened again.
+		if (mergeRequest.state === 'closed' && !mergeRequest.merged)
+			throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
 		await jira.transition(story, 'In Review')
 		await jira.comment(story, `Merge request for ${repository.name}: ${mergeRequest.url}`, { key: `merge-request ${repository.name}` })
 
 		// Returns once the merge request is merged or closed. Each round of review comments is one call.
-		const outcome = await gitlab.review(mergeRequest, {
-			async comments(comments) {
-				// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
-				const changes = await gitlab.triage(reviewer, repository, { mergeRequest, comments })
-				if (changes.length === 0) return
-				await developer.loop`
+		const outcome = mergeRequest.merged
+			? { state: 'merged' as const }
+			: await gitlab.review(mergeRequest, {
+					async comments(comments) {
+						// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
+						const changes = await gitlab.triage(reviewer, repository, { mergeRequest, comments })
+						if (changes.length === 0) return
+						await developer.loop`
 					Make these changes in ${repository}, as they were planned: ${changes}.
 					When a change goes beyond this merge request, record it with ${deviations.record}.
 					Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
 					When every item is done, hand in with ${verify(dotnet.tests(repository))}.
 					${limit({ minutes: 45 })}
 				`
-				// `describe` runs no writer loop when the pushed commit is already described.
-				await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
-			},
-			async pipelineFailed({ failures }) {
-				await developer.loop`
+						// What was fixed after the last push, to make the tests pass, goes up too.
+						await gitlab.push(repository)({ message: `${story.key}: review changes` })
+						// `describe` runs no writer loop when the pushed commit is already described.
+						await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+					},
+					async pipelineFailed({ failures }) {
+						await developer.loop`
 					The pipeline of ${mergeRequest} failed: ${failures}.
 					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
 					${limit({ minutes: 45 })}
 				`
-				await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
-			},
-		})
+						await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+					},
+				})
 		if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)
 
 		// Only what another repository waits for: a project that publishes nothing has no packages to wait for.
-		return part.hasDependents ? gitlab.publishedPackages(mergeRequest, 'nuget') : []
+		if (!part.hasDependents) return []
+		const published = await gitlab.publishedPackages(mergeRequest, 'nuget')
+		// A repository waits for this one's packages: without any, it would build against the old ones.
+		if (published.length === 0)
+			throw new Error(`The merge of ${mergeRequest.url} published no packages, which ${part.repository}'s dependents wait for.`)
+		return published
 	})
 
 	await jira.transition(story, 'Done')

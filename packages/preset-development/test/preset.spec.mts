@@ -1,14 +1,13 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { agent, runCheck, toPrompt } from '@mesh-flow/core'
+import { agent, runCheck } from '@mesh-flow/core'
 import { describe, expect, it } from 'vitest'
-import { codeReview, deviations, Plan, type ReviewedCheckout } from '../src/_module/preset-development.mts'
+import { codeReview, deviations, Plan } from '../src/_module/preset-development.mts'
+import { gitCheckout } from './support/git-checkout.mts'
 import { runBody } from './support/run-body.mts'
 import { callsTool, modelId, neverAnswers, scriptedModel, textOf } from './support/scripted-model.mts'
 
 const reviewer = agent({ model: modelId })
-
-const repository: ReviewedCheckout = { name: 'team/api', defaultBranch: 'main', [toPrompt]: () => '/workspace/api' }
 
 /** Long enough for a scripted review. */
 const checkTimeoutMs = 10_000
@@ -44,11 +43,24 @@ describe('deviations', () => {
 				'## team/api\n\n- Found: A review comment on the refund handler\n- Deviation: Refunds are retried\n\n',
 		)
 	})
+
+	it('records nothing once the run stopped', async () => {
+		// Arrange
+		const deviation = { repository: 'team/api', reason: 'A pipeline', change: 'Refunds are queued' }
+		const stopped = AbortSignal.abort(new Error('The run stopped.'))
+
+		// Act
+		const recording = deviations.record(deviation, { abortSignal: stopped })
+
+		// Assert
+		await expect(recording).rejects.toThrow('The run stopped.')
+	})
 })
 
 describe('codeReview', () => {
 	it("reports the reviewer's findings, each with where it is", async () => {
 		// Arrange
+		const repository = await gitCheckout()
 		const model = scriptedModel([
 			callsTool('succeed', { findings: [{ where: 'src/Refunds.cs:12', message: 'The refund is never saved.' }] }),
 		])
@@ -63,12 +75,40 @@ describe('codeReview', () => {
 		expect(await run.result).toEqual([{ source: 'code review: src/Refunds.cs:12', message: 'The refund is never saved.' }])
 		const prompt = textOf(model.requests[0])
 		expect(prompt).toContain('git diff origin/main')
-		expect(prompt).toContain('/workspace/api')
+		expect(prompt).toContain(repository.directory)
 		expect(prompt).toContain('plan-deviations.md')
+	})
+
+	it('reviews each state of the checkout in a loop of its own, untracked files included', async () => {
+		// Arrange
+		const repository = await gitCheckout()
+		const noFindings = callsTool('succeed', { findings: [] })
+		const model = scriptedModel([noFindings, noFindings, noFindings])
+		const review = codeReview(reviewer, repository, planIn(workspaceDirectory))
+		const reviewNow = () => runBody(() => runCheck(review, { abortSignal: AbortSignal.timeout(checkTimeoutMs) }), model.models)
+
+		// Act
+		await (
+			await reviewNow()
+		).result
+		await (
+			await reviewNow()
+		).result
+		await writeFile(path.join(repository.directory, 'Refunds.cs'), 'class Refunds {}\n')
+		await (
+			await reviewNow()
+		).result
+
+		// Assert
+		const [first, unchanged, withNewFile] = model.requests.map((request) => /\(state (\w+)\)/.exec(textOf(request))?.[1])
+		expect(first).toBeDefined()
+		expect(unchanged).toBe(first)
+		expect(withNewFile).not.toBe(first)
 	})
 
 	it('settles when the run stops while the reviewer never answers', async () => {
 		// Arrange
+		const repository = await gitCheckout()
 		const model = scriptedModel([neverAnswers])
 		const run = await runBody(
 			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
