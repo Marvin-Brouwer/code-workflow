@@ -1,4 +1,4 @@
-import { check, type Check } from '@mesh-flow/core'
+import { check, type Check, type Finding } from '@mesh-flow/core'
 import type { DotnetRepository } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 
@@ -15,26 +15,29 @@ import { listPackages } from '../package-list.mts'
 export function security(repository: DotnetRepository): Check {
 	return check('security', async ({ abortSignal }) => {
 		const list = await listPackages(repository.directory, ['--vulnerable', '--include-transitive'], abortSignal)
-		const findings = new Map<string, { source: string; message: string }>()
-		for (const project of list.projects)
-			for (const framework of project.frameworks ?? [])
-				for (const [kind, packages] of [
-					['package', framework.topLevelPackages],
-					['transitive package', framework.transitivePackages],
-				] as const)
-					for (const listed of packages ?? []) {
-						const version = listed.resolvedVersion ?? listed.requestedVersion ?? ''
-						const key = `${listed.id}@${version}`
-						if (findings.has(key) || listed.vulnerabilities === undefined || listed.vulnerabilities.length === 0) continue
-						const advisories = listed.vulnerabilities.map(
-							(vulnerability) =>
-								`${vulnerability.severity}${vulnerability.advisoryurl === undefined ? '' : ` (${vulnerability.advisoryurl})`}`,
-						)
-						findings.set(key, {
-							source: 'vulnerable packages',
-							message: `${kind} ${listed.id} ${version} has known vulnerabilities: ${advisories.join(', ')}`,
-						})
-					}
-		return [...findings.values()]
+		const packages = list.projects.flatMap((project) =>
+			(project.frameworks ?? []).flatMap((framework) => [
+				...(framework.topLevelPackages ?? []).map((listed) => ({ kind: 'package', listed })),
+				...(framework.transitivePackages ?? []).map((listed) => ({ kind: 'transitive package', listed })),
+			]),
+		)
+		const findings = new Map<string, Finding>()
+		for (const { kind, listed } of packages) {
+			const version = listed.resolvedVersion ?? listed.requestedVersion ?? ''
+			const key = `${listed.id}@${version}`
+			const vulnerabilities = listed.vulnerabilities ?? []
+			if (findings.has(key) || vulnerabilities.length === 0) continue
+			const advisories = vulnerabilities.map(({ severity, advisoryurl }) =>
+				advisoryurl === undefined ? severity : `${severity} (${advisoryurl})`,
+			)
+			findings.set(key, {
+				source: 'vulnerable packages',
+				message: `${kind} ${listed.id} ${version} has known vulnerabilities: ${advisories.join(', ')}`,
+			})
+		}
+		// A source without vulnerability data, or one that couldn't be reached, is a problem of the
+		// list: without this, nothing found would read as nothing vulnerable.
+		const problems = (list.problems ?? []).map((problem) => ({ source: 'package audit', message: problem.text }))
+		return [...problems, ...findings.values()]
 	})
 }

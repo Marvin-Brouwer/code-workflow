@@ -16,14 +16,23 @@ export interface PackageUpdate {
 	/** The project, relative to the checkout. */
 	readonly project: string
 	readonly name: string
-	readonly from: string
+	/** The version the project asked for before, or undefined when it named none, as a reference without a version does. */
+	readonly from?: string
 	readonly to: string
+}
+
+/** A version as NuGet writes an exact one, `[2.4.0]`, or as a minimum, `2.4.0`, which both mean that version here. */
+const exactVersion = /^\[([^,\]]+)\]$/
+
+/** Whether a project's reference asks for `version`, written either way. */
+function asksFor(requested: string | undefined, version: string): boolean {
+	return requested !== undefined && (exactVersion.exec(requested.trim())?.[1] ?? requested.trim()) === version
 }
 
 /** NuGet ignores case in package ids. */
 const sameId = (one: string, other: string) => one.toLowerCase() === other.toLowerCase()
 
-/** The update as a tool, so a run that starts over finds it done. */
+/** The update as a tool, so a run's events show what it was called with. A rerun changes nothing since a reference at the version is left alone. */
 const updateTool = tool('dotnetUpdatePackages', {
 	description: 'Moves the package references of the .NET projects in a directory to the versions given',
 	input: z.object({
@@ -32,23 +41,21 @@ const updateTool = tool('dotnetUpdatePackages', {
 	}),
 	action: async ({ directory, packages }, { abortSignal }): Promise<readonly PackageUpdate[]> => {
 		if (packages.length === 0) return []
+		const cwd = workingDirectoryOf(directory)
 		const list = await listPackages(directory, [], abortSignal)
 		const updates: PackageUpdate[] = []
 		for (const project of list.projects) {
 			const referenced = (project.frameworks ?? []).flatMap((framework) => framework.topLevelPackages ?? [])
 			for (const wanted of packages) {
 				const current = referenced.find((listed) => sameId(listed.id, wanted.name))
-				if (current === undefined || current.requestedVersion === wanted.version) continue
+				if (current === undefined || asksFor(current.requestedVersion, wanted.version)) continue
 				// One at a time: `dotnet add` writes the project file, or Directory.Packages.props under central package management.
-				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], {
-					cwd: workingDirectoryOf(directory),
-					abortSignal,
-				})
+				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
 				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
-					project: path.relative(workingDirectoryOf(directory), project.path),
+					project: path.relative(cwd, project.path),
 					name: current.id,
-					from: current.requestedVersion ?? '',
+					...(current.requestedVersion === undefined ? {} : { from: current.requestedVersion }),
 					to: wanted.version,
 				})
 			}

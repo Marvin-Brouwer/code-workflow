@@ -13,7 +13,8 @@ const hasSdk = await execa('dotnet', ['--version'], { reject: false }).then((res
 /** Long enough for a first restore from nuget.org. */
 const sdkTimeoutMs = 180_000
 
-const running = () => ({ abortSignal: new AbortController().signal })
+/** What a tool or check gets when called from code, with a signal nothing aborts. */
+const toolContext = () => ({ abortSignal: new AbortController().signal })
 
 /** A new project from one of the SDK's templates, in a directory of its own. */
 async function newProject(template: string): Promise<string> {
@@ -33,7 +34,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			await writeFile(path.join(directory, 'Program.cs'), 'Console.WriteLine("hello")\n')
 
 			// Act
-			const result = await build({ directory }, running())
+			const result = await build({ directory }, toolContext())
 
 			// Assert
 			expect(result.succeeded).toBe(false)
@@ -53,7 +54,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			)
 
 			// Act
-			const findings = await runCheck(tests({ directory }), running())
+			const findings = await runCheck(tests({ directory }), toolContext())
 
 			// Assert
 			expect(findings).toMatchObject([{ source: 'test: App.UnitTest1.Adds' }])

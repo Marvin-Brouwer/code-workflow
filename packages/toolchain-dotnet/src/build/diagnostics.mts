@@ -16,7 +16,7 @@ export interface Diagnostic {
  * MSBuild's canonical form: `origin: [subcategory] error|warning [code]: text [project]`, where the
  * origin is a file with an optional `(line,column)`, or a tool's name.
  */
-const canonical =
+const msbuildDiagnosticLine =
 	/^\s*(?:(?<origin>.+?)(?:\((?<line>\d+)(?:,(?<column>\d+))?(?:,\d+,\d+)?\))?\s*:\s*)?(?:[\w ]+ )?(?<severity>error|warning)\s*(?<code>[A-Za-z]+\d+)?\s*:\s*(?<message>.*?)(?:\s+\[(?<project>[^\]]+)\])?\s*$/
 
 /**
@@ -27,7 +27,7 @@ export function diagnosticsIn(output: string): Diagnostic[] {
 	const seen = new Set<string>()
 	const found: Diagnostic[] = []
 	for (const line of output.split(/\r?\n/)) {
-		const groups = canonical.exec(line)?.groups
+		const groups = msbuildDiagnosticLine.exec(line)?.groups
 		if (groups?.severity !== 'error' && groups?.severity !== 'warning') continue
 		const diagnostic: Diagnostic = {
 			severity: groups.severity,
@@ -48,9 +48,9 @@ export function diagnosticsIn(output: string): Diagnostic[] {
 
 /** A diagnostic on one line, as a finding or an agent reads it: `file(line,column): CS1002: message`. */
 export function diagnosticLine(diagnostic: Diagnostic): string {
-	const where =
-		diagnostic.file === undefined
-			? ''
-			: `${diagnostic.file}${diagnostic.line === undefined ? '' : `(${String(diagnostic.line)}${diagnostic.column === undefined ? '' : `,${String(diagnostic.column)}`})`}: `
+	const { file, line, column } = diagnostic
+	const atColumn = column === undefined ? '' : `,${String(column)}`
+	const position = line === undefined ? '' : `(${String(line)}${atColumn})`
+	const where = file === undefined ? '' : `${file}${position}: `
 	return `${where}${diagnostic.code === undefined ? '' : `${diagnostic.code}: `}${diagnostic.message}`
 }

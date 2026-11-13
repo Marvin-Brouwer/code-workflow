@@ -18,27 +18,60 @@ export interface TestCounts {
 }
 
 /** Elements that can come once or many times: always lists, so one test reads like many. */
-const lists = new Set(['UnitTestResult', 'InnerResults'])
+const repeatableElements = new Set(['UnitTestResult', 'InnerResults'])
 
 const parser = new XMLParser({
 	ignoreAttributes: false,
 	attributeNamePrefix: '',
-	isArray: (name) => lists.has(name),
+	isArray: (name) => repeatableElements.has(name),
 	parseAttributeValue: false,
+	// A message such as `007` stays text.
+	parseTagValue: false,
 	trimValues: false,
 })
 
 /** Text that may be missing, an element's text, or text with attributes beside it. */
 const Text = z
-	.union([z.string(), z.number(), z.object({ '#text': z.union([z.string(), z.number()]).optional() })])
+	.union([z.string(), z.object({ '#text': z.string().optional() })])
 	.optional()
-	.transform((value) => (typeof value === 'object' ? String(value['#text'] ?? '') : value === undefined ? '' : String(value)))
+	.transform((value) => (typeof value === 'object' ? (value['#text'] ?? '') : (value ?? '')))
 
-const UnitTestResult = z.object({
-	testName: z.string(),
-	outcome: z.string(),
-	Output: z.object({ ErrorInfo: z.object({ Message: Text, StackTrace: Text }).optional() }).optional(),
-})
+interface UnitTestResult {
+	readonly testName: string
+	readonly outcome: string
+	readonly Output?: { readonly ErrorInfo?: { readonly Message: string; readonly StackTrace: string } | undefined } | undefined
+	/** The results of each data row of a data-driven test, which carry the errors the test itself may not. */
+	readonly InnerResults?: readonly { readonly UnitTestResult?: readonly UnitTestResult[] | undefined }[] | undefined
+}
+
+const UnitTestResult: z.ZodType<UnitTestResult> = z.lazy(() =>
+	z.object({
+		testName: z.string(),
+		outcome: z.string(),
+		Output: z.object({ ErrorInfo: z.object({ Message: Text, StackTrace: Text }).optional() }).optional(),
+		InnerResults: z.array(z.object({ UnitTestResult: z.array(UnitTestResult).optional() })).optional(),
+	}),
+)
+
+/** Outcomes that aren't a failure: the test passed, or didn't run. Any other, such as `Timeout` or `Aborted`, is one. */
+const notFailed = new Set(['Passed', 'NotExecuted', 'Inconclusive'])
+
+/** The failures of a result: those of its data rows when it has them, else its own. */
+function failuresOf(result: UnitTestResult): TestFailure[] {
+	if (notFailed.has(result.outcome)) return []
+	const rows = (result.InnerResults ?? []).flatMap((inner) => inner.UnitTestResult ?? []).flatMap(failuresOf)
+	if (rows.length > 0) return rows
+	const error = result.Output?.ErrorInfo
+	const message = error?.Message.trim() ?? ''
+	return [
+		{
+			name: result.testName,
+			// A test that timed out or was aborted may say nothing more than its outcome.
+			message: message === '' ? result.outcome : message,
+			...(error === undefined || error.StackTrace.trim() === '' ? {} : { stackTrace: error.StackTrace.trim() }),
+		},
+	]
+}
 
 const Trx = z.object({
 	TestRun: z.object({
@@ -46,7 +79,14 @@ const Trx = z.object({
 		ResultSummary: z
 			.object({
 				Counters: z
-					.object({ passed: z.coerce.number().default(0), failed: z.coerce.number().default(0), notExecuted: z.coerce.number().default(0) })
+					.object({
+						passed: z.coerce.number().default(0),
+						failed: z.coerce.number().default(0),
+						error: z.coerce.number().default(0),
+						timeout: z.coerce.number().default(0),
+						aborted: z.coerce.number().default(0),
+						notExecuted: z.coerce.number().default(0),
+					})
 					.optional(),
 			})
 			.optional(),
@@ -63,17 +103,10 @@ export function countsOf(files: readonly string[]): TestCounts {
 		const { TestRun: run } = Trx.parse(parser.parse(file))
 		const counters = run.ResultSummary?.Counters
 		passed += counters?.passed ?? 0
-		failed += counters?.failed ?? 0
+		// A test that errored, timed out or was aborted failed too: TRX counts each apart.
+		failed += (counters?.failed ?? 0) + (counters?.error ?? 0) + (counters?.timeout ?? 0) + (counters?.aborted ?? 0)
 		skipped += counters?.notExecuted ?? 0
-		for (const result of run.Results?.UnitTestResult ?? []) {
-			if (result.outcome !== 'Failed') continue
-			const error = result.Output?.ErrorInfo
-			failures.push({
-				name: result.testName,
-				message: error?.Message.trim() ?? '',
-				...(error === undefined || error.StackTrace.trim() === '' ? {} : { stackTrace: error.StackTrace.trim() }),
-			})
-		}
+		failures.push(...(run.Results?.UnitTestResult ?? []).flatMap(failuresOf))
 	}
 	return { passed, failed, skipped, failures }
 }

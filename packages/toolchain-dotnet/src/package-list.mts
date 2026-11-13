@@ -1,16 +1,16 @@
 import { z } from 'zod'
 import { workingDirectoryOf } from './directory.mts'
-import { outputTail, runDotnet } from './run-dotnet.mts'
+import { noBuildServerArguments, outputTail, runDotnet } from './run-dotnet.mts'
 
 const Vulnerability = z.object({ severity: z.string(), advisoryurl: z.string().optional() })
 
+/** A package as `dotnet list package` lists it, with its vulnerabilities when asked for them. */
 const ListedPackage = z.object({
 	id: z.string(),
 	requestedVersion: z.string().optional(),
 	resolvedVersion: z.string().optional(),
 	vulnerabilities: z.array(Vulnerability).optional(),
 })
-export type ListedPackage = z.infer<typeof ListedPackage>
 
 /** What `dotnet list package --format json` writes: per project, per target framework, the packages. */
 const PackageList = z.object({
@@ -32,7 +32,7 @@ const PackageList = z.object({
 		)
 		.default([]),
 })
-export type PackageList = z.infer<typeof PackageList>
+type PackageList = z.infer<typeof PackageList>
 
 /**
  * Restores, then lists the packages of a solution or project with `dotnet list package`, in its
@@ -41,7 +41,7 @@ export type PackageList = z.infer<typeof PackageList>
  */
 export async function listPackages(target: string, options: readonly string[], abortSignal: AbortSignal): Promise<PackageList> {
 	const cwd = workingDirectoryOf(target)
-	const restored = await runDotnet(['restore', target, '-nologo', '--disable-build-servers'], { cwd, abortSignal })
+	const restored = await runDotnet(['restore', target, ...noBuildServerArguments], { cwd, abortSignal })
 	if (!restored.ok) throw new Error(`dotnet restore failed:\n${outputTail(restored)}`)
 	const listed = await runDotnet(['list', target, 'package', ...options, '--format', 'json'], { cwd, abortSignal })
 	if (!listed.ok) throw new Error(`dotnet list package failed:\n${outputTail(listed)}`)

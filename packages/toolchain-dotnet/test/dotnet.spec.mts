@@ -6,13 +6,40 @@ import { security } from '../src/security/security.mts'
 import { test as testTool } from '../src/test-run/test.mts'
 import { tests } from '../src/test-run/tests-check.mts'
 import { fakeDotnet } from './support/fake-dotnet.mts'
-import { brokenBuild, failingTrx, passingTrx, referencedList, vulnerableList } from './support/fixtures.mts'
+import { existsSync } from 'node:fs'
+import {
+	auditProblemList,
+	brokenBuild,
+	failingTestOutput,
+	failingTrx,
+	passingTrx,
+	referencedList,
+	vulnerableList,
+} from './support/fixtures.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 /** How soon a call that stopped has to settle. */
 const promptlyMs = 1000
 
-const running = () => ({ abortSignal: new AbortController().signal })
+/** Time for the fake `dotnet` to have started before the call stops. */
+const startedMs = 300
+
+/** What a tool or check gets when called from code, with a signal nothing aborts. */
+/**
+ * Starts the work, stops it once the fake `dotnet` had time to start, and resolves to how long the
+ * work took to settle after the stop, having checked it rejected with the stop's reason.
+ */
+async function settleAfterStop(start: (context: { abortSignal: AbortSignal }) => Promise<unknown>): Promise<number> {
+	const controller = new AbortController()
+	const working = start({ abortSignal: controller.signal })
+	await new Promise((resolve) => setTimeout(resolve, startedMs))
+	const started = performance.now()
+	controller.abort(new Error('The run stopped.'))
+	await expect(working).rejects.toThrow('The run stopped.')
+	return performance.now() - started
+}
+
+const toolContext = () => ({ abortSignal: new AbortController().signal })
 
 describe('build', () => {
 	test('builds the directory without build servers, and hands back its errors and how many warnings it had', async () => {
@@ -21,12 +48,12 @@ describe('build', () => {
 		const cli = await fakeDotnet({ build: { stdout: brokenBuild, exitCode: 1 } })
 
 		// Act
-		const result = await build({ directory }, running())
+		const result = await build({ directory }, toolContext())
 
 		// Assert
 		expect(result).toMatchObject({ succeeded: false, warnings: 2, errors: [{ code: 'CS1002', line: 12 }] })
 		expect(await cli.calls()).toEqual([
-			['build', directory, '--configuration', 'Debug', '-nologo', '-clp:NoSummary', '--disable-build-servers'],
+			['build', directory, '--configuration', 'Debug', '-nologo', '--disable-build-servers', '-clp:NoSummary'],
 		])
 	})
 
@@ -36,7 +63,7 @@ describe('build', () => {
 		await fakeDotnet({ build: { stdout: 'A compatible .NET SDK was not found.\n', exitCode: 145 } })
 
 		// Act
-		const result = await build({ directory }, running())
+		const result = await build({ directory }, toolContext())
 
 		// Assert
 		expect(result).toEqual({ succeeded: false, errors: [], warnings: 0, output: 'A compatible .NET SDK was not found.' })
@@ -46,17 +73,12 @@ describe('build', () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		await fakeDotnet({ build: { hang: true } })
-		const controller = new AbortController()
 
 		// Act
-		const building = build({ directory }, { abortSignal: controller.signal })
-		await new Promise((resolve) => setTimeout(resolve, 300))
-		const started = performance.now()
-		controller.abort(new Error('The run stopped.'))
+		const settledMs = await settleAfterStop((context) => build({ directory }, context))
 
 		// Assert
-		await expect(building).rejects.toThrow('The run stopped.')
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(settledMs).toBeLessThan(promptlyMs)
 	})
 })
 
@@ -67,7 +89,7 @@ describe('test and tests', () => {
 		const cli = await fakeDotnet({ test: { exitCode: 1, trx: [failingTrx, passingTrx] } })
 
 		// Act
-		const result = await testTool({ directory, filter: 'FullyQualifiedName~Login' }, running())
+		const result = await testTool({ directory, filter: 'FullyQualifiedName~Login' }, toolContext())
 
 		// Assert
 		expect(result).toMatchObject({ succeeded: false, passed: 2, failed: 1, skipped: 1, buildErrors: [] })
@@ -76,16 +98,13 @@ describe('test and tests', () => {
 		expect(call).toEqual(expect.arrayContaining(['test', directory, '--logger', 'trx', '--filter', 'FullyQualifiedName~Login']))
 	})
 
-	test('the check reports each failed test, and the build errors when it does not build', async () => {
+	test('the check reports each failed test', async () => {
 		// Arrange
-		const failing = await temporaryDirectory()
-		const broken = await temporaryDirectory()
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ test: { exitCode: 1, trx: [failingTrx] } })
 
 		// Act
-		await fakeDotnet({ test: { exitCode: 1, trx: [failingTrx] } })
-		const failures = await runCheck(tests({ directory: failing }), running())
-		await fakeDotnet({ test: { exitCode: 1, stdout: brokenBuild } })
-		const buildErrors = await runCheck(tests({ directory: broken }), running())
+		const failures = await runCheck(tests({ directory }), toolContext())
 
 		// Assert
 		expect(failures).toEqual([
@@ -95,6 +114,45 @@ describe('test and tests', () => {
 					'Assert.Equal() Failure: Expected "None", Actual "Lax"\nat Api.Tests.LoginTests.SetsSameSite() in /work/api/tests/LoginTests.cs:line 21',
 			},
 		])
+	})
+
+	test('reports the failed test, not a build error, for a line of its output that looks like one', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ test: { exitCode: 1, stdout: failingTestOutput, trx: [failingTrx] } })
+
+		// Act
+		const findings = await runCheck(tests({ directory }), toolContext())
+
+		// Assert
+		expect(findings.map((finding) => finding.source)).toEqual(['test: Api.Tests.LoginTests.SetsSameSite'])
+	})
+
+	test('settles promptly when the run stops while the tests never end, and leaves no results behind', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const cli = await fakeDotnet({ test: { hang: true } })
+
+		// Act
+		const toolSettledMs = await settleAfterStop((context) => testTool({ directory }, context))
+		const checkSettledMs = await settleAfterStop((context) => runCheck(tests({ directory }), context))
+
+		// Assert
+		expect([toolSettledMs, checkSettledMs].every((settledMs) => settledMs < promptlyMs)).toBe(true)
+		const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
+		expect(results).toHaveLength(2)
+		expect(results.filter((folder) => existsSync(folder))).toEqual([])
+	})
+
+	test('the check reports the build errors when it does not build', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ test: { exitCode: 1, stdout: brokenBuild } })
+
+		// Act
+		const buildErrors = await runCheck(tests({ directory }), toolContext())
+
+		// Assert
 		expect(buildErrors).toEqual([{ source: 'build', message: '/work/api/src/Login.cs(12,34): CS1002: ; expected' }])
 	})
 
@@ -104,7 +162,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { trx: [passingTrx] } })
 
 		// Act
-		const findings = await runCheck(tests({ directory }), running())
+		const findings = await runCheck(tests({ directory }), toolContext())
 
 		// Assert
 		expect(findings).toEqual([])
@@ -118,7 +176,7 @@ describe('security', () => {
 		const cli = await fakeDotnet({ list: { stdout: vulnerableList } })
 
 		// Act
-		const findings = await runCheck(security({ directory }), running())
+		const findings = await runCheck(security({ directory }), toolContext())
 
 		// Assert
 		expect(findings).toEqual([
@@ -137,6 +195,44 @@ describe('security', () => {
 		expect(calls[1]).toEqual(['list', directory, 'package', '--vulnerable', '--include-transitive', '--format', 'json'])
 	})
 
+	test('reports what kept the list from telling whether a package is vulnerable', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ list: { stdout: auditProblemList } })
+
+		// Act
+		const findings = await runCheck(security({ directory }), toolContext())
+
+		// Assert
+		expect(findings).toEqual([
+			{ source: 'package audit', message: 'The source https://feed.example/v3/index.json has no vulnerability data.' },
+		])
+	})
+
+	test('settles promptly when the run stops while the restore never ends', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ restore: { hang: true } })
+
+		// Act
+		const settledMs = await settleAfterStop((context) => runCheck(security({ directory }), context))
+
+		// Assert
+		expect(settledMs).toBeLessThan(promptlyMs)
+	})
+
+	test('settles promptly when the run stops while the list never ends', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ list: { hang: true } })
+
+		// Act
+		const settledMs = await settleAfterStop((context) => runCheck(security({ directory }), context))
+
+		// Assert
+		expect(settledMs).toBeLessThan(promptlyMs)
+	})
+
 	test('fails when the restore fails, since nothing can be told about the packages then', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
@@ -145,7 +241,7 @@ describe('security', () => {
 		})
 
 		// Act
-		const checking = runCheck(security({ directory }), running())
+		const checking = runCheck(security({ directory }), toolContext())
 
 		// Assert
 		await expect(checking).rejects.toThrow('NU1301')
@@ -165,7 +261,7 @@ describe('updatePackages', () => {
 				{ name: 'Team.Contracts', version: '2.4.0' },
 				{ name: 'Team.Other', version: '1.0.0' },
 			],
-			running(),
+			toolContext(),
 		)
 
 		// Assert
@@ -175,13 +271,27 @@ describe('updatePackages', () => {
 		expect(added).toEqual([['add', '/work/api/src/Api.csproj', 'package', 'Team.Contracts', '--version', '2.4.0']])
 	})
 
+	test('settles promptly when the run stops while a package is being added', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		await fakeDotnet({ list: { stdout: referencedList }, add: { hang: true } })
+
+		// Act
+		const settledMs = await settleAfterStop((context) =>
+			updatePackages({ directory }, [{ name: 'Team.Contracts', version: '2.4.0' }], context),
+		)
+
+		// Assert
+		expect(settledMs).toBeLessThan(promptlyMs)
+	})
+
 	test('does nothing without packages', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
 		const cli = await fakeDotnet({})
 
 		// Act
-		const updates = await updatePackages({ directory }, [], running())
+		const updates = await updatePackages({ directory }, [], toolContext())
 
 		// Assert
 		expect(updates).toEqual([])
