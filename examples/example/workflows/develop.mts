@@ -46,7 +46,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		await developer.loop`
 			Implement your part of ${plan.path}, as amended by ${deviations}, in ${repository}: ${part.changes}
 			Build with ${dotnet.build} and test with ${dotnet.test} until both pass, then hand in your work with ${verify(
-				dotnet.tests(repository),
+				dotnet.testsPass(repository),
 				dotnet.security(repository),
 				codeReview(reviewer, repository, plan),
 			)}.
@@ -76,7 +76,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 						Make these changes in ${repository}, as they were planned: ${changes}.
 						When a change goes beyond this merge request, record it with ${deviations.record}.
 						Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
-						When every item is done, hand in with ${verify(dotnet.tests(repository))}.
+						When every item is done, hand in with ${verify(dotnet.testsPass(repository))}.
 						${limit({ minutes: 45 })}
 					`
 					// What was fixed after the last push, to make the tests pass, goes up too.

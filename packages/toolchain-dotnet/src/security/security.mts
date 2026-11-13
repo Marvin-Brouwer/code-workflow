@@ -1,5 +1,5 @@
 import { check, type Check, type Finding } from '@mesh-flow/core'
-import type { DotnetRepository } from '../directory.mts'
+import type { DotnetCheckout } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 
 /** The level of a problem of the list that says nothing is wrong, as `info` or `Information`. */
@@ -16,7 +16,7 @@ const informationalLevel = 'info'
  * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.security(repository))}.`
  * ```
  */
-export function security(repository: DotnetRepository): Check {
+export function security(repository: DotnetCheckout): Check {
 	return check('security', async ({ abortSignal }) => {
 		const list = await listPackages(repository.directory, ['--vulnerable', '--include-transitive'], abortSignal)
 		const packages = list.projects.flatMap((project) =>

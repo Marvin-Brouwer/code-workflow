@@ -5,7 +5,7 @@ import { execa } from 'execa'
 import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
 import { security } from '../src/security/security.mts'
-import { tests } from '../src/test-run/tests-check.mts'
+import { testsPass } from '../src/test-run/tests-pass.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 /** Whether a .NET SDK is on the `PATH`, as on GitHub's runners: these tests need the real one. */
@@ -55,7 +55,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			)
 
 			// Act
-			const findings = await runCheck(tests({ directory }), toolContext())
+			const findings = await runCheck(testsPass({ directory }), toolContext())
 
 			// Assert
 			expect(findings).toMatchObject([{ source: 'test: App.UnitTest1.Adds' }])
@@ -74,7 +74,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			)
 
 			// Act
-			const findings = await runCheck(tests({ directory }), toolContext())
+			const findings = await runCheck(testsPass({ directory }), toolContext())
 
 			// Assert
 			expect(new Set(findings.map((finding) => finding.source))).toEqual(new Set(['build']))

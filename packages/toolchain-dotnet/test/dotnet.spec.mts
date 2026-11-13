@@ -5,7 +5,7 @@ import { build } from '../src/build/build.mts'
 import { updatePackages } from '../src/packages/update-packages.mts'
 import { security } from '../src/security/security.mts'
 import { test as testTool } from '../src/test-run/test.mts'
-import { tests } from '../src/test-run/tests-check.mts'
+import { testsPass } from '../src/test-run/tests-pass.mts'
 import { fakeDotnet } from './support/fake-dotnet.mts'
 import {
 	auditProblemList,
@@ -104,7 +104,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, trx: [failingTrx] } })
 
 		// Act
-		const failures = await runCheck(tests({ directory }), toolContext())
+		const failures = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(failures).toEqual([
@@ -122,7 +122,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, stdout: failingTestOutput, trx: [failingTrx] } })
 
 		// Act
-		const findings = await runCheck(tests({ directory }), toolContext())
+		const findings = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(findings.map((finding) => finding.source)).toEqual(['test: Api.Tests.LoginTests.SetsSameSite'])
@@ -135,7 +135,7 @@ describe('test and tests', () => {
 
 		// Act
 		const toolSettledMs = await settleAfterStop((context) => testTool({ directory }, context))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(tests({ directory }), context))
+		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory }), context))
 
 		// Assert
 		expect(toolSettledMs).toBeLessThan(promptlyMs)
@@ -151,7 +151,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, stdout: brokenBuild } })
 
 		// Act
-		const buildErrors = await runCheck(tests({ directory }), toolContext())
+		const buildErrors = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(buildErrors).toEqual([{ source: 'build', message: '/work/api/src/Login.cs(12,34): CS1002: ; expected' }])
@@ -163,7 +163,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { trx: [passingTrx] } })
 
 		// Act
-		const findings = await runCheck(tests({ directory }), toolContext())
+		const findings = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(findings).toEqual([])

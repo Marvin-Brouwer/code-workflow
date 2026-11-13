@@ -19,7 +19,7 @@ await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4
 
 await developer.loop`
 	Implement ${story} in ${repository}. Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
-	then hand in with ${verify(dotnet.tests(repository), dotnet.security(repository))}.
+	then hand in with ${verify(dotnet.testsPass(repository), dotnet.security(repository))}.
 `
 ```
 
@@ -30,7 +30,7 @@ await developer.loop`
 
 ### Checks for `verify`
 
-- `dotnet.tests(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
+- `dotnet.testsPass(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
 - `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A problem the list reports, such as a source without vulnerability data, and a restore that fails, fail the check: nothing can be told about the packages then, and an agent can't fix the environment.
 
 ### Packages

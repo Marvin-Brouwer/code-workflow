@@ -39,7 +39,7 @@ class Blocked extends Error {}
  * await inDependencyOrder(deliveryOrder(plan), async (part, upstream) => {
  * 	const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
  * 	// ...
- * 	return { packages: await gitlab.publishedPackages(mergeRequest, 'nuget') }
+ * 	return gitlab.publishedPackages(mergeRequest, 'nuget')
  * })
  * ```
  *

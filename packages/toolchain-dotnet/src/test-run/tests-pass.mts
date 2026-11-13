@@ -1,6 +1,6 @@
 import { check, type Check } from '@mesh-flow/core'
 import { diagnosticLine } from '../build/diagnostics.mts'
-import type { DotnetRepository } from '../directory.mts'
+import type { DotnetCheckout } from '../directory.mts'
 import { runTests } from './run-tests.mts'
 
 /**
@@ -9,10 +9,10 @@ import { runTests } from './run-tests.mts'
  * the end of its output.
  *
  * ```ts
- * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.tests(repository))}.`
+ * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository))}.`
  * ```
  */
-export function tests(repository: DotnetRepository): Check {
+export function testsPass(repository: DotnetCheckout): Check {
 	return check('tests', async ({ abortSignal }) => {
 		const result = await runTests({ target: repository.directory, abortSignal })
 		const failures = result.failures.map((failure) => ({

@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
-import { Directory, workingDirectoryOf, type DotnetRepository } from '../directory.mts'
+import { Directory, workingDirectoryOf, type DotnetCheckout } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
 
@@ -77,11 +77,11 @@ const updateTool = tool('dotnetUpdatePackages', {
  * packages, no work. Resolves to what was updated.
  *
  * ```ts
- * await dotnet.updatePackages(repository, upstream.flatMap((dependency) => dependency.packages))
+ * await dotnet.updatePackages(repository, upstream.flat())
  * ```
  */
 export function updatePackages(
-	repository: DotnetRepository,
+	repository: DotnetCheckout,
 	packages: readonly PackageVersion[],
 	context?: ToolContext,
 ): Promise<readonly PackageUpdate[]> {

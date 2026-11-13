@@ -2,7 +2,7 @@ import path from 'node:path'
 import { z } from 'zod'
 
 /** What the toolchain works on: a checkout, such as a connector's, by where it is on disk. */
-export interface DotnetRepository {
+export interface DotnetCheckout {
 	/** The checkout on disk: a solution or a project is in it, or under it. */
 	readonly directory: string
 }

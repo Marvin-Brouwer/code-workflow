@@ -20,7 +20,7 @@ export interface Check {
  * for example to wait for a pipeline, and it stops when its signal aborts.
  *
  * ```ts
- * export function tests(repository: Repository): Check {
+ * export function testsPass(repository: Repository): Check {
  * 	return check('tests', async ({ abortSignal }) => {
  * 		const result = await runTests(repository, abortSignal)
  * 		return result.failures.map((failure) => ({ source: 'tests', message: failure }))

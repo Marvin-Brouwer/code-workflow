@@ -26,7 +26,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 		await developer.loop`
 			Implement your part of ${plan.path}, as amended by ${deviations}, in ${repository}.
 			Record any deviation from the plan with ${deviations.record}.
-			Hand in with ${verify(dotnet.tests(repository), codeReview(reviewer, repository, plan))}.
+			Hand in with ${verify(dotnet.testsPass(repository), codeReview(reviewer, repository, plan))}.
 		`
 	})
 })

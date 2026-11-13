@@ -31,7 +31,7 @@ const Findings = z.object({
  *
  * ```ts
  * await developer.loop`
- * 	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.tests(repository), codeReview(reviewer, repository, plan))}.
+ * 	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository), codeReview(reviewer, repository, plan))}.
  * `
  * ```
  */
