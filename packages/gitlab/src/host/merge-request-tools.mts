@@ -22,9 +22,9 @@ import {
 } from '../tools/merge-request-tools.mts'
 import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 import { keepingDraft, withoutDraftPrefix } from './draft-title.mts'
+import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
 import { noCommit } from './no-commit.mts'
 import { GitlabRequestError, refusedToken } from './request-error.mts'
-import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
 
 /** A merge request as GitLab's API has it, in the fields the tools pass on. */
 const ApiMergeRequest = z.object({

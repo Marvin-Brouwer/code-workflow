@@ -5,7 +5,7 @@ import { gitlabApi, type GitlabApiOptions } from './api.mts'
 import { gitRemote, type GitRemoteOptions } from './git-remote.mts'
 import { mergeRequestHostTools } from './merge-request-tools.mts'
 import { pipelineHostTools } from './pipeline-tools.mts'
-import { projectHostTools } from './project-tools.mts'
+import { searchHostTools } from './search-tools.mts'
 
 /** What the GitLab host tools run on. */
 export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
@@ -18,7 +18,7 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
 export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
 	const api = gitlabApi(options)
 	return [
-		...projectHostTools(api),
+		...searchHostTools(api),
 		...mergeRequestHostTools(api),
 		...pipelineHostTools(api),
 		...gitHostTools(gitRemote(options), { cloneRepository, pushBundle }),

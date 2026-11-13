@@ -1,6 +1,7 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
+import { githubTerms } from './github-terms.mts'
 
 /** The longest title GitHub takes. */
 const maxTitleCharacters = 256
@@ -15,7 +16,7 @@ const maxDescriptionCharacters = 65_536
 export const PullRequestText = changeTextSchema({
 	maxTitleCharacters,
 	maxDescriptionCharacters,
-	request: 'pull request',
+	terms: githubTerms,
 })
 export type PullRequestText = z.infer<typeof PullRequestText>
 

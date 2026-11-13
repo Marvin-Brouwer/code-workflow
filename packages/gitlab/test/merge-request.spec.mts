@@ -3,7 +3,6 @@ import { describe, expect, test } from 'vitest'
 import { mergedMergeRequest, mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { searchRepositories } from '../src/repository/search.mts'
-import { forkProjectId } from './support/fake-gitlab.mts'
 import {
 	branch,
 	changeLogin,
@@ -14,6 +13,7 @@ import {
 	sameSite,
 	story,
 } from './support/connected-gitlab.mts'
+import { forkProjectId } from './support/fake-gitlab.mts'
 import { runOnGateway, testToken } from './support/test-run.mts'
 
 /** The text after the second fix, which adds Secure to the cookie. */
@@ -253,7 +253,7 @@ describe('mergedMergeRequest', () => {
 })
 
 describe('searchRepositories', () => {
-	test('finds projects by their path, with what checkout takes', async () => {
+	test('finds repositories by their path, with what checkout takes', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.project('team/frontend/web', { description: 'The web app' })
@@ -264,7 +264,7 @@ describe('searchRepositories', () => {
 
 		// Assert
 		expect(found).toEqual({
-			projects: [
+			repositories: [
 				{
 					repository: projectPath,
 					name: 'api',

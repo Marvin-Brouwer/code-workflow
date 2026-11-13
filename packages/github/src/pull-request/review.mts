@@ -1,5 +1,5 @@
-import type { ToolContext, WaitSpec } from '@mesh-flow/core'
 import { watchReview } from '@mesh-flow/code-repository'
+import type { ToolContext, WaitSpec } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'

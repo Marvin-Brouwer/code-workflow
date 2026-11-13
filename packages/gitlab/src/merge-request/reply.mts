@@ -1,15 +1,7 @@
-import { tool, type Tool } from '@mesh-flow/core'
-import { ReplyStage } from '@mesh-flow/code-repository'
-import { z } from 'zod'
+import { replyTool, type ReplyInput } from '@mesh-flow/code-repository'
+import type { Tool } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/merge-request-tools.mts'
-
-/** What the agent replies with: the item, the text, and whether it's a plan or the answer. */
-export interface ReplyInput {
-	readonly item: string
-	readonly text: string
-	readonly stage?: ReplyStage | undefined
-}
 
 /**
  * The tool that replies to a review item on a merge request, in the item's thread. The agent names
@@ -25,19 +17,9 @@ export interface ReplyInput {
  * ```
  */
 export function reply(on: MergeRequestRef): Tool<ReplyInput, ReplyOutcome> {
-	return tool('reply', {
-		description: `Replies to a review item on merge request ${on.repository}!${String(on.number)}`,
-		input: z.object({
-			item: ReviewItemId.describe('The id of the item, as listed'),
-			text: z.string().min(1),
-			stage: ReplyStage.optional().describe(
-				'plan: what you will do about the item, before you change anything. answer (the default): the answer to a question, or what you did.',
-			),
-		}),
-		action: ({ item, text, stage }, context) =>
-			stubs.replyToReviewItem(
-				{ repository: on.repository, number: on.number, item, body: text, ...(stage === undefined ? {} : { stage }) },
-				context,
-			),
+	return replyTool({
+		on: `merge request ${on.repository}!${String(on.number)}`,
+		item: ReviewItemId,
+		replyToReviewItem: (answer, context) => stubs.replyToReviewItem({ repository: on.repository, number: on.number, ...answer }, context),
 	})
 }

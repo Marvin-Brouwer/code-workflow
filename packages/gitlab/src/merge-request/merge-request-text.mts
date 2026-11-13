@@ -1,5 +1,6 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
+import { gitlabTerms } from './gitlab-terms.mts'
 
 /** The longest title GitLab takes. */
 const maxTitleCharacters = 255
@@ -14,7 +15,7 @@ const maxDescriptionCharacters = 1_048_576
 export const MergeRequestText = changeTextSchema({
 	maxTitleCharacters,
 	maxDescriptionCharacters,
-	request: 'merge request',
+	terms: gitlabTerms,
 })
 export type MergeRequestText = z.infer<typeof MergeRequestText>
 

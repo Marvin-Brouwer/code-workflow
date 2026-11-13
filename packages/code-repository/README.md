@@ -34,9 +34,8 @@ const repository: Checkout = await checkoutRepository(
 `describeChange`, `triageItems` and `watchReview` hold the loops and the watch of a connector's `describe`, `triage` and `review`. The connector says how its code host is read and written:
 
 ```ts
-import { tool, type Agent } from '@mesh-flow/core'
 import {
-	branchHeadOf,
+	branchHeadTool,
 	changeTextSchema,
 	describeChange,
 	type ChangeRequest,
@@ -45,7 +44,7 @@ import {
 	type DescribeChangeOptions,
 	type DescribeCodeHost,
 } from '@mesh-flow/code-repository'
-import { z } from 'zod'
+import type { Agent } from '@mesh-flow/core'
 
 interface MergeRequestRef {
 	readonly repository: string
@@ -56,24 +55,17 @@ declare const layout: ChangeRequestLayout
 declare function findOpenMergeRequest(repository: Checkout): Promise<ChangeRequest | undefined>
 declare function mergeRequest(ref: MergeRequestRef): Promise<ChangeRequest>
 
-/** The connector's tool that reads which commit a checkout's branch is at, which also tells an agent. */
-const branchHead = (repository: Checkout) =>
-	tool('gitlabBranchHead', {
-		description: `Reads which commit the branch of ${repository.directory} is at`,
-		input: z.object({ pushed: z.boolean() }),
-		action: ({ pushed }, context) => branchHeadOf(repository, pushed, context),
-	})
-
-const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_048_576, request: 'merge request' })
+const terms = { name: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' }
+const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_048_576, terms })
 
 const gitlabDescribe: DescribeCodeHost<Checkout, ChangeRequest, MergeRequestRef> = {
-	terms: { name: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' },
+	terms,
 	layout,
 	text: MergeRequestText,
 	sameRepository: (one, other) => one === other,
 	findOpen: (repository) => findOpenMergeRequest(repository),
 	read: (ref) => mergeRequest(ref),
-	head: (repository, pushed) => branchHead(repository)({ pushed }),
+	head: (repository, pushed) => branchHeadTool(terms, repository)({ pushed }),
 }
 
 export function describe(agent: Agent, repository: Checkout, options: DescribeChangeOptions<MergeRequestRef, never> = {}) {
@@ -81,7 +73,7 @@ export function describe(agent: Agent, repository: Checkout, options: DescribeCh
 }
 ```
 
-`untilCompleted(look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
+`untilCompleted(look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `replyTool` makes a connector's `reply` tool, and `branchHeadTool` the tool that reads which commit a checkout's branch is at. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
 
 ```ts
 import { check } from '@mesh-flow/core'
@@ -98,7 +90,7 @@ const pipelinePasses = (sha: string) =>
 
 ## The host half
 
-`@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, a `fetch` that tries again when the connection drops, one call at a time per key, the footer every post is signed with, and the replies to review items:
+`@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, a `fetch` that tries again when the connection drops, the footer every post is signed with, and the replies to review items:
 
 ```ts
 import type { GitTools } from '@mesh-flow/code-repository'

@@ -1,9 +1,8 @@
+import { branchHeadTool, describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import { sameProjectPath } from '../project-path.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
-import { branchHead } from './branch-head.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 import { gitlabLayout } from './layout.mts'
 import { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request-text.mts'
@@ -66,5 +65,5 @@ const gitlabDescribe: DescribeCodeHost<Repository, MergeRequest, MergeRequestRef
 	sameRepository: sameProjectPath,
 	findOpen: (repository) => findOpenMergeRequest(repository),
 	read: (ref) => mergeRequest(ref),
-	head: (repository, pushed) => branchHead(repository)({ pushed }),
+	head: (repository, pushed) => branchHeadTool(gitlabTerms, repository)({ pushed }),
 }

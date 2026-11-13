@@ -1,6 +1,6 @@
 import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
-import { searchProjects } from '../tools/project-tools.mts'
+import { searchRepositories } from '../tools/search-tools.mts'
 import type { ApiClient } from './api.mts'
 
 /** A project as GitLab's search lists it, in the fields the tool passes on. */
@@ -13,9 +13,9 @@ const ApiProject = z.object({
 })
 
 /** The host half of the project search. */
-export function projectHostTools(api: ApiClient): HostTool[] {
+export function searchHostTools(api: ApiClient): HostTool[] {
 	return [
-		hostTool(searchProjects, async ({ query, limit }, context) => {
+		hostTool(searchRepositories, async ({ query, limit }, context) => {
 			const client = await api(context)
 			const { items, more } = await client.firstPage('/projects', ApiProject, limit, {
 				search: query,
@@ -25,14 +25,14 @@ export function projectHostTools(api: ApiClient): HostTool[] {
 				simple: true,
 				order_by: 'last_activity_at',
 			})
-			const projects = items.map((project) => ({
+			const repositories = items.map((project) => ({
 				repository: project.path_with_namespace,
 				name: project.name,
 				description: project.description ?? '',
 				url: project.web_url,
 				...(project.default_branch === null || project.default_branch === undefined ? {} : { defaultBranch: project.default_branch }),
 			}))
-			return { projects, more }
+			return { repositories, more }
 		}),
 	]
 }

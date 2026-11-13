@@ -1,10 +1,9 @@
+import { branchHeadTool, describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Issue } from '../issue/issue.mts'
 import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { branchHead } from './branch-head.mts'
 import { githubTerms } from './github-terms.mts'
 import { githubLayout } from './layout.mts'
 import { PullRequestText, type PullRequestContent } from './pull-request-text.mts'
@@ -58,7 +57,7 @@ export interface DescribeOptions {
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
  * ```
  */
-export async function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
+export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
 	return describeChange(agent, repository, githubDescribe, {
 		...(options.issue === undefined ? {} : { closes: options.issue }),
 		...(options.pullRequest === undefined ? {} : { request: options.pullRequest }),
@@ -74,5 +73,5 @@ const githubDescribe: DescribeCodeHost<Repository, PullRequest, PullRequestRef> 
 	sameRepository: sameRepositoryName,
 	findOpen: (repository) => findOpenPullRequest(repository),
 	read: (ref) => pullRequest(ref),
-	head: (repository, pushed) => branchHead(repository)({ pushed }),
+	head: (repository, pushed) => branchHeadTool(githubTerms, repository)({ pushed }),
 }

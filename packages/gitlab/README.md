@@ -56,7 +56,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 })
 ```
 
-### Projects
+### Repositories
 
 `gitlab.searchRepositories` is a tool for an agent that has to find where a change goes: it searches the projects the token's user is a member of by words in their name, path or description, and lists each with the path `gitlab.checkout` takes.
 

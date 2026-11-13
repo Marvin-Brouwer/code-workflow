@@ -1,18 +1,12 @@
-import { tool } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
-import { searchProjects } from '../tools/project-tools.mts'
 
 /**
- * The tool that searches the GitLab projects the user of the token is a member of, by words in
- * their name, path or description, for an agent that has to find where a change goes. Each
- * project comes with its path, which `gitlab.checkout` takes as its `repository`.
+ * Searches the GitLab projects the user of the token is a member of, by words in their name, path
+ * or description: a tool for agents that have to find where a change goes, and a function for
+ * code. Each comes with its path, which `gitlab.checkout` takes as its `repository`.
  *
  * ```ts
- * await planner.loop`Find the projects ${story} touches with ${gitlab.searchRepositories}.`
+ * await planner.loop`Find the repositories ${story} touches with ${gitlab.searchRepositories}.`
  * ```
  */
-export const searchRepositories = tool('searchRepositories', {
-	description: 'Searches the GitLab projects the user of the token is a member of by name, path or description',
-	input: searchProjects.input,
-	action: (input, context) => stubs.searchProjects(input, context),
-})
+export const searchRepositories = stubs.searchRepositories
