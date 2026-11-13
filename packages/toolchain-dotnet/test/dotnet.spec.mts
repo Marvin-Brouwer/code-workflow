@@ -139,21 +139,22 @@ describe('test and tests', () => {
 
 	test('settles promptly when the run stops while the tests never end, and leaves no results behind', async () => {
 		// Arrange
-		const directory = await temporaryDirectory()
+		const toolDirectory = await temporaryDirectory()
 		// Runs in one directory take turns, and the first run's dotnet may still be stopping when the check starts.
-		const otherDirectory = await temporaryDirectory()
+		const checkDirectory = await temporaryDirectory()
 		const cli = await fakeDotnet({ test: { hang: true } })
 
 		// Act
-		const toolSettledMs = await settleAfterStop((context) => testTool({ directory }, context))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: otherDirectory }), context))
+		const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context))
+		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context))
 
 		// Assert
 		expect(toolSettledMs).toBeLessThan(promptlyMs)
 		expect(checkSettledMs).toBeLessThan(promptlyMs)
 		const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
 		expect(results).toHaveLength(2)
-		expect(results.filter((folder) => existsSync(folder))).toEqual([])
+		// The stopped tool's folder goes once its dotnet is gone, which on Windows can be after the tool settled.
+		await expect.poll(() => results.filter((folder) => existsSync(folder))).toEqual([])
 	})
 
 	test('the check reports the build errors when it does not build', async () => {
