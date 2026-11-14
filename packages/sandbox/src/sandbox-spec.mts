@@ -37,7 +37,7 @@ export function allowsEgress(egress: EgressPolicy): boolean {
  * @example
  * ```ts
  * const spec: SandboxSpec = {
- * 	image: 'node:22-slim',
+ * 	image: 'node:26-slim',
  * 	cpus: 2,
  * 	memoryMb: 2048,
  * 	egress: { allow: ['registry.npmjs.org'] },

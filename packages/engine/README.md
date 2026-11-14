@@ -68,7 +68,7 @@ mesh-flow triggers               # the current version's sandbox, workflows, the
 mesh-flow app remove example     # its webhooks and schedules stop; its runs stay
 ```
 
-The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:26-slim` have all of them.
 
 ### Start a run and answer it
 

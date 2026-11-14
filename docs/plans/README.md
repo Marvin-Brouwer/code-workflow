@@ -40,7 +40,7 @@ code-workflow/
 
 - oxlint runs at the root over every POC. `pnpm lint` and `pnpm typecheck` both have to pass
   before a PR goes up.
-- Node 22, pnpm 10.
+- Node 26, pnpm 10.
 
 ## Delivery
 

@@ -20,7 +20,7 @@ const startLabel = 'ai-develop'
  * A public stand-in for the image the Dockerfile builds: the same base, without the .NET SDK. Name
  * the built image here once it's pushed, such as `<account>/mesh-flow-example:dotnet10`.
  */
-const sandboxImage = 'node:22-bookworm'
+const sandboxImage = 'node:26-bookworm'
 
 export default defineMeshFlow({
 	sandbox: image({ name: sandboxImage, memoryMb: 4096, egress: ['api.nuget.org'] }),

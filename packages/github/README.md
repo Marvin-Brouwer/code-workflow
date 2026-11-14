@@ -14,7 +14,7 @@ mesh-flow connector add @mesh-flow/github
 mesh-flow credential set github/token < token.txt
 ```
 
-The sandbox image needs `git` next to `node`: `node:22-bookworm` has both, `node:22-slim` doesn't.
+The sandbox image needs `git` next to `node`: `node:26-bookworm` has both, `node:26-slim` doesn't.
 
 ## Usage
 
@@ -141,7 +141,7 @@ import { github } from '@mesh-flow/github/hooks'
 import { fixIssue, triage } from './workflows/issues.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-bookworm' }),
+	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
 		userTrigger(fixIssue),
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.

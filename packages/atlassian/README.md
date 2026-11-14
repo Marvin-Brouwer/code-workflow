@@ -94,7 +94,7 @@ import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-bookworm' }),
+	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
 		userTrigger(develop),
 		// Labelling an issue ai-develop starts develop with { key }. Only compiles for a workflow that takes JiraIssueParameters.

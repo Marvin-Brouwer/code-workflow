@@ -18,7 +18,7 @@ describe('RuntimeMessage', () => {
 		const message = RuntimeMessage.parse({
 			type: 'described',
 			description: {
-				sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: [] } },
+				sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, egress: { allow: [] } },
 				workflows: [{ name: 'fix-issue', parameters: { type: 'object' } }],
 				triggers: [
 					{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },

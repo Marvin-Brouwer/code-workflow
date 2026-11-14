@@ -71,7 +71,7 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:22-bookworm' }),
+ * 	sandbox: image({ name: 'node:26-bookworm' }),
  * 	workflows: [userTrigger(develop), jira.onIssueLabeled(develop, 'ai-develop')],
  * })
  * ```

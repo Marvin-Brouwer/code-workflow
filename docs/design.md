@@ -252,7 +252,7 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 // main.mts, the package's `main`
 export default defineMeshFlow({
 	sandbox: image({
-		name: 'node:22-slim',
+		name: 'node:26-slim',
 		egress: ['api.github.com'],
 	}),
 	workflows: [

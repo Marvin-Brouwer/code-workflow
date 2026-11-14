@@ -1,4 +1,4 @@
-# The sandbox image of the example app: Node.js 22 for the app, git for checkouts, and the .NET 10
+# The sandbox image of the example app: Node.js 26 for the app, git for checkouts, and the .NET 10
 # SDK for the toolchain. Node-based, since the gVisor backend's egress forwarder runs on the image's
 # node. Build it and push it to Docker Hub, which is where every sandbox backend pulls from:
 #
@@ -6,7 +6,7 @@
 #   docker push <account>/mesh-flow-example:dotnet10
 #
 # then name it in main.mts.
-FROM node:22-bookworm
+FROM node:26-bookworm
 
 # The SDK needs ICU, which bookworm has as libicu72.
 RUN apt-get update \

@@ -29,7 +29,7 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/code-repository --filter @mesh-flow/github --filter @mesh-flow/gitlab --filter @mesh-flow/atlassian --filter @mesh-flow/toolchain-dotnet --filter @mesh-flow/preset-development --filter github-issue --filter example typecheck
@@ -58,7 +58,7 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 

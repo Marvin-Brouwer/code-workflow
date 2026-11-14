@@ -38,7 +38,7 @@ Hosted, E2B takes an API key from the engine's credential store and a template p
 ```ts
 import { e2bBackend } from '@mesh-flow/sandbox/e2b'
 
-const backend = e2bBackend({ apiKey, templates: { 'node:22-slim': 'mesh-flow-node-22' } })
+const backend = e2bBackend({ apiKey, templates: { 'node:26-slim': 'mesh-flow-node-22' } })
 ```
 
 ### Create a sandbox and run commands
@@ -48,7 +48,7 @@ const backend = e2bBackend({ apiKey, templates: { 'node:22-slim': 'mesh-flow-nod
 ```ts
 const sandbox = await backend.create(
 	{
-		image: 'node:22-slim',
+		image: 'node:26-slim',
 		cpus: 2,
 		memoryMb: 2048,
 		egress: { allow: ['registry.npmjs.org'] },
@@ -104,7 +104,7 @@ const deadline = AbortSignal.timeout(30_000)
 const paused = await abortable(sandbox.pause(deadline), deadline)
 
 // `createVm` stands for any SDK call that takes no signal and makes something that mustn't leak.
-const createVm = (): Promise<{ kill(): Promise<void> }> => sdk.vms.create({ image: 'node:22-slim' })
+const createVm = (): Promise<{ kill(): Promise<void> }> => sdk.vms.create({ image: 'node:26-slim' })
 const vm = await abortable(createVm(), deadline, (late) => late.kill())
 ```
 
@@ -127,7 +127,7 @@ E2B starts sandboxes from templates, not from images. Build one per image with t
 ```ts
 import { defaultBuildLogger, Template } from 'e2b'
 
-const template = Template().fromImage('node:22-slim')
+const template = Template().fromImage('node:26-slim')
 
 await Template.build(template, 'mesh-flow-node-22', {
 	apiKey,
@@ -137,14 +137,14 @@ await Template.build(template, 'mesh-flow-node-22', {
 })
 ```
 
-Then map the image to the template's name in `templates`: `{ 'node:22-slim': 'mesh-flow-node-22' }`. A spec with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
+Then map the image to the template's name in `templates`: `{ 'node:26-slim': 'mesh-flow-node-22' }`. A spec with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
 
 ### Self-hosted E2B
 
 A [self-hosted E2B](https://github.com/e2b-dev/infra) deployment works the same way: it also needs an API key and templates, only both come from your own deployment. Create the key there, build the templates against it by passing its `domain` to `Template.build`, and pass the same `domain` to the backend:
 
 ```ts
-const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: { 'node:22-slim': 'mesh-flow-node-22' } })
+const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: { 'node:26-slim': 'mesh-flow-node-22' } })
 ```
 
 ## What every backend does the same
@@ -179,7 +179,7 @@ pnpm --filter @mesh-flow/sandbox test
 
 Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere, except the conformance suite below. The gVisor backend runs against a fake `runsc` there, including the checks that `close` finishes while a command or a create never does.
 
-The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; npm and NuGet install from an allowed registry with no proxy or certificate settings; `list`, `remove` and `close` leave nothing behind. The package checks also need `node:22-bookworm`, and reach `registry.npmjs.org`, `builds.dotnet.microsoft.com` (for the SDK) and `api.nuget.org`. It needs the backend on the machine, so it only runs when asked:
+The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; npm and NuGet install from an allowed registry with no proxy or certificate settings; `list`, `remove` and `close` leave nothing behind. The package checks also need `node:26-bookworm`, and reach `registry.npmjs.org`, `builds.dotnet.microsoft.com` (for the SDK) and `api.nuget.org`. It needs the backend on the machine, so it only runs when asked:
 
 ```bash
 MESH_FLOW_SANDBOX_TESTS=gvisor RUNSC="sudo $(command -v runsc)" pnpm --filter @mesh-flow/sandbox test

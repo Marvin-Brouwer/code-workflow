@@ -254,7 +254,7 @@ const StoryLabeled = z.object({
 
 export default defineMeshFlow({
 	sandbox: image({
-		name: 'node:22-slim',
+		name: 'node:26-slim',
 		memoryMb: 4096,
 		egress: ['api.example.com'],
 	}),
