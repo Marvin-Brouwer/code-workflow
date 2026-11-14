@@ -100,7 +100,7 @@ Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --genera
 
 ## The host half
 
-`@mesh-flow/gitlab/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `gitlab/token` (`tokenCredential`) and the GitLab under `gitlab/url` (`urlCredential`, gitlab.com when it isn't set) on every call, so a changed credential counts at once, try reads again when the connection drops or GitLab answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per project in the connector's directory in the engine's home. For a test, `gitlabHostTools` points them at servers of your own:
+`@mesh-flow/gitlab/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `gitlab/token` (`tokenCredential`) and the GitLab under `gitlab/url` (`urlCredential`, gitlab.com when it isn't set) on every call, so a changed credential counts at once, try reads again when the connection drops or GitLab answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per project in the connector's directory in the engine's home. They speak to GitLab's REST API through a small `fetch` client of the connector's own rather than gitbeaker, which can't take a call's abort signal and retries writes: [decisions.md](../../docs/decisions.md#connectors) has the reasons. For a test, `gitlabHostTools` points them at servers of your own:
 
 ```ts
 import { gitlabHostTools } from '@mesh-flow/gitlab/host'

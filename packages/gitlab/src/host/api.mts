@@ -53,6 +53,10 @@ export function projectSegment(project: string): string {
  * credential store, so a new token counts at once. Reads are tried again when the connection drops
  * or GitLab is briefly unavailable (see {@link retryingFetch}), and a failure that may still pass
  * after that is thrown as transient, so a watch looks again later instead of failing.
+ *
+ * A client of the connector's own, not gitbeaker: gitbeaker can't take a call's abort signal, and
+ * it retries writes, which can make a note or a merge request twice. `docs/decisions.md` has the
+ * whole reasoning.
  */
 export function gitlabApi(options: GitlabApiOptions = {}): ApiClient {
 	const send = retryingFetch(options.fetch ?? fetch, options.retry ?? defaultFetchRetry)
