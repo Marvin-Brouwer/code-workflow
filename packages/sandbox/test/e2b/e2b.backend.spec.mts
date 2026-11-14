@@ -24,7 +24,7 @@ vi.mock('e2b', () => ({
 
 const { e2bBackend } = await import('../../src/e2b/e2b.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 
 describe('E2B backend, on a fake SDK', () => {
 	beforeEach(() => {
@@ -33,7 +33,7 @@ describe('E2B backend, on a fake SDK', () => {
 
 	test('close kills the sandboxes it still runs', async () => {
 		// Arrange
-		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:22-slim': 'node-22' } })
+		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:26-slim': 'node-22' } })
 		await backend.create(spec, AbortSignal.timeout(1000))
 
 		// Act
@@ -51,7 +51,7 @@ describe('E2B backend, on a fake SDK', () => {
 		const creating = backend.create(spec, AbortSignal.timeout(1000))
 
 		// Assert
-		await expect(creating).rejects.toThrow("No E2B template is configured for the image 'node:22-slim'.")
+		await expect(creating).rejects.toThrow("No E2B template is configured for the image 'node:26-slim'.")
 		expect(sdk.create).not.toHaveBeenCalled()
 	})
 })

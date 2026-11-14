@@ -1,10 +1,9 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { defaultFetchRetry, signed, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
-import { defaultFetchRetry, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
-import { signed } from '../src/host/signature.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { checksPass } from '../src/pull-request/checks-pass.mts'
 import { openPullRequest } from '../src/pull-request/pull-request.mts'
@@ -107,8 +106,8 @@ describe('github', () => {
 		const result = await run.result
 
 		// Assert
-		expect(result.rendered).toBe(path.join(run.workspace, 'app'))
-		expect(result.repository.directory).toBe(path.join(run.workspace, 'app'))
+		expect(result.rendered).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
+		expect(result.repository.directory).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
 		expect(result.pushed).toMatchObject({ pushed: true, head: await remote.head('fix/7') })
 		expect(result.nothing).toMatchObject({ pushed: false })
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'fix.txt'])
@@ -137,6 +136,20 @@ describe('github', () => {
 
 		// Assert
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'earlier.txt', 'later.txt'])
+	})
+
+	test('refuses to push a new branch that holds nothing the default branch does not, naming it', async () => {
+		// Arrange
+		const { remote, gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () =>
+			push(await checkout({ repository: repositoryName, branch: 'fix/7' }))({ message: 'Nothing' }),
+		)
+
+		// Assert
+		await expect(run.result).rejects.toThrow('fix/7 in team/app has no commits on top of main, so there is nothing to push.')
+		await expect(remote.head('fix/7')).rejects.toThrow()
 	})
 
 	test("watches a pull request: hands new review items to the handler with eyes on them, leaves the run's own out, and ends when it is merged", async () => {
@@ -798,11 +811,12 @@ describe('github', () => {
 			await rm(path.join(first.directory, '.git', 'HEAD'))
 			const again = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			const againFiles = (await git(again.directory, 'ls-files')).split('\n')
-			const refused = await checkout({ repository: 'other/app', branch: 'fix/7' }).then(
+			await git(again.directory, 'remote', 'set-url', 'origin', 'https://github.com/other/app.git')
+			const refused = await checkout({ repository: repositoryName, branch: 'fix/7' }).then(
 				() => undefined,
 				(error: unknown) => (error instanceof Error ? error.message : String(error)),
 			)
-			const notes = workspace.folder('notes').location()
+			const notes = workspace.folder('repositories/team/notes').location()
 			await mkdir(notes, { recursive: true })
 			await writeFile(path.join(notes, 'todo.md'), 'keep me\n')
 			const kept = await checkout({ repository: 'team/notes', branch: 'fix/7' }).then(
@@ -821,7 +835,24 @@ describe('github', () => {
 		expect(result.againFiles).toEqual(['README.md', 'fix.txt'])
 		expect(result.refused).toContain('holds a checkout of another repository')
 		expect(result.kept).toContain("holds something that isn't a checkout")
-		expect(await readFile(path.join(run.workspace, 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
+		expect(await readFile(path.join(run.workspace, 'repositories', 'team', 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
+	})
+
+	test('puts repositories with the same name under other owners in folders of their own', async () => {
+		// Arrange
+		const { gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const ours = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			const theirs = await checkout({ repository: 'other/app', branch: 'fix/7' })
+			return { ours, theirs }
+		})
+		const { ours, theirs } = await run.result
+
+		// Assert
+		expect(ours.directory).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
+		expect(theirs.directory).toBe(path.join(run.workspace, 'repositories', 'other', 'app'))
 	})
 
 	test("hands a comment from the same second as the last look over once, and never the run's own reply", async () => {

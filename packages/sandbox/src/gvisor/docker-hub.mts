@@ -32,7 +32,7 @@ export interface Repository {
 }
 
 /**
- * `node:22-slim` → `library/node` and `22-slim`; `node@sha256:…` → `library/node` and the digest.
+ * `node:26-slim` → `library/node` and `22-slim`; `node@sha256:…` → `library/node` and the digest.
  * Docker Hub only: a reference that names another registry is refused.
  */
 export function parseImage(image: string): { name: string; reference: string } {

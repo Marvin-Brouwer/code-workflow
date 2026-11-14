@@ -1,8 +1,8 @@
-import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
+import { branchHeadOf, untilCompleted } from '@mesh-flow/code-repository'
+import { check, type Check, type WaitSpec } from '@mesh-flow/core'
+import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { defaultLookEvery, defaultToleratedOutage, looksWithin } from './look-interval.mts'
-import { patientLook } from './patient-look.mts'
 
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {
@@ -18,9 +18,13 @@ export interface ChecksPassOptions {
 	 * fails with the last error. Counted in looks, as in `review`. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
+	/**
+	 * The checkout whose branch the pull request is of. With it, the commit looked at is the one last
+	 * pushed from it, rather than the head GitHub shows, which can lag a few seconds behind a push: a
+	 * check right after a push then waits for that commit's checks instead of reporting the last one's.
+	 */
+	readonly checkout?: Repository
 }
-
-const defaultAppearWithin: WaitSpec = { minutes: 10 }
 
 /**
  * A check for `verify`: waits for the checks on the pull request's head commit to complete, and
@@ -29,30 +33,22 @@ const defaultAppearWithin: WaitSpec = { minutes: 10 }
  * again on the next one, for up to `toleratedOutage`.
  *
  * ```ts
- * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest))}.`
+ * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.`
  * ```
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {
-	const every = options.every ?? defaultLookEvery
-	const looksForChecksToAppear = looksWithin(options.appearWithin ?? defaultAppearWithin, every)
-	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	return check('checks', async (context) => {
 		const where = { repository: on.repository, number: on.number }
-		let looksWithoutChecks = 0
-		for (;;) {
-			const checks = await look(async () => {
-				const { head } = await stubs.getPullRequest(where, context)
-				return stubs.checksOnRef({ repository: on.repository, ref: head.sha }, context)
-			})
-			if (checks.status === 'none') looksWithoutChecks++
-			const done = checks.status === 'completed' || (checks.status === 'none' && looksWithoutChecks > looksForChecksToAppear)
-			if (done) {
-				return checks.failures.map((failure) => ({
-					source: `check: ${failure.name}`,
-					message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,
-				}))
-			}
-			await wait(every)
-		}
+		const failures = await untilCompleted(async () => {
+			const sha =
+				options.checkout === undefined
+					? (await stubs.getPullRequest(where, context)).head.sha
+					: await branchHeadOf(options.checkout, true, context)
+			return stubs.checksOnRef({ repository: on.repository, ref: sha }, context)
+		}, options)
+		return failures.map((failure) => ({
+			source: `check: ${failure.name}`,
+			message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,
+		}))
 	})
 }

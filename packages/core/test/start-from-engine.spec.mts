@@ -74,7 +74,7 @@ function neverSettles(): Promise<boolean> {
 }
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-slim' }),
+	sandbox: image({ name: 'node:26-slim' }),
 	workflows: [
 		userTrigger(greet),
 		webhook(echo, onlyAiFix.transform((event) => ({ issue: event.issue.number }))),
@@ -102,7 +102,7 @@ describe('an entry file started by the engine', () => {
 			{
 				type: 'described',
 				description: {
-					sandbox: { image: 'node:22-slim' },
+					sandbox: { image: 'node:26-slim' },
 					workflows: [{ name: 'greet' }, { name: 'echo', parameters: { required: ['issue'] } }, { name: 'unlisted' }],
 					triggers: [
 						{ kind: 'user', id: 'greet', workflow: 'greet' },

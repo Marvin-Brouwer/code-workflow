@@ -89,6 +89,8 @@ const ticket = await readTicket({ key: 'ABC-1' })
 await developer.loop`Fix this: ${ticket} Look up related tickets with ${readTicket}.`
 ```
 
+A tool settles as soon as its signal aborts, even when its action doesn't: the call is wrapped in `untilAborted(promise, abortSignal)`, which packages can use for their own waits too.
+
 An agent becomes a tool for another agent with `as`. With `verify`, its work has to pass those checks before the tool returns:
 
 ```ts
@@ -252,7 +254,7 @@ const StoryLabeled = z.object({
 
 export default defineMeshFlow({
 	sandbox: image({
-		name: 'node:22-slim',
+		name: 'node:26-slim',
 		memoryMb: 4096,
 		egress: ['api.example.com'],
 	}),

@@ -1,7 +1,7 @@
 name: engine
 
-# The engine's, the build's, the protocol's, the gateway's, core's, git's and the GitHub connector's own checks, then one run end to end on each real backend this OS has. Lint and
-# format run repo-wide in the sandbox workflow.
+# Every package's own checks and the example apps' builds, then one run end to end on each real
+# backend this OS has. Lint and format run repo-wide in the sandbox workflow.
 on:
   pull_request:
   push:
@@ -29,14 +29,14 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github --filter github-issue typecheck
-      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... build
-      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/github test
-      # The github-issue app builds and describes itself with the packages just built.
-      - run: pnpm --filter github-issue build
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/code-repository --filter @mesh-flow/github --filter @mesh-flow/gitlab --filter @mesh-flow/atlassian --filter @mesh-flow/toolchain-dotnet --filter @mesh-flow/preset-development --filter github-issue --filter example typecheck
+      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... --filter @mesh-flow/gitlab... --filter @mesh-flow/atlassian... --filter @mesh-flow/toolchain-dotnet... --filter @mesh-flow/preset-development... build
+      - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/code-repository --filter @mesh-flow/github --filter @mesh-flow/gitlab --filter @mesh-flow/atlassian --filter @mesh-flow/toolchain-dotnet --filter @mesh-flow/preset-development test
+      # The example apps build and describe themselves with the packages just built.
+      - run: pnpm --filter github-issue --filter example build
 
   real-backend:
     name: real backend (${{ matrix.os }}, ${{ matrix.backend }})
@@ -58,7 +58,7 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 

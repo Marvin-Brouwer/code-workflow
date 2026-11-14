@@ -2,6 +2,8 @@
 
 The GitHub connector for mesh-flow. A connector gives workflows one outside system; this one gives them GitHub: functions for code, tools for agents, a check for `verify`, and GitHub's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
+It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other code host connectors through `@mesh-flow/code-repository`, so a workflow reads the same on each.
+
 ## Setup
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token. A fine-grained token with contents, issues and pull requests on the repositories the workflows touch is enough.
@@ -12,7 +14,7 @@ mesh-flow connector add @mesh-flow/github
 mesh-flow credential set github/token < token.txt
 ```
 
-The sandbox image needs `git` next to `node`: `node:22-bookworm` has both, `node:22-slim` doesn't.
+The sandbox image needs `git` next to `node`: `node:26-bookworm` has both, `node:26-slim` doesn't.
 
 ## Usage
 
@@ -72,7 +74,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 ### Repositories
 
-`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its absolute path, so the agent finds it from inside another checkout too. A checkout of the repository that is already there is reused, and switched to the branch when it is on another; one folder holds one repository, so a second repository with the same name in one run is an error.
+`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its absolute path, so the agent finds it from inside another checkout too. A checkout of the repository that is already there is reused, and switched to the branch when it is on another. Its folder is `repositories/<owner>/<repo>` in lower case, so two repositories never share one.
 
 `github.push(repository)` is a tool: it commits every change in the checkout with the message it's given (what changed and why, which is what `describe` later reads) and pushes the branch. Code calls it too, as a function, and `openPullRequest` calls it first.
 
@@ -127,7 +129,7 @@ A bot that adds to descriptions, such as an issue tracker's links, counts as an 
 
 Code posts the replies once the loop is done, not the agent. The agent finishes with every item it was handed, once; one left out or sorted twice goes back to it as an error. `github.reply` takes `stage: 'plan'` for the same plan from an agent. The answer after a plan is a reply of its own under it, since GitHub notifies the reviewer of a new comment and not of an edit; it takes the 👀 off. A reply that says what one of the item's replies already says isn't posted again, and `review` doesn't hand over items the run answered before it started over. A line comment deleted since it was read gets no reply, and isn't among the changes. The connector never resolves a thread; that is left to the reviewer.
 
-`github.checksPass(pullRequest, { every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding. Checks take a while to appear after a push, so a commit without any is looked at again until `appearWithin` (default 10 minutes) has passed; a repository without checks passes after that. Like `review`, it looks again after a failed look, until `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes).
+`github.checksPass(pullRequest, { checkout, every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding. With `checkout`, the commit is the one last pushed from that checkout rather than the head GitHub shows, which can lag a moment behind a push. Checks take a while to appear after a push, so a commit without any is looked at again until `appearWithin` (default 10 minutes) has passed; a repository without checks passes after that. Like `review`, it looks again after a failed look, until `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes).
 
 ### Webhooks
 
@@ -139,13 +141,17 @@ import { github } from '@mesh-flow/github/hooks'
 import { fixIssue, triage } from './workflows/issues.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-bookworm' }),
+	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
 		userTrigger(fixIssue),
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
 		// Any event schema works with webhook; the filter is in the structure, so other deliveries get a 4xx.
-		webhook(triage, github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })), github.triggerOptions),
+		webhook(
+			triage,
+			github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
+			github.triggerOptions,
+		),
 	],
 })
 ```

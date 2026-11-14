@@ -1,0 +1,78 @@
+{
+	"name": "@mesh-flow/atlassian",
+	"version": "0.0.0",
+	"description": "Atlassian connector for mesh-flow: Jira issues, search, transitions, comments and webhooks, and Confluence pages and search, on Cloud and Data Center, with credentials on the host only",
+	"keywords": [
+		"agents",
+		"atlassian",
+		"confluence",
+		"jira",
+		"mesh-flow",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/atlassian#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/atlassian"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/atlassian.mts",
+			"types": "./dist/atlassian.d.mts",
+			"import": "./dist/atlassian.mjs"
+		},
+		"./hooks": {
+			"source": "./src/_module/hooks.mts",
+			"types": "./dist/hooks.d.mts",
+			"import": "./dist/hooks.mjs"
+		},
+		"./host": {
+			"source": "./src/_module/host.mts",
+			"types": "./dist/host.d.mts",
+			"import": "./dist/host.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/gateway": "workspace:*",
+		"jira.js": "^6.4.0",
+		"jira2md": "^3.0.1",
+		"marklassian": "^1.2.1",
+		"turndown": "^7.2.5",
+		"yaml": "^2.9.1",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^26.6.6",
+		"@types/turndown": "^5.0.6",
+		"hono": "^4.13.16",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=26"
+	}
+}

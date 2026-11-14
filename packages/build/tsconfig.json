@@ -3,6 +3,7 @@
 	"compilerOptions": {
 		// Workspace packages resolve to their sources, so nothing has to be built first.
 		"customConditions": ["source"],
+		"erasableSyntaxOnly": true,
 		"lib": ["ES2024"]
 	},
 	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]

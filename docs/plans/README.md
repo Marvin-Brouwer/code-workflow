@@ -28,7 +28,7 @@ run it, Findings and an outcome line (✅ adopted / ❌ not adopted).
 ```text
 code-workflow/
   CLAUDE.md, docs/design.md, docs/decisions.md   from the starter
-  examples/example/, packages/*                  the option C sketches, not workspace members yet
+  examples/example/, packages/*                  the reference workflow and its packages; workspace members since MVP step 7
   pocs/
     loop-typing/                                 @pocs/loop-typing
     e2b-pause/                                   @pocs/e2b-pause
@@ -40,7 +40,7 @@ code-workflow/
 
 - oxlint runs at the root over every POC. `pnpm lint` and `pnpm typecheck` both have to pass
   before a PR goes up.
-- Node 22, pnpm 10.
+- Node 26, pnpm 10.
 
 ## Delivery
 

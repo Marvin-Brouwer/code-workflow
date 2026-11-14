@@ -1,0 +1,74 @@
+{
+	"name": "@mesh-flow/gitlab",
+	"version": "0.0.0",
+	"description": "GitLab for mesh-flow workflows: checkouts, merge requests, reviews and pipelines, on gitlab.com or a GitLab of your own, with the token on the host",
+	"keywords": [
+		"agents",
+		"gitlab",
+		"merge-request",
+		"mesh-flow",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/gitlab#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/gitlab"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/gitlab.mts",
+			"types": "./dist/gitlab.d.mts",
+			"import": "./dist/gitlab.mjs"
+		},
+		"./hooks": {
+			"source": "./src/_module/hooks.mts",
+			"types": "./dist/hooks.d.mts",
+			"import": "./dist/hooks.mjs"
+		},
+		"./host": {
+			"source": "./src/_module/host.mts",
+			"types": "./dist/host.d.mts",
+			"import": "./dist/host.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/code-repository": "workspace:*",
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/gateway": "workspace:*",
+		"@mesh-flow/git": "workspace:*",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^26.6.6",
+		"execa": "^10.2.1",
+		"hono": "^4.13.16",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=26"
+	}
+}

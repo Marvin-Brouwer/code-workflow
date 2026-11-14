@@ -76,6 +76,20 @@ export const status = hostTool({ name: 'serviceStatus', input: z.object({}) }, a
 })
 ```
 
+Calls that must not overlap, such as two replies to one review comment, go through `oneAtATime()`: calls with the same key run one after another, others side by side, and a call whose signal aborts while it waits is never run.
+
+```ts
+import { hostTool, oneAtATime } from '@mesh-flow/gateway'
+
+const perIssue = oneAtATime()
+
+export const comment = hostTool(commentDefinition, ({ issue, body }, { abortSignal }) =>
+	perIssue(issue, abortSignal, () => postComment(issue, body, abortSignal)),
+)
+```
+
+`projectUrl` is where the footer of a post a connector signs links to, so every connector's footer points at the same place.
+
 A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.
 
 ```ts

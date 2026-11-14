@@ -1,6 +1,6 @@
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { BranchName, RepositoryName } from '../repository-name.mts'
-import { Sha } from './git-tools.mts'
+import { RepositoryName } from '../repository-name.mts'
 import { PostedComment } from './issue-tools.mts'
 
 /** Names a pull request: its repository and number. */
@@ -79,13 +79,6 @@ export const openPullRequest = {
 	output: PullRequestData,
 }
 
-/**
- * Why `updatePullRequest` wrote nothing. `closed`: a closed pull request keeps its text.
- * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
- */
-export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
-export type UpdateSkip = z.infer<typeof UpdateSkip>
-
 /** Gives an open pull request on the host a new title and description; a closed one is left as it is. */
 export const updatePullRequest = {
 	name: 'githubUpdatePullRequest',
@@ -95,7 +88,10 @@ export const updatePullRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
-		/** What the pull request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		/**
+		 * What the pull request said when it was last looked at: when it says something else now,
+		 * someone edited it since, and nothing is written.
+		 */
 		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
 	/** With `skipped` when nothing was written. */
@@ -135,27 +131,9 @@ export const reviewActivity = {
 	}),
 }
 
-/**
- * What a reply to a review item is. `plan`: what will be done about it, before it's done. `answer`
- * (the default): the answer to a question, or what was done.
- */
-export const ReplyStage = z.enum(['plan', 'answer'])
-export type ReplyStage = z.infer<typeof ReplyStage>
-
-/** The stage of a reply that names none. */
-export const defaultReplyStage: ReplyStage = 'answer'
-
 /** What came of a reply: the comment posted or edited, or that the item is gone, a line comment deleted since it was read. */
-/** A reply that found its item gone. */
-const GoneReply = z.object({ gone: z.literal(true) })
-
 export const ReplyOutcome = z.union([PostedComment, GoneReply])
 export type ReplyOutcome = z.infer<typeof ReplyOutcome>
-
-/** Whether a reply found its item gone: a line comment deleted since it was read. */
-export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
-	return 'gone' in outcome
-}
 
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never

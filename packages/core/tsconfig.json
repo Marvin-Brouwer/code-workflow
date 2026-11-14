@@ -4,7 +4,7 @@
 		// Workspace packages resolve to their sources, so nothing has to be built first.
 		"customConditions": ["source"],
 		"erasableSyntaxOnly": true,
-		// Node 22 has all of ES2024, such as `Promise.withResolvers` and `toSorted`.
+		// Node 26 has all of ES2024, such as `Promise.withResolvers` and `toSorted`.
 		"lib": ["ES2024"]
 	},
 	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]

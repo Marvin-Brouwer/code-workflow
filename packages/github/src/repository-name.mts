@@ -25,18 +25,9 @@ export function splitRepositoryName(full: RepositoryName): { readonly owner: str
 
 /** Where git clones `owner/name` from on GitHub. */
 export function githubRemoteUrl(repository: RepositoryName): string {
-	return `https://github.com/${repository}.git`
+	// GitHub ignores case in names: `Team/App` is `team/app`.
+	return `https://github.com/${repository.toLowerCase()}.git`
 }
-
-/** A branch name, as git takes it in a ref. */
-export const BranchName = z
-	.string()
-	.regex(/^(?!.*(\.\.|\/\/|@\{))[^\s~^:?*[\\]+$/, "Use a branch name git takes: no spaces, '..', '~', '^', ':', '?', '*', '[' or '\\'.")
-	.refine(
-		(name) => !name.startsWith('-') && !name.endsWith('/') && !name.endsWith('.') && !name.endsWith('.lock'),
-		"A branch name doesn't start with '-' or end with '/', '.' or '.lock'.",
-	)
-export type BranchName = z.infer<typeof BranchName>
 
 /** Whether two repository names name the same repository: GitHub ignores case in them. */
 export function sameRepositoryName(one: string, other: string): boolean {

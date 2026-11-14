@@ -3,7 +3,8 @@
 	"compilerOptions": {
 		// Workspace packages resolve to their sources, so nothing has to be built first.
 		"customConditions": ["source"],
-		// Node 22 has all of ES2024, such as `toSorted` and `with`.
+		"erasableSyntaxOnly": true,
+		// Node 26 has all of ES2024, such as `toSorted` and `with`.
 		"lib": ["ES2024"]
 	},
 	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]

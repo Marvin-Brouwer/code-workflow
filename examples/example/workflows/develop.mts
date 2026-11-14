@@ -1,94 +1,137 @@
 /**
- * The `example` development workflow: plain async TypeScript, agents as calls.
- *
- * Every `await` is real. While the run waits for a human or an external event, the sandbox is
- * snapshotted and stopped; the answer restores it and the await resolves in the same stack.
- *
- * Design sketch: the packages don't exist yet and this hasn't been type-checked.
+ * The `example` development workflow: a Jira story from research to merged merge requests, one per
+ * repository the plan changes. Plain async TypeScript: every `await` is real, and agents are calls
+ * inside it. While the run waits for a person or for GitLab, the sandbox can be paused; the answer
+ * resumes it and the await resolves in the same stack.
  */
-import { fail, inDependencyOrder, propose, succeed, verify, workflow } from '@mesh-flow/core'
-import { jira } from '@mesh-flow/atlassian'
+import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
+import { codeReview, deliveryOrder, deviations, Plan, planFile, Research, type Delivery } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
-import { Plan, Research, codeReview, deliveryOrder, deviations, planFile } from '@mesh-flow/preset-development'
-import { developer, planner, reviewer } from '../agents.mts'
+import { developer, planner, reviewer, writer } from '../agents.mts'
+import { moveOn } from './story-status.mts'
 
-export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+/** How long a developer may take for its part of the plan, waits on a person not counted. */
+const implementationMinutes = 120
+
+/** How long a developer may take for one round of review changes or a pipeline fix. */
+const fixRoundMinutes = 45
+
+/** The one Jira comment the run keeps up to date with how far it got. */
+const progressComment = { key: 'progress' }
+
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
-	await jira.transition(story, 'In Progress')
+	await moveOn(story, 'In Progress')
 
 	const research = await planner.loop`
-        Do preliminary research for ${story}.
-        Find related issues with ${jira.search} and read them with ${jira.dump}.
-        Find the repositories each part of the work touches with ${gitlab.searchRepositories}.
-        Write your findings as Markdown in ${Research}, then ${succeed(Research)}.
-    `
+		Do preliminary research for ${story}.
+		Find related issues with ${jira.search} and read them with ${jira.dump}.
+		Look for the team's guidelines with ${confluence.search} and read them with ${confluence.dump}.
+		Find the repositories each part of the work touches with ${gitlab.searchRepositories}.
+		Write your findings as Markdown in ${Research}, then ${succeed(Research)}.
+	`
 
 	const plan = await planner.loop`
-        Create a development plan for ${story}, based on ${research}.
-        List every repository that needs changes. When a repository needs something from another one
-        first (a new package version, an API contract, a migration), add it to the dependency graph
-        with the reason; repositories are delivered in that order.
-        Write the plan to ${planFile}, then propose it with ${propose(Plan)}.
-        When the proposal is rejected, revise the plan with the feedback and propose it again.
-        If the story can't be planned with the information available, ${fail}.
-    `
+		Create a development plan for ${story}, based on ${research}.
+		List every repository that needs changes, by its project path. When a repository builds against
+		packages another one publishes, such as a new version of a shared library, add it to the
+		dependency graph with the reason; repositories are delivered in that order, each waiting for
+		the packages the merges before it published.
+		Write the plan to ${planFile}, then propose it with ${propose(Plan)}.
+		When the proposal is rejected, revise the plan with the feedback and propose it again.
+		If the story can't be planned with the information available, ${fail}.
+	`
+	await jira.comment(
+		story,
+		`The plan is approved, for ${plan.repositories.map(({ repository }) => repository).join(', ')}.`,
+		progressComment,
+	)
+	// A merge request that closes the story moves it to Done when it merges, through GitLab's Jira
+	// integration. With more than one repository, the run moves it once every merge request is merged.
+	const closing = plan.repositories.length === 1 ? { issue: story } : {}
 
-	// Starts each repository as soon as the repositories it depends on have returned.
-	// Independent repositories run concurrently; a pending review never blocks unrelated work.
-	await inDependencyOrder(deliveryOrder(plan), async (part, upstream): Promise<{ packages: string[] }> => {
-		const repository = await gitlab.checkout(part.repository, { branch: `feature/${story.key}` })
-		await dotnet.updatePackages(
-			repository,
-			upstream.flatMap((dependency) => dependency.packages),
-		)
+	/** Delivers one repository of the plan: implemented, verified, reviewed and merged. Resolves to its merge request. */
+	async function deliver(
+		part: Delivery,
+		repository: gitlab.Repository,
+		upstream: readonly gitlab.PublishedPackage[],
+	): Promise<gitlab.MergeRequest> {
+		await dotnet.updatePackages(repository, upstream)
 
 		await developer.loop`
-            Implement your part of ${plan.path}, amended by ${deviations}, in ${repository}.
-            Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
-            then hand in your work with ${verify(
-							dotnet.tests(repository),
-							dotnet.security(repository),
-							codeReview(reviewer, repository, plan),
-						)}.
-            When it's rejected, fix the findings and hand it in again.
-            Record any deviation from the plan with ${deviations.record}.
-        `
+			Implement your part of ${plan.path}, as amended by ${deviations}, in ${repository}: ${part.changes}
+			Build with ${dotnet.build} and test with ${dotnet.test} until both pass, then hand in your work with ${verify(
+				dotnet.testsPass(repository),
+				dotnet.security(repository),
+				codeReview(reviewer, repository, plan),
+			)}.
+			When it's rejected, fix the findings and hand it in again.
+			Record any deviation from the plan with ${deviations.record}.
+			${limit({ minutes: implementationMinutes })}
+		`
+		// Code commits and pushes what was handed in, so `describe` reads the work as it was verified.
+		await gitlab.push(repository)({ message: `${story.key}: ${part.changes}` })
 
-		const mergeRequest = await gitlab.openMergeRequest(repository, {
-			title: `${story.key}: ${story.summary}`,
-			description: await planner.loop`
-                Write a short merge request description for the changes in ${repository},
-                based on ${plan.path}. ${succeed(gitlab.Description)}
-            `,
+		const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, closing))
+		// A merge request merged or closed meanwhile is given back as it is, not opened again.
+		if (mergeRequest.state === 'closed' && !mergeRequest.merged)
+			throw new Error(`${mergeRequest.url} was closed, so ${part.repository} isn't delivered.`)
+		await moveOn(story, 'In Review')
+		await jira.comment(story, `Merge request for ${part.repository}: ${mergeRequest.url}`, { key: `merge-request ${part.repository}` })
+
+		// A merge request merged meanwhile has no review left to watch.
+		if (mergeRequest.merged) return mergeRequest
+
+		// Returns once the merge request is merged or closed. Each round of review comments is one call.
+		const outcome = await gitlab.review(mergeRequest, {
+			async comments(comments) {
+				// Questions are answered here; what asks for a change gets a plan as its reply, and comes back.
+				const changes = await gitlab.triage(reviewer, repository, { mergeRequest, comments })
+				if (changes.length === 0) return
+				await developer.loop`
+					Make these changes in ${repository}, as they were planned: ${changes}.
+					When a change goes beyond this merge request, record it with ${deviations.record}.
+					Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
+					When every item is done, hand in with ${verify(dotnet.testsPass(repository))}.
+					${limit({ minutes: fixRoundMinutes })}
+				`
+				// What was fixed after the last push, to make the tests pass, goes up too.
+				await gitlab.push(repository)({ message: `${story.key}: review changes` })
+				// `describe` runs no writer loop when the pushed commit is already described.
+				await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { ...closing, mergeRequest }))
+			},
+			async pipelineFailed({ failures }) {
+				await developer.loop`
+					The pipeline of ${mergeRequest} failed: ${failures}.
+					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
+					${limit({ minutes: fixRoundMinutes })}
+				`
+				await gitlab.push(repository)({ message: `${story.key}: pipeline fix` })
+				await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { ...closing, mergeRequest }))
+			},
 		})
-		await jira.transition(story, 'In Review') // no-op after the first merge request
-		await jira.comment(story, `Merge request for ${repository.name}: ${mergeRequest.url}`)
+		if (outcome.state === 'closed') throw new Error(`${mergeRequest.url} was closed without a merge.`)
+		return mergeRequest
+	}
 
-		// Returns once merged. Handles pipeline failures and tagged comments as they come in.
-		await gitlab.review(mergeRequest, {
-			pipelineFailed: (failure) => developer.loop`
-                The pipeline for ${mergeRequest.url} failed: ${failure.log}.
-                Fix it in ${repository} and push with ${gitlab.push(repository)},
-                then hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
-            `,
+	// Starts each repository once the repositories it depends on are merged, with the packages
+	// their merges published. Independent repositories don't wait for each other.
+	await inDependencyOrder(deliveryOrder(plan), async (part, upstream): Promise<readonly gitlab.PublishedPackage[]> => {
+		const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
+		// A run that starts over after this repository was merged finds the merge, and only reads what it published.
+		const mergeRequest = (await gitlab.mergedMergeRequest(repository)) ?? (await deliver(part, repository, upstream.flat()))
 
-			taggedComments: (comments) => reviewer.loop`
-                Handle these review comments on ${mergeRequest.url}: ${comments}.
-                Triage every comment first:
-                - a question: answer it, based on the code, ${plan.path} and ${deviations};
-                - a remark: decide whether it needs a code change, and reply with what you did or why not.
-                A comment can be both.
-                Ask ${developer.as('changeCode', { in: repository, verify: [dotnet.tests(repository)] })}
-                for code changes and reply with ${gitlab.reply(mergeRequest)}.
-                When a remark changes the approach beyond this merge request, record it with
-                ${deviations.record}.
-                When every comment is handled, ${succeed(gitlab.Triage)}.
-            `,
-		})
-
-		return { packages: await gitlab.publishedPackages(mergeRequest, 'nuget') }
+		// Only what another repository waits for: a project that publishes nothing has no packages to wait for.
+		if (!part.hasDependents) return []
+		const published = await gitlab.publishedPackages(mergeRequest, 'nuget')
+		// A repository waits for this one's packages: without any, it would build against the old ones.
+		if (published.length === 0)
+			throw new Error(`The merge of ${mergeRequest.url} published no packages, which ${part.repository}'s dependents wait for.`)
+		return published
 	})
 
-	await jira.transition(story, 'Done')
+	await moveOn(story, 'Done')
+	await jira.comment(story, 'Every merge request is merged.', progressComment)
 })

@@ -14,9 +14,21 @@ differs from the plan below: `github.review` polls through a host tool with an e
 instead of the durable external-event primitive, which isn't built yet (see
 [decisions](../decisions.md#engine)); commits cross between host and sandbox as git bundles; and
 the engine loads connector host tools from the packages the user adds with `mesh-flow connector`.
+Step 7 is built:
+[`@mesh-flow/atlassian`](../../packages/atlassian/README.md), with Jira and Confluence on Cloud and
+Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which shares what it has in
+common with `@mesh-flow/github` through [`@mesh-flow/code-repository`](../../packages/code-repository/README.md);
+[`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
+[`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
+[`examples/example`](../../examples/example), which builds and describes itself in CI, and
+names a sandbox image built from its own Dockerfile (built and pushed by hand, not in CI).
+Running `develop` against a real story is what's left of "done when". A dependent repository that
+takes another's new NuGet packages needs the private registry shim, which isn't built: until it
+is, a dependent repository's restore fails, so only plans whose repositories don't depend on each
+other run through. Independent repositories run side by side.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
 a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
-sequential repositories, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
+repositories in dependency order, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
 
 ## Before it starts
@@ -182,7 +194,7 @@ import { github } from '@mesh-flow/github/hooks'
 import { fixIssue } from './workflows/fix-issue.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-slim' }),
+	sandbox: image({ name: 'node:26-slim' }),
 	workflows: [
 		userTrigger(fixIssue),
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
@@ -192,7 +204,7 @@ export default defineMeshFlow({
 // workflows/fix-issue.mts
 export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, async ({ parameters }) => {
     const issue = await github.collect(parameters.issue);
-    const repository = await github.checkout(issue.repository, { branch: `fix/${issue.number}` });
+    const repository = await github.checkout({ repository: issue.repository, branch: `fix/${issue.number}` });
 
     await developer.loop`
         Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.
@@ -221,10 +233,12 @@ the first proof that the sandbox, engine, core and gateway work together.
 ### 7. The other connectors and `example`
 
 The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
-against one repository at a time. `inDependencyOrder` runs sequentially until roadmap step 4.
-Until this step lands, the root `pnpm build` skips `example` (`--filter=!example` in the root
-`package.json`), because its connector and preset sketches have no `package.json` yet and its
-imports don't resolve. This step takes that filter out again.
+for plans whose repositories don't depend on each other. `inDependencyOrder` runs independent
+repositories side by side; a dependent one waits for the packages its dependencies' merges
+publish, which it can only restore once the registry shim is built.
+Until this step landed, the root `pnpm build` skipped `example` (`--filter=!example` in the root
+`package.json`), because its connector and preset sketches had no `package.json` and its imports
+didn't resolve. This step took that filter out again.
 
 ## Rules for every package
 

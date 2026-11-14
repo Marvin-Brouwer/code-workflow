@@ -57,6 +57,9 @@ function stubBackend(parts: {
  */
 const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(1_000) })
 
+/** Deadlines for a test about what a shutdown leads to, not how long it takes: a busy runner can't run out of them. */
+const ampleDeadlines = () => ({ pause: AbortSignal.timeout(10_000), backend: AbortSignal.timeout(20_000) })
+
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
@@ -142,9 +145,10 @@ describe('Engine.close', () => {
 	})
 
 	test('refuses new runs once it has started', async () => {
-		// Arrange: a pause that settles, so the shutdown doesn't wait out any deadline.
+		// Arrange: a pause that settles, so the shutdown doesn't wait out any deadline, and a busy
+		// runner, which flushed the records in over a second on Windows, doesn't run out of one.
 		const { engine } = await startRun(stubBackend({ pause: pausesAtOnce }).backend)
-		await engine.close(shortDeadlines())
+		await engine.close(ampleDeadlines())
 
 		// Act
 		const starting = engine.startRun({ ...userRun('hello'), abortSignal: signal })

@@ -1,4 +1,23 @@
-export { checkout, push, searchRepositories } from './repository.mts'
-export { Description, openMergeRequest, publishedPackages } from './merge-request.mts'
-export { Triage, reply, review } from './review.mts'
-export { pipelinePasses } from './pipeline.mts'
+export { BranchName, type ReplyInput } from '@mesh-flow/code-repository'
+export { describe, type DescribeOptions } from './merge-request/describe.mts'
+export { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request/merge-request-text.mts'
+export {
+	mergedMergeRequest,
+	mergeRequest,
+	openMergeRequest,
+	updateMergeRequest,
+	type MergeRequest,
+	type UpdatedMergeRequest,
+} from './merge-request/merge-request.mts'
+export { pipelinePasses, type PipelinePassesOptions } from './merge-request/pipeline-passes.mts'
+export { publishedPackages, type PublishedPackagesOptions } from './merge-request/published-packages.mts'
+export { reply } from './merge-request/reply.mts'
+export { review, type PipelineFailed, type ReviewHandlers, type ReviewOptions, type ReviewOutcome } from './merge-request/review.mts'
+export { triage, type PlannedChange, type TriageOptions } from './merge-request/triage.mts'
+export { ProjectPath } from './project-path.mts'
+export { push, type Pushed } from './repository/push.mts'
+export { checkout, type Repository } from './repository/repository.mts'
+export { searchRepositories } from './repository/search.mts'
+export type { FoundRepository } from './tools/search-tools.mts'
+export type { MergeRequestRef, ReviewItem } from './tools/merge-request-tools.mts'
+export type { JobFailure, PackageType, PublishedPackage } from './tools/pipeline-tools.mts'

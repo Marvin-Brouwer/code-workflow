@@ -1,0 +1,60 @@
+{
+	"name": "@mesh-flow/preset-development",
+	"version": "0.0.0",
+	"description": "A development preset for mesh-flow workflows: research and plan shapes, the order repositories are delivered in, a code review check and plan deviations",
+	"keywords": [
+		"agents",
+		"code-review",
+		"mesh-flow",
+		"planning",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/preset-development#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/preset-development"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/preset-development.mts",
+			"types": "./dist/preset-development.d.mts",
+			"import": "./dist/preset-development.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/git": "workspace:*",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-ai": "^1.5.0",
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^26.6.6",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=26"
+	}
+}

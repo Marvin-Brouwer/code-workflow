@@ -1,18 +1,25 @@
 {
 	"name": "example",
 	"private": true,
-	"description": "The reference mesh-flow app: one workflow that takes a story from plan to merge request",
+	"description": "The reference mesh-flow app: a Jira story from research and a plan to merged GitLab merge requests in .NET repositories",
 	"type": "module",
 	"main": "main.mts",
 	"scripts": {
 		"build": "mesh-flow build",
 		"deploy": "mesh-flow deploy",
-		"dev": "mesh-flow dev"
+		"dev": "mesh-flow dev",
+		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
-		"@mesh-flow/core": "workspace:*"
+		"@mesh-flow/atlassian": "workspace:*",
+		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/gitlab": "workspace:*",
+		"@mesh-flow/preset-development": "workspace:*",
+		"@mesh-flow/toolchain-dotnet": "workspace:*"
 	},
 	"devDependencies": {
-		"@mesh-flow/engine": "workspace:*"
+		"@mesh-flow/engine": "workspace:*",
+		"@types/node": "^26.6.6",
+		"typescript": "~6.0.3"
 	}
 }

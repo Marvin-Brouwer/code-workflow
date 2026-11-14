@@ -37,7 +37,7 @@ vi.mock('microsandbox', () => ({
 
 const { microsandboxBackend } = await import('../../src/microsandbox/microsandbox.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 
 describe('microsandbox backend, on a fake SDK', () => {
 	beforeEach(() => {

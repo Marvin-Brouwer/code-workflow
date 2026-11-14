@@ -7,8 +7,7 @@ const loader = path.join(import.meta.dirname, 'workspace-from-source.mts')
 
 /** Starts {@link script} for a home directory and waits until it serves. Killed when the test ends. */
 export async function startEngineProcess(home: string): Promise<ChildProcess> {
-	// The sandbox package's sources use TypeScript syntax that only the transform mode runs.
-	const child = spawn(process.execPath, ['--experimental-transform-types', '--no-warnings', '--import', loader, script, home], {
+	const child = spawn(process.execPath, ['--no-warnings', '--import', loader, script, home], {
 		stdio: ['ignore', 'pipe', 'pipe'],
 	})
 	onTestFinished(() => {

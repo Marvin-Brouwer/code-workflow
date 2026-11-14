@@ -1,5 +1,5 @@
+import { gone, notFound, unauthorized, unavailable } from '@mesh-flow/code-repository/host'
 import { HostToolTransientError } from '@mesh-flow/gateway'
-import { unauthorized, unavailable } from './github-statuses.mts'
 
 /** GitHub's answer to a missing permission, and to a rate limit, told apart by the headers. */
 const forbidden = 403
@@ -14,7 +14,8 @@ interface RequestFailure {
 
 /**
  * A failure from Octokit, marked as a {@link HostToolTransientError} when it may pass on another
- * try: a dropped connection, GitHub being unavailable, a rate limit (429, or a 403 that says so).
+ * try: a dropped connection, which Octokit reports as a 500, GitHub being unavailable, a rate
+ * limit (429, or a 403 that says so).
  * Anything else, such as a bad token, a missing permission, a 404 or an aborted request, comes back
  * as it is.
  */
@@ -29,13 +30,16 @@ export function markedTransient(error: unknown): unknown {
 	return unavailable(error.status) || rateLimited ? new HostToolTransientError(error.message, { cause: error }) : error
 }
 
-/** Whether GitHub refused the token: one that's wrong, expired or revoked. */
+/**
+ * Whether GitHub refused the token: one that's wrong, expired or revoked, which it answers with a
+ * 401. A 403 is not one: a locked conversation answers that too.
+ */
 export function refusedToken(error: unknown): boolean {
 	return isRequestFailure(error) && error.status === unauthorized
 }
 
 /** GitHub's answers for something that is gone: never there, or deleted. */
-const goneStatuses = new Set([404, 410])
+const goneStatuses = new Set([notFound, gone])
 
 /** Whether GitHub answered that what was asked for is gone, such as a comment deleted since. */
 export function isGone(error: unknown): boolean {

@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"check": "tsc -p tsconfig.json && tsc -p tsconfig.sketches.json && tsx scripts/hover.mts && tsx scripts/timing.mts",
+		"check": "tsc -p tsconfig.json && tsx scripts/hover.mts && tsx scripts/timing.mts",
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {

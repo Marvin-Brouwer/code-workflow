@@ -1,11 +1,11 @@
+import { decideOnEdit, type UpdateSkip } from '@mesh-flow/code-repository'
 import { toPrompt, type ToolContext } from '@mesh-flow/core'
 import { sameRepositoryName } from '../repository-name.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { PullRequestData, PullRequestRef, UpdateSkip } from '../tools/pull-request-tools.mts'
+import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
-import { decideOnEdit } from './decide-on-edit.mts'
 import type { PullRequestContent, PullRequestText } from './pull-request-text.mts'
 
 /** A pull request. In a prompt it renders as its URL. */

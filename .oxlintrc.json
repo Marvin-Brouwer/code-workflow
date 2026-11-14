@@ -9,15 +9,7 @@
 		"builtin": true,
 		"node": true
 	},
-	"ignorePatterns": [
-		"**/node_modules/",
-		"**/dist/",
-		"examples/example/",
-		"packages/atlassian/",
-		"packages/gitlab/",
-		"packages/preset-development/",
-		"packages/toolchain-dotnet/"
-	],
+	"ignorePatterns": ["**/node_modules/", "**/dist/"],
 	"overrides": [
 		{
 			"files": ["pocs/loop-typing/test/**/*.mts"],

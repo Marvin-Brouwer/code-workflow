@@ -9,7 +9,7 @@ import { startFromEngine } from '../workflow/start-from-engine.mts'
 
 /** What `defineMeshFlow` takes. */
 export interface MeshFlowOptions {
-	/** The sandbox every run gets, such as `image({ name: 'node:22-slim' })`. */
+	/** The sandbox every run gets, such as `image({ name: 'node:26-slim' })`. */
 	readonly sandbox: SandboxDescription
 	/** Everything that can start a run: triggers, and bundles of them from `defineWorkflows`. */
 	readonly workflows: readonly (Trigger | WorkflowBundle)[]
@@ -27,7 +27,7 @@ export interface MeshFlowApp {
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:22-slim', egress: ['api.example.com'] }),
+ * 	sandbox: image({ name: 'node:26-slim', egress: ['api.example.com'] }),
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),

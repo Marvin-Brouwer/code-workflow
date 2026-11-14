@@ -65,7 +65,7 @@ export function rootfsDirectory(images: string, image: string): string {
  * Unpacks an image from Docker Hub into a root filesystem directory, without Docker, unless it's
  * already there.
  *
- * Enough for official images like `node:22-slim`: the manifest for this machine's architecture,
+ * Enough for official images like `node:26-slim`: the manifest for this machine's architecture,
  * each layer in order, checked against its digest, and the config's `Env` and `WorkingDir`. Not a
  * general OCI implementation. Needs GNU tar. The files belong to the user the engine runs as.
  */

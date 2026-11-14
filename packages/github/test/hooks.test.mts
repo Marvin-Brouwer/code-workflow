@@ -53,7 +53,7 @@ describe('github hooks', () => {
 	test('an app lists it as a webhook trigger with the filter in the payload schema', () => {
 		// Arrange
 		const fixIssue = workflow('fix-issue-listed', { issue }, async () => undefined)
-		const app = defineMeshFlow({ sandbox: image({ name: 'node:22-bookworm' }), workflows: [github.onIssueLabeled(fixIssue, 'ai-fix')] })
+		const app = defineMeshFlow({ sandbox: image({ name: 'node:26-bookworm' }), workflows: [github.onIssueLabeled(fixIssue, 'ai-fix')] })
 
 		// Act
 		const described = describeApp(app, [fixIssue])

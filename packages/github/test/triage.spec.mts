@@ -1,9 +1,10 @@
+import { triageResult } from '@mesh-flow/code-repository'
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
-import { signed } from '../src/host/signature.mts'
-import { triage, triageResult } from '../src/pull-request/triage.mts'
+import { triage } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
-import type { ReviewItem } from '../src/tools/pull-request-tools.mts'
+import { ReviewItemId, type ReviewItem } from '../src/tools/pull-request-tools.mts'
 import { branch, connectedGithub, promptlyMs, repositoryName } from './support/connected-github.mts'
 import { reactionsOf } from './support/fake-github.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
@@ -177,7 +178,7 @@ describe('triageResult', () => {
 		const { comments } = await reviewed()
 
 		// Act
-		const parsed = triageResult(comments).safeParse({
+		const parsed = triageResult(comments, ReviewItemId).safeParse({
 			items: [
 				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
 				{ id: 'comment/2', asks: 'change', reply: 'Will do.' },
@@ -193,7 +194,7 @@ describe('triageResult', () => {
 		const { comments } = await reviewed()
 
 		// Act
-		const parsed = triageResult(comments).safeParse({
+		const parsed = triageResult(comments, ReviewItemId).safeParse({
 			items: [
 				{ id: 'comment/1', asks: 'question', reply: 'Because.' },
 				{ id: 'comment/1', asks: 'change', reply: 'Will do.' },

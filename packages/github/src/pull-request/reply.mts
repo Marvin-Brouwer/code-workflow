@@ -1,14 +1,7 @@
-import { tool, type Tool } from '@mesh-flow/core'
-import { z } from 'zod'
+import { replyTool, type ReplyInput } from '@mesh-flow/code-repository'
+import type { Tool } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
-import { ReplyStage, ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/pull-request-tools.mts'
-
-/** What the agent replies with: the item, the text, and whether it's a plan or the answer. */
-export interface ReplyInput {
-	readonly item: string
-	readonly text: string
-	readonly stage?: ReplyStage | undefined
-}
+import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/pull-request-tools.mts'
 
 /**
  * The tool that replies to a review item on a pull request: in the thread of a comment on a line,
@@ -25,19 +18,9 @@ export interface ReplyInput {
  * ```
  */
 export function reply(on: PullRequestRef): Tool<ReplyInput, ReplyOutcome> {
-	return tool('reply', {
-		description: `Replies to a review item on pull request ${on.repository}#${String(on.number)}`,
-		input: z.object({
-			item: ReviewItemId.describe('The id of the item, as listed'),
-			text: z.string().min(1),
-			stage: ReplyStage.optional().describe(
-				'plan: what you will do about the item, before you change anything. answer (the default): the answer to a question, or what you did.',
-			),
-		}),
-		action: ({ item, text, stage }, context) =>
-			stubs.replyToReviewItem(
-				{ repository: on.repository, number: on.number, item, body: text, ...(stage === undefined ? {} : { stage }) },
-				context,
-			),
+	return replyTool({
+		on: `pull request ${on.repository}#${String(on.number)}`,
+		item: ReviewItemId,
+		replyToReviewItem: (answer, context) => stubs.replyToReviewItem({ repository: on.repository, number: on.number, ...answer }, context),
 	})
 }
