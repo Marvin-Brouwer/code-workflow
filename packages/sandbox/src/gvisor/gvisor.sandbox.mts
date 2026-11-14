@@ -11,14 +11,12 @@ import { runsc, runscOrThrow } from './runsc.mts'
 
 /** A running gVisor container. Its runsc container id is the sandbox id. */
 export class GvisorSandbox implements Sandbox {
+	readonly id: string
 	readonly #spec: SandboxSpec
 	readonly #context: GvisorContext
 
-	constructor(
-		readonly id: string,
-		spec: SandboxSpec,
-		context: GvisorContext,
-	) {
+	constructor(id: string, spec: SandboxSpec, context: GvisorContext) {
+		this.id = id
 		this.#spec = spec
 		this.#context = context
 		context.lifetime.track(id, (signal) => context.remove(id, signal))
