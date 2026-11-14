@@ -5,9 +5,9 @@
  *
  * The sandbox is meant to be the image the Dockerfile next to this file builds: node, git and the
  * .NET 10 SDK. Until it's pushed to a registry and named below, the app runs on a public Node.js
- * image, which has node and git but no .NET SDK, so the dotnet tools and checks fail. It reaches NuGet,
- * so restores work and the agents can build and test, and nothing else: Jira, Confluence and
- * GitLab are only spoken to from the host, through the gateway.
+ * image, which has node and git but no .NET SDK, so the dotnet tools and checks fail there. The
+ * sandbox reaches NuGet, so restores work, and nothing else: Jira, Confluence and GitLab are only
+ * spoken to from the host, through the gateway.
  */
 import { jira } from '@mesh-flow/atlassian/hooks'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
