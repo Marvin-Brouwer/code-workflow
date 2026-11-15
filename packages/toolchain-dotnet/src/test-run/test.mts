@@ -22,7 +22,8 @@ import { runTests } from './run-tests.mts'
  * ```ts
  * const result = await dotnet.test({ directory: repository.directory, filter: 'Category=Smoke' })
  * const failed = [...result.failures.map((failure) => failure.name), ...result.buildErrors.map((error) => error.message)]
- * if (!result.succeeded) await jira.comment(story, `The smoke tests of ${repository.name} fail: ${failed.join(', ')}`)
+ * const why = failed.length > 0 ? failed.join(', ') : (result.output ?? '')
+ * if (!result.succeeded) await jira.comment(story, `The smoke tests of ${repository.name} fail: ${why}`)
  * ```
  *
  * @example For an agent

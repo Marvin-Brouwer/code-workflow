@@ -15,6 +15,8 @@ import { runTests } from './run-tests.mts'
  * @param options - `target`: the solution or project, relative to the checkout.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means every test passed.
+ * @throws From the check: when `dotnet` can't run, such as when it isn't installed, or writes more
+ * than 64 MiB of output; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts

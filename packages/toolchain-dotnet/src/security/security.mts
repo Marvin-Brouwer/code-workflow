@@ -23,7 +23,7 @@ const findingSource = 'vulnerable packages'
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means no package has a known vulnerability.
  * @throws From the check: when `dotnet` can't tell which packages are vulnerable, such as when a
- * source has no vulnerability data.
+ * source has no vulnerability data; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts
