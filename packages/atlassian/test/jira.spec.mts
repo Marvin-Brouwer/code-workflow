@@ -22,7 +22,7 @@ const descriptionHtml = [
 	'<p>The dashboard opens, as described in <a href="https://example.atlassian.net/wiki/spaces/TEAM/pages/12345">the guidelines</a>.</p>',
 	'<pre><code>POST /session 200</code></pre>',
 	'<table><tr><th>Browser</th><th>Result</th></tr><tr><td>Safari 19</td><td>fails</td></tr><tr><td>Firefox</td><td>works</td></tr></table>',
-	`<p>Ask ${rita.cloudMention} for a test account.</p>`,
+	`<p>Ask ${rita.jiraMention} for a test account.</p>`,
 ].join('')
 
 test('collect writes an issue as the Markdown in jira.spec.md', async () => {
@@ -40,7 +40,7 @@ test('collect writes an issue as the Markdown in jira.spec.md', async () => {
 						id: '2',
 						author: 'Dev Eloper',
 						created: '2026-11-11T08:30:00.000Z',
-						html: `<p>${rita.cloudMention} can you share the HAR file?</p>`,
+						html: `<p>${rita.jiraMention} can you share the HAR file?</p>`,
 					},
 				],
 				links: [

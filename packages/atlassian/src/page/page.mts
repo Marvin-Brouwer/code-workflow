@@ -93,7 +93,7 @@ export const dump = tool('confluenceDump', {
  *
  * Input: `{ text, space?, limit? }`. `text` is the words to look for; `space` keeps the search to
  * the space with that key, such as `TEAM`; `limit` is how many pages come back at most, 20 when not
- * given. Only pages are searched, not blog posts, comments or attachments.
+ * given and 50 at most. Only pages are searched, not blog posts, comments or attachments.
  *
  * @throws When Confluence turns the search down.
  *

@@ -7,7 +7,7 @@ import { stubs } from '../stubs.mts'
  *
  * Input: `{ jql, limit? }`. `jql` is any JQL query Jira takes, such as
  * `project = PROJ AND labels = web`; `limit` is how many issues come back at most, 20 when not
- * given. Results come in Jira's order, so put an `ORDER BY` in the query when the order matters.
+ * given and 100 at most. Results come in Jira's order, so put an `ORDER BY` in the query when the order matters.
  *
  * @throws When Jira turns the query down, such as for a field it doesn't know.
  *

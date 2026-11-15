@@ -47,7 +47,7 @@ export type IssueCreated = z.infer<typeof issueCreated>
  * The `jira:issue_updated` event, with what changed. An update that changed no field, such as one
  * Jira sends for a new comment or worklog, comes without a changelog, and reads as one with no items.
  * A `refine` on the changelog keeps a trigger to the updates it cares about; the others end as
- * skipped runs.
+ * skipped runs, each of which still starts a sandbox, so narrow the webhook in Jira with JQL too.
  *
  * @example A trigger on a move to a status
  * ```ts

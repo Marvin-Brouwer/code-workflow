@@ -12,7 +12,7 @@ const settings = {
 }
 
 const html = [
-	`<p>Owner: ${rita.cloudMention}</p>`,
+	`<p>Owner: ${rita.confluenceMention}</p>`,
 	'<h2>Commits</h2>',
 	'<p>Use <a href="https://www.conventionalcommits.org">conventional commits</a>, for example:</p>',
 	'<pre><code>fix(login): keep the session on Safari</code></pre>',
