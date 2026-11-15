@@ -32,8 +32,6 @@ attachments:
 
 # PROJ-7: Login fails on Safari
 
-## Description
-
 ## Steps
 
 1.  Open the **login** page in Safari.

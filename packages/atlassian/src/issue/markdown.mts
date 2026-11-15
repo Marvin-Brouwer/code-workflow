@@ -33,8 +33,6 @@ export function issueMarkdownOf(data: IssueData): string {
 	const body = [
 		`# ${data.key}: ${data.summary}`,
 		'',
-		'## Description',
-		'',
 		description === '' ? '(no description)' : description,
 		'',
 		...section('Comments', data.comments.flatMap(commentLines)),
