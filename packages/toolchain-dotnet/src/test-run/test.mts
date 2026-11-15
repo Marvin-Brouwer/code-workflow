@@ -8,18 +8,21 @@ import { runTests } from './run-tests.mts'
  * an agent to run them while it works, all of them or those a filter picks. Each failed test comes
  * back with its message and stack trace; when the build fails, its errors come back instead.
  *
- * A tool for agents, and a function for code. Runs in the sandbox, with the SDK of the sandbox's
- * image.
+ * A tool for agents and a function for code. Runs in the sandbox's image, with its SDK.
  *
  * Input: `{ directory, filter? }`. `directory` is the checkout's absolute path, or that of a
  * solution or project in it; `filter` is a `dotnet test --filter` expression, such as
  * `FullyQualifiedName~Login`. The result says whether the run succeeded, and lists the failed
  * tests, or the build's errors when the tests didn't get to run.
  *
+ * @throws When `directory` isn't an absolute path, when `dotnet` can't run, such as when it isn't
+ * installed, and when it writes more output than is kept.
+ *
  * @example From code
  * ```ts
  * const result = await dotnet.test({ directory: repository.directory, filter: 'Category=Smoke' })
- * if (!result.succeeded) await jira.comment(story, `Smoke tests fail in ${repository.name}: ${String(result.failures.length)} failed.`)
+ * const failed = [...result.failures.map((failure) => failure.name), ...result.buildErrors.map((error) => error.message)]
+ * if (!result.succeeded) await jira.comment(story, `The smoke tests of ${repository.name} fail: ${failed.join(', ')}`)
  * ```
  *
  * @example For an agent

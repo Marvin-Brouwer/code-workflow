@@ -21,13 +21,14 @@ const findingSource = 'vulnerable packages'
  * checkout.
  * @param options - `target`: the solution or project, relative to the checkout.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
- * means no package has a known vulnerability. The check throws, rather than finding something, when
- * `dotnet` can't tell, such as when a source has no vulnerability data.
+ * means no package has a known vulnerability.
+ * @throws From the check: when `dotnet` can't tell which packages are vulnerable, such as when a
+ * source has no vulnerability data.
  *
  * @example From code
  * ```ts
- * const vulnerable = await runCheck(dotnet.security(repository), { abortSignal })
- * for (const finding of vulnerable) await jira.comment(story, finding.message)
+ * const findings = await runCheck(dotnet.security(repository), { abortSignal })
+ * for (const finding of findings) await jira.comment(story, finding.message)
  * ```
  *
  * @example For an agent

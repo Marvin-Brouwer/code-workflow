@@ -19,7 +19,7 @@ import { runTests } from './run-tests.mts'
  * @example From code
  * ```ts
  * const findings = await runCheck(dotnet.testsPass(repository, { target: 'src/Api.slnx' }), { abortSignal })
- * if (findings.length > 0) throw new Error(`${String(findings.length)} tests fail in ${repository.name}.`)
+ * if (findings.length > 0) throw new Error(`The tests of ${repository.name} fail:\n${findings.map((finding) => finding.message).join('\n')}`)
  * ```
  *
  * @example For an agent

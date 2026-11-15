@@ -40,20 +40,21 @@ const holdMs = 500
 const afterForceKillMs = 3_000
 
 /** Waits long enough for the fake `dotnet` to have started, on a runner that isn't busy. */
-const waitForStart = () => new Promise((resolve) => setTimeout(resolve, startedMs))
+const untilStartedMs = () => new Promise((resolve) => setTimeout(resolve, startedMs))
 
 /**
  * Starts the work, stops it once the fake `dotnet` started, and resolves to how long the work took
- * to settle after the stop, having checked it rejected with the stop's reason. `hasStarted` waits for
- * the start: by default `startedMs`, and for a test that needs the fake to have run, until it did.
+ * to settle after the stop, having checked it rejected with the stop's reason. `untilStarted`
+ * waits for the start: by default `startedMs`, and for a test that needs the fake to have run,
+ * until it did.
  */
 async function settleAfterStop(
 	start: (context: { abortSignal: AbortSignal }) => Promise<unknown>,
-	hasStarted: () => Promise<unknown> = waitForStart,
+	untilStarted: () => Promise<unknown> = untilStartedMs,
 ): Promise<number> {
 	const controller = new AbortController()
 	const working = start({ abortSignal: controller.signal })
-	await hasStarted()
+	await untilStarted()
 	const started = performance.now()
 	controller.abort(new Error('The run stopped.'))
 	await expect(working).rejects.toThrow('The run stopped.')
@@ -154,12 +155,12 @@ describe('test and tests', () => {
 		const checkDirectory = await temporaryDirectory()
 		const cli = await fakeDotnet({ test: { hang: true } })
 		// A busy Windows runner can take longer than `startedMs` to start the fake, which then never logs its call.
-		const calledTimes = (times: number) => () =>
+		const untilCalled = (times: number) => () =>
 			expect.poll(async () => (await cli.calls()).length, { timeout: fakeStartsWithinMs }).toBe(times)
 
 		// Act
-		const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), calledTimes(1))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context), calledTimes(2))
+		const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), untilCalled(1))
+		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context), untilCalled(2))
 
 		// Assert
 		expect(toolSettledMs).toBeLessThan(promptlyMs)

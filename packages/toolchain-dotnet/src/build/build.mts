@@ -18,13 +18,16 @@ export interface BuildResult {
  * see whether its change compiles. The errors come back in MSBuild's terms, one per error, with
  * the file and line.
  *
- * A tool for agents, and a function for code that wants to know whether a checkout compiles before
- * it goes further. Runs in the sandbox, with the SDK of the sandbox's image.
+ * A tool for agents and a function for code that wants to know whether a checkout compiles
+ * before it goes further. Runs in the sandbox, with the SDK of the sandbox's image.
  *
  * Input: `{ directory, configuration? }`. `directory` is the checkout's absolute path, or that of a
  * solution or project in it; `configuration` is `Debug` (the default) or `Release`. The result says
  * whether the build succeeded, lists its errors with file and line, counts its warnings, and holds
  * the end of the output for a failure that isn't one of MSBuild's errors, such as a missing SDK.
+ *
+ * @throws When `directory` isn't an absolute path, when `dotnet` can't run, such as when it isn't
+ * installed, and when it writes more output than is kept.
  *
  * @example From code
  * ```ts
