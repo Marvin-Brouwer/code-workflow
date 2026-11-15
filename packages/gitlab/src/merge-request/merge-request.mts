@@ -183,6 +183,7 @@ export async function findOpenMergeRequest(repository: Repository, context?: Too
  * context a tool's action got when you call this from a tool of your own.
  * @returns The merge request, or `undefined` when no merge request this run opened for the branch
  * was merged.
+ * @throws When GitLab has no such project, or the token can't read it.
  *
  * @example Deliver each repository once, also across a rerun
  * ```ts
