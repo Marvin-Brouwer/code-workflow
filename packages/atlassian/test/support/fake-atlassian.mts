@@ -8,7 +8,7 @@ export interface FakeRequest {
 	readonly authorization: string | null
 	readonly body: unknown
 	/** The request's signal, so a test sees that a stopped call stopped its request. */
-	readonly signal: AbortSignal | undefined
+	readonly abortSignal: AbortSignal | undefined
 }
 
 /** A comment on a fake issue. */
@@ -246,7 +246,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			query: url.searchParams,
 			authorization: headers.get('authorization'),
 			body,
-			signal: init?.signal ?? undefined,
+			abortSignal: init?.signal ?? undefined,
 		})
 		if (state.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, state.latencyMs))
 		if (hanging.has(url.pathname))

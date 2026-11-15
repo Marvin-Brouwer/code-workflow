@@ -8,7 +8,7 @@ It shares its checkouts, `describe`, `review`, `triage` and `reply` with the oth
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token. A fine-grained token with contents, issues and pull requests on the repositories the workflows touch is enough.
 
-```bash
+```sh
 pnpm add @mesh-flow/github
 mesh-flow connector add @mesh-flow/github
 mesh-flow credential set github/token < token.txt
@@ -150,7 +150,7 @@ export default defineMeshFlow({
 		userTrigger(fixIssue),
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
-		// Any event schema works with webhook; the filter is in the structure, so other deliveries are skipped before a sandbox starts.
+		// Any event schema works with webhook; the filter is in the structure, so the engine skips other deliveries before it makes a sandbox.
 		webhook(triage, commented, github.triggerOptions),
 	],
 })
@@ -162,7 +162,7 @@ Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --genera
 
 ## The host half
 
-`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` on every call, so a new token counts at once, try reads again when the connection drops or GitHub answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per repository in the connector's directory in the engine's home, which runs share one call at a time. For a test, `githubHostTools` points them at servers of your own:
+`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` (`tokenCredential`) on every call, so a new token counts at once, try reads again when the connection drops or GitHub answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per repository in the connector's directory in the engine's home, which runs share one call at a time. For a test, `githubHostTools` points them at servers of your own:
 
 ```ts
 import { githubHostTools } from '@mesh-flow/github/host'

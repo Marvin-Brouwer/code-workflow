@@ -1,10 +1,11 @@
 /**
- * The agents for the `github-issue` app. Agents belong to the workflow repository, not to packages:
- * model, reasoning and system prompt are team specific. The model id resolves through the
- * providers configured for the engine.
+ * Agents for the github-issue app's workflows. Agents belong to the workflow repository, not to
+ * packages: model, reasoning and system prompt are team specific. Model ids resolve through the
+ * providers configured for the app.
  */
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
 
+/** Fixes the issue and makes the changes reviewers ask for. */
 export const developer = agent({
 	model: 'claude-sonnet-5-5',
 	reasoning: 'medium',
@@ -16,6 +17,7 @@ export const developer = agent({
 	`,
 })
 
+/** Writes the pull request's title and description. */
 export const writer = agent({
 	model: 'claude-sonnet-5-5',
 	reasoning: 'low',

@@ -9,8 +9,8 @@ Workflows don't use this package: they use a connector. It is for writing one.
 A connector defines its git tools with `gitTools`, and checks a repository out with `checkoutRepository`, which clones on the host through the clone tool and reuses a checkout that is there already:
 
 ```ts
-import { hostToolStub, type ToolContext } from '@mesh-flow/core'
 import { checkoutFolder, checkoutRepository, gitTools, type Checkout } from '@mesh-flow/code-repository'
+import { hostToolStub, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
 
 declare const context: ToolContext
@@ -76,8 +76,8 @@ export function describe(agent: Agent, repository: Checkout, options: DescribeCh
 `untilCompleted(look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `replyTool` makes a connector's `reply` tool, and `branchHeadTool` the tool that reads which commit a checkout's branch is at. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
 
 ```ts
-import { check } from '@mesh-flow/core'
 import { untilCompleted, type CommitChecks } from '@mesh-flow/code-repository'
+import { check } from '@mesh-flow/core'
 
 declare function pipelineOf(sha: string): Promise<CommitChecks<{ readonly name: string }>>
 

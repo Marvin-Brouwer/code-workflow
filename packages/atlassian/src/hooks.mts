@@ -18,10 +18,8 @@ export const deliveryHeader = 'x-atlassian-webhook-identifier'
  * import { webhook } from '@mesh-flow/core'
  * import { triage } from './workflows/triage.mts'
  *
- * export const onCreated = webhook(triage, jira.issueCreated.transform((event) => ({ key: event.issue.key })), {
- * 	name: 'triage-new',
- * 	...jira.triggerOptions,
- * })
+ * const created = jira.issueCreated.transform((event) => ({ key: event.issue.key }))
+ * export const onCreated = webhook(triage, created, { name: 'triage-new', ...jira.triggerOptions })
  * ```
  */
 export const triggerOptions = Object.freeze({ signature, deliveryHeader })
@@ -70,10 +68,8 @@ export type IssueUpdated = z.infer<typeof issueUpdated>
  *
  * @example
  * ```ts
- * webhook(answer, jira.commentCreated.transform((event) => ({ key: event.issue.key })), {
- * 	name: 'answer-on-comment',
- * 	...jira.triggerOptions,
- * })
+ * const commented = jira.commentCreated.transform((event) => ({ key: event.issue.key }))
+ * webhook(answer, commented, { name: 'answer-on-comment', ...jira.triggerOptions })
  * ```
  */
 export const commentCreated = z.object({
@@ -123,9 +119,9 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * Point a Jira webhook for updated issues at `/webhooks/<app>/<workflow>-labeled-<label>` on the
  * engine: deliveries are checked as Jira signs them, and keyed by Jira's delivery id, so a
  * redelivery reuses its run. Other updates end as skipped runs, since a changelog can't be filtered
- * by structure alone, so narrow the webhook in Jira with JQL, such as `labels = ai-develop`. Give
- * the webhook a secret in Jira, and the same one to the engine, with
- * `mesh-flow webhook secret <app> <workflow>-labeled-<label>`.
+ * by structure alone, so narrow the webhook in Jira with JQL, such as `labels = ai-develop`. Set
+ * its secret with `mesh-flow webhook secret <app> <workflow>-labeled-<label> --generate` and paste
+ * it into Jira.
  *
  * @param workflow - A workflow whose parameters are `JiraIssueParameters`, or `{ key }` with
  * anything else optional. Any other workflow is a type error.

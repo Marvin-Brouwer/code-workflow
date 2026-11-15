@@ -36,8 +36,8 @@ export interface ConfluencePage extends PageData {
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The page, with `path` the Markdown file relative to the workspace.
- * @throws When `page` is neither an id nor a page URL; when Confluence has no such page, or the token
- * can't read it.
+ * @throws When `page` is neither an id nor a page URL, and when Confluence has no such page, or the
+ * token can't read it.
  *
  * @example From code
  * ```ts

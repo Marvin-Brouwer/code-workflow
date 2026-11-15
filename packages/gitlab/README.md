@@ -96,7 +96,7 @@ const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ reposit
 export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...gitlab.triggerOptions })
 ```
 
-A delivery that doesn't fit a schema, such as a merge request that was only updated, is skipped on the host with a `200`, so GitLab doesn't disable the webhook for it. `mergeRequestNote` leaves out the notes a connector wrote, such as the run's own replies, so a workflow that answers notes isn't started again by its answers. `pipelineEvent` also takes pipelines of the default branch and of tags; extend it with a `merge_request` object to take only those of a merge request.
+A delivery that doesn't fit a schema, such as a merge request that was only updated, is skipped with a `200` before the engine makes a sandbox, so GitLab doesn't disable the webhook for it. `mergeRequestNote` leaves out the notes a connector wrote, such as the run's own replies, so a workflow that answers notes isn't started again by its answers. `pipelineEvent` also takes pipelines of the default branch and of tags; extend it with a `merge_request` object to take only those of a merge request.
 
 Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitLab as the webhook's secret token, with the webhook URL `mesh-flow serve --webhook-port` prints.
 

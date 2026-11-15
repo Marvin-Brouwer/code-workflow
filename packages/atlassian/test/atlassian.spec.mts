@@ -585,7 +585,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[0]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[0]?.abortSignal?.aborted).toBe(true)
 	})
 
 	test('stopping the run settles a collect whose image never arrives', async () => {
@@ -606,7 +606,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[1]?.abortSignal?.aborted).toBe(true)
 	})
 
 	test.each([
@@ -645,7 +645,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[1]?.abortSignal?.aborted).toBe(true)
 	})
 })
 

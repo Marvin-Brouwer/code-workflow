@@ -39,6 +39,8 @@ export interface ChecksPassOptions {
  * answer again, and the checkout whose last push to look at.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means every check passed, or that no check appeared within `appearWithin`.
+ * @throws From the check: when looks at GitHub kept failing for longer than `toleratedOutage`, or
+ * GitHub turns the token down; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts

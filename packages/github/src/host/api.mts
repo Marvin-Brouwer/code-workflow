@@ -13,7 +13,7 @@ export interface GithubApiOptions {
 	readonly apiUrl?: string
 	/** Sends the requests. Default: the global `fetch`. */
 	readonly fetch?: typeof fetch
-	/** How a request that GitHub didn't answer is tried again. Default: {@link defaultFetchRetry}. */
+	/** How a read that GitHub didn't answer is tried again. Default: {@link defaultFetchRetry}. */
 	readonly retry?: FetchRetryOptions
 }
 

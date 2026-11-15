@@ -39,7 +39,9 @@ export interface PipelinePassesOptions {
  * @param options - How often to look, how long to wait for a pipeline to appear and for GitLab to
  * answer again, and the checkout whose last push to look at.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
- * means the pipeline passed.
+ * means the pipeline passed, or that no pipeline appeared within `appearWithin`.
+ * @throws From the check: when looks at GitLab kept failing for longer than `toleratedOutage`, or
+ * GitLab turns the token down; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts

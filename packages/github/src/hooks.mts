@@ -168,7 +168,7 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  *
  * Point a GitHub webhook for `Issues` events at `/webhooks/<app>/<workflow>-labeled-<label>` on the
  * engine. Set its secret with `mesh-flow webhook secret <app> <workflow>-labeled-<label> --generate`
- * and paste it into GitHub. Other labels are skipped before a sandbox starts.
+ * and paste it into GitHub. The engine skips other labels before it makes a sandbox.
  *
  * @param workflow - A workflow whose parameters are `IssueParameters`, or `{ issue }` with
  * anything else optional. Any other workflow is a type error.

@@ -127,10 +127,12 @@ export async function installDependencies(repository: github.Repository, options
 function installLimitMs(timeout: WaitSpec | 'indefinite'): number | undefined {
 	if (timeout === 'indefinite') return undefined
 	const ms = Math.ceil(durationMs(timeout))
-	if (ms > maxTimerMs)
+	if (ms > maxTimerMs) {
+		const maxHours = String(Math.floor(maxTimerMs / msPerHour))
 		throw new RangeError(
-			`An install timeout can be at most ${String(Math.floor(maxTimerMs / msPerHour))} hours, not ${JSON.stringify(timeout)}; use 'indefinite' for no limit.`,
+			`An install timeout can be at most ${maxHours} hours, not ${JSON.stringify(timeout)}. Use 'indefinite' for no limit.`,
 		)
+	}
 	return ms
 }
 

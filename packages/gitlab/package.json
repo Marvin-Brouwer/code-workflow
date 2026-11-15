@@ -1,7 +1,7 @@
 {
 	"name": "@mesh-flow/gitlab",
 	"version": "0.0.0",
-	"description": "GitLab for mesh-flow workflows: checkouts, merge requests, reviews and pipelines, on gitlab.com or a GitLab of your own, with the token on the host",
+	"description": "GitLab connector for mesh-flow: checkouts, merge requests, reviews, pipelines, packages and webhooks, on gitlab.com or a GitLab of your own, with credentials on the host only",
 	"keywords": [
 		"agents",
 		"gitlab",

@@ -7,20 +7,25 @@ The .NET toolchain for mesh-flow: tools an agent checks its own work with, check
 Everything takes a checkout by where it is on disk, `{ directory }`, which a connector's checkout is, such as `gitlab.checkout`'s:
 
 ```ts
-import { verify, type Agent } from '@mesh-flow/core'
+// workflows/develop.mts
+import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { verify, workflow, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 
+// The workflow repository's own agent: packages ship none.
 declare const developer: Agent
-declare const story: { readonly key: string }
 
-const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
-await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
+	const story = await jira.collect(parameters.key)
+	const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
+	await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
 
-await developer.loop`
-	Implement ${story} in ${repository}. Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
-	then hand in with ${verify(dotnet.testsPass(repository), dotnet.security(repository))}.
-`
+	await developer.loop`
+		Implement ${story} in ${repository}. Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
+		then hand in with ${verify(dotnet.testsPass(repository), dotnet.security(repository))}.
+	`
+})
 ```
 
 ### Tools for agents
@@ -36,7 +41,10 @@ await developer.loop`
 Both take `{ target }` as a second argument, the solution or project relative to the checkout, for a checkout without one at its root or with more than one there, such as an `.sln` beside its `.slnx`: `dotnet` looks only at the root, and fails on more than one.
 
 ```ts
-await developer.loop`Implement ${story} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository, { target: 'src/Api.slnx' }))}.`
+await developer.loop`
+	Implement ${story} in ${repository},
+	then hand in with ${verify(dotnet.testsPass(repository, { target: 'src/Api.slnx' }))}.
+`
 ```
 
 ### Packages

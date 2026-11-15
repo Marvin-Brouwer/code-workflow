@@ -83,7 +83,7 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * repository it applies to, `reason` is what was found and where, and `change` is how the work now
  * deviates from the plan. The result is `{ recordedIn }`, the file's absolute path.
  *
- * @throws From the tool: when the file can't be written, and, with the stop's reason, when the run
+ * @throws From the tool: when the file can't be written; and, with the stop's reason, when the run
  * stops.
  *
  * @example From code

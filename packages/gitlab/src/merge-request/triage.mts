@@ -33,7 +33,7 @@ export type PlannedChange = SharedPlannedChange<ReviewItem>
  * @param options - The merge request, the items `review` handed over, and the loop's limit.
  * @returns The items that ask for a change, each with the agent's plan for it. Empty when every
  * item was a question or a change the agent won't make, which got its answer already.
- * @throws When the loop fails or runs out of its limit.
+ * @throws When the loop fails or runs out of its limit; and, with the stop's reason, when the run stops.
  *
  * @example In a review
  * ```ts

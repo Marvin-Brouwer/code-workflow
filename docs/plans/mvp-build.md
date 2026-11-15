@@ -195,7 +195,7 @@ import { github } from '@mesh-flow/github/hooks'
 import { fixIssue } from './workflows/fix-issue.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:26-slim' }),
+	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
 		userTrigger(fixIssue),
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
@@ -204,28 +204,28 @@ export default defineMeshFlow({
 
 // workflows/fix-issue.mts
 export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, async ({ parameters }) => {
-    const issue = await github.collect(parameters.issue);
-    const repository = await github.checkout({ repository: issue.repository, branch: `fix/${issue.number}` });
+	const issue = await github.collect(parameters.issue)
+	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${issue.number}` })
 
-    await developer.loop`
-        Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.
-        ${limit({ minutes: 30 })}
-    `;
+	await developer.loop`
+		Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.
+		${limit({ minutes: 30 })}
+	`
 
-    const pullRequest = await github.openPullRequest(repository, {
-        title: issue.title,
-        description: `Fixes #${issue.number}`,
-    });
+	const pullRequest = await github.openPullRequest(repository, {
+		title: issue.title,
+		description: `Fixes #${issue.number}`,
+	})
 
-    await github.review(pullRequest, {
-        comments: (comments) => developer.loop`
-            Handle these review comments on ${pullRequest.url}: ${comments}.
-            Change the code where a comment asks for it, push with ${github.push(repository)},
-            and reply to every comment with ${github.reply(pullRequest)}.
-            When every comment is handled, ${succeed()}.
-        `,
-    });
-});
+	await github.review(pullRequest, {
+		comments: (comments) => developer.loop`
+			Handle these review comments on ${pullRequest.url}: ${comments}.
+			Change the code where a comment asks for it, push with ${github.push(repository)},
+			and reply to every comment with ${github.reply(pullRequest)}.
+			When every comment is handled, ${succeed()}.
+		`,
+	})
+})
 ```
 
 It runs before `develop` because it needs only one connector and no toolchain package, so it is

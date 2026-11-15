@@ -6,14 +6,14 @@ The Atlassian connector for mesh-flow. A connector gives workflows one outside s
 
 Install the package where `mesh-flow serve` runs, add it as a connector and give it each product's site and token. They live in the gateway's credential store, the site too, since connectors have no settings of their own yet.
 
-```bash
+```sh
 pnpm add @mesh-flow/atlassian
 mesh-flow connector add @mesh-flow/atlassian
 ```
 
 On Atlassian Cloud, an API token with the account's email. The same token serves Jira and Confluence, but each product has its own settings:
 
-```bash
+```sh
 echo 'https://example.atlassian.net' | mesh-flow credential set jira/url
 echo 'bot@example.com' | mesh-flow credential set jira/email
 mesh-flow credential set jira/token < api-token.txt
@@ -25,7 +25,7 @@ mesh-flow credential set confluence/token < api-token.txt
 
 On Data Center, a personal access token per product, and no email: a product without `<product>/email` is spoken to as Data Center, with the token as a bearer token. The URL is the product's own, with its context path if it has one:
 
-```bash
+```sh
 echo 'https://jira.example.com' | mesh-flow credential set jira/url
 mesh-flow credential set jira/token < jira-pat.txt
 
@@ -105,6 +105,8 @@ export default defineMeshFlow({
 
 Point a Jira webhook for updated issues at it, with a secret. Jira's changelog can't be filtered by structure alone, so an update that doesn't add the label ends as a skipped run once the sandbox started; narrow the webhook in Jira with JQL, such as `labels = ai-develop`, so few others arrive. The run's own transitions and comments on the issue are updates too, and still match that JQL: each starts a sandbox that ends as a skipped run. Leaving the statuses the run moves an issue to out of the JQL, such as `labels = ai-develop AND status = "To Do"`, keeps most of them out. `jira.issueCreated`, `jira.issueUpdated` and `jira.commentCreated` work with `webhook` for anything else.
 
+Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into Jira as the webhook's secret, with the webhook URL `mesh-flow serve --webhook-port` prints.
+
 On Data Center, a webhook has a secret, and so a signature, only on recent versions; the engine needs one, so an older site can't start runs this way. A delivery without `x-atlassian-webhook-identifier` is told apart by a hash of its body, which holds a timestamp, so a redelivery still reuses its run.
 
 ## The host half
@@ -131,7 +133,4 @@ pnpm --filter @mesh-flow/atlassian build
 
 Tests run against in-memory Jira and Confluence sites, so they need no token and no network.
 
-`test/jira.spec.md` and `test/confluence.spec.md` hold the whole Markdown an agent reads for one
-rich issue and one rich page, next to the tests that write them. A change to what the connector
-writes shows up there as a diff; after checking it, accept it with
-`pnpm --filter @mesh-flow/atlassian test -u`.
+`test/jira.spec.md` and `test/confluence.spec.md` hold the whole Markdown an agent reads for one rich issue and one rich page, next to the tests that write them. A change to what the connector writes shows up there as a diff; after checking it, accept it with `pnpm --filter @mesh-flow/atlassian test -u`.
