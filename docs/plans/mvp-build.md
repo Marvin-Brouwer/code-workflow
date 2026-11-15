@@ -27,9 +27,9 @@ takes another's new NuGet packages needs the private registry shim, which isn't 
 is, a dependent repository's restore fails, so only plans whose repositories don't depend on each
 other run through. Independent repositories run side by side.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
-a minimal GitHub issue workflow and then the big-repo app's `develop` workflow end to end from a CLI, with
-repositories in dependency order, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
-and a gateway for model providers.
+a minimal GitHub issue workflow and then the big-repo app's `develop` workflow end to end from a
+CLI, with repositories in dependency order, one sandbox per run, `loop` with exits and `limit` on
+Pi Durable, `input`, and a gateway for model providers.
 
 ## Before it starts
 

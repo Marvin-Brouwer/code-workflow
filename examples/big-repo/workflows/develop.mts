@@ -1,8 +1,8 @@
 /**
  * The `develop` workflow of the big-repo app: a Jira story from research to merged merge requests,
  * one per repository the plan changes. Plain async TypeScript: every `await` is real, and agents
- * are calls inside it. While the run waits for a person or for GitLab, the sandbox can be paused; the answer
- * resumes it and the await resolves in the same stack.
+ * are calls inside it. While the run waits for a person or for GitLab, the sandbox can be paused;
+ * the answer resumes it and the await resolves in the same stack.
  */
 import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
 import { fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
