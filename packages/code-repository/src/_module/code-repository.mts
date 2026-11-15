@@ -42,6 +42,7 @@ export {
 } from '../describe/repository-files.mts'
 export { UpdateSkip } from '../describe/update-skip.mts'
 export { commentMarker, isMarked, markerStart, markerValue } from '../markers.mts'
+export { NotByConnector } from '../not-by-connector.mts'
 export { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin } from '../review/look-interval.mts'
 export { patientLook, type PatientLookOptions } from '../review/patient-look.mts'
 export { defaultReplyStage, GoneReply, isGoneReply, ReplyStage } from '../review/reply-stage.mts'

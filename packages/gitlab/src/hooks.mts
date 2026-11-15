@@ -1,4 +1,4 @@
-import { markerStart } from '@mesh-flow/code-repository'
+import { NotByConnector } from '@mesh-flow/code-repository'
 import type { WebhookSignature } from '@mesh-flow/core'
 import { z } from 'zod'
 
@@ -66,15 +66,6 @@ export function mergeRequestEvent(action?: 'open' | 'reopen' | 'update' | 'appro
 	})
 }
 export type MergeRequestEvent = z.infer<ReturnType<typeof mergeRequestEvent>>
-
-/**
- * A note that a connector didn't write: every note it posts, such as a reply to a reviewer, carries
- * a marker. It is a regex pattern rather than a refine, so it is in the JSON Schema the engine
- * checks: the engine skips the connector's own notes before it makes a sandbox, and a workflow that
- * answers notes isn't started again by its answers. The marker holds no regex special characters,
- * so it goes into the pattern as it is.
- */
-const NotByConnector = z.string().regex(new RegExp(`^(?![\\s\\S]*${markerStart})`))
 
 /**
  * The `note` event for a comment on a merge request, on a line or on the merge request itself. A

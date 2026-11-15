@@ -1,3 +1,4 @@
+import { NotByConnector } from '@mesh-flow/code-repository'
 import { webhook, type WebhookSignature, type WebhookTrigger, type Workflow } from '@mesh-flow/core'
 import { z } from 'zod'
 import type { IssueRef } from './tools/issue-tools.mts'
@@ -62,7 +63,8 @@ export type IssueLabeled = z.infer<ReturnType<typeof issueLabeled>>
 
 /**
  * The `issue_comment` event for a new comment on an issue or a pull request: GitHub sends both as
- * this event.
+ * this event. A comment a connector wrote, such as the run's own replies, doesn't fit, so the
+ * engine skips it before it makes a sandbox.
  *
  * @example
  * ```ts
@@ -76,7 +78,7 @@ export type IssueLabeled = z.infer<ReturnType<typeof issueLabeled>>
 export const issueCommentCreated = z.object({
 	action: z.literal('created'),
 	issue: Issue.extend({ pull_request: z.object({ url: z.url() }).optional() }),
-	comment: z.object({ id: z.int(), body: z.string(), html_url: z.url(), user: User }),
+	comment: z.object({ id: z.int(), body: NotByConnector, html_url: z.url(), user: User }),
 	repository: Repository,
 })
 export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
@@ -109,7 +111,8 @@ export type PullRequestReviewSubmitted = z.infer<typeof pullRequestReviewSubmitt
 
 /**
  * The `pull_request_review_comment` event for a new comment on a line, also a reply in a thread
- * (`in_reply_to_id`).
+ * (`in_reply_to_id`). A comment a connector wrote, such as the run's own replies, doesn't fit, so
+ * the engine skips it before it makes a sandbox.
  *
  * @example
  * ```ts
@@ -124,7 +127,7 @@ export const pullRequestReviewCommentCreated = z.object({
 	action: z.literal('created'),
 	comment: z.object({
 		id: z.int(),
-		body: z.string(),
+		body: NotByConnector,
 		path: z.string(),
 		line: z.int().nullable().optional(),
 		html_url: z.url(),

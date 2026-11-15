@@ -156,6 +156,8 @@ export default defineMeshFlow({
 })
 ```
 
+`issueCommentCreated` and `pullRequestReviewCommentCreated` leave out the comments a connector wrote, such as the run's own replies, so a workflow that answers comments isn't started again by its answers.
+
 Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitHub, with the webhook URL `mesh-flow serve --webhook-port` prints.
 
 ## The host half
