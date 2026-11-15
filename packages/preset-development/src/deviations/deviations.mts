@@ -79,9 +79,12 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * the same way. Recording the same deviation again, as when a loop runs again, adds nothing.
  * Deviations recorded side by side, by parts delivered at once, are written one after the other.
  *
- * `deviations.record` takes `{ repository, reason, change }`: the repository it applies to, what
- * was found and where, and how the work now deviates from the plan. It resolves to
- * `{ recordedIn }`, the file's absolute path.
+ * `deviations.record` is the tool. Input: `{ repository, reason, change }`. `repository` is the
+ * repository it applies to, `reason` is what was found and where, and `change` is how the work now
+ * deviates from the plan. The result is `{ recordedIn }`, the file's absolute path.
+ *
+ * @throws From the tool: when the file can't be written, and, with the stop's reason, when the run
+ * stops.
  *
  * @example From code
  * ```ts
@@ -90,7 +93,7 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * 	reason: 'The pipeline needs .NET 10, which the plan assumed was there already',
  * 	change: 'global.json pins the SDK first',
  * })
- * const recorded = await deviations.read()
+ * await jira.comment(story, await deviations.read(), { key: 'deviations' })
  * ```
  *
  * @example For an agent

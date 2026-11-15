@@ -310,9 +310,9 @@ export default defineMeshFlow({
 - **Webhook payloads are checked in two steps.** The engine checks a delivery's signature and the
   input side of the schema as JSON Schema (structure, literals, enums) before it creates a sandbox,
   so an unrelated event never costs a run: it is skipped with a `200`, since senders such as GitLab
-  disable a webhook that keeps getting a 4xx. `.refine` and `.transform` are code, so
-  they run in the sandbox when the run starts; a payload they reject ends the run as *not for this
-  workflow*, which isn't a failure. Filters belong in the schema's structure where they can
+  disable a webhook that keeps getting a 4xx. `.refine` and `.transform` are code, so they run in
+  the sandbox when the run starts; a payload they reject ends the run as *not for this workflow*,
+  which isn't a failure. Filters belong in the schema's structure where they can
   (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled(label)`
   does.
 
@@ -563,7 +563,7 @@ Out of scope for now: token and cost budgets.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
-   then the `example` workflow, both end to end from a CLI. Done: the `example` workflow delivers
+   then the `big-repo` workflow, both end to end from a CLI. Done: the `big-repo` workflow delivers
    independent repositories side by side (`inDependencyOrder`); a dependent one needs the
    registry shim to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).

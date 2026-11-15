@@ -9,7 +9,7 @@
 import { limit, succeed, workflow } from '@mesh-flow/core'
 import { github, IssueParameters } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
-import { installDependencies } from '../install-dependencies.mts'
+import { installDependencies } from '../utils/npm/install-dependencies.mts'
 
 export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)

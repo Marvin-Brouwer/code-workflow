@@ -1,5 +1,5 @@
 /**
- * How the `big-repo` workflow moves a story along on the team's board, as a run gets further.
+ * How the `develop` workflow moves a story along on the team's board, as a run gets further.
  */
 import { jira, type JiraIssue } from '@mesh-flow/atlassian'
 

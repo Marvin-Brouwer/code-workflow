@@ -40,7 +40,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 
 - `Research` is a workspace folder, `research/`, for the research notes. `succeed(Research)` takes it once it holds a file, and in a later prompt it renders as the folder with its files.
 - `planFile` is `plan.md` in the workspace; in a prompt it renders as its absolute path.
-- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its `repository`, its name on the code host, with a summary of its changes, and the `dependencies` between them: a repository that builds against packages another one publishes depends on it, with the reason. Names are compared in lower case, as code hosts compare them. A dependency on a repository the plan doesn't list is refused, so the agent corrects it before the plan is proposed.
+- `Plan` is what code needs from the plan, for `propose(Plan)`: its absolute `path`, the `repositories` it changes, each by its `repository`, its name on the code host, with a summary of its changes, and the `dependencies` between them: a repository that builds against packages another one publishes depends on it, with the reason. Names are compared in lower case, as code hosts compare them. A dependency on a repository the plan doesn't list is refused, and so are a repository listed twice and one that ends up depending on itself, so the agent corrects the plan before it is proposed.
 
 ### Delivery order
 
@@ -57,7 +57,11 @@ The approved plan stays as it was approved; what turns out different later is re
 ```ts
 import { deviations } from '@mesh-flow/preset-development'
 
-await deviations.record({ repository: 'team/backend/api', reason: 'The pipeline needs .NET 10', change: 'The target framework moves to net10.0' })
+await deviations.record({
+	repository: 'team/backend/api',
+	reason: 'The pipeline needs .NET 10',
+	change: 'The target framework moves to net10.0',
+})
 ```
 
 ## Development

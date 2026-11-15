@@ -19,20 +19,23 @@ export interface Delivery extends DependencyNode {
  * plan lists it.
  *
  * @param plan - The plan, as the planner proposed it with `propose(Plan)`.
- * @returns One node per repository, with what changes in it, what it depends on, and whether others
- * wait for it, for `inDependencyOrder`.
+ * @returns One node per repository, for `inDependencyOrder`: what changes in it, what it depends on,
+ * and whether others wait for it.
  *
  * @example Deliver the plan's repositories in order
  * ```ts
- * await inDependencyOrder(deliveryOrder(plan), async (part, upstream) => {
+ * await inDependencyOrder(deliveryOrder(plan), async (part) => {
  * 	const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
  * 	// ...
  * })
  * ```
  *
- * @example Only publish what someone waits for
+ * @example Hand on packages only when another repository waits for them
  * ```ts
  * await inDependencyOrder(deliveryOrder(plan), async (part, upstream) => {
+ * 	const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
+ * 	// What each repository this one waits for handed on.
+ * 	await dotnet.updatePackages(repository, upstream.flat())
  * 	// ...
  * 	return part.hasDependents ? gitlab.publishedPackages(mergeRequest, 'nuget') : []
  * })

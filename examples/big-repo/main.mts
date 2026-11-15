@@ -3,10 +3,8 @@
  * everything that can start a run. A workflow says what it does and what it starts with; this
  * file says how it gets started and where it runs.
  *
- * The sandbox is meant to be the image the Dockerfile next to this file builds: node, git and the
- * .NET 10 SDK. Until it's pushed to a registry and named below, the app runs on a public Node.js
- * image, which has node and git but no .NET SDK, so the dotnet tools and checks fail there. The
- * sandbox reaches NuGet, so restores work, and nothing else: Jira, Confluence and GitLab are only
+ * The sandbox is meant to be the image the Dockerfile next to this file builds; see `sandboxImage`.
+ * It reaches NuGet, so restores work, and nothing else: Jira, Confluence and GitLab are only
  * spoken to from the host, through the gateway.
  */
 import { jira } from '@mesh-flow/atlassian/hooks'
@@ -17,8 +15,9 @@ import { develop } from './workflows/develop.mts'
 const startLabel = 'ai-develop'
 
 /**
- * A public stand-in for the image the Dockerfile builds: the same base, without the .NET SDK. Name
- * the built image here once it's pushed, such as `<account>/mesh-flow-big-repo:dotnet10`.
+ * A public stand-in for the image the Dockerfile builds: the same base, with node and git but
+ * without the .NET 10 SDK, so the dotnet tools and checks fail on it. Name the built image here once
+ * it's pushed, such as `<account>/mesh-flow-big-repo:dotnet10`.
  */
 const sandboxImage = 'node:26-bookworm'
 

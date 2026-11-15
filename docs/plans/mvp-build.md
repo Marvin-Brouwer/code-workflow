@@ -27,7 +27,7 @@ takes another's new NuGet packages needs the private registry shim, which isn't 
 is, a dependent repository's restore fails, so only plans whose repositories don't depend on each
 other run through. Independent repositories run side by side.
 Covers roadmap step 2 of [`../design.md`](../design.md#roadmap):
-a minimal GitHub issue workflow and then the `example` workflow end to end from a CLI, with
+a minimal GitHub issue workflow and then the `big-repo` workflow end to end from a CLI, with
 repositories in dependency order, one sandbox per run, `loop` with exits and `limit` on Pi Durable, `input`,
 and a gateway for model providers.
 
@@ -55,7 +55,7 @@ packages that don't depend on the open decisions first.
 | 4 | triggers and `@mesh-flow/build` | workflow parameters, the entry file (`defineMeshFlow`, `image`, `userTrigger`, `webhook`, `schedule`); building and deploying apps; webhook ingress and the scheduler in the engine | 2 and 3 |
 | 5 | `@mesh-flow/gateway` | the host side of tool calls (per-loop endpoints, tokens) and model providers (model-first resolution) | 1 to 4 |
 | 6 | `@mesh-flow/github` and `examples/github-issue` | GitHub issues, pull requests, comments and checks, its webhook schemas; the smallest workflow that runs end to end | 1 to 5 |
-| 7 | the other connectors and `example` | `@mesh-flow/atlassian`, `@mesh-flow/gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
+| 7 | the other connectors and `big-repo` | `@mesh-flow/atlassian`, `@mesh-flow/gitlab`, `toolchain-dotnet`, `preset-development` made real enough for `develop` | 1 to 5, and 6 for the shared review-watching shape |
 
 ### 1. `@mesh-flow/sandbox`
 
@@ -142,13 +142,13 @@ credentials stay as they are.
 - **Engine:** immutable deployed app versions with a current one per app; a run pins its version
   and the sandbox only runs `node`; `mesh-flow build`, `deploy` (local socket only until the
   gateway), `dev` and `trigger <kind> <id> -p`; generic webhook ingress (the built-in signature
-  schemes, JSON Schema check, 4xx, delivery id as run key), tested with plain zod schemas and no
+  schemes, JSON Schema check, 4xx (since superseded: it gets `200` with `skipped`, see decisions.md), delivery id as run key), tested with plain zod schemas and no
   connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers` lists
   what the current version declares. Webhook secrets come from the gateway's credential store
   (step 5), set with the CLI, never in the app.
 - **Docs:** the core, build and engine READMEs, and `examples/big-repo` gets a `package.json` and an
   entry file.
-- **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
+- **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx (since superseded: `200` with `skipped`) and no
   sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
   schedule tick is skipped; a restart runs the version the run first ran; shutdown completes while a
   delivery's sandbox or unpacking the app never settles.
@@ -230,13 +230,13 @@ export const fixIssue = workflow('fix-issue', { issue: github.issueNumber }, asy
 It runs before `develop` because it needs only one connector and no toolchain package, so it is
 the first proof that the sandbox, engine, core and gateway work together.
 
-### 7. The other connectors and `example`
+### 7. The other connectors and `big-repo`
 
 The sketches in `packages/` and `examples/big-repo/` made real enough to run `develop` end to end
 for plans whose repositories don't depend on each other. `inDependencyOrder` runs independent
 repositories side by side; a dependent one waits for the packages its dependencies' merges
 publish, which it can only restore once the registry shim is built.
-Until this step landed, the root `pnpm build` skipped `example` (`--filter=!example` in the root
+Until this step landed, the root `pnpm build` skipped `big-repo` (then called `example`; `--filter=!example` in the root
 `package.json`), because its connector and preset sketches had no `package.json` and its imports
 didn't resolve. This step took that filter out again.
 
@@ -275,7 +275,7 @@ didn't resolve. This step took that filter out again.
 First, `examples/github-issue` runs from the CLI against a real issue in a test repository: a fix,
 a pull request, and a review comment answered with a change.
 
-Then `example`'s `develop` runs from the CLI against one story and one repository: research, a plan
+Then `big-repo`'s `develop` runs from the CLI against one story and one repository: research, a plan
 approved through `answer`, implementation with `verify`, a merge request. Stopping the engine with
 `Ctrl+C` mid-run leaves no sandbox or backend process running, and starting it again reports the
 run as restartable.

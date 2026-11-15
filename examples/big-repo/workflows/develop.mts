@@ -1,5 +1,5 @@
 /**
- * The `big-repo` development workflow: a Jira story from research to merged merge requests, one per
+ * The `develop` workflow of the big-repo app: a Jira story from research to merged merge requests, one per
  * repository the plan changes. Plain async TypeScript: every `await` is real, and agents are calls
  * inside it. While the run waits for a person or for GitLab, the sandbox can be paused; the answer
  * resumes it and the await resolves in the same stack.
@@ -105,7 +105,9 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 			async pipelineFailed({ failures }) {
 				await developer.loop`
 					The pipeline of ${mergeRequest} failed: ${failures}.
-					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
+					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(
+						gitlab.pipelinePasses(mergeRequest, { checkout: repository }),
+					)}.
 					${limit({ minutes: fixRoundMinutes })}
 				`
 				await gitlab.push(repository)({ message: `${story.key}: pipeline fix` })

@@ -167,7 +167,7 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 ## Connectors
 
 - **gitbeaker (`@gitbeaker/rest`) as the GitLab client.** Checked at 44.0.5 in November 2026,
-  when the repository moved to Node 26, which 44 needs at least 24.16 of. Rejected for two reasons
+  when the repository moved to Node 26 (44 needs Node 24.16 or later). Rejected for two reasons
   in its request code, both against rules every connector keeps:
   - **No abort signal per call.** Its only signal is a global `queryTimeout`, made inside each
     request: a caller can't pass the host call's signal, so a stopped run can't cancel a request.

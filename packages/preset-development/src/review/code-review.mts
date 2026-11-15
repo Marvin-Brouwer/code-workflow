@@ -30,24 +30,29 @@ const Findings = z.object({
  * its own for each state of the checkout it is handed in with, so a fixed finding isn't reported
  * again, and a rerun never takes the review of other changes for this one.
  *
- * The reviewer changes no file: it only reports. The package ships no agent: pass the workflow's own.
- *
- * @param reviewer - The agent that reviews.
+ * @param reviewer - The workflow's own agent, since the package ships none. It reports and changes
+ * no file.
  * @param repository - The checkout to review, such as `gitlab.checkout` or `github.checkout` gives.
  * @param plan - The plan the changes carry out.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means the reviewer found no real problem.
+ * @throws From the check: when git can't read the checkout's state; when the reviewer's loop fails
+ * or runs out of its limit; and, with the stop's reason, when the run stops.
  *
  * @example From code, before a merge request is opened
  * ```ts
  * const findings = await runCheck(codeReview(reviewer, repository, plan), { abortSignal })
- * if (findings.length > 0) await developer.loop`Fix ${findings.map((finding) => finding.message).join('\n')} in ${repository}, then ${succeed()}.`
+ * const list = findings.map((finding) => finding.message).join('\n')
+ * if (findings.length > 0) await developer.loop`Fix these in ${repository}, then ${succeed()}:\n${list}`
  * ```
  *
  * @example Next to the tests, for the agent that makes the change
  * ```ts
  * await developer.loop`
- * 	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository), codeReview(reviewer, repository, plan))}.
+ * 	Implement ${plan.path} in ${repository}, then hand in with ${verify(
+ * 		dotnet.testsPass(repository),
+ * 		codeReview(reviewer, repository, plan),
+ * 	)}.
  * `
  * ```
  */
