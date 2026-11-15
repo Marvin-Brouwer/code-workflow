@@ -93,6 +93,16 @@ export interface FakeAtlassian {
 	latencyMs: number
 }
 
+/** The first bytes of a PNG file: enough of an image for the fake to serve. */
+export const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+
+/** Rita, as a Cloud site knows her: her account id, her profile, and how a mention of her renders. */
+export const rita = Object.freeze({
+	accountId: '5b10',
+	user: { displayName: 'Rita Reporter', email: 'rita@example.com' },
+	cloudMention: '<a href="/secure/ViewProfile.jspa?accountId=5b10" class="user-hover" data-account-id="5b10">@Rita Reporter</a>',
+})
+
 /** An issue with the defaults filled in. */
 export function fakeIssue(issue: Partial<FakeIssue> & { key: string }): FakeIssue {
 	return {

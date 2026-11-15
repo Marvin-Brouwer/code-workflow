@@ -12,14 +12,14 @@ import { jiraHostTools } from './jira/jira-host-tools.mts'
  * your own, or to test a workflow against a fake site.
  *
  * @param options - What the tools send requests with, and how they retry. Defaults: the global
- * `fetch` and {@link defaultRequestRetry}.
+ * `fetch` and `defaultRequestRetry`.
  * @returns The host tools, for the gateway.
  *
  * @example A test against a fake site
  * ```ts
- * import { atlassianHostTools } from '@mesh-flow/atlassian/host'
+ * import { atlassianHostTools, defaultRequestRetry } from '@mesh-flow/atlassian/host'
  *
- * const tools = atlassianHostTools({ fetch: fakeJira.fetch, retry: { maxAttempts: 1, initialDelayMs: 0, backoffFactor: 1 } })
+ * const tools = atlassianHostTools({ fetch: fakeSite.fetch, retry: { ...defaultRequestRetry, maxAttempts: 1 } })
  * ```
  */
 export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool[] {
@@ -34,9 +34,9 @@ export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool
  * @example
  * ```sh
  * mesh-flow connector add @mesh-flow/atlassian
- * printf '%s' 'https://example.atlassian.net' | mesh-flow credential set jira/url
- * printf '%s' 'bot@example.com' | mesh-flow credential set jira/email   # Cloud only
- * mesh-flow credential set jira/token < token.txt
+ * echo 'https://example.atlassian.net' | mesh-flow credential set jira/url
+ * echo 'bot@example.com' | mesh-flow credential set jira/email   # Cloud only
+ * mesh-flow credential set jira/token < api-token.txt
  * ```
  */
 export const connector: ConnectorHost = connectorHost('atlassian', () => atlassianHostTools())

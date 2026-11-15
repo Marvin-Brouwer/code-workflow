@@ -7,8 +7,8 @@ import { confluence, jira } from '../src/_module/atlassian.mts'
 import { atlassianHostTools } from '../src/_module/host.mts'
 import { maxImageBytes, maxImageBytesPerIssue } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
-import { fakeAtlassian, fakeIssue, type FakeAtlassian, type FakeRequest } from './support/fake-atlassian.mts'
-import { quickRetry, run, type Arrangement } from './support/run-on-fake.mts'
+import { fakeAtlassian, fakeIssue, pngSignature, type FakeAtlassian, type FakeRequest } from './support/fake-atlassian.mts'
+import { quickRetry, runOnFake, type Arrangement } from './support/run-on-fake.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
 const deployments = [
@@ -49,9 +49,6 @@ const deployments = [
 ] as const
 const [, dataCenter] = deployments
 
-/** The first bytes of a PNG file: enough of an image for the fake to serve. */
-const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-
 /** Whether a request read an attachment's bytes. */
 const isAttachmentRequest = (request: FakeRequest) => request.path.startsWith('/secure/attachment/')
 
@@ -90,7 +87,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, async () => {
+			const { fake, started, result } = await runOnFake(settings, arrangement, async () => {
 				const story = await jira.collect('PROJ-7')
 				return { story, rendered: story[toPrompt](), markdown: await readFile(story[toPrompt](), 'utf8') }
 			})
@@ -135,7 +132,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, started, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const image = path.join(started.workspace, 'jira', 'PROJ-7', '10001-login_page.png')
@@ -176,7 +173,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`![huge](${jiraUrl}/secure/attachment/10003/huge.png)`)
@@ -205,7 +202,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const rita = `\`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``
@@ -222,7 +219,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
@@ -235,7 +232,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
@@ -255,7 +252,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain('<img src="PROJ-7/10001-shot.png">')
@@ -267,7 +264,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => [
+			const { fake, result } = await runOnFake(settings, arrangement, async () => [
 				await jira.transition('PROJ-7', 'in progress'),
 				await jira.transition({ key: 'PROJ-7' }, 'In Progress'),
 			])
@@ -283,7 +280,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const outcome = run(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
+			const outcome = runOnFake(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
 
 			// Assert
 			await expect(outcome).rejects.toThrow("PROJ-7 can't move from To Do to In Review. It can move to: In Progress, Done.")
@@ -294,7 +291,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, async () => {
+			const { fake, started, result } = await runOnFake(settings, arrangement, async () => {
 				const first = await jira.comment('PROJ-7', 'Merge request: **one**', { key: 'mr-api' })
 				const again = await jira.comment('PROJ-7', 'Merge request: **two**', { key: 'mr-api' })
 				return { first, again }
@@ -318,7 +315,9 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }))
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
+				jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }),
+			)
 
 			// Assert
 			expect(result.id).not.toBe('999')
@@ -330,7 +329,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () =>
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
 				Promise.all([jira.comment('PROJ-7', 'API', { key: 'mr-api' }), jira.comment('PROJ-7', 'Web', { key: 'mr-web' })]),
 			)
 
@@ -345,7 +344,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () =>
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
 				Promise.all([jira.comment('PROJ-7', 'one', { key: 'status' }), jira.comment('PROJ-7', 'two', { key: 'status' })]),
 			)
 
@@ -377,7 +376,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
 
 			// Assert
 			expect(result).toEqual({ moved: true })
@@ -389,7 +388,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { result } = await run(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
+			const { result } = await runOnFake(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
 
 			// Assert
 			expect(result).toEqual({
@@ -414,7 +413,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, async () => {
+			const { result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect('12345')
 				return { markdown: await readFile(page[toPrompt](), 'utf8') }
 			})
@@ -430,7 +429,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, async () => {
+			const { result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect('12345')
 				return { markdown: await readFile(page[toPrompt](), 'utf8') }
 			})
@@ -446,7 +445,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => {
+			const { fake, result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect(`${pageUrl}/Guidelines`)
 				return { page, markdown: await readFile(page[toPrompt](), 'utf8'), found: await confluence.search({ text: 'conventional' }) }
 			})
@@ -483,7 +482,7 @@ describe('attachments', () => {
 		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7', attachments })] }
 
 		// Act
-		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.story.attachments.filter((attachment) => attachment.file !== undefined)).toHaveLength(fit)
@@ -507,7 +506,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.markdown).toContain(
@@ -524,7 +523,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.story.attachments).toEqual([
@@ -552,7 +551,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.markdown).toContain(`![](${dataCenter.jiraUrl}/secure/attachment/10001/shot.png)`)
@@ -564,7 +563,7 @@ describe('attachments', () => {
 describe('settings', () => {
 	test('a missing site says how to set it', async () => {
 		// Act
-		const outcome = run({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
+		const outcome = runOnFake({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
 
 		// Assert
 		await expect(outcome).rejects.toThrow('There is no Jira site. Set it with `mesh-flow credential set jira/url`.')
@@ -667,7 +666,7 @@ describe('Confluence sites', () => {
 		const arrangement: Arrangement = { pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<p>Hi</p>', version: 1 }] }
 
 		// Act
-		const { fake } = await run({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
+		const { fake } = await runOnFake({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
 
 		// Assert
 		expect(fake.requests[0]?.path).toBe(expected)
@@ -683,7 +682,7 @@ test('a Data Center page names a mentioned person by their username', async () =
 	}
 
 	// Act
-	const { fake, result } = await run(dataCenter.settings, arrangement, async () =>
+	const { fake, result } = await runOnFake(dataCenter.settings, arrangement, async () =>
 		readFile((await confluence.collect('12345'))[toPrompt](), 'utf8'),
 	)
 
@@ -698,7 +697,7 @@ describe('trouble', () => {
 		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], failNext: [503] }
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
 
 		// Assert
 		expect(result.key).toBe('PROJ-7')

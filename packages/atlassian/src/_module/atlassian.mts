@@ -5,6 +5,10 @@
  * agents. Cloud and Data Center alike. Whatever needs the token runs on the host, through the
  * gateway; the sandbox never has it.
  *
+ * Every call also fails, saying what to set, when the product's site or token isn't set on the
+ * host: `mesh-flow credential set jira/url`, `jira/token`, and on Cloud `jira/email`, and the same
+ * for `confluence/`.
+ *
  * @module
  */
 export * as confluence from '../confluence.mts'

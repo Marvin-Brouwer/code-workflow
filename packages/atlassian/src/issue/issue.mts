@@ -21,7 +21,7 @@ import { issueMarkdownOf } from './markdown.mts'
  * @example Checking a key
  * ```ts
  * const parsed = jira.key.safeParse(input)
- * if (!parsed.success) throw new Error(`${input} is no Jira issue key, such as PROJ-123.`)
+ * if (!parsed.success) throw new Error(`${input} is not a Jira issue key, such as PROJ-123.`)
  * ```
  */
 export const key = IssueKey
@@ -72,8 +72,9 @@ export interface JiraIssue extends IssueData {
  * writes it as Markdown into `jira/<key>.md` in the workspace, with its facts as frontmatter. The
  * images the issue shows are downloaded next to it, into `jira/<key>/`, and the Markdown links to
  * them there; other attachments are listed with their URL. A mention reads as
- * `` `@mention({ name, email, id })` ``, without the email when the site keeps it private. See
- * `test/jira.spec.md` in the package for the whole of what an agent reads.
+ * `` `@mention({ name, email, id })` ``, without the email when the site keeps it private.
+ * The whole of what an agent reads is in `test/jira.spec.md` in the repository:
+ * https://github.com/Marvin-Brouwer/code-workflow/blob/main/packages/atlassian/test/jira.spec.md
  *
  * Collecting an issue again writes it again, as it is in Jira by then. Runs on the host, through
  * the gateway, so the token never reaches the sandbox.
@@ -84,11 +85,9 @@ export interface JiraIssue extends IssueData {
  * @param issue - The issue's key, such as `PROJ-123`, or anything with a `key`, such as an issue
  * collected before.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
- * context a tool's action got when you call this from a tool of your own, so stopping the loop stops
- * the call too.
+ * context a tool's action got when you call this from a tool of your own.
  * @returns The issue, with `path` the Markdown file relative to the workspace.
- * @throws When Jira has no such issue, or the token can't read it, and when no Jira site or token
- * is set on the host (`mesh-flow credential set jira/url`, `jira/token`, and on Cloud `jira/email`).
+ * @throws When Jira has no such issue, or the token can't read it.
  *
  * @example From code
  * ```ts
@@ -130,14 +129,16 @@ export async function collect(issue: IssueRef, context?: ToolContext): Promise<J
  *
  * Input: `{ key }`, the issue's key, such as `PROJ-123`.
  *
- * @example For an agent
- * ```ts
- * await researcher.loop`Research ${story}. Find related issues with ${jira.search} and read the ones that matter with ${jira.dump}.`
- * ```
+ * @throws When Jira has no such issue, or the token can't read it.
  *
  * @example From code
  * ```ts
  * const { path } = await jira.dump({ key: 'PROJ-123' })
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await researcher.loop`Research ${story}. Find related issues with ${jira.search} and read the ones that matter with ${jira.dump}.`
  * ```
  */
 export const dump = tool('jiraDump', {

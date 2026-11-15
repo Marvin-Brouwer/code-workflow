@@ -9,13 +9,14 @@ import { stubs } from '../stubs.mts'
  * `project = PROJ AND labels = web`; `limit` is how many issues come back at most, 20 when not
  * given. Results come in Jira's order, so put an `ORDER BY` in the query when the order matters.
  *
- * Throws when Jira turns the query down, such as for a field it doesn't know.
+ * @throws When Jira turns the query down, such as for a field it doesn't know.
  *
  * @example From code
  * ```ts
- * const { issues, more } = await jira.search({ jql: `parent = ${story.key} AND statusCategory != Done`, limit: 50 })
+ * const limit = 50
+ * const { issues, more } = await jira.search({ jql: `parent = ${story.key} AND statusCategory != Done`, limit })
  * for (const subtask of issues) await jira.transition(subtask, 'In Progress')
- * if (more) console.log(`More than 50 open subtasks of ${story.key}; the rest wait for the next run.`)
+ * if (more) await jira.comment(story, `More than ${String(limit)} open subtasks: the rest wait for the next run.`, { key: 'subtasks' })
  * ```
  *
  * @example For an agent

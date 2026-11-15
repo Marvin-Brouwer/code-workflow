@@ -20,8 +20,9 @@ export interface ConfluencePage extends PageData {
  * Collects a page, by its id or its URL: reads it from Confluence and writes it as Markdown into
  * `confluence/<id>.md` in the workspace, with its title, URL, space, version and when it was last
  * updated as frontmatter. A mention reads as `` `@mention({ name, email, id })` ``, without the
- * email when the site keeps it private. See `test/confluence.spec.md` in the package for the whole
- * of what an agent reads.
+ * email when the site keeps it private.
+ * The whole of what an agent reads is in `test/confluence.spec.md` in the repository:
+ * https://github.com/Marvin-Brouwer/code-workflow/blob/main/packages/atlassian/test/confluence.spec.md
  *
  * Collecting a page again writes it again, as it is in Confluence by then. Runs on the host,
  * through the gateway, so the token never reaches the sandbox.
@@ -36,13 +37,13 @@ export interface ConfluencePage extends PageData {
  * context a tool's action got when you call this from a tool of your own.
  * @returns The page, with `path` the Markdown file relative to the workspace.
  * @throws When `page` is neither an id nor a page URL; when Confluence has no such page, or the token
- * can't read it; and when no Confluence site or token is set on the host
- * (`mesh-flow credential set confluence/url`, `confluence/token`, and on Cloud `confluence/email`).
+ * can't read it.
  *
  * @example From code
  * ```ts
  * const guidelines = await confluence.collect('https://example.atlassian.net/wiki/spaces/TEAM/pages/12345/Guidelines')
- * await jira.comment(story, `Follows [${guidelines.title}](${guidelines.url}), version ${String(guidelines.version)}.`, { key: 'guidelines' })
+ * const version = String(guidelines.version)
+ * await jira.comment(story, `Follows [${guidelines.title}](${guidelines.url}), version ${version}.`, { key: 'guidelines' })
  * ```
  *
  * @example In a prompt
@@ -66,14 +67,17 @@ export async function collect(page: PageRef, context?: ToolContext): Promise<Con
  *
  * Input: `{ page }`, the page's id or its URL.
  *
- * @example For an agent
- * ```ts
- * await researcher.loop`Research ${story}. Read the pages it links to with ${confluence.dump}.`
- * ```
+ * @throws When `page` is neither an id nor a page URL, and when Confluence has no such page, or the
+ * token can't read it.
  *
  * @example From code
  * ```ts
  * const { path } = await confluence.dump({ page: '12345' })
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await researcher.loop`Research ${story}. Read the pages it links to with ${confluence.dump}.`
  * ```
  */
 export const dump = tool('confluenceDump', {
@@ -91,11 +95,13 @@ export const dump = tool('confluenceDump', {
  * the space with that key, such as `TEAM`; `limit` is how many pages come back at most, 20 when not
  * given. Only pages are searched, not blog posts, comments or attachments.
  *
+ * @throws When Confluence turns the search down.
+ *
  * @example From code
  * ```ts
  * const { pages } = await confluence.search({ text: 'release process', space: 'TEAM', limit: 5 })
  * const [first] = pages
- * const process = first === undefined ? undefined : await confluence.collect(first)
+ * const releaseProcess = first === undefined ? undefined : await confluence.collect(first)
  * ```
  *
  * @example For an agent

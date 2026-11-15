@@ -17,7 +17,7 @@ export type Product = 'jira' | 'confluence'
  * Jira and Confluence each have their own, since a Data Center install often runs them on different
  * hosts; on Cloud they are usually the same values.
  *
- * @param product - `jira` or `confluence`.
+ * @param product - The product whose credentials to name: `jira` or `confluence`.
  * @returns The three names.
  *
  * @example

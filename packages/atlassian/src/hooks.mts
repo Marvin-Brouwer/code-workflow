@@ -16,9 +16,10 @@ export const deliveryHeader = 'x-atlassian-webhook-identifier'
  * ```ts
  * import { jira } from '@mesh-flow/atlassian/hooks'
  * import { webhook } from '@mesh-flow/core'
+ * import { triage } from './workflows/triage.mts'
  *
- * export const onComment = webhook(answer, jira.commentCreated.transform((event) => ({ key: event.issue.key })), {
- * 	name: 'answer-on-comment',
+ * export const onCreated = webhook(triage, jira.issueCreated.transform((event) => ({ key: event.issue.key })), {
+ * 	name: 'triage-new',
  * 	...jira.triggerOptions,
  * })
  * ```
@@ -37,12 +38,7 @@ const ChangeItem = z.object({ field: z.string(), fromString: z.string().nullable
 /**
  * The `jira:issue_created` event: the issue's key, summary and labels, and who made it. Use it as the
  * schema of a `webhook` trigger, with {@link triggerOptions}, and `transform` it into the
- * workflow's parameters.
- *
- * @example
- * ```ts
- * webhook(triage, jira.issueCreated.transform((event) => ({ key: event.issue.key })), { name: 'triage-new', ...jira.triggerOptions })
- * ```
+ * workflow's parameters, as the example there shows.
  */
 export const issueCreated = z.object({ webhookEvent: z.literal('jira:issue_created'), issue: Issue, user: User })
 export type IssueCreated = z.infer<typeof issueCreated>
@@ -74,7 +70,10 @@ export type IssueUpdated = z.infer<typeof issueUpdated>
  *
  * @example
  * ```ts
- * webhook(answer, jira.commentCreated.transform((event) => ({ key: event.issue.key })), { name: 'answer-on-comment', ...jira.triggerOptions })
+ * webhook(answer, jira.commentCreated.transform((event) => ({ key: event.issue.key })), {
+ * 	name: 'answer-on-comment',
+ * 	...jira.triggerOptions,
+ * })
  * ```
  */
 export const commentCreated = z.object({
@@ -99,7 +98,9 @@ function labelsIn(text: string | null): string[] {
  *
  * @example
  * ```ts
- * const labeledUrgent = jira.issueUpdated.refine((event) => jira.addsLabel(event, 'urgent')).transform((event) => ({ key: event.issue.key }))
+ * const labeledUrgent = jira.issueUpdated
+ * 	.refine((event) => jira.addsLabel(event, 'urgent'))
+ * 	.transform((event) => ({ key: event.issue.key }))
  * ```
  */
 export function addsLabel(event: IssueUpdated, label: string): boolean {
