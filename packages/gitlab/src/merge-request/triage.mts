@@ -41,7 +41,10 @@ export type PlannedChange = SharedPlannedChange<ReviewItem>
  * 	comments: async (comments) => {
  * 		const changes = await gitlab.triage(developer, repository, { mergeRequest, comments })
  * 		for (const change of changes)
- * 			await developer.loop`Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)}, and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.`
+ * 			await developer.loop`
+ * 				Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)},
+ * 				and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.
+ * 			`
  * 	},
  * })
  * ```

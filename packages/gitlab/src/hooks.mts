@@ -13,19 +13,18 @@ export const deliveryHeader = 'idempotency-key'
 
 /**
  * The options every GitLab webhook trigger gets: how GitLab signs a delivery, and the header that
- * names it. Spread them into a `webhook` trigger on one of the events here. Give the webhook a secret
- * token in GitLab, and the same one to the engine, with `mesh-flow webhook secret <app> <webhook>`.
+ * names it. Spread them into a `webhook` trigger on one of the events here. Set the webhook's secret
+ * with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitLab as the
+ * webhook's secret token.
  *
  * @example
  * ```ts
- * import { gitlab } from '@mesh-flow/gitlab/hooks'
  * import { webhook } from '@mesh-flow/core'
+ * import { gitlab } from '@mesh-flow/gitlab/hooks'
+ * import { release } from './workflows/release.mts'
  *
- * export const onMerge = webhook(
- * 	release,
- * 	gitlab.mergeRequestEvent('merge').transform((event) => ({ repository: event.project.path_with_namespace })),
- * 	{ name: 'release-on-merge', ...gitlab.triggerOptions },
- * )
+ * const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ repository: event.project.path_with_namespace }))
+ * export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...gitlab.triggerOptions })
  * ```
  */
 export const triggerOptions = Object.freeze({ signature, deliveryHeader })
@@ -50,11 +49,11 @@ const MergeRequest = z.object({
  *
  * @example
  * ```ts
- * webhook(
- * 	review,
- * 	gitlab.mergeRequestEvent('open').transform((event) => ({ repository: event.project.path_with_namespace, number: event.object_attributes.iid })),
- * 	{ name: 'review-on-open', ...gitlab.triggerOptions },
- * )
+ * const opened = gitlab.mergeRequestEvent('open').transform((event) => ({
+ * 	repository: event.project.path_with_namespace,
+ * 	number: event.object_attributes.iid,
+ * }))
+ * webhook(review, opened, { name: 'review-on-open', ...gitlab.triggerOptions })
  * ```
  */
 export function mergeRequestEvent(action?: 'open' | 'reopen' | 'update' | 'approved' | 'unapproved' | 'merge' | 'close') {
@@ -74,11 +73,11 @@ export type MergeRequestEvent = z.infer<ReturnType<typeof mergeRequestEvent>>
  *
  * @example
  * ```ts
- * webhook(
- * 	answer,
- * 	gitlab.mergeRequestNote.transform((event) => ({ repository: event.project.path_with_namespace, number: event.merge_request.iid })),
- * 	{ name: 'answer-on-note', ...gitlab.triggerOptions },
- * )
+ * const noted = gitlab.mergeRequestNote.transform((event) => ({
+ * 	repository: event.project.path_with_namespace,
+ * 	number: event.merge_request.iid,
+ * }))
+ * webhook(answer, noted, { name: 'answer-on-note', ...gitlab.triggerOptions })
  * ```
  */
 export const mergeRequestNote = z.object({
@@ -97,7 +96,7 @@ export const mergeRequestNote = z.object({
 export type MergeRequestNote = z.infer<typeof mergeRequestNote>
 
 /**
- * The `pipeline` event. With `status`, only pipelines that ended so fit, such as `failed`.
+ * The `pipeline` event. With `status`, only pipelines that ended with that status fit, such as `failed`.
  *
  * @param status - The one status to take deliveries of. Default: every status, also of pipelines
  * that are still running.
@@ -105,11 +104,11 @@ export type MergeRequestNote = z.infer<typeof mergeRequestNote>
  *
  * @example
  * ```ts
- * webhook(
- * 	fixPipeline,
- * 	gitlab.pipelineEvent('failed').transform((event) => ({ repository: event.project.path_with_namespace, branch: event.object_attributes.ref })),
- * 	{ name: 'fix-failed-pipeline', ...gitlab.triggerOptions },
- * )
+ * const failed = gitlab.pipelineEvent('failed').transform((event) => ({
+ * 	repository: event.project.path_with_namespace,
+ * 	branch: event.object_attributes.ref,
+ * }))
+ * webhook(fixPipeline, failed, { name: 'fix-failed-pipeline', ...gitlab.triggerOptions })
  * ```
  */
 export function pipelineEvent(status?: 'success' | 'failed' | 'canceled') {

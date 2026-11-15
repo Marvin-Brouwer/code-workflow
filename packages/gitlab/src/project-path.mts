@@ -10,8 +10,14 @@ const segmentPattern = /^(?!\.\.?$)[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/
  *
  * @example
  * ```ts
+ * import { JiraIssueParameters } from '@mesh-flow/atlassian'
+ * import { succeed, workflow } from '@mesh-flow/core'
+ * import { gitlab } from '@mesh-flow/gitlab'
+ * import { developer } from '../agents.mts'
+ *
  * export const fix = workflow('fix', { repository: gitlab.ProjectPath, ...JiraIssueParameters }, async ({ parameters }) => {
  * 	const repository = await gitlab.checkout({ repository: parameters.repository, branch: `fix/${parameters.key.toLowerCase()}` })
+ * 	await developer.loop`Fix ${parameters.key} in ${repository}, then ${succeed()}.`
  * })
  * ```
  */

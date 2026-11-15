@@ -7,8 +7,10 @@ import { stubs } from '../stubs.mts'
  * description, URL and default branch (none for a project without commits).
  *
  * Input: `{ query, limit? }`. `query` is the words to look for; `limit` is how many projects come
- * back at most, 20 when not given and 100 at most. The result is `{ repositories, more }`, with
- * `more` telling whether more projects match.
+ * back, 20 by default and 100 at most. The result is `{ repositories, more }`, with `more` telling
+ * whether more projects match.
+ *
+ * @throws When GitLab turns the token down.
  *
  * @example From code
  * ```ts

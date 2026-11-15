@@ -65,7 +65,7 @@ export interface DescribeOptions {
  *
  * @example Reading the text before opening it
  * ```ts
- * const content = await gitlab.describe(writer, repository, { issue: story, limit: limit({ minutes: 5 }) })
+ * const content = await gitlab.describe(writer, repository, { issue: story })
  * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title: `${story.key}: ${content.title}` })
  * ```
  */

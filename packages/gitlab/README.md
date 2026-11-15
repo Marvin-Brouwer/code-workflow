@@ -8,7 +8,7 @@ It shares its checkouts, `describe`, `review`, `triage` and `reply` with the oth
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token: a personal, group or project access token with the `api` scope. For a GitLab of your own, set its URL too; without one, the connector goes to gitlab.com.
 
-```bash
+```sh
 pnpm add @mesh-flow/gitlab
 mesh-flow connector add @mesh-flow/gitlab
 mesh-flow credential set gitlab/token < token.txt
@@ -92,7 +92,7 @@ import { webhook } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab/hooks'
 import { release } from './workflows/release.mts'
 
-const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ project: event.project.path_with_namespace }))
+const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ repository: event.project.path_with_namespace }))
 export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...gitlab.triggerOptions })
 ```
 

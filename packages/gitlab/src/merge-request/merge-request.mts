@@ -108,7 +108,7 @@ export interface UpdatedMergeRequest extends MergeRequest {
  *
  * @example A title of your own
  * ```ts
- * const updated = await gitlab.updateMergeRequest({ repository: 'team/api', number: 42 }, { title: 'Draft: Update packages', description })
+ * const updated = await gitlab.updateMergeRequest({ repository: 'team/api', number: 7 }, { title: 'Draft: Update packages', description })
  * if (updated.skipped === 'closed') return
  * ```
  */
@@ -156,7 +156,7 @@ export async function updateMergeRequest(
  *
  * @example
  * ```ts
- * const current = await gitlab.mergeRequest({ repository: 'team/api', number: 42 })
+ * const current = await gitlab.mergeRequest({ repository: 'team/api', number: 7 })
  * if (current.merged) await jira.transition(story, 'Done')
  * ```
  */

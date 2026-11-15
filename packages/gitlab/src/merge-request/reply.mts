@@ -26,7 +26,10 @@ import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/
  * @example For an agent
  * ```ts
  * for (const change of changes)
- * 	await developer.loop`Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)}, and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.`
+ * 	await developer.loop`
+ * 		Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)},
+ * 		and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.
+ * 	`
  * ```
  */
 export function reply(on: MergeRequestRef): Tool<ReplyInput, ReplyOutcome> {

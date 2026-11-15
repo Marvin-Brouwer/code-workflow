@@ -73,11 +73,16 @@ export interface ReviewOutcome {
  * await gitlab.review(mergeRequest, {
  * 	pipelineFailed: ({ failures }) => developer.loop`
  * 		The pipeline of ${mergeRequest} failed: ${failures}. Fix it in ${repository}, push with
- * 		${gitlab.push(repository)}, and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
+ * 		${gitlab.push(repository)},
+ * 		and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
  * 	`,
  * 	comments: async (comments) => {
  * 		const changes = await gitlab.triage(developer, repository, { mergeRequest, comments })
- * 		// Make each change, and reply with what was done.
+ * 		for (const change of changes)
+ * 			await developer.loop`
+ * 				Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)},
+ * 				and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.
+ * 			`
  * 	},
  * })
  * ```

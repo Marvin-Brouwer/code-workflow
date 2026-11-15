@@ -15,7 +15,7 @@ export interface PipelinePassesOptions {
 	readonly appearWithin?: WaitSpec
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before the check
-	 * fails with the last error. Counted in looks, as in `review`. Default: 10 minutes.
+	 * fails with the last error. Counted in looks, `toleratedOutage / every` of them. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
 	/**
@@ -43,12 +43,16 @@ export interface PipelinePassesOptions {
  * @example From code
  * ```ts
  * const findings = await runCheck(gitlab.pipelinePasses(mergeRequest, { checkout: repository }), { abortSignal })
- * if (findings.length > 0) await jira.comment(story, `The pipeline failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
+ * const list = findings.map((finding) => `- ${finding.message}`).join('\n')
+ * if (findings.length > 0) await jira.comment(story, `The pipeline failed:\n\n${list}`)
  * ```
  *
  * @example For an agent
  * ```ts
- * await developer.loop`Fix the build, push with ${gitlab.push(repository)} and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.`
+ * await developer.loop`
+ * 	Fix the build, push with ${gitlab.push(repository)}
+ * 	and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
+ * `
  * ```
  */
 export function pipelinePasses(on: MergeRequestRef, options: PipelinePassesOptions = {}): Check {

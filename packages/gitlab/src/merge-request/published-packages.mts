@@ -15,13 +15,13 @@ export interface PublishedPackagesOptions {
 	readonly appearWithin?: WaitSpec
 	/** How long GitLab may take to process the packages the pipeline uploaded. Default: 10 minutes. */
 	readonly processWithin?: WaitSpec
-	/** How long looks at GitLab may keep failing before it fails with the last error. Default: 10 minutes. */
+	/** How long looks at GitLab may keep failing before `publishedPackages` fails with the last error. Default: 10 minutes. */
 	readonly toleratedOutage?: WaitSpec
 }
 
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
- * name and version after the upload, in the background. Fails when that takes more than `looks`.
+ * name and version after the upload, in the background. Fails when that takes more than `looks` looks.
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
@@ -58,11 +58,11 @@ async function processedPackages(
  *
  * @example Hand a library's new version to the projects that use it
  * ```ts
- * const { state } = await gitlab.review(library, handlers)
- * if (state === 'closed') throw new Error(`${library.url} was closed without a merge.`)
- * const packages = await gitlab.publishedPackages(library, 'nuget')
+ * const { state } = await gitlab.review(libraryMergeRequest, handlers)
+ * if (state === 'closed') throw new Error(`${libraryMergeRequest.url} was closed without a merge.`)
+ * const packages = await gitlab.publishedPackages(libraryMergeRequest, 'nuget')
  * await dotnet.updatePackages(consumer, packages)
- * await gitlab.push(consumer)({ message: `Update to ${packages.map((found) => `${found.name} ${found.version}`).join(', ')}` })
+ * await gitlab.push(consumer)({ message: `Update to ${packages.map((published) => `${published.name} ${published.version}`).join(', ')}` })
  * ```
  */
 export async function publishedPackages(

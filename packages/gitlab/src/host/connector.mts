@@ -25,7 +25,12 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
  * ```ts
  * import { gitlabHostTools } from '@mesh-flow/gitlab/host'
  *
- * const tools = gitlabHostTools({ directory: clones, fetch: fakeGitlab.fetch, remoteUrl: (project) => path.join(remotes, `${project}.git`) })
+ * const tools = gitlabHostTools({
+ * 	directory: '/tmp/gitlab-host',
+ * 	fetch: (input, init) => fetch(String(input).replace('https://gitlab.com', 'http://127.0.0.1:4010'), init),
+ * 	remoteUrl: (project) => `file:///tmp/remotes/${project}.git`,
+ * 	retry: { attempts: 1, firstDelayMs: 0, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 },
+ * })
  * ```
  */
 export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
@@ -47,7 +52,7 @@ export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
  * ```sh
  * mesh-flow connector add @mesh-flow/gitlab
  * mesh-flow credential set gitlab/token < token.txt
- * printf '%s' 'https://gitlab.example.com' | mesh-flow credential set gitlab/url   # not for gitlab.com
+ * echo 'https://gitlab.example.com' | mesh-flow credential set gitlab/url   # not for gitlab.com
  * ```
  */
 export const connector: ConnectorHost = connectorHost('gitlab', ({ directory }) => gitlabHostTools({ directory }))

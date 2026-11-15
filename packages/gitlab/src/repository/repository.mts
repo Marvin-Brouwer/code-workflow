@@ -20,17 +20,16 @@ export interface Repository extends Checkout {
  * GitLab doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the project that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
- * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
+ * workflow's own that isn't a checkout is left alone, and the call throws. The checkout goes in a folder
  * at the project's whole path, in lower case, under `repositories/`.
  *
- * A tool for agents and a function for code. In a prompt the result renders as the checkout's
- * absolute path, so the agent finds it from any directory, including inside another checkout. In
- * code, `directory` is where it is on disk.
+ * A tool for agents and a function for code. In code, `directory` is where it is on disk.
  *
  * Input: `{ repository, branch }`. `repository` is the project's path with its groups, such as
  * `team/api`, as `gitlab.searchRepositories` lists it; `branch` is the branch to work on.
  *
- * Throws when GitLab has no such project, or the token can't read it.
+ * @throws When GitLab has no such project or the token can't read it, and when the checkout's folder
+ * holds files of the workflow's own that aren't a checkout.
  *
  * @example From code
  * ```ts
