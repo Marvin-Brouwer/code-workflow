@@ -100,7 +100,8 @@ export const collect = tool('githubCollect', {
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The comment's id and its URL.
- * @throws When `body` is empty, and when GitHub has no such issue, or the token may not comment on it.
+ * @throws When `body` is empty, and when GitHub has no such issue, or the token may not comment
+ * on it.
  *
  * @example
  * ```ts

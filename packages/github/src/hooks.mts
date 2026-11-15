@@ -84,11 +84,14 @@ export const issueCommentCreated = z.object({
 })
 export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
 
+/** What every submitted review has, whatever its state. */
+const SubmittedReview = z.object({ id: z.int(), html_url: z.url(), user: User })
+
 /**
  * The `pull_request_review` event for a submitted review. GitHub wraps every reply in a thread of
- * line comments, the run's own too, in a review of its own, `commented` and without a body: such a
- * review doesn't fit, so the engine skips it before it makes a sandbox, and neither does a review
- * whose body a connector wrote. A person's `commented` review with only line comments looks the
+ * line comments, the run's own too, in a review of its own, `commented` and without a body. Such a
+ * review doesn't fit, and neither does a review whose body a connector wrote, so the engine skips
+ * them before it makes a sandbox. A person's `commented` review with only line comments looks the
  * same and is skipped as well; `github.review` in a running workflow sees its comments.
  *
  * @example
@@ -100,9 +103,6 @@ export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
  * webhook(handleReview, reviewed, { name: 'handle-review', ...github.triggerOptions })
  * ```
  */
-/** What every submitted review has, whatever its state. */
-const SubmittedReview = z.object({ id: z.int(), html_url: z.url(), user: User })
-
 export const pullRequestReviewSubmitted = z.object({
 	action: z.literal('submitted'),
 	review: z.union([
