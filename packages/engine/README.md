@@ -116,7 +116,7 @@ Everything is checked on the host, before a sandbox is made:
 | the delivery is signed with the secret (a secret header, or an HMAC-SHA256 of the body) | 401 |
 | the body is JSON, up to 25 MB | 400, 413 |
 
-A signed delivery whose payload doesn't fit the input side of the trigger's schema, as JSON Schema, gets `200` with `skipped` and the problems, and starts no run. The sender was right to send it, and senders such as GitLab disable a webhook that keeps getting a `4xx`, which would stop the deliveries that do fit. The engine logs the first skip per webhook, with the problems, so a schema that never fits shows.
+A signed delivery whose payload doesn't fit the input side of the trigger's schema, as JSON Schema, gets `200` with `skipped` and the problems, and starts no run. The sender was right to send it, and senders such as GitLab disable a webhook that keeps getting a `4xx`, which would stop the deliveries that do fit. The engine logs the first skip per webhook and app version, with the problems, so a schema that never fits shows.
 
 A delivery that passes gets `202` and a new run on the current version. Its delivery header (such as `x-github-delivery`), or a hash of the body without one, is the run's key: a redelivery gets `200` and the run it started before. In the sandbox, the schema's `.refine` and `.transform` turn the payload into the workflow's parameters; a delivery they turn down ends the run as `skipped`, which isn't a failure.
 
