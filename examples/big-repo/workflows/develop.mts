@@ -10,6 +10,7 @@ import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research, type Delivery } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { developer, planner, reviewer, writer } from '../agents.mts'
+import { requireDotnetSdk } from '../utils/dotnet/require-sdk.mts'
 import { moveOn } from '../utils/jira/story-status.mts'
 
 /** How long a developer may take for its part of the plan, waits on a person not counted. */
@@ -21,7 +22,8 @@ const fixRoundMinutes = 45
 /** The one Jira comment the run keeps up to date with how far it got. */
 const progressComment = { key: 'progress' }
 
-export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters, abortSignal }) => {
+	await requireDotnetSdk(abortSignal)
 	const story = await jira.collect(parameters.key)
 	await moveOn(story, 'In Progress')
 

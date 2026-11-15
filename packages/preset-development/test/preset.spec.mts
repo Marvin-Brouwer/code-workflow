@@ -179,4 +179,22 @@ describe('codeReview', () => {
 		// Assert
 		await expect(run.outcome).resolves.toMatchObject({ status: 'failed' })
 	})
+
+	test('settles when the signal it runs with aborts while the reviewer never answers', async () => {
+		// Arrange
+		const repository = await gitCheckout()
+		const model = scriptedModel([neverAnswers])
+		const checking = new AbortController()
+		const run = await runBody(async () => {
+			const review = runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checking.signal })
+			await expect.poll(() => model.requests.length).toBe(1)
+
+			// Act
+			checking.abort(new Error('Gave up on the review.'))
+
+			// Assert
+			await expect(review).rejects.toThrow('Gave up on the review.')
+		}, model.models)
+		await expect(run.outcome).resolves.toMatchObject({ status: 'succeeded' })
+	})
 })
