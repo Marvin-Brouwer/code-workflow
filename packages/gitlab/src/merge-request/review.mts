@@ -52,6 +52,23 @@ export interface ReviewOutcome {
  * the run can be paused. A look that fails is tried again on the next one, for up to
  * `toleratedOutage`, so a watch that takes days outlives a dropped connection.
  *
+ * @param on - The merge request to watch: anything with its `repository` and `number`.
+ * @param handlers - What to do with new comments and with a failed pipeline. A handler left out
+ * lets those pass by.
+ * @param options - How often to look, and how long GitLab may keep failing to answer.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Whether the merge request was merged or closed, and the merge request as it was then.
+ * @throws When GitLab keeps failing for longer than `toleratedOutage`, or turns the token down, and
+ * when a handler throws.
+ *
+ * @example Wait for a merge without handling anything
+ * ```ts
+ * const { state } = await gitlab.review(mergeRequest, {})
+ * if (state === 'merged') await jira.transition(story, 'Done')
+ * ```
+ *
+ * @example Handle review and pipeline failures with agents
  * ```ts
  * await gitlab.review(mergeRequest, {
  * 	pipelineFailed: ({ failures }) => developer.loop`

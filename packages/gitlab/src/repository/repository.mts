@@ -23,9 +23,26 @@ export interface Repository extends Checkout {
  * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
  * at the project's whole path, in lower case, under `repositories/`.
  *
+ * A tool for agents and a function for code. In a prompt the result renders as the checkout's
+ * absolute path, so the agent finds it from any directory, including inside another checkout. In
+ * code, `directory` is where it is on disk.
+ *
+ * Input: `{ repository, branch }`. `repository` is the project's path with its groups, such as
+ * `team/api`, as `gitlab.searchRepositories` lists it; `branch` is the branch to work on.
+ *
+ * Throws when GitLab has no such project, or the token can't read it.
+ *
+ * @example From code
  * ```ts
- * const repository = await gitlab.checkout({ repository: 'team/api', branch: `feature/${story.key}` })
- * await developer.loop`Implement ${story} in ${repository}, then push with ${gitlab.push(repository)}.`
+ * const repository = await gitlab.checkout({ repository: 'team/api', branch: `feature/${story.key.toLowerCase()}` })
+ * await writeFile(path.join(repository.directory, 'CHANGELOG.md'), changelog)
+ * await gitlab.push(repository)({ message: 'Update the changelog' })
+ * ```
+ *
+ * @example In a prompt
+ * ```ts
+ * const repository = await gitlab.checkout({ repository: 'team/api', branch: `feature/${story.key.toLowerCase()}` })
+ * await developer.loop`Implement ${story} in ${repository}, then push with ${gitlab.push(repository)} and ${succeed()}.`
  * ```
  */
 export const checkout = tool('gitlabCheckout', {

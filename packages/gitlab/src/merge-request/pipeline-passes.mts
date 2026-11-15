@@ -28,12 +28,27 @@ export interface PipelinePassesOptions {
 
 /**
  * A check for `verify`: waits for the pipeline of the merge request's head commit to complete, and
- * reports each job that failed as a finding. A pipeline takes a while to appear after a push, so a
- * commit without one is looked at again until `appearWithin` has passed. A look that fails is tried
- * again on the next one, for up to `toleratedOutage`.
+ * reports each job that failed as a finding, with GitLab's reason and a link to its log. A pipeline
+ * takes a while to appear after a push, so a commit without one is looked at again until
+ * `appearWithin` has passed; a project without CI then passes. A look that fails is tried again on
+ * the next one, for up to `toleratedOutage`. The waits are on the engine's clock, where the run can
+ * be paused.
  *
+ * @param on - The merge request: anything with its `repository` and `number`.
+ * @param options - How often to look, how long to wait for a pipeline to appear and for GitLab to
+ * answer again, and the checkout whose last push to look at.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means the pipeline passed.
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Fix the build, push with ${gitlab.push(repository)} and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const findings = await runCheck(gitlab.pipelinePasses(mergeRequest, { checkout: repository }), { abortSignal })
+ * if (findings.length > 0) await jira.comment(story, `The pipeline failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
  * ```
  */
 export function pipelinePasses(on: MergeRequestRef, options: PipelinePassesOptions = {}): Check {

@@ -13,7 +13,20 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
 /**
  * The host halves of every GitLab tool: the API calls and the git fetches and pushes, with the
  * token from the credential store under `gitlab/token`, on the GitLab under `gitlab/url`
- * (gitlab.com when it isn't set). For a test, `fetch` and `remoteUrl` point them at fakes of your own.
+ * (gitlab.com when it isn't set). The engine loads them itself with
+ * `mesh-flow connector add @mesh-flow/gitlab`; call this when you embed a gateway of your own, or
+ * to test a workflow against a fake GitLab.
+ *
+ * @param options - `directory`: where the host keeps its clones. For a test, `fetch` and
+ * `remoteUrl` point the tools at fakes of your own; `retry` sets how a failed request is sent again.
+ * @returns The host tools, for the gateway.
+ *
+ * @example A test against a fake GitLab
+ * ```ts
+ * import { gitlabHostTools } from '@mesh-flow/gitlab/host'
+ *
+ * const tools = gitlabHostTools({ directory: clones, fetch: fakeGitlab.fetch, remoteUrl: (project) => path.join(remotes, `${project}.git`) })
+ * ```
  */
 export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
 	const api = gitlabApi(options)
@@ -25,5 +38,16 @@ export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
 	]
 }
 
-/** The GitLab connector's host half, as `mesh-flow connector add @mesh-flow/gitlab` loads it. */
+/**
+ * The GitLab connector's host half, as `mesh-flow connector add @mesh-flow/gitlab` loads it:
+ * {@link gitlabHostTools} with the defaults. Set the token, and the URL of a GitLab of your own,
+ * with `mesh-flow credential set`.
+ *
+ * @example
+ * ```sh
+ * mesh-flow connector add @mesh-flow/gitlab
+ * mesh-flow credential set gitlab/token < token.txt
+ * printf '%s' 'https://gitlab.example.com' | mesh-flow credential set gitlab/url   # not for gitlab.com
+ * ```
+ */
 export const connector: ConnectorHost = connectorHost('gitlab', ({ directory }) => gitlabHostTools({ directory }))

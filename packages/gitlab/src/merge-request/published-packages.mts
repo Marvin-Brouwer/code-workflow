@@ -40,11 +40,29 @@ async function processedPackages(
  * the commit the merge left on the target branch to complete, then lists the packages in the
  * project's package registry that pipeline built. A merge request that isn't merged, a pipeline
  * that failed or waits for a person to start a job, or no pipeline within `appearWithin`, fails
- * the call: the packages a dependent project would take don't exist, or may not yet.
+ * the call: the packages a dependent project would take don't exist, or may not yet. GitLab reads a
+ * NuGet package's name and version after the upload, in the background, so it also waits, for up
+ * to `processWithin`, until every package of that pipeline is processed. A look that fails is tried
+ * again on the next one, for up to `toleratedOutage`.
  *
+ * @param on - The merged merge request: anything with its `repository` and `number`.
+ * @param type - The kind of package: `nuget`, `npm`, `maven`, `pypi` or `generic`.
+ * @param options - How often to look, and how long to wait for the pipeline, the processing and
+ * GitLab to answer again.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Each package's name and version, and its URL in the registry when GitLab gives one.
+ * @throws When the merge request isn't merged; when the pipeline of the merge failed, waits for a
+ * person, or didn't appear within `appearWithin`; and when GitLab still processes packages after
+ * `processWithin`.
+ *
+ * @example Hand a library's new version to the projects that use it
  * ```ts
- * await gitlab.review(mergeRequest, handlers)
- * const packages = await gitlab.publishedPackages(mergeRequest, 'nuget')
+ * const { state } = await gitlab.review(library, handlers)
+ * if (state === 'closed') throw new Error(`${library.url} was closed without a merge.`)
+ * const packages = await gitlab.publishedPackages(library, 'nuget')
+ * await dotnet.updatePackages(consumer, packages)
+ * await gitlab.push(consumer)({ message: `Update to ${packages.map((found) => `${found.name} ${found.version}`).join(', ')}` })
  * ```
  */
 export async function publishedPackages(

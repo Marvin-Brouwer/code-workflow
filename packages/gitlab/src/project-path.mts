@@ -3,7 +3,18 @@ import { z } from 'zod'
 /** A segment of a project's path as GitLab takes one, and never `.` or `..`, which would leave the clones' directory on the host. */
 const segmentPattern = /^(?!\.\.?$)[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/
 
-/** A project as GitLab names it: its path with its group and subgroups, such as `team/backend/api`. */
+/**
+ * A project as GitLab names it: its path with its group and subgroups, such as `team/backend/api`.
+ * A zod schema, for a workflow parameter or a plan's field, that turns down a bare name, a URL and
+ * a path that ends in `.git`.
+ *
+ * @example
+ * ```ts
+ * export const fix = workflow('fix', { repository: gitlab.ProjectPath, ...JiraIssueParameters }, async ({ parameters }) => {
+ * 	const repository = await gitlab.checkout({ repository: parameters.repository, branch: `fix/${parameters.key.toLowerCase()}` })
+ * })
+ * ```
+ */
 export const ProjectPath = z.string().refine(
 	(full) => {
 		const segments = full.split('/')

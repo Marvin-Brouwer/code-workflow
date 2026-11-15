@@ -45,8 +45,28 @@ export interface DescribeOptions {
  * Writing the text is up to the caller: the result goes to `openMergeRequest` or
  * `updateMergeRequest` as it is. It stops with the run, as the loop does.
  *
+ * @param agent - The agent that writes the text: the workflow's own, as the package ships none.
+ * @param repository - The checkout whose branch to describe, from `gitlab.checkout`.
+ * @param options - The issue it closes, the merge request to describe again, and the loop's limit.
+ * @returns The title and description, the commit they describe, and what they close, ready for
+ * `gitlab.openMergeRequest` or `gitlab.updateMergeRequest`.
+ * @throws When the branch has no commits of its own, when `mergeRequest` is of another branch or
+ * onto another branch than the default one, and when the loop fails or runs out of its limit.
+ *
+ * @example A new merge request
  * ```ts
  * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
+ * ```
+ *
+ * @example After a round of review
+ * ```ts
+ * await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
+ * ```
+ *
+ * @example Reading the text before opening it
+ * ```ts
+ * const content = await gitlab.describe(writer, repository, { issue: story, limit: limit({ minutes: 5 }) })
+ * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title: `${story.key}: ${content.title}` })
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<MergeRequestContent> {

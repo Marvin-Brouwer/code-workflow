@@ -10,7 +10,14 @@ const maxDescriptionCharacters = 1_048_576
 
 /**
  * What a merge request says: its title and its description, as the agent of `describe` writes them,
- * within GitLab's limits, less the room for the footer.
+ * within GitLab's limits, less the room for the footer. A zod schema, for an agent of your own that
+ * writes the text with `succeed(gitlab.MergeRequestText)`, or to check text code wrote.
+ *
+ * @example
+ * ```ts
+ * const text = await writer.loop`Write the merge request for ${repository} in the team's style, then ${succeed(gitlab.MergeRequestText)}.`
+ * const mergeRequest = await gitlab.openMergeRequest(repository, { ...text, closes: story })
+ * ```
  */
 export const MergeRequestText = changeTextSchema({
 	maxTitleCharacters,
