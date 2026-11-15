@@ -18,14 +18,14 @@ import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/p
  * and `plan` or `answer` (the default). It resolves to the posted reply, or to `{ gone: true }` when
  * the line comment was deleted since it was read.
  *
- * @example For an agent
- * ```ts
- * await reviewer.loop`Handle ${comments} on ${pullRequest}. Reply to each with ${github.reply(pullRequest)}.`
- * ```
- *
  * @example From code
  * ```ts
  * await github.reply(pullRequest)({ item: comment.id, text: 'Renamed in the next push.' })
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await reviewer.loop`Handle ${comments} on ${pullRequest}. Reply to each with ${github.reply(pullRequest)}.`
  * ```
  */
 export function reply(on: PullRequestRef): Tool<ReplyInput, ReplyOutcome> {

@@ -83,13 +83,6 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * was found and where, and how the work now deviates from the plan. It resolves to
  * `{ recordedIn }`, the file's absolute path.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`
- * 	Implement ${plan.path}, as amended by ${deviations}. Record any deviation with ${deviations.record}.
- * `
- * ```
- *
  * @example From code
  * ```ts
  * await deviations.record({
@@ -98,6 +91,13 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * 	change: 'global.json pins the SDK first',
  * })
  * const recorded = await deviations.read()
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`
+ * 	Implement ${plan.path}, as amended by ${deviations}. Record any deviation with ${deviations.record}.
+ * `
  * ```
  */
 export const deviations: Deviations = Object.freeze({

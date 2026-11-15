@@ -16,15 +16,15 @@ import { runTests } from './run-tests.mts'
  * `FullyQualifiedName~Login`. The result says whether the run succeeded, and lists the failed
  * tests, or the build's errors when the tests didn't get to run.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`Implement ${plan} in ${repository}. Test with ${dotnet.test} until the tests pass.`
- * ```
- *
  * @example From code
  * ```ts
  * const result = await dotnet.test({ directory: repository.directory, filter: 'Category=Smoke' })
  * if (!result.succeeded) await jira.comment(story, `Smoke tests fail in ${repository.name}: ${String(result.failures.length)} failed.`)
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`Implement ${plan} in ${repository}. Test with ${dotnet.test} until the tests pass.`
  * ```
  */
 export const test = tool('dotnetTest', {

@@ -24,15 +24,15 @@ const findingSource = 'vulnerable packages'
  * means no package has a known vulnerability. The check throws, rather than finding something, when
  * `dotnet` can't tell, such as when a source has no vulnerability data.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.security(repository))}.`
- * ```
- *
  * @example From code
  * ```ts
  * const vulnerable = await runCheck(dotnet.security(repository), { abortSignal })
  * for (const finding of vulnerable) await jira.comment(story, finding.message)
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.security(repository))}.`
  * ```
  */
 export function security(repository: DotnetCheckout, options: DotnetTargetOptions = {}): Check {

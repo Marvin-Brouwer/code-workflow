@@ -30,16 +30,16 @@ export interface Repository extends Checkout {
  *
  * Throws when GitHub has no such repository, or the token can't read it.
  *
- * @example In a prompt
- * ```ts
- * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
- * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)}.`
- * ```
- *
  * @example From code
  * ```ts
  * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
  * const packageJson = JSON.parse(await readFile(path.join(repository.directory, 'package.json'), 'utf8'))
+ * ```
+ *
+ * @example In a prompt
+ * ```ts
+ * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
+ * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)}.`
  * ```
  */
 export const checkout = tool('githubCheckout', {

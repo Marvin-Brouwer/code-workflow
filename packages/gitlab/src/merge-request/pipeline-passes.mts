@@ -40,15 +40,15 @@ export interface PipelinePassesOptions {
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means the pipeline passed.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`Fix the build, push with ${gitlab.push(repository)} and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.`
- * ```
- *
  * @example From code
  * ```ts
  * const findings = await runCheck(gitlab.pipelinePasses(mergeRequest, { checkout: repository }), { abortSignal })
  * if (findings.length > 0) await jira.comment(story, `The pipeline failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`Fix the build, push with ${gitlab.push(repository)} and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.`
  * ```
  */
 export function pipelinePasses(on: MergeRequestRef, options: PipelinePassesOptions = {}): Check {

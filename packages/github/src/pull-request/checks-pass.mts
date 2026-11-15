@@ -40,15 +40,15 @@ export interface ChecksPassOptions {
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means every check passed.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.`
- * ```
- *
  * @example From code
  * ```ts
  * const findings = await runCheck(github.checksPass(pullRequest, { checkout: repository }), { abortSignal })
  * if (findings.length > 0) await github.comment(issue, `The checks failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.`
  * ```
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {

@@ -18,15 +18,15 @@ import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/
  * and `plan` or `answer` (the default). It resolves to the posted reply, or to `{ gone: true }` when
  * the note was deleted since it was read.
  *
+ * @example From code
+ * ```ts
+ * await gitlab.reply(mergeRequest)({ item: comment.id, text: 'Renamed in the next push.' })
+ * ```
+ *
  * @example For an agent
  * ```ts
  * for (const change of changes)
  * 	await developer.loop`Make ${change.plan} in ${repository}, push with ${gitlab.push(repository)}, and reply to ${change.item.id} with ${gitlab.reply(mergeRequest)}.`
- * ```
- *
- * @example From code
- * ```ts
- * await gitlab.reply(mergeRequest)({ item: comment.id, text: 'Renamed in the next push.' })
  * ```
  */
 export function reply(on: MergeRequestRef): Tool<ReplyInput, ReplyOutcome> {

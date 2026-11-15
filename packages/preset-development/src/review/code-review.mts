@@ -38,17 +38,17 @@ const Findings = z.object({
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means the reviewer found no real problem.
  *
+ * @example From code, before a merge request is opened
+ * ```ts
+ * const findings = await runCheck(codeReview(reviewer, repository, plan), { abortSignal })
+ * if (findings.length > 0) await developer.loop`Fix ${findings.map((finding) => finding.message).join('\n')} in ${repository}, then ${succeed()}.`
+ * ```
+ *
  * @example Next to the tests, for the agent that makes the change
  * ```ts
  * await developer.loop`
  * 	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository), codeReview(reviewer, repository, plan))}.
  * `
- * ```
- *
- * @example From code, before a merge request is opened
- * ```ts
- * const findings = await runCheck(codeReview(reviewer, repository, plan), { abortSignal })
- * if (findings.length > 0) await developer.loop`Fix ${findings.map((finding) => finding.message).join('\n')} in ${repository}, then ${succeed()}.`
  * ```
  */
 export function codeReview(reviewer: Agent, repository: ReviewedCheckout, plan: Plan): Check {

@@ -21,15 +21,15 @@ export type { Pushed }
  * The tool throws when the branch has no commits on top of the default branch, as there is nothing
  * to push, and when GitHub turns the push down, such as for a protected branch.
  *
- * @example For an agent
- * ```ts
- * await developer.loop`Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.`
- * ```
- *
  * @example From code
  * ```ts
  * await writeFile(path.join(repository.directory, '.nvmrc'), '26\n')
  * const { head } = await github.push(repository)({ message: 'Run on Node.js 26' })
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.`
  * ```
  */
 export function push(repository: Repository): Tool<{ message: string }, Pushed> {
