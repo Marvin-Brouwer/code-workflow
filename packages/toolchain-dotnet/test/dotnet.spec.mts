@@ -30,11 +30,11 @@ const promptlyMs = 1000
 /** Time for the fake `dotnet` to have started before the call stops. */
 const startedMs = 300
 
-/** How long a busy runner may take to start the fake `dotnet`, for a test that waits until it did. */
-const fakeStartsWithinMs = 10_000
+/** How long a busy runner may take to start the fake `dotnet`, or to remove a stopped run's folder. */
+const busyRunnerWithinMs = 10_000
 
-/** The stop test's own limit: up to `fakeStartsWithinMs` for each of its two starts and for the folders to go. */
-const stopTestTimeoutMs = 45_000
+/** The stop test's own limit: `busyRunnerWithinMs` for each of its two starts and for the folders to go, and the rest. */
+const stopTestTimeoutMs = 4 * busyRunnerWithinMs
 
 /** How long a run of the fake holds on, long enough that two runs at once would overlap. */
 const holdMs = 500
@@ -43,7 +43,7 @@ const holdMs = 500
 const afterForceKillMs = 3_000
 
 /** Waits long enough for the fake `dotnet` to have started, on a runner that isn't busy. */
-const untilStartedMs = () => new Promise((resolve) => setTimeout(resolve, startedMs))
+const untilStartedMsPassed = () => new Promise((resolve) => setTimeout(resolve, startedMs))
 
 /**
  * Starts the work, stops it once the fake `dotnet` started, and resolves to how long the work took
@@ -53,7 +53,7 @@ const untilStartedMs = () => new Promise((resolve) => setTimeout(resolve, starte
  */
 async function settleAfterStop(
 	start: (context: { abortSignal: AbortSignal }) => Promise<unknown>,
-	untilStarted: () => Promise<unknown> = untilStartedMs,
+	untilStarted: () => Promise<unknown> = untilStartedMsPassed,
 ): Promise<number> {
 	const controller = new AbortController()
 	const working = start({ abortSignal: controller.signal })
@@ -168,7 +168,7 @@ describe('test and tests', () => {
 			const cli = await fakeDotnet({ test: { hang: true } })
 			// A busy Windows runner can take longer than `startedMs` to start the fake, which then never logs its call.
 			const untilCalled = (times: number) => () =>
-				expect.poll(async () => (await cli.calls()).length, { timeout: fakeStartsWithinMs }).toBe(times)
+				expect.poll(async () => (await cli.calls()).length, { timeout: busyRunnerWithinMs }).toBe(times)
 
 			// Act
 			const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), untilCalled(1))
@@ -180,7 +180,7 @@ describe('test and tests', () => {
 			const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
 			expect(results).toHaveLength(2)
 			// The stopped tool's folder goes once its dotnet is gone, which on Windows can be after the tool settled.
-			await expect.poll(() => results.filter((folder) => existsSync(folder)), { timeout: fakeStartsWithinMs }).toEqual([])
+			await expect.poll(() => results.filter((folder) => existsSync(folder)), { timeout: busyRunnerWithinMs }).toEqual([])
 		},
 		stopTestTimeoutMs,
 	)
