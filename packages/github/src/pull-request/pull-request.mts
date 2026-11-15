@@ -176,8 +176,44 @@ export async function pullRequest(ref: PullRequestRef, context?: ToolContext): P
 
 /** The open pull request of the checkout's branch onto the default branch, when it has one. */
 export async function findOpenPullRequest(repository: Repository, context?: ToolContext): Promise<PullRequest | undefined> {
+	return branchPullRequest(repository, 'open', context)
+}
+
+/**
+ * The pull request this run opened that merged the checkout's branch into the default branch, when
+ * there is one; the latest, when there are several. A run that starts over after it delivered, such
+ * as one whose sandbox was lost while it waited for the review, finds it here, while the branch may
+ * be gone or hold nothing new. A merge of the branch by an earlier run or by a person isn't this
+ * run's, and isn't found.
+ *
+ * @param repository - The checkout whose branch to look for, from `github.checkout`.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The pull request, or `undefined` when no pull request this run opened for the branch was
+ * merged.
+ * @throws When GitHub has no such repository, or the token can't read it.
+ *
+ * @example Deliver once, also across a rerun
+ * ```ts
+ * const merged = await github.mergedPullRequest(repository)
+ * if (merged !== undefined) {
+ * 	await github.close(issue)
+ * 	return
+ * }
+ * ```
+ */
+export async function mergedPullRequest(repository: Repository, context?: ToolContext): Promise<PullRequest | undefined> {
+	return branchPullRequest(repository, 'merged', context)
+}
+
+/** The checkout's branch's pull request onto the default branch in `state`, when it has one. */
+async function branchPullRequest(
+	repository: Repository,
+	state: 'open' | 'merged',
+	context?: ToolContext,
+): Promise<PullRequest | undefined> {
 	const found = await stubs.findPullRequest(
-		{ repository: repository.name, head: repository.branch, base: repository.defaultBranch },
+		{ repository: repository.name, head: repository.branch, base: repository.defaultBranch, state },
 		context,
 	)
 	return found === null ? undefined : pullRequestOf(found)

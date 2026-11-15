@@ -33,7 +33,7 @@ describe('E2B backend, on a fake SDK', () => {
 
 	test('close kills the sandboxes it still runs', async () => {
 		// Arrange
-		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:26-slim': 'node-22' } })
+		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:26-slim': 'node-26' } })
 		await backend.create(spec, AbortSignal.timeout(1000))
 
 		// Act

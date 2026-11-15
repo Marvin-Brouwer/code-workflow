@@ -15,6 +15,11 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	const issue = await github.collect(parameters.issue)
 	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
+	// A run that starts over after its pull request merged, such as one whose sandbox was lost while it waited, is done.
+	if ((await github.mergedPullRequest(repository)) !== undefined) {
+		await github.close(issue)
+		return
+	}
 
 	const dependencies = await installDependencies(repository, { abortSignal })
 
@@ -44,6 +49,8 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				When every item is done, ${succeed()}.
 				${limit({ minutes: 30 })}
 			`
+			// What the agent changed after its last push goes up too, so the text describes what reviewers see.
+			await github.push(repository)({ message: `Review changes for #${String(issue.number)}` })
 			// `describe` runs no writer loop when the pushed commit is already described.
 			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},
@@ -53,6 +60,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
 				${limit({ minutes: 20 })}
 			`
+			await github.push(repository)({ message: `Check fix for #${String(issue.number)}` })
 			// `describe` runs no writer loop when the pushed commit is already described.
 			await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
 		},

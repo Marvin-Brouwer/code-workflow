@@ -6,6 +6,7 @@ import {
 	replyToItem,
 	sameBody,
 	showItemsBeingRead,
+	signedBy,
 	signedDescription,
 } from '@mesh-flow/code-repository/host'
 import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
@@ -82,6 +83,28 @@ async function openOnBranch(
 	return open[0]
 }
 
+/**
+ * The latest pull request of the repository's own branch `head` that was merged into `base` and
+ * that run `runId` signed, when there is one. Only the run's own: a branch named after an issue may
+ * have been merged before, by an earlier run or by a person, and that is no delivery of this run's.
+ */
+async function mergedOnBranch(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	{ head, base, runId }: { head: string; base: string; runId: string },
+): Promise<ApiPullRequest | undefined> {
+	const closed = await client.paginate(client.rest.pulls.list, {
+		...where,
+		state: 'closed',
+		head: `${where.owner}:${head}`,
+		base,
+		per_page: pageSize,
+	})
+	return closed
+		.filter((pull) => (pull.merged_at ?? null) !== null && signedBy(pull.body ?? '', runId))
+		.toSorted((one, other) => other.number - one.number)[0]
+}
+
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
@@ -119,9 +142,13 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			return pullRequestData(repository, data)
 		}),
 
-		hostTool(findPullRequest, async ({ repository, head, base }, context) => {
+		hostTool(findPullRequest, async ({ repository, head, base, state }, context) => {
 			const client = await api(context)
-			const found = await openOnBranch(client, splitRepositoryName(repository), head, base)
+			const where = splitRepositoryName(repository)
+			const found =
+				state === 'open'
+					? await openOnBranch(client, where, head, base)
+					: await mergedOnBranch(client, where, { head, base, runId: context.runId })
 			return found === undefined ? null : pullRequestData(repository, found)
 		}),
 

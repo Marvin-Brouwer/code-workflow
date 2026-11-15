@@ -63,9 +63,9 @@ mesh-flow dev      # builds and deploys again on every change (not in node_modul
 The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
 
 ```bash
-mesh-flow app list               # example  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
-mesh-flow triggers               # the current version's sandbox, workflows, their parameters and triggers
-mesh-flow app remove example     # its webhooks and schedules stop; its runs stay
+mesh-flow app list                        # example-github-issue  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
+mesh-flow triggers                        # the current version's sandbox, workflows, their parameters and triggers
+mesh-flow app remove example-github-issue  # its webhooks and schedules stop; its runs stay
 ```
 
 The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:26-slim` have all of them.

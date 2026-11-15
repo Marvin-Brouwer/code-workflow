@@ -98,11 +98,14 @@ export const updatePullRequest = {
 	output: PullRequestData.extend({ skipped: UpdateSkip.optional() }),
 }
 
-/** Finds on the host the open pull request of a branch onto a base, when it has one. */
+/**
+ * Finds on the host the open pull request of a branch onto a base, when it has one; or, with
+ * `merged`, the latest merged one that this run signed.
+ */
 export const findPullRequest = {
 	name: 'githubFindPullRequest',
-	description: 'Finds the open pull request of a branch on GitHub',
-	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName }),
+	description: 'Finds the open or the merged pull request of a branch on GitHub',
+	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName, state: z.enum(['open', 'merged']) }),
 	output: PullRequestData.nullable(),
 }
 

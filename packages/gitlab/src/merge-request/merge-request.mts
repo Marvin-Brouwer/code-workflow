@@ -33,8 +33,9 @@ export interface MergeRequest extends MergeRequestData {
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The merge request, which renders as its URL in a prompt.
- * @throws When the branch has no commits on top of the default branch, and when GitLab turns the
- * push or the merge request down.
+ * @throws When the branch has no commits on top of the default branch; when the branch already has
+ * an open merge request onto another target branch, such as after a reviewer changed its target;
+ * and when GitLab turns the push or the merge request down.
  *
  * @example With a description an agent wrote
  * ```ts
