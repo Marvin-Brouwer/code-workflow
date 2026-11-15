@@ -17,8 +17,22 @@ const findingSource = 'vulnerable packages'
  * `options.target` names the solution or project when the checkout has none at its root, or more
  * than one.
  *
+ * @param repository - The checkout to look at: anything with a `directory`, such as a connector's
+ * checkout.
+ * @param options - `target`: the solution or project, relative to the checkout.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means no package has a known vulnerability. The check throws, rather than finding something, when
+ * `dotnet` can't tell, such as when a source has no vulnerability data.
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.security(repository))}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const vulnerable = await runCheck(dotnet.security(repository), { abortSignal })
+ * for (const finding of vulnerable) await jira.comment(story, finding.message)
  * ```
  */
 export function security(repository: DotnetCheckout, options: DotnetTargetOptions = {}): Check {

@@ -86,8 +86,29 @@ const updateTool = tool('dotnetUpdatePackages', {
  * packages, no work. Resolves to what was updated. `options.target` names the solution or project
  * when the checkout has none at its root, or more than one.
  *
+ * Runs in the sandbox, with the SDK of the sandbox's image; the packages come from the NuGet sources
+ * the checkout restores from.
+ *
+ * @param repository - The checkout to update: anything with a `directory`, such as a connector's
+ * checkout.
+ * @param packages - The packages and the versions to move to, such as `gitlab.publishedPackages`
+ * gives. Package ids are compared without regard to case, as NuGet does.
+ * @param options - `target`: the solution or project, relative to the checkout.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Each reference that was moved: the project, relative to the checkout, the package, and
+ * the version before and after.
+ * @throws When `dotnet add package` fails, such as for a version no source has.
+ *
+ * @example After an upstream merge
  * ```ts
  * await dotnet.updatePackages(repository, upstream.flat())
+ * ```
+ *
+ * @example A version of your own
+ * ```ts
+ * const updates = await dotnet.updatePackages(repository, [{ name: 'Serilog', version: '4.3.0' }])
+ * if (updates.length > 0) await gitlab.push(repository)({ message: 'Update Serilog to 4.3.0' })
  * ```
  */
 export async function updatePackages(

@@ -10,8 +10,21 @@ import { runTests } from './run-tests.mts'
  * `options.target` names the solution or project when the checkout has none at its root, or more
  * than one.
  *
+ * @param repository - The checkout to test: anything with a `directory`, such as a connector's
+ * checkout.
+ * @param options - `target`: the solution or project, relative to the checkout.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means every test passed.
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository))}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const findings = await runCheck(dotnet.testsPass(repository, { target: 'src/Api.slnx' }), { abortSignal })
+ * if (findings.length > 0) throw new Error(`${String(findings.length)} tests fail in ${repository.name}.`)
  * ```
  */
 export function testsPass(repository: DotnetCheckout, options: DotnetTargetOptions = {}): Check {
