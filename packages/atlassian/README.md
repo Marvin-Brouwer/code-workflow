@@ -130,3 +130,8 @@ pnpm --filter @mesh-flow/atlassian build
 ```
 
 Tests run against in-memory Jira and Confluence sites, so they need no token and no network.
+
+`test/jira.spec.md` and `test/confluence.spec.md` hold the whole Markdown an agent reads for one
+rich issue and one rich page, next to the tests that write them. A change to what the connector
+writes shows up there as a diff; after checking it, accept it with
+`pnpm --filter @mesh-flow/atlassian test -u`.

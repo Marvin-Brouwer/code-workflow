@@ -4,18 +4,11 @@ import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
-import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
+import { atlassianHostTools } from '../src/_module/host.mts'
 import { maxImageBytes, maxImageBytesPerIssue } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
-import {
-	fakeAtlassian,
-	fakeIssue,
-	type FakeAtlassian,
-	type FakeIssue,
-	type FakePage,
-	type FakeRequest,
-	type FakeUser,
-} from './support/fake-atlassian.mts'
+import { fakeAtlassian, fakeIssue, type FakeAtlassian, type FakeRequest } from './support/fake-atlassian.mts'
+import { quickRetry, run, type Arrangement } from './support/run-on-fake.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
 const deployments = [
@@ -68,38 +61,11 @@ async function collectMarkdown(key: string) {
 	return { story, markdown: await readFile(story[toPrompt](), 'utf8') }
 }
 
-/** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
-const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
-
 /** The YAML between the `---` lines a written issue or page starts with. */
 function frontmatterOf(markdown: string): unknown {
 	const [, yaml] = /^---\n([\s\S]*?)\n---\n/.exec(markdown) ?? []
 	if (yaml === undefined) throw new Error('The Markdown has no frontmatter.')
 	return parse(yaml)
-}
-
-/** What the fake holds before a run. */
-interface Arrangement {
-	readonly issues?: readonly FakeIssue[]
-	readonly pages?: readonly FakePage[]
-	readonly failNext?: readonly number[]
-	readonly losesAnswers?: readonly string[]
-	readonly latencyMs?: number
-	readonly users?: Readonly<Record<string, FakeUser>>
-}
-
-/** Runs `body` against a fake with the deployment's settings, and hands back what the fake saw. */
-async function run<T>(settings: Readonly<Record<string, string>>, arrangement: Arrangement, body: () => Promise<T>) {
-	const fake = fakeAtlassian()
-	for (const issue of arrangement.issues ?? []) fake.issues.set(issue.key, issue)
-	for (const page of arrangement.pages ?? []) fake.pages.set(page.id, page)
-	fake.failNext.push(...(arrangement.failNext ?? []))
-	for (const request of arrangement.losesAnswers ?? []) fake.losesAnswers.add(request)
-	fake.latencyMs = arrangement.latencyMs ?? 0
-	for (const [id, user] of Object.entries(arrangement.users ?? {})) fake.users.set(id, user)
-	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
-	const started = await runOnGateway(gateway, body)
-	return { fake, started, result: await started.result }
 }
 
 describe.each(deployments)(
