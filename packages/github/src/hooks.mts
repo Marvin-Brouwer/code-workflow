@@ -22,6 +22,7 @@ export const deliveryHeader = 'x-github-delivery'
  *
  * const commented = github.issueCommentCreated.transform((event) => ({
  * 	issue: { repository: event.repository.full_name, number: event.issue.number },
+ * 	comment: { body: event.comment.body, url: event.comment.html_url },
  * }))
  * export const onComment = webhook(answer, commented, { name: 'answer-on-comment', ...github.triggerOptions })
  * ```
@@ -129,7 +130,9 @@ export type PullRequestReviewSubmitted = z.infer<typeof pullRequestReviewSubmitt
  * const lineCommented = github.pullRequestReviewCommentCreated.transform((event) => ({
  * 	repository: event.repository.full_name,
  * 	number: event.pull_request.number,
- * 	comment: { id: event.comment.id, body: event.comment.body, path: event.comment.path },
+ * 	// The form `github.reply` takes the comment's id in.
+ * 	item: `review-comment/${String(event.comment.id)}`,
+ * 	comment: { body: event.comment.body, path: event.comment.path },
  * }))
  * webhook(answerLineComment, lineCommented, { name: 'answer-line-comment', ...github.triggerOptions })
  * ```
