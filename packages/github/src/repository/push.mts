@@ -10,16 +10,14 @@ export type { Pushed }
  * The tool that commits every change in the checkout and pushes the branch, for an agent to call
  * when its work is ready, and for code before a pull request. The commits go to the host as a git
  * bundle of what the remote doesn't have yet (on top of the default branch for a new branch), and
- * the host pushes them with the credential.
- *
- * A checkout without changes since the last push pushes nothing, so calling it again is safe.
+ * the host pushes them with the credential. A checkout without changes since the last push pushes
+ * nothing, so calling it again is safe.
  *
  * @param repository - The checkout to push, from `github.checkout`.
  * @returns The tool. Its input is `{ message }`, the commit message; it resolves to `{ pushed, head }`:
  * whether anything went up, and the branch's commit on GitHub.
- *
- * The tool throws when the branch has no commits on top of the default branch, as there is nothing
- * to push, and when GitHub turns the push down, such as for a protected branch.
+ * @throws From the tool: when the branch has no commits on top of the default branch, as there is
+ * nothing to push, and when GitHub turns the push down, such as for a protected branch.
  *
  * @example From code
  * ```ts

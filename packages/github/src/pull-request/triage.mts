@@ -47,7 +47,10 @@ export type PlannedChange = SharedPlannedChange<ReviewItem>
  * 	comments: async (comments) => {
  * 		const changes = await github.triage(developer, repository, { pullRequest, comments })
  * 		for (const change of changes)
- * 			await developer.loop`Make ${change.plan} in ${repository}, push with ${github.push(repository)}, and reply to ${change.item.id} with ${github.reply(pullRequest)}.`
+ * 			await developer.loop`
+ * 				Make ${change.plan} in ${repository}, push with ${github.push(repository)},
+ * 				and reply to ${change.item.id} with ${github.reply(pullRequest)}.
+ * 			`
  * 	},
  * })
  * ```

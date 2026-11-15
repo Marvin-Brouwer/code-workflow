@@ -140,6 +140,10 @@ import { defineMeshFlow, image, userTrigger, webhook } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
 import { fixIssue, triage } from './workflows/issues.mts'
 
+const commented = github.issueCommentCreated.transform((event) => ({
+	issue: { repository: event.repository.full_name, number: event.issue.number },
+}))
+
 export default defineMeshFlow({
 	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
@@ -147,11 +151,7 @@ export default defineMeshFlow({
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
 		// Any event schema works with webhook; the filter is in the structure, so other deliveries are skipped before a sandbox starts.
-		webhook(
-			triage,
-			github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
-			github.triggerOptions,
-		),
+		webhook(triage, commented, github.triggerOptions),
 	],
 })
 ```

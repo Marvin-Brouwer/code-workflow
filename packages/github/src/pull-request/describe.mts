@@ -59,17 +59,23 @@ export interface DescribeOptions {
  * @throws When the branch has no commits of its own, when `pullRequest` is of another branch or
  * onto another branch than the default one, and when the loop fails or runs out of its limit.
  *
- * @example A new pull request, and again after a round of review
+ * @example A new pull request
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
- * // After a round of review:
+ * ```
+ *
+ * @example After a round of review
+ * ```ts
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
  * ```
  *
  * @example Reading the text before opening it
  * ```ts
- * const content = await github.describe(writer, repository, { issue, limit: limit({ minutes: 5 }) })
- * const pullRequest = await github.openPullRequest(repository, { ...content, title: `#${String(issue.number)}: ${content.title}` })
+ * const content = await github.describe(writer, repository, { issue })
+ * // A rerun describes the open pull request again, with the number in its title already.
+ * const prefix = `#${String(issue.number)}: `
+ * const title = content.title.includes(prefix) ? content.title : `${prefix}${content.title}`
+ * const pullRequest = await github.openPullRequest(repository, { ...content, title })
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {

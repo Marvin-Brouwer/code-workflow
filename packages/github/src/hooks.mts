@@ -11,19 +11,19 @@ export const deliveryHeader = 'x-github-delivery'
 
 /**
  * The options every GitHub webhook trigger gets: how GitHub signs a delivery, and the header that
- * names it. Spread them into a `webhook` trigger on one of the events here. Give the webhook a secret
- * in GitHub, and the same one to the engine, with `mesh-flow webhook secret <app> <webhook>`.
+ * names it. Spread them into a `webhook` trigger on one of the events here. Set the webhook's
+ * secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitHub.
  *
  * @example
  * ```ts
- * import { github } from '@mesh-flow/github/hooks'
  * import { webhook } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github/hooks'
+ * import { answer } from './workflows/answer.mts'
  *
- * export const onComment = webhook(
- * 	answer,
- * 	github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
- * 	{ name: 'answer-on-comment', ...github.triggerOptions },
- * )
+ * const commented = github.issueCommentCreated.transform((event) => ({
+ * 	issue: { repository: event.repository.full_name, number: event.issue.number },
+ * }))
+ * export const onComment = webhook(answer, commented, { name: 'answer-on-comment', ...github.triggerOptions })
  * ```
  */
 export const triggerOptions = Object.freeze({ signature, deliveryHeader })
@@ -43,11 +43,10 @@ const PullRequest = z.object({ number: z.int().positive(), title: z.string(), ht
  *
  * @example
  * ```ts
- * webhook(
- * 	triage,
- * 	github.issueLabeled('needs-triage').transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
- * 	{ name: 'triage-on-label', ...github.triggerOptions },
- * )
+ * const labeled = github.issueLabeled('needs-triage').transform((event) => ({
+ * 	issue: { repository: event.repository.full_name, number: event.issue.number },
+ * }))
+ * webhook(triage, labeled, { name: 'triage-on-label', ...github.triggerOptions })
  * ```
  */
 export function issueLabeled(label?: string) {
@@ -88,11 +87,11 @@ export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
  *
  * @example
  * ```ts
- * webhook(
- * 	handleReview,
- * 	github.pullRequestReviewSubmitted.transform((event) => ({ repository: event.repository.full_name, number: event.pull_request.number })),
- * 	{ name: 'handle-review', ...github.triggerOptions },
- * )
+ * const reviewed = github.pullRequestReviewSubmitted.transform((event) => ({
+ * 	repository: event.repository.full_name,
+ * 	number: event.pull_request.number,
+ * }))
+ * webhook(handleReview, reviewed, { name: 'handle-review', ...github.triggerOptions })
  * ```
  */
 export const pullRequestReviewSubmitted = z.object({
@@ -116,11 +115,11 @@ export type PullRequestReviewSubmitted = z.infer<typeof pullRequestReviewSubmitt
  *
  * @example
  * ```ts
- * webhook(
- * 	handleReview,
- * 	github.pullRequestReviewCommentCreated.transform((event) => ({ repository: event.repository.full_name, number: event.pull_request.number })),
- * 	{ name: 'handle-line-comment', ...github.triggerOptions },
- * )
+ * const lineCommented = github.pullRequestReviewCommentCreated.transform((event) => ({
+ * 	repository: event.repository.full_name,
+ * 	number: event.pull_request.number,
+ * }))
+ * webhook(handleReview, lineCommented, { name: 'handle-line-comment', ...github.triggerOptions })
  * ```
  */
 export const pullRequestReviewCommentCreated = z.object({
@@ -149,12 +148,12 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
 /**
  * Starts `workflow` with `{ issue: { repository, number } }` whenever `label` is put on an issue.
  * The webhook is named `<workflow>-labeled-<label>`, signed as GitHub signs, and keyed by GitHub's
- * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue` parameter.
+ * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue`
+ * parameter.
  *
  * Point a GitHub webhook for `Issues` events at `/webhooks/<app>/<workflow>-labeled-<label>` on the
- * engine, and give it the same secret as
- * `mesh-flow webhook secret <app> <workflow>-labeled-<label>`. Other labels are skipped before a
- * sandbox starts.
+ * engine. Set its secret with `mesh-flow webhook secret <app> <workflow>-labeled-<label> --generate`
+ * and paste it into GitHub. Other labels are skipped before a sandbox starts.
  *
  * @param workflow - A workflow whose parameters are `IssueParameters`, or `{ issue }` with
  * anything else optional. Any other workflow is a type error.
@@ -164,6 +163,10 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  *
  * @example
  * ```ts
+ * import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github/hooks'
+ * import { fixIssue } from './workflows/issues.mts'
+ *
  * export default defineMeshFlow({
  * 	sandbox: image({ name: 'node:26-bookworm' }),
  * 	workflows: [userTrigger(fixIssue), github.onIssueLabeled(fixIssue, 'ai-fix')],

@@ -110,7 +110,9 @@ export interface UpdatedPullRequest extends PullRequest {
  *
  * @example A title of your own
  * ```ts
- * const updated = await github.updatePullRequest({ repository: 'team/app', number: 42 }, { title: 'Fix the login on Safari', description })
+ * const ref = { repository: 'team/app', number: 42 }
+ * const current = await github.pullRequest(ref)
+ * const updated = await github.updatePullRequest(ref, { title: 'Fix the login on Safari', description: current.description })
  * if (updated.skipped === 'closed') return
  * ```
  */

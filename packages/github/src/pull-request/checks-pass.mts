@@ -43,12 +43,16 @@ export interface ChecksPassOptions {
  * @example From code
  * ```ts
  * const findings = await runCheck(github.checksPass(pullRequest, { checkout: repository }), { abortSignal })
- * if (findings.length > 0) await github.comment(issue, `The checks failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
+ * const list = findings.map((finding) => `- ${finding.message}`).join('\n')
+ * if (findings.length > 0) await github.comment(issue, `The checks failed:\n\n${list}`)
  * ```
  *
  * @example For an agent
  * ```ts
- * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.`
+ * await developer.loop`
+ * 	Fix the build, push with ${github.push(repository)}
+ * 	and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.
+ * `
  * ```
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {

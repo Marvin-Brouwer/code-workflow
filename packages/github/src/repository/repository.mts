@@ -20,7 +20,7 @@ export interface Repository extends Checkout {
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the repository that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
- * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
+ * workflow's own that isn't a checkout is left alone, and the call throws. The checkout goes in a folder
  * at the repository's name, `owner/repo`, in lower case, under `repositories/`.
  *
  * A tool for agents and a function for code. In a prompt the result renders as the checkout's
@@ -28,7 +28,8 @@ export interface Repository extends Checkout {
  *
  * Input: `{ repository, branch }`. `repository` is `owner/name`; `branch` is the branch to work on.
  *
- * Throws when GitHub has no such repository, or the token can't read it.
+ * @throws When GitHub has no such repository or the token can't read it, and when the checkout's
+ * folder holds files of the workflow's own that aren't a checkout.
  *
  * @example From code
  * ```ts

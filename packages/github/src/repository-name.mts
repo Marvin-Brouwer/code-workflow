@@ -12,8 +12,13 @@ const namePattern = /^(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/
  *
  * @example
  * ```ts
+ * import { succeed, workflow } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github'
+ * import { developer } from '../agents.mts'
+ *
  * export const bump = workflow('bump', { repository: github.RepositoryName }, async ({ parameters }) => {
  * 	const repository = await github.checkout({ repository: parameters.repository, branch: 'chore/bump-node' })
+ * 	await developer.loop`Bump Node.js in ${repository}, then ${succeed()}.`
  * })
  * ```
  */

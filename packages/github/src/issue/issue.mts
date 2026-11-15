@@ -8,8 +8,13 @@ import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-too
  *
  * @example
  * ```ts
+ * import { succeed, workflow } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github'
+ * import { triager } from '../agents.mts'
+ *
  * export const triage = workflow('triage', { issue: github.issue }, async ({ parameters }) => {
  * 	const issue = await github.collect(parameters.issue)
+ * 	await triager.loop`Triage ${issue}, then ${succeed()}.`
  * })
  * ```
  */
@@ -53,7 +58,7 @@ export interface Issue extends IssueData {
  *
  * Input: `{ repository, number }`, such as `{ repository: 'team/app', number: 12 }`.
  *
- * Throws when GitHub has no such issue, or the token can't read it, and when no token is set on the
+ * @throws When GitHub has no such issue, or the token can't read it, and when no token is set on the
  * host (`mesh-flow credential set github/token`).
  *
  * @example From code
@@ -125,6 +130,7 @@ export function comment(
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns Every label the issue has afterwards.
+ * @throws When GitHub has no such issue, or the token may not label it.
  *
  * @example
  * ```ts

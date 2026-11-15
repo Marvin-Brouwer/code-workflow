@@ -15,15 +15,20 @@ export interface GithubHostOptions extends GithubApiOptions, GitRemoteOptions {}
  * `mesh-flow connector add @mesh-flow/github`; call this when you embed a gateway of your own, or to
  * test a workflow against a GitHub of your own.
  *
- * @param options - `directory`: where the host keeps its clones. For a test, `apiUrl` and
- * `remoteUrl` point the tools at a server of your own; `retry` sets how a failed read is sent again.
+ * @param options - `directory`: where the host keeps its clones. For a test, `apiUrl`, `fetch` and
+ * `remoteUrl` point the tools at fakes of your own; `retry` sets how a read GitHub didn't answer
+ * is sent again.
  * @returns The host tools, for the gateway.
  *
  * @example A test against a fake GitHub
  * ```ts
  * import { githubHostTools } from '@mesh-flow/github/host'
  *
- * const tools = githubHostTools({ directory: clones, apiUrl: fakeGithub.url, remoteUrl: (repository) => path.join(remotes, `${repository}.git`) })
+ * const tools = githubHostTools({
+ * 	directory: '/tmp/github-host',
+ * 	apiUrl: 'http://127.0.0.1:4010',
+ * 	remoteUrl: (repository) => `file:///tmp/remotes/${repository}.git`,
+ * })
  * ```
  */
 export function githubHostTools(options: GithubHostOptions): HostTool[] {
