@@ -18,7 +18,8 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
  * to test a workflow against a fake GitLab.
  *
  * @param options - `directory`: where the host keeps its clones. For a test, `fetch` and
- * `remoteUrl` point the tools at fakes of your own; `retry` sets how a failed request is sent again.
+ * `remoteUrl` point the tools at fakes of your own; `retry` sets how a read GitLab didn't answer
+ * is sent again.
  * @returns The host tools, for the gateway.
  *
  * @example A test against a fake GitLab

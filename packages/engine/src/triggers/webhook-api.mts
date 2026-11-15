@@ -41,7 +41,11 @@ export function webhookPath(app: string, webhook: string): string {
  * | the app is deployed, and its current version has the webhook | 404 |
  * | the delivery is signed with the secret | 401 |
  * | the body is JSON, up to 25 MB | 400, 413 |
- * | the payload fits the input side of the trigger's schema, as JSON Schema | 422 |
+ *
+ * A signed delivery whose payload doesn't fit the input side of the trigger's schema, as JSON
+ * Schema, gets 200 with `skipped` and the problems, and starts no run. It is a delivery the sender
+ * was right to send, of an event the trigger doesn't take: senders such as GitLab disable a webhook
+ * that keeps getting a 4xx, and so would stop the deliveries that do fit.
  *
  * Nothing before the signature check reads more than the credential store and what the app's build
  * declared, so an unsigned request never costs a sandbox.
@@ -86,7 +90,7 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 				return c.json({ error: 'The delivery is not JSON.' }, 400)
 			}
 			const problems = payloadProblems(trigger.payload, payload)
-			if (problems.length > 0) return c.json({ error: `The delivery is not for webhook ${id}.`, problems }, 422)
+			if (problems.length > 0) return c.json({ skipped: `The delivery is not for webhook ${id}.`, problems }, 200)
 
 			const key = `webhook ${appName}/${id}/${deliveryName(trigger.deliveryHeader, c.req.raw.headers, body)}`
 			const known = engine.runWithKey(key)

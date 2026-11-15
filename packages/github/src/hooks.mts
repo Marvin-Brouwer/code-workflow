@@ -34,7 +34,7 @@ const PullRequest = z.object({ number: z.int().positive(), title: z.string(), ht
 
 /**
  * The `issues` event for a label put on an issue. With `label`, only that label fits: the filter
- * is in the structure, so the engine turns other deliveries down before it makes a sandbox.
+ * is in the structure, so the engine skips other deliveries before it makes a sandbox.
  * `github.onIssueLabeled` is the ready-made trigger on it.
  *
  * @param label - The one label to take deliveries of. Default: every label.

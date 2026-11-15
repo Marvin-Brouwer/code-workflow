@@ -51,16 +51,18 @@ async function processedPackages(
  * GitLab to answer again.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
- * @returns Each package's name and version, and its URL in the registry when GitLab gives one.
+ * @returns Each package's name and version; none when the pipeline published no package of `type`.
  * @throws When the merge request isn't merged; when the pipeline of the merge failed, waits for a
- * person, or didn't appear within `appearWithin`; and when GitLab still processes packages after
- * `processWithin`.
+ * person, or didn't appear within `appearWithin`; when GitLab couldn't process a package of the
+ * pipeline, or still processes one after `processWithin`; and when looks at GitLab kept failing for
+ * longer than `toleratedOutage`.
  *
  * @example Hand a library's new version to the projects that use it
  * ```ts
  * const { state } = await gitlab.review(libraryMergeRequest, handlers)
  * if (state === 'closed') throw new Error(`${libraryMergeRequest.url} was closed without a merge.`)
  * const packages = await gitlab.publishedPackages(libraryMergeRequest, 'nuget')
+ * if (packages.length === 0) return
  * await dotnet.updatePackages(consumer, packages)
  * await gitlab.push(consumer)({ message: `Update to ${packages.map((published) => `${published.name} ${published.version}`).join(', ')}` })
  * ```

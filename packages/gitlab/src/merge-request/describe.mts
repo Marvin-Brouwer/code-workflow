@@ -66,7 +66,10 @@ export interface DescribeOptions {
  * @example Reading the text before opening it
  * ```ts
  * const content = await gitlab.describe(writer, repository, { issue: story })
- * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title: `${story.key}: ${content.title}` })
+ * // A rerun describes the open merge request again, with the key in its title already.
+ * const prefix = `${story.key}: `
+ * const title = content.title.startsWith(prefix) ? content.title : `${prefix}${content.title}`
+ * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title })
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<MergeRequestContent> {

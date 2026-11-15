@@ -25,7 +25,8 @@ export interface MergeRequest extends MergeRequestData {
  * someone may have edited it, which the person is asked about first.
  *
  * The content usually comes from `gitlab.describe`, but code can write it too: `title` and
- * `description` are all it needs, and `closes` puts `Fixes <key>` in the footer.
+ * `description` are all it needs, and `closes` puts `Fixes <key>` in the footer. Text without
+ * `basedOn` replaces what an open merge request of the branch has, also an edit a person made.
  *
  * @param repository - The checkout whose branch to open the merge request for, from `gitlab.checkout`.
  * @param content - The title and description, and optionally the issue it closes.
@@ -179,7 +180,8 @@ export async function findOpenMergeRequest(repository: Repository, context?: Too
  * @param repository - The checkout whose branch to look for, from `gitlab.checkout`.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
- * @returns The merge request, or `undefined` when this run merged none for the branch.
+ * @returns The merge request, or `undefined` when no merge request this run opened for the branch
+ * was merged.
  *
  * @example Deliver each repository once, also across a rerun
  * ```ts

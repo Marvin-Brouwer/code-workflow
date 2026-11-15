@@ -155,7 +155,7 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(await client.list(signal)).toHaveLength(1)
 	})
 
-	test('answer a payload that does not fit with a 4xx, before any sandbox is made for it', async () => {
+	test('skip a signed payload that does not fit with a 2xx, so the sender keeps the webhook on, and make no sandbox for it', async () => {
 		// Arrange
 		const { client, deliver, created } = await serve()
 
@@ -163,8 +163,11 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		const response = await deliver('fix-issue', JSON.stringify({ label: 'ai-fix' }), { 'x-webhook-secret': secret })
 
 		// Assert
-		expect(response.status).toBe(422)
-		expect(await response.json()).toMatchObject({ problems: ["/ must have required property 'issue'"] })
+		expect(response.status).toBe(200)
+		expect(await response.json()).toMatchObject({
+			skipped: 'The delivery is not for webhook fix-issue.',
+			problems: ["/ must have required property 'issue'"],
+		})
 		expect(created).not.toHaveBeenCalled()
 		expect(await client.list(signal)).toEqual([])
 	})

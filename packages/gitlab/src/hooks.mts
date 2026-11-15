@@ -1,3 +1,4 @@
+import { markerStart } from '@mesh-flow/code-repository'
 import type { WebhookSignature } from '@mesh-flow/core'
 import { z } from 'zod'
 
@@ -42,7 +43,7 @@ const MergeRequest = z.object({
 
 /**
  * The `merge_request` event. With `action`, only that action fits, such as `open` or `merge`: the
- * filter is in the structure, so the engine turns other deliveries down before it makes a sandbox.
+ * filter is in the structure, so the engine skips other deliveries before it makes a sandbox.
  *
  * @param action - The one action to take deliveries of. Default: every action.
  * @returns The schema, for a `webhook` trigger with {@link triggerOptions}.
@@ -67,9 +68,16 @@ export function mergeRequestEvent(action?: 'open' | 'reopen' | 'update' | 'appro
 export type MergeRequestEvent = z.infer<ReturnType<typeof mergeRequestEvent>>
 
 /**
+ * A note that a connector didn't write: every note it posts, such as a reply to a reviewer, carries
+ * a marker. As a pattern, so the engine skips the connector's own notes before it makes a sandbox,
+ * and a workflow that answers notes isn't started again by its answers.
+ */
+const NotByConnector = z.string().regex(new RegExp(`^(?![\\s\\S]*${markerStart})`))
+
+/**
  * The `note` event for a comment on a merge request, on a line or on the merge request itself. A
- * comment on an issue, a commit or a snippet doesn't fit, so the engine turns it down before it makes
- * a sandbox.
+ * comment on an issue, a commit or a snippet doesn't fit, and neither does a note a connector wrote,
+ * such as the run's own replies, so the engine skips them before it makes a sandbox.
  *
  * @example
  * ```ts
@@ -86,7 +94,7 @@ export const mergeRequestNote = z.object({
 	project: Project,
 	object_attributes: z.object({
 		id: z.int(),
-		note: z.string(),
+		note: NotByConnector,
 		noteable_type: z.literal('MergeRequest'),
 		url: z.url(),
 		discussion_id: z.string().optional(),
@@ -97,6 +105,8 @@ export type MergeRequestNote = z.infer<typeof mergeRequestNote>
 
 /**
  * The `pipeline` event. With `status`, only pipelines that ended with that status fit, such as `failed`.
+ * Pipelines of the default branch and of tags fit too: a workflow that pushes to the branch takes
+ * only those of a merge request, with a `merge_request` that isn't `null`, as below.
  *
  * @param status - The one status to take deliveries of. Default: every status, also of pipelines
  * that are still running.
@@ -104,10 +114,10 @@ export type MergeRequestNote = z.infer<typeof mergeRequestNote>
  *
  * @example
  * ```ts
- * const failed = gitlab.pipelineEvent('failed').transform((event) => ({
- * 	repository: event.project.path_with_namespace,
- * 	branch: event.object_attributes.ref,
- * }))
+ * const failed = gitlab
+ * 	.pipelineEvent('failed')
+ * 	.extend({ merge_request: z.object({ iid: z.int().positive() }) })
+ * 	.transform((event) => ({ repository: event.project.path_with_namespace, branch: event.object_attributes.ref }))
  * webhook(fixPipeline, failed, { name: 'fix-failed-pipeline', ...gitlab.triggerOptions })
  * ```
  */
