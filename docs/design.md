@@ -2,13 +2,13 @@
 
 Status: design converged (option C: plain async TypeScript). The sandbox and typing spikes are
 done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). The reference
-workflow lives in `examples/example/`, and the packages it uses in `packages/`.
+workflow lives in `examples/big-repo/`, and the packages it uses in `packages/`.
 
 ## 1. Goal
 
 Durable workflows that live in git instead of being clicked together in a UI. A workflow is a
 deterministic TypeScript program that dispatches to AI agents where that makes sense. The
-reference use case (`example`):
+reference use case (`big-repo`):
 
 - collect a Jira story
 - research it (agent), asking the user when unclear

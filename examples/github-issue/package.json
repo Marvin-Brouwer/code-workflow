@@ -1,5 +1,5 @@
 {
-	"name": "github-issue",
+	"name": "@example/github-issue",
 	"private": true,
 	"description": "The smallest mesh-flow app: pick up a GitHub issue, fix it, open a pull request and handle the review until it's merged",
 	"type": "module",

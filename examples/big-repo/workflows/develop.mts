@@ -1,5 +1,5 @@
 /**
- * The `example` development workflow: a Jira story from research to merged merge requests, one per
+ * The `big-repo` development workflow: a Jira story from research to merged merge requests, one per
  * repository the plan changes. Plain async TypeScript: every `await` is real, and agents are calls
  * inside it. While the run waits for a person or for GitLab, the sandbox can be paused; the answer
  * resumes it and the await resolves in the same stack.
@@ -10,7 +10,7 @@ import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research, type Delivery } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 import { developer, planner, reviewer, writer } from '../agents.mts'
-import { moveOn } from './story-status.mts'
+import { moveOn } from '../utils/jira/story-status.mts'
 
 /** How long a developer may take for its part of the plan, waits on a person not counted. */
 const implementationMinutes = 120

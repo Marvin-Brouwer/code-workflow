@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
 
-const example = path.resolve(import.meta.dirname, '../../../examples/example')
+const example = path.resolve(import.meta.dirname, '../../../examples/big-repo')
 const workflow = path.join(example, 'workflows/develop.mts')
 
 /** Variables in develop.mts holding a `loop` result, and what hovering them must show. */

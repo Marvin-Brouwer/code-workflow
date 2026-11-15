@@ -19,12 +19,12 @@ That runs three checks, and any failure fails the command:
 1. `tsc -p tsconfig.json`: the type tests in [`test/loop-result.mts`](test/loop-result.mts),
    written with `expect-type`.
 2. `scripts/hover.mts`: asks the TypeScript language service, the same call an editor's hover
-   makes, what `research` and `plan` in `examples/example/workflows/develop.mts` show, on the
+   makes, what `research` and `plan` in `examples/big-repo/workflows/develop.mts` show, on the
    example's own project against the real `@mesh-flow/core`.
 3. `scripts/timing.mts`: generates one `loop` with 20 interpolated values, and a file with 50 of
    them, and type-checks them against a 2 s budget.
 
-When it ran, a fourth check type-checked `examples/example` and the sketch packages against
+When it ran, a fourth check type-checked `examples/big-repo` and the sketch packages against
 `src/core.mts`, with stubs for the modules that didn't exist yet. Since MVP step 7 the example and
 its packages are real and type-check in CI on their own, so that check and its stubs are gone.
 

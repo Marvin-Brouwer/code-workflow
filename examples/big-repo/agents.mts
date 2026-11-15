@@ -1,5 +1,5 @@
 /**
- * Agents for the `example` workflows. Workflow and team specific: models, reasoning and
+ * Agents for the `big-repo` workflows. Workflow and team specific: models, reasoning and
  * conventions. Model ids resolve through the providers configured for the app.
  */
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'

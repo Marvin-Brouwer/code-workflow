@@ -21,7 +21,7 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
-  examples/example:
+  examples/big-repo:
     dependencies:
       '@mesh-flow/atlassian':
         specifier: workspace:*

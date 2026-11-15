@@ -18,7 +18,7 @@ const startLabel = 'ai-develop'
 
 /**
  * A public stand-in for the image the Dockerfile builds: the same base, without the .NET SDK. Name
- * the built image here once it's pushed, such as `<account>/mesh-flow-example:dotnet10`.
+ * the built image here once it's pushed, such as `<account>/mesh-flow-big-repo:dotnet10`.
  */
 const sandboxImage = 'node:26-bookworm'
 

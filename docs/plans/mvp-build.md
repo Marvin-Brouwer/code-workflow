@@ -20,7 +20,7 @@ Data Center; [`@mesh-flow/gitlab`](../../packages/gitlab/README.md), which share
 common with `@mesh-flow/github` through [`@mesh-flow/code-repository`](../../packages/code-repository/README.md);
 [`@mesh-flow/toolchain-dotnet`](../../packages/toolchain-dotnet/README.md);
 [`@mesh-flow/preset-development`](../../packages/preset-development/README.md); and
-[`examples/example`](../../examples/example), which builds and describes itself in CI, and
+[`examples/big-repo`](../../examples/big-repo), which builds and describes itself in CI, and
 names a sandbox image built from its own Dockerfile (built and pushed by hand, not in CI).
 Running `develop` against a real story is what's left of "done when". A dependent repository that
 takes another's new NuGet packages needs the private registry shim, which isn't built: until it
@@ -146,7 +146,7 @@ credentials stay as they are.
   connector; the scheduler on the wall clock, with the overlap rule; `mesh-flow triggers` lists
   what the current version declares. Webhook secrets come from the gateway's credential store
   (step 5), set with the CLI, never in the app.
-- **Docs:** the core, build and engine READMEs, and `examples/example` gets a `package.json` and an
+- **Docs:** the core, build and engine READMEs, and `examples/big-repo` gets a `package.json` and an
   entry file.
 - **Tests:** a redelivered webhook reuses its run; a payload that doesn't fit gets a 4xx and no
   sandbox; a payload a `.refine` rejects ends the run as not for this workflow; an overlapping
@@ -232,7 +232,7 @@ the first proof that the sandbox, engine, core and gateway work together.
 
 ### 7. The other connectors and `example`
 
-The sketches in `packages/` and `examples/example/` made real enough to run `develop` end to end
+The sketches in `packages/` and `examples/big-repo/` made real enough to run `develop` end to end
 for plans whose repositories don't depend on each other. `inDependencyOrder` runs independent
 repositories side by side; a dependent one waits for the packages its dependencies' merges
 publish, which it can only restore once the registry shim is built.
