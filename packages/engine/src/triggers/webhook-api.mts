@@ -45,7 +45,8 @@ export function webhookPath(app: string, webhook: string): string {
  * A signed delivery whose payload doesn't fit the input side of the trigger's schema, as JSON
  * Schema, gets 200 with `skipped` and the problems, and starts no run. It is a delivery the sender
  * was right to send, of an event the trigger doesn't take: senders such as GitLab disable a webhook
- * that keeps getting a 4xx, and so would stop the deliveries that do fit.
+ * that keeps getting a 4xx, and so would stop the deliveries that do fit. The first skip per
+ * webhook is logged, with the problems, so a schema that never fits shows.
  *
  * Nothing before the signature check reads more than the credential store and what the app's build
  * declared, so an unsigned request never costs a sandbox.
@@ -62,6 +63,8 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 		return c.json({ error }, status)
 	}
 	const notFound = 'There is no such webhook.'
+	// The webhooks a delivery was skipped for, so a schema that never fits shows in the log once, not on every delivery.
+	const skippedFor = new Set<string>()
 
 	api.post(
 		'/webhooks/:app/:webhook',
@@ -90,7 +93,13 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 				return c.json({ error: 'The delivery is not JSON.' }, 400)
 			}
 			const problems = payloadProblems(trigger.payload, payload)
-			if (problems.length > 0) return c.json({ skipped: `The delivery is not for webhook ${id}.`, problems }, 200)
+			if (problems.length > 0) {
+				if (!skippedFor.has(c.req.path)) {
+					skippedFor.add(c.req.path)
+					log(`Skipped a delivery to ${c.req.path}, which doesn't fit its schema: ${problems.join('; ')}. Later skips aren't logged.`)
+				}
+				return c.json({ skipped: `The delivery is not for webhook ${id}.`, problems }, 200)
+			}
 
 			const key = `webhook ${appName}/${id}/${deliveryName(trigger.deliveryHeader, c.req.raw.headers, body)}`
 			const known = engine.runWithKey(key)

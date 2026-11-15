@@ -68,7 +68,7 @@ export interface DescribeOptions {
  * const content = await gitlab.describe(writer, repository, { issue: story })
  * // A rerun describes the open merge request again, with the key in its title already.
  * const prefix = `${story.key}: `
- * const title = content.title.startsWith(prefix) ? content.title : `${prefix}${content.title}`
+ * const title = content.title.includes(prefix) ? content.title : `${prefix}${content.title}`
  * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title })
  * ```
  */

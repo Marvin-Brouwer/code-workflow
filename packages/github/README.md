@@ -146,7 +146,7 @@ export default defineMeshFlow({
 		userTrigger(fixIssue),
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
-		// Any event schema works with webhook; the filter is in the structure, so other deliveries get a 4xx.
+		// Any event schema works with webhook; the filter is in the structure, so other deliveries are skipped before a sandbox starts.
 		webhook(
 			triage,
 			github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),

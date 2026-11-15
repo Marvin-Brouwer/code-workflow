@@ -158,6 +158,11 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **Attaching to a sandbox that still runs after a crash.** The sandbox interface can't attach to
   a running sandbox or pause one it didn't start, and the runtime may have moved on unobserved.
   It's removed, and the run is restartable.
+- **Answering a signed delivery that doesn't fit the trigger's schema with a 422.** Superseded in
+  November 2026, in the GitLab connector's review: GitLab counts a 4xx as a failed delivery and
+  disables a webhook that keeps failing, and a merge request webhook gets mostly deliveries a
+  trigger doesn't take, such as updates. Such a delivery now gets `200` with `skipped` and the
+  problems, and the first one per webhook is logged.
 
 ## Connectors
 

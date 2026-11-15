@@ -309,7 +309,8 @@ export default defineMeshFlow({
   go to the run that waits for them, not to a trigger.
 - **Webhook payloads are checked in two steps.** The engine checks a delivery's signature and the
   input side of the schema as JSON Schema (structure, literals, enums) before it creates a sandbox,
-  so an unrelated event never costs a run: it gets a 4xx. `.refine` and `.transform` are code, so
+  so an unrelated event never costs a run: it is skipped with a `200`, since senders such as GitLab
+  disable a webhook that keeps getting a 4xx. `.refine` and `.transform` are code, so
   they run in the sandbox when the run starts; a payload they reject ends the run as *not for this
   workflow*, which isn't a failure. Filters belong in the schema's structure where they can
   (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled(label)`
