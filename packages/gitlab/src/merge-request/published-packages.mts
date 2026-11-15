@@ -24,8 +24,8 @@ export interface PublishedPackagesOptions {
 
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
- * name and version after the upload, in the background. Fails when that takes more than `looks`
- * looks.
+ * name and version after the upload, in the background. Fails when that takes more
+ * than `looks` looks.
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,

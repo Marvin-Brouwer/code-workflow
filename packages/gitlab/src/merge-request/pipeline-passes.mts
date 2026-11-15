@@ -15,8 +15,8 @@ export interface PipelinePassesOptions {
 	readonly appearWithin?: WaitSpec
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before the check
-	 * fails with the last error. Counted in looks, `toleratedOutage / every` of them. Default: 10
-	 * minutes.
+	 * fails with the last error. Counted in looks, `toleratedOutage / every` of them.
+	 * Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
 	/**
