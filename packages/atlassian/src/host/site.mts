@@ -13,6 +13,18 @@ export type Product = 'jira' | 'confluence'
  * - `<product>/token`: an API token on Cloud, a personal access token on Data Center;
  * - `<product>/email`: the account's email on Cloud, which goes with the API token. Data Center
  *   has none: without it, the token is sent as a personal access token.
+ *
+ * Jira and Confluence each have their own, since a Data Center install often runs them on different
+ * hosts; on Cloud they are usually the same values.
+ *
+ * @param product - `jira` or `confluence`.
+ * @returns The three names.
+ *
+ * @example
+ * ```ts
+ * const names = credentialNames('confluence')
+ * // { url: 'confluence/url', token: 'confluence/token', email: 'confluence/email' }
+ * ```
  */
 export function credentialNames(product: Product): Readonly<{ url: string; token: string; email: string }> {
 	return Object.freeze({ url: `${product}/url`, token: `${product}/token`, email: `${product}/email` })

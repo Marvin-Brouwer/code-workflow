@@ -7,16 +7,42 @@ import { IssueKey } from '../tools/issue-key.mts'
 import type { IssueData, PostedComment } from '../tools/issue-tools.mts'
 import { issueMarkdownOf } from './markdown.mts'
 
-/** Names an issue by its key, such as `PROJ-123`: the `key` parameter of a workflow. */
+/**
+ * Names an issue by its key, such as `PROJ-123`: a zod schema, for the `key` parameter of a
+ * workflow, or for checking a key that came from elsewhere.
+ *
+ * @example A workflow parameter
+ * ```ts
+ * export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+ * 	const story = await jira.collect(parameters.key)
+ * })
+ * ```
+ *
+ * @example Checking a key
+ * ```ts
+ * const parsed = jira.key.safeParse(input)
+ * if (!parsed.success) throw new Error(`${input} is no Jira issue key, such as PROJ-123.`)
+ * ```
+ */
 export const key = IssueKey
 
 /**
  * The parameters of a workflow that works on one Jira issue, `{ key }`, so a workflow declares
- * them in one word and `jira.onIssueLabeled` can start it.
+ * them in one word and `jira.onIssueLabeled` can start it. Add parameters of your own next to it
+ * with a spread; `jira.onIssueLabeled` starts a workflow only while the others are optional.
  *
+ * @example
  * ```ts
+ * import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+ * import { workflow } from '@mesh-flow/core'
+ * import { z } from 'zod'
+ *
  * export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
  * 	const story = await jira.collect(parameters.key)
+ * })
+ *
+ * export const estimate = workflow('estimate', { ...JiraIssueParameters, team: z.string().optional() }, async ({ parameters }) => {
+ * 	// ...
  * })
  * ```
  */
@@ -42,13 +68,40 @@ export interface JiraIssue extends IssueData {
 }
 
 /**
- * Collects an issue: reads it from Jira, with its comments, links and subtasks, and writes it as
- * Markdown into `jira/` in the workspace. In a prompt it renders as that file's absolute path, so
- * the agent reads as much of it as it needs, also from inside a checkout.
+ * Collects an issue: reads it from Jira, with its comments, links, subtasks and attachments, and
+ * writes it as Markdown into `jira/<key>.md` in the workspace, with its facts as frontmatter. The
+ * images the issue shows are downloaded next to it, into `jira/<key>/`, and the Markdown links to
+ * them there; other attachments are listed with their URL. A mention reads as
+ * `` `@mention({ name, email, id })` ``, without the email when the site keeps it private. See
+ * `test/jira.spec.md` in the package for the whole of what an agent reads.
  *
+ * Collecting an issue again writes it again, as it is in Jira by then. Runs on the host, through
+ * the gateway, so the token never reaches the sandbox.
+ *
+ * In a prompt the result renders as the Markdown file's absolute path, so the agent reads as much of
+ * it as it needs, also from inside a checkout. In code, its fields are what Jira has, ready to use.
+ *
+ * @param issue - The issue's key, such as `PROJ-123`, or anything with a `key`, such as an issue
+ * collected before.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own, so stopping the loop stops
+ * the call too.
+ * @returns The issue, with `path` the Markdown file relative to the workspace.
+ * @throws When Jira has no such issue, or the token can't read it, and when no Jira site or token
+ * is set on the host (`mesh-flow credential set jira/url`, `jira/token`, and on Cloud `jira/email`).
+ *
+ * @example From code
  * ```ts
  * const story = await jira.collect(parameters.key)
- * await planner.loop`Plan ${story}.`
+ * if (story.labels.includes('blocked')) return
+ * const linked = story.links.filter((link) => link.relation === 'is blocked by' && link.status !== 'Done')
+ * if (linked.length > 0) await jira.comment(story, `Waiting on ${linked.map((link) => link.key).join(', ')}.`)
+ * ```
+ *
+ * @example In a prompt
+ * ```ts
+ * const story = await jira.collect(parameters.key)
+ * const research = await researcher.loop`Research ${story}, then hand in with ${succeed(Research)}.`
  * ```
  */
 export async function collect(issue: IssueRef, context?: ToolContext): Promise<JiraIssue> {
@@ -71,8 +124,21 @@ export async function collect(issue: IssueRef, context?: ToolContext): Promise<J
 }
 
 /**
- * The agent's form of {@link collect}: dumps an issue to Markdown in the workspace and returns the
- * dump's absolute path, for an agent that found the issue with `jira.search` or in a link.
+ * The agent's form of {@link collect}: dumps an issue to Markdown in the workspace and returns
+ * `{ path }`, the dump's absolute path, for an agent that found the issue with `jira.search` or in a
+ * link and wants to read it. Code that wants the issue's fields calls `jira.collect` instead.
+ *
+ * Input: `{ key }`, the issue's key, such as `PROJ-123`.
+ *
+ * @example For an agent
+ * ```ts
+ * await researcher.loop`Research ${story}. Find related issues with ${jira.search} and read the ones that matter with ${jira.dump}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const { path } = await jira.dump({ key: 'PROJ-123' })
+ * ```
  */
 export const dump = tool('jiraDump', {
 	description: 'Writes a Jira issue, with its comments, links and subtasks, as Markdown into the workspace and returns the file',
@@ -81,9 +147,35 @@ export const dump = tool('jiraDump', {
 })
 
 /**
- * Comments on an issue, in Markdown. With a `key`, commenting again with the same key updates the
- * earlier comment instead of adding one, so a rerun stays tidy. Every comment ends in a footer
- * that names mesh-flow and the run.
+ * Comments on an issue, in Markdown, which is turned into what the site takes: Atlassian's document
+ * format on Cloud, wiki markup on Data Center. Every comment ends in a footer that names mesh-flow
+ * and the run, so a reader knows where it came from.
+ *
+ * With a `key`, commenting again with the same key updates the earlier comment instead of adding a
+ * new one, so a rerun, or a status that changes as the run goes on, keeps one comment. Without one,
+ * every call adds a comment.
+ *
+ * @param issue - The issue's key, such as `PROJ-123`, or anything with a `key`, such as an issue
+ * collected before.
+ * @param body - The comment, in Markdown.
+ * @param options - `key`: names the comment within the issue, such as `status` or `mr-team/api`, so
+ * a later comment with the same key replaces it.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The comment's id and its URL.
+ * @throws When Jira has no such issue, or the token may not comment on it.
+ *
+ * @example A comment per run step, kept up to date
+ * ```ts
+ * await jira.comment(story, 'Picked up: researching.', { key: 'status' })
+ * // ...
+ * await jira.comment(story, `Merge requests are open:\n\n${links.join('\n')}`, { key: 'status' })
+ * ```
+ *
+ * @example A comment of its own
+ * ```ts
+ * const { url } = await jira.comment('PROJ-123', `Released in **${version}**.`)
+ * ```
  */
 export function comment(
 	issue: IssueRef,
@@ -96,8 +188,23 @@ export function comment(
 
 /**
  * Moves an issue to `status`, such as `In Progress`, through the transition of its workflow that
- * leads there. Does nothing when the issue already has that status, so a rerun is safe. Throws,
- * naming the statuses it can move to, when no transition leads there.
+ * leads there. Status names are compared without regard to case. Does nothing when the issue
+ * already has that status, so a rerun is safe.
+ *
+ * @param issue - The issue's key, such as `PROJ-123`, or anything with a `key`, such as an issue
+ * collected before.
+ * @param status - The status to move to, by its name on the board.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns `{ moved: true }` when the issue was moved, `{ moved: false }` when it already had the status.
+ * @throws When no transition leads to `status` from where the issue is, naming the statuses it can
+ * move to; and when Jira has no such issue.
+ *
+ * @example
+ * ```ts
+ * const { moved } = await jira.transition(story, 'In Progress')
+ * if (moved) await jira.comment(story, 'Picked up by mesh-flow.', { key: 'status' })
+ * ```
  */
 export async function transition(issue: IssueRef, status: string, context?: ToolContext): Promise<{ readonly moved: boolean }> {
 	const { moved } = await stubs.transitionIssue({ key: keyOf(issue), status }, context)
