@@ -99,7 +99,7 @@ export const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 /** Rita, as a Cloud site knows her: her account id, her profile, and how Jira and Confluence render a mention of her. */
 export const rita = Object.freeze({
 	accountId: '5b10',
-	user: { displayName: 'Rita Reporter', email: 'rita@example.com' },
+	user: Object.freeze({ displayName: 'Rita Reporter', email: 'rita@example.com' }),
 	jiraMention: '<a href="/secure/ViewProfile.jspa?accountId=5b10" class="user-hover" data-account-id="5b10">@Rita Reporter</a>',
 	confluenceMention: '<a href="/wiki/people/5b10" class="confluence-userlink user-mention" data-account-id="5b10">Rita Reporter</a>',
 })

@@ -11,7 +11,7 @@ const settings = {
 	'jira/token': 'cloud-token',
 }
 
-/** An attachment that is no image, which stays on the site. */
+/** An attachment that isn't an image, so it stays on the site. */
 const emptyJson = new TextEncoder().encode('{}')
 
 const descriptionHtml = [

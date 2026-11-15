@@ -72,9 +72,9 @@ export interface JiraIssue extends IssueData {
  * writes it as Markdown into `jira/<key>.md` in the workspace, with its facts as frontmatter. Its
  * image attachments on the site are downloaded next to it, into `jira/<key>/`, up to a size limit
  * per image and per issue, and the Markdown links to them there; larger images and other files
- * are listed with their URL. A mention reads as
- * `` `@mention({ name, email, id })` ``, without the email when the site keeps it private.
- * The whole of what an agent reads is in `test/jira.spec.md` in the repository:
+ * are listed with their URL. A mention reads as `` `@mention({ name, email, id })` ``, without
+ * the email when the site keeps it private. The whole of what an agent reads is in
+ * `test/jira.spec.md` in the repository:
  * https://github.com/Marvin-Brouwer/code-workflow/blob/main/packages/atlassian/test/jira.spec.md
  *
  * Collecting an issue again writes it again, as it is in Jira by then. Runs on the host, through

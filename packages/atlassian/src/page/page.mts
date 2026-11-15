@@ -20,8 +20,8 @@ export interface ConfluencePage extends PageData {
  * Collects a page, by its id or its URL: reads it from Confluence and writes it as Markdown into
  * `confluence/<id>.md` in the workspace, with its title, URL, space, version and when it was last
  * updated as frontmatter. A mention reads as `` `@mention({ name, email, id })` ``, without the
- * email when the site keeps it private.
- * The whole of what an agent reads is in `test/confluence.spec.md` in the repository:
+ * email when the site keeps it private. The whole of what an agent reads is in
+ * `test/confluence.spec.md` in the repository:
  * https://github.com/Marvin-Brouwer/code-workflow/blob/main/packages/atlassian/test/confluence.spec.md
  *
  * Collecting a page again writes it again, as it is in Confluence by then. Runs on the host,
@@ -92,8 +92,8 @@ export const dump = tool('confluenceDump', {
  * than came back; `confluence.dump` and `confluence.collect` read one in full.
  *
  * Input: `{ text, space?, limit? }`. `text` is the words to look for; `space` keeps the search to
- * the space with that key, such as `TEAM`; `limit` is how many pages come back at most, 20 when not
- * given and 50 at most. Only pages are searched, not blog posts, comments or attachments.
+ * the space with that key, such as `TEAM`; `limit` is how many pages come back, 20 by default and
+ * 50 at most. Only pages are searched, not blog posts, comments or attachments.
  *
  * @throws When Confluence turns the search down.
  *
