@@ -8,7 +8,23 @@ export const signature: WebhookSignature = Object.freeze({ scheme: 'hmac-sha256'
 /** The header GitHub names each delivery in, so a redelivery reuses its run. */
 export const deliveryHeader = 'x-github-delivery'
 
-/** The options every GitHub webhook trigger gets. */
+/**
+ * The options every GitHub webhook trigger gets: how GitHub signs a delivery, and the header that
+ * names it. Spread them into a `webhook` trigger on one of the events here. Give the webhook a secret
+ * in GitHub, and the same one to the engine, with `mesh-flow webhook secret <app> <webhook>`.
+ *
+ * @example
+ * ```ts
+ * import { github } from '@mesh-flow/github/hooks'
+ * import { webhook } from '@mesh-flow/core'
+ *
+ * export const onComment = webhook(
+ * 	answer,
+ * 	github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
+ * 	{ name: 'answer-on-comment', ...github.triggerOptions },
+ * )
+ * ```
+ */
 export const triggerOptions = Object.freeze({ signature, deliveryHeader })
 
 const Repository = z.object({ full_name: z.string() })
@@ -19,6 +35,19 @@ const PullRequest = z.object({ number: z.int().positive(), title: z.string(), ht
 /**
  * The `issues` event for a label put on an issue. With `label`, only that label fits: the filter
  * is in the structure, so the engine turns other deliveries down before it makes a sandbox.
+ * `github.onIssueLabeled` is the ready-made trigger on it.
+ *
+ * @param label - The one label to take deliveries of. Default: every label.
+ * @returns The schema, for a `webhook` trigger with {@link triggerOptions}.
+ *
+ * @example
+ * ```ts
+ * webhook(
+ * 	triage,
+ * 	github.issueLabeled('needs-triage').transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
+ * 	{ name: 'triage-on-label', ...github.triggerOptions },
+ * )
+ * ```
  */
 export function issueLabeled(label?: string) {
 	return z.object({
@@ -31,7 +60,19 @@ export function issueLabeled(label?: string) {
 }
 export type IssueLabeled = z.infer<ReturnType<typeof issueLabeled>>
 
-/** The `issue_comment` event for a new comment on an issue or a pull request. */
+/**
+ * The `issue_comment` event for a new comment on an issue or a pull request: GitHub sends both as
+ * this event.
+ *
+ * @example
+ * ```ts
+ * webhook(
+ * 	answer,
+ * 	github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
+ * 	{ name: 'answer-on-comment', ...github.triggerOptions },
+ * )
+ * ```
+ */
 export const issueCommentCreated = z.object({
 	action: z.literal('created'),
 	issue: Issue.extend({ pull_request: z.object({ url: z.url() }).optional() }),
@@ -40,7 +81,18 @@ export const issueCommentCreated = z.object({
 })
 export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
 
-/** The `pull_request_review` event for a submitted review. */
+/**
+ * The `pull_request_review` event for a submitted review.
+ *
+ * @example
+ * ```ts
+ * webhook(
+ * 	handleReview,
+ * 	github.pullRequestReviewSubmitted.transform((event) => ({ repository: event.repository.full_name, number: event.pull_request.number })),
+ * 	{ name: 'handle-review', ...github.triggerOptions },
+ * )
+ * ```
+ */
 export const pullRequestReviewSubmitted = z.object({
 	action: z.literal('submitted'),
 	review: z.object({
@@ -55,7 +107,19 @@ export const pullRequestReviewSubmitted = z.object({
 })
 export type PullRequestReviewSubmitted = z.infer<typeof pullRequestReviewSubmitted>
 
-/** The `pull_request_review_comment` event for a new comment on a line. */
+/**
+ * The `pull_request_review_comment` event for a new comment on a line, also a reply in a thread
+ * (`in_reply_to_id`).
+ *
+ * @example
+ * ```ts
+ * webhook(
+ * 	handleReview,
+ * 	github.pullRequestReviewCommentCreated.transform((event) => ({ repository: event.repository.full_name, number: event.pull_request.number })),
+ * 	{ name: 'handle-line-comment', ...github.triggerOptions },
+ * )
+ * ```
+ */
 export const pullRequestReviewCommentCreated = z.object({
 	action: z.literal('created'),
 	comment: z.object({
@@ -84,6 +148,18 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * The webhook is named `<workflow>-labeled-<label>`, signed as GitHub signs, and keyed by GitHub's
  * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue` parameter.
  *
+ * Point a GitHub webhook for `Issues` events at `/webhooks/<app>/<workflow>-labeled-<label>` on the
+ * engine, and give it the same secret as
+ * `mesh-flow webhook secret <app> <workflow>-labeled-<label>`. Other labels are turned down before
+ * a sandbox starts.
+ *
+ * @param workflow - A workflow whose parameters are `IssueParameters`, or `{ issue }` with
+ * anything else optional. Any other workflow is a type error.
+ * @param label - The label, in lowercase letters, digits and dashes, such as `ai-fix`.
+ * @returns The trigger, for the `workflows` of `defineMeshFlow`.
+ * @throws When `label` holds anything but lowercase letters, digits and dashes.
+ *
+ * @example
  * ```ts
  * export default defineMeshFlow({
  * 	sandbox: image({ name: 'node:26-bookworm' }),

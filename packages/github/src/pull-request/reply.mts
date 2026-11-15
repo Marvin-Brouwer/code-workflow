@@ -13,8 +13,19 @@ import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/p
  * A question needs no plan: its answer replaces the reading reply right away. A line comment deleted
  * since it was read comes back as `{ gone: true }`.
  *
+ * @param on - The pull request the items are on: anything with its `repository` and `number`.
+ * @returns The tool. Its input is `{ item, text, stage? }`: the item's id, the reply in Markdown,
+ * and `plan` or `answer` (the default). It resolves to the posted reply, or to `{ gone: true }` when
+ * the line comment was deleted since it was read.
+ *
+ * @example For an agent
  * ```ts
  * await reviewer.loop`Handle ${comments} on ${pullRequest}. Reply to each with ${github.reply(pullRequest)}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * await github.reply(pullRequest)({ item: comment.id, text: 'Renamed in the next push.' })
  * ```
  */
 export function reply(on: PullRequestRef): Tool<ReplyInput, ReplyOutcome> {

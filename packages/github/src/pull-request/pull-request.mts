@@ -23,8 +23,31 @@ export interface PullRequest extends PullRequestData {
  * `updatePullRequest`, never a new one opened: it may have been merged or closed meanwhile, and
  * someone may have edited it, which the person is asked about first.
  *
+ * The content usually comes from `github.describe`, but code can write it too: `title` and
+ * `description` are all it needs, and `closes` puts `Fixes #7` in the footer (`Fixes owner/name#7`
+ * for an issue in another repository).
+ *
+ * @param repository - The checkout whose branch to open the pull request for, from `github.checkout`.
+ * @param content - The title and description, and optionally the issue it closes.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The pull request, which renders as its URL in a prompt.
+ * @throws When the branch has no commits on top of the default branch, and when GitHub turns the
+ * push or the pull request down.
+ *
+ * @example With a description an agent wrote
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
+ * ```
+ *
+ * @example With a description of your own
+ * ```ts
+ * const pullRequest = await github.openPullRequest(repository, {
+ * 	title: `Fix #${String(issue.number)}: ${issue.title}`,
+ * 	description: 'Keeps the session cookie when Safari blocks third-party cookies.',
+ * 	closes: issue,
+ * })
+ * await github.comment(issue, `Opened ${pullRequest.url}`, { key: 'status' })
  * ```
  */
 export async function openPullRequest(repository: Repository, content: PullRequestContent, context?: ToolContext): Promise<PullRequest> {
@@ -66,8 +89,29 @@ export interface UpdatedPullRequest extends PullRequest {
  * it, the person is asked whether to overwrite the edit, and nothing is written when they say no.
  * Resolves to the pull request as it is then, with `skipped` saying why when nothing was written.
  *
+ * Pushes nothing: push first when the text describes new commits.
+ *
+ * @param ref - The pull request: anything with its `repository` and `number`, such as one
+ * `openPullRequest` gave.
+ * @param content - The new title and description, and optionally the issue it closes. Text written
+ * from another pull request than `ref` is refused.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The pull request as it is then, with `skipped` saying why when nothing was written:
+ * `unchanged` when it already said this, `closed` when it's closed, and `edited` when the person
+ * kept someone's edit.
+ * @throws When `content` was written from another pull request, and when GitHub has no such pull
+ * request.
+ *
+ * @example After a round of review
  * ```ts
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
+ * ```
+ *
+ * @example A title of your own
+ * ```ts
+ * const updated = await github.updatePullRequest({ repository: 'team/app', number: 42 }, { title: 'Fix the login on Safari', description })
+ * if (updated.skipped === 'closed') return
  * ```
  */
 export async function updatePullRequest(
@@ -102,7 +146,22 @@ export async function updatePullRequest(
 	}
 }
 
-/** Reads a pull request as it is now: its state, whether it was merged, and its head commit. */
+/**
+ * Reads a pull request as it is now: its title, description, state, whether it was merged, and its
+ * head commit and branch.
+ *
+ * @param ref - The pull request: anything with its `repository` and `number`.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The pull request, which renders as its URL in a prompt.
+ * @throws When GitHub has no such pull request, or the token can't read it.
+ *
+ * @example
+ * ```ts
+ * const current = await github.pullRequest({ repository: 'team/app', number: 42 })
+ * if (current.merged) await github.close(issue)
+ * ```
+ */
 export async function pullRequest(ref: PullRequestRef, context?: ToolContext): Promise<PullRequest> {
 	return pullRequestOf(await stubs.getPullRequest({ repository: ref.repository, number: ref.number }, context))
 }

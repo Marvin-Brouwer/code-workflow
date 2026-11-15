@@ -23,9 +23,23 @@ export interface Repository extends Checkout {
  * workflow's own that is no checkout is left alone, with an error. The checkout goes in a folder
  * at the repository's name, `owner/repo`, in lower case, under `repositories/`.
  *
+ * A tool for agents and a function for code. In a prompt the result renders as the checkout's
+ * absolute path; in code, `directory` is where it is on disk.
+ *
+ * Input: `{ repository, branch }`. `repository` is `owner/name`; `branch` is the branch to work on.
+ *
+ * Throws when GitHub has no such repository, or the token can't read it.
+ *
+ * @example In a prompt
  * ```ts
  * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
  * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
+ * const packageJson = JSON.parse(await readFile(path.join(repository.directory, 'package.json'), 'utf8'))
  * ```
  */
 export const checkout = tool('githubCheckout', {

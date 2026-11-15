@@ -2,7 +2,17 @@ import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
 
-/** Names an issue, `{ repository: 'owner/name', number }`: the `issue` parameter of a workflow. */
+/**
+ * Names an issue, `{ repository: 'owner/name', number }`: a zod schema, for the `issue` parameter
+ * of a workflow, or for checking a reference that came from elsewhere.
+ *
+ * @example
+ * ```ts
+ * export const triage = workflow('triage', { issue: github.issue }, async ({ parameters }) => {
+ * 	const issue = await github.collect(parameters.issue)
+ * })
+ * ```
+ */
 export const issue = IssueRef
 export type { IssueRef }
 
@@ -32,12 +42,31 @@ export interface Issue extends IssueData {
 
 /**
  * Collects an issue: reads it from GitHub and writes it as Markdown into `issues/` in the
- * workspace. In a prompt it renders as that file's absolute path, so the agent reads as much of it
- * as it needs, also after it changed directory into a checkout ([design: Context](https://github.com/Marvin-Brouwer/code-workflow/blob/main/docs/design.md#context)).
+ * workspace, with its repository, URL, author, state, labels and when it was made, then its body.
+ * Collecting it again writes it again, as it is on GitHub by then. Runs on the host, through the
+ * gateway, so the token never reaches the sandbox.
  *
+ * A tool for agents and a function for code. In a prompt it renders as the Markdown file's absolute
+ * path, so the agent reads as much of it as it needs, also after it changed directory into a
+ * checkout ([design: Context](https://github.com/Marvin-Brouwer/code-workflow/blob/main/docs/design.md#context)).
+ * In code, its fields are what GitHub has.
+ *
+ * Input: `{ repository, number }`, such as `{ repository: 'team/app', number: 12 }`.
+ *
+ * Throws when GitHub has no such issue, or the token can't read it, and when no token is set on the
+ * host (`mesh-flow credential set github/token`).
+ *
+ * @example From code
  * ```ts
  * const issue = await github.collect(parameters.issue)
- * await developer.loop`Fix ${issue} in ${repository}.`
+ * if (issue.state === 'closed') return
+ * if (!issue.labels.includes('bug')) await github.label(issue, ['needs-triage'])
+ * ```
+ *
+ * @example In a prompt
+ * ```ts
+ * const issue = await github.collect(parameters.issue)
+ * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)} and ${succeed()}.`
  * ```
  */
 export const collect = tool('githubCollect', {
@@ -53,8 +82,27 @@ export const collect = tool('githubCollect', {
 })
 
 /**
- * Comments on an issue or a pull request. With a `key`, commenting again with the same key updates
- * the earlier comment instead of adding one, so a rerun stays tidy.
+ * Comments on an issue or a pull request, in Markdown. Every comment is signed with a footer that
+ * names mesh-flow and the run. With a `key`, commenting again with the same key updates the earlier
+ * comment instead of adding a new one, so a rerun, or a status that changes as the run goes on,
+ * keeps one comment. Without one, every call adds a comment.
+ *
+ * @param on - The issue or pull request: anything with its `repository` and `number`, such as a
+ * collected issue or an opened pull request.
+ * @param body - The comment, in Markdown.
+ * @param options - `key`: names the comment within the issue, such as `status`, so a later comment
+ * with the same key replaces it.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns The comment's id and its URL.
+ * @throws When GitHub has no such issue, or the token may not comment on it.
+ *
+ * @example
+ * ```ts
+ * await github.comment(issue, 'Picked up: working on a fix.', { key: 'status' })
+ * // ...
+ * await github.comment(issue, `Fixed in ${pullRequest.url}`, { key: 'status' })
+ * ```
  */
 export function comment(
 	on: IssueRef,
@@ -68,12 +116,39 @@ export function comment(
 	)
 }
 
-/** Adds labels to an issue. Labels it already has stay as they are. */
+/**
+ * Adds labels to an issue or a pull request. Labels it already has stay as they are, and a label
+ * the repository doesn't have yet is made.
+ *
+ * @param on - The issue or pull request: anything with its `repository` and `number`.
+ * @param labels - The labels to add.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Every label the issue has afterwards.
+ *
+ * @example
+ * ```ts
+ * const labels = await github.label(issue, ['in-progress'])
+ * ```
+ */
 export async function label(on: IssueRef, labels: readonly string[], context?: ToolContext): Promise<readonly string[]> {
 	return (await stubs.labelIssue({ repository: on.repository, number: on.number, labels: [...labels] }, context)).labels
 }
 
-/** Closes an issue. Closing a closed issue does nothing. */
+/**
+ * Closes an issue. Closing a closed issue does nothing, so a rerun is safe.
+ *
+ * @param on - The issue: anything with its `repository` and `number`.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @throws When GitHub has no such issue, or the token may not close it.
+ *
+ * @example
+ * ```ts
+ * const { state } = await github.review(pullRequest, handlers)
+ * if (state === 'merged') await github.close(issue)
+ * ```
+ */
 export async function close(on: IssueRef, context?: ToolContext): Promise<void> {
 	await stubs.closeIssue({ repository: on.repository, number: on.number }, context)
 }

@@ -32,8 +32,23 @@ export interface ChecksPassOptions {
  * commit without any is looked at again until `appearWithin` has passed. A look that fails is tried
  * again on the next one, for up to `toleratedOutage`.
  *
+ * The waits are on the engine's clock, where the run can be paused.
+ *
+ * @param on - The pull request: anything with its `repository` and `number`.
+ * @param options - How often to look, how long to wait for checks to appear and for GitHub to
+ * answer again, and the checkout whose last push to look at.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means every check passed.
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.`
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * const findings = await runCheck(github.checksPass(pullRequest, { checkout: repository }), { abortSignal })
+ * if (findings.length > 0) await github.comment(issue, `The checks failed:\n\n${findings.map((finding) => `- ${finding.message}`).join('\n')}`)
  * ```
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {

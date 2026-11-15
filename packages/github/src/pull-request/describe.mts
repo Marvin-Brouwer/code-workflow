@@ -51,10 +51,25 @@ export interface DescribeOptions {
  * It stops with the run, as the loop does: an agent's loop follows the run's signal, not one of
  * the caller's.
  *
+ * @param agent - The agent that writes the text: the workflow's own, as the package ships none.
+ * @param repository - The checkout whose branch to describe, from `github.checkout`.
+ * @param options - The issue it closes, the pull request to describe again, and the loop's limit.
+ * @returns The title and description, the commit they describe, and what they close, ready for
+ * `github.openPullRequest` or `github.updatePullRequest`.
+ * @throws When the branch has no commits of its own, when `pullRequest` is of another branch or
+ * onto another branch than the default one, and when the loop fails or runs out of its limit.
+ *
+ * @example A new pull request, and again after a round of review
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
  * // After a round of review:
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
+ * ```
+ *
+ * @example Reading the text before opening it
+ * ```ts
+ * const content = await github.describe(writer, repository, { issue, limit: limit({ minutes: 5 }) })
+ * const pullRequest = await github.openPullRequest(repository, { ...content, title: `#${String(issue.number)}: ${content.title}` })
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {

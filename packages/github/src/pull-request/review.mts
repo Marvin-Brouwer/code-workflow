@@ -52,6 +52,17 @@ export interface ReviewOutcome {
  * run can be paused. A look that fails is tried again on the next one, for up to `toleratedOutage`,
  * so a watch that takes days outlives a dropped connection.
  *
+ * @param on - The pull request to watch: anything with its `repository` and `number`.
+ * @param handlers - What to do with new review comments and with failed checks. A handler left out
+ * lets those pass by.
+ * @param options - How often to look, and how long GitHub may keep failing to answer.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Whether the pull request was merged or closed, and the pull request as it was then.
+ * @throws When GitHub keeps failing for longer than `toleratedOutage`, or turns the token down, and
+ * when a handler throws.
+ *
+ * @example Handle review comments with an agent
  * ```ts
  * await github.review(pullRequest, {
  * 	comments: (comments) => reviewer.loop`
@@ -60,6 +71,12 @@ export interface ReviewOutcome {
  * 		and reply to every comment with ${github.reply(pullRequest)}. When every comment is handled, ${succeed()}.
  * 	`,
  * })
+ * ```
+ *
+ * @example Wait for a merge without handling anything
+ * ```ts
+ * const { state } = await github.review(pullRequest, {})
+ * if (state === 'merged') await github.close(issue)
  * ```
  */
 export async function review(
