@@ -20,8 +20,8 @@ export interface Repository extends Checkout {
  * GitLab doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the project that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
- * workflow's own that isn't a checkout is left alone, and the call throws. The checkout goes in a folder
- * at the project's whole path, in lower case, under `repositories/`.
+ * workflow's own that isn't a checkout is left alone, and the call throws. The checkout goes in a
+ * folder at the project's whole path, in lower case, under `repositories/`.
  *
  * A tool for agents and a function for code. In code, `directory` is where it is on disk.
  *

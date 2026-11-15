@@ -15,13 +15,17 @@ export interface PublishedPackagesOptions {
 	readonly appearWithin?: WaitSpec
 	/** How long GitLab may take to process the packages the pipeline uploaded. Default: 10 minutes. */
 	readonly processWithin?: WaitSpec
-	/** How long looks at GitLab may keep failing before `publishedPackages` fails with the last error. Default: 10 minutes. */
+	/**
+	 * How long looks at GitLab may keep failing before `publishedPackages` fails with the last error.
+	 * Default: 10 minutes.
+	 */
 	readonly toleratedOutage?: WaitSpec
 }
 
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
- * name and version after the upload, in the background. Fails when that takes more than `looks` looks.
+ * name and version after the upload, in the background. Fails when that takes more than `looks`
+ * looks.
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,

@@ -72,8 +72,7 @@ export interface ReviewOutcome {
  * ```ts
  * await gitlab.review(mergeRequest, {
  * 	pipelineFailed: ({ failures }) => developer.loop`
- * 		The pipeline of ${mergeRequest} failed: ${failures}. Fix it in ${repository}, push with
- * 		${gitlab.push(repository)},
+ * 		The pipeline of ${mergeRequest} failed: ${failures}. Fix it in ${repository}, push with ${gitlab.push(repository)},
  * 		and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
  * 	`,
  * 	comments: async (comments) => {

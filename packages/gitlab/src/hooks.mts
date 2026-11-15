@@ -69,8 +69,10 @@ export type MergeRequestEvent = z.infer<ReturnType<typeof mergeRequestEvent>>
 
 /**
  * A note that a connector didn't write: every note it posts, such as a reply to a reviewer, carries
- * a marker. As a pattern, so the engine skips the connector's own notes before it makes a sandbox,
- * and a workflow that answers notes isn't started again by its answers.
+ * a marker. It is a regex pattern rather than a refine, so it is in the JSON Schema the engine
+ * checks: the engine skips the connector's own notes before it makes a sandbox, and a workflow that
+ * answers notes isn't started again by its answers. The marker holds no regex special characters,
+ * so it goes into the pattern as it is.
  */
 const NotByConnector = z.string().regex(new RegExp(`^(?![\\s\\S]*${markerStart})`))
 
@@ -104,9 +106,9 @@ export const mergeRequestNote = z.object({
 export type MergeRequestNote = z.infer<typeof mergeRequestNote>
 
 /**
- * The `pipeline` event. With `status`, only pipelines that ended with that status fit, such as `failed`.
- * Pipelines of the default branch and of tags fit too: a workflow that pushes to the branch takes
- * only those of a merge request, with a `merge_request` that isn't `null`, as below.
+ * The `pipeline` event. With `status`, only pipelines that ended with that status fit, such as
+ * `failed`. Pipelines of the default branch and of tags fit too. A workflow that should only see
+ * merge request pipelines extends the schema with a `merge_request` object, as the example shows.
  *
  * @param status - The one status to take deliveries of. Default: every status, also of pipelines
  * that are still running.
