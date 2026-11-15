@@ -2,7 +2,17 @@ import path from 'node:path'
 import { workspace } from '@mesh-flow/core'
 import { z } from 'zod'
 
-/** Where the planner writes the plan. In a prompt it renders as its absolute path, which `Plan.path` takes. */
+/**
+ * Where the planner writes the plan, `plan.md` in the workspace. In a prompt it renders as its
+ * absolute path, which `Plan.path` takes; in code, `read` and `write` work on it as on any
+ * workspace file.
+ *
+ * @example
+ * ```ts
+ * const markdown = await planFile.read()
+ * await jira.comment(story, markdown, { key: 'plan' })
+ * ```
+ */
 export const planFile = workspace.file('plan.md')
 
 /** One repository the plan changes. */
@@ -31,8 +41,30 @@ export function repositoryKey(repository: string): string {
 
 /**
  * A development plan, as the planner proposes it with `propose(Plan)`: the plan itself is a
- * Markdown file, and this is what code needs from it. Every dependency names repositories the plan
- * lists, so the delivery order can be made from it.
+ * Markdown file, and this is what code needs from it: the file's path, the repositories it changes
+ * with what changes in each, and which repository waits for which one's packages. Every dependency
+ * names repositories the plan lists, no repository is listed twice, and no repository ends up
+ * waiting for itself, so the delivery order can be made from it; a proposal that breaks one of
+ * these goes back to the planner with what's wrong.
+ *
+ * @example For an agent
+ * ```ts
+ * const plan = await planner.loop`
+ * 	Plan ${story} from ${research}. Write the plan in ${planFile}, then ${propose(Plan)}.
+ * `
+ * ```
+ *
+ * @example A plan from code
+ * ```ts
+ * const plan = Plan.parse({
+ * 	path: planFile.location(),
+ * 	repositories: [
+ * 		{ repository: 'team/contracts', changes: 'Add the Invoice type' },
+ * 		{ repository: 'team/api', changes: 'Return invoices' },
+ * 	],
+ * 	dependencies: [{ repository: 'team/api', dependsOn: 'team/contracts', reason: 'Builds against the Invoice type' }],
+ * })
+ * ```
  */
 export const Plan = z
 	.object({

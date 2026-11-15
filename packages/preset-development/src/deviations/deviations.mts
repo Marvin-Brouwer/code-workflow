@@ -74,10 +74,30 @@ async function recordNow(deviation: Deviation, { abortSignal }: ToolContext): Pr
  * different is recorded next to it, in `plan-deviations.md` in the workspace. In a prompt it
  * renders as that file's absolute path; `deviations.record` is the tool that adds one, in Markdown.
  *
+ * The file can be read and written like any workspace file, and `deviations.record` is a function
+ * for code too: a deviation that code finds, such as a repository the plan didn't list, is recorded
+ * the same way. Recording the same deviation again, as when a loop runs again, adds nothing.
+ * Deviations recorded side by side, by parts delivered at once, are written one after the other.
+ *
+ * `deviations.record` takes `{ repository, reason, change }`: the repository it applies to, what
+ * was found and where, and how the work now deviates from the plan. It resolves to
+ * `{ recordedIn }`, the file's absolute path.
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`
  * 	Implement ${plan.path}, as amended by ${deviations}. Record any deviation with ${deviations.record}.
  * `
+ * ```
+ *
+ * @example From code
+ * ```ts
+ * await deviations.record({
+ * 	repository: part.repository,
+ * 	reason: 'The pipeline needs .NET 10, which the plan assumed was there already',
+ * 	change: 'global.json pins the SDK first',
+ * })
+ * const recorded = await deviations.read()
  * ```
  */
 export const deviations: Deviations = Object.freeze({
