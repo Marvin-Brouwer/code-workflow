@@ -57,7 +57,8 @@ export interface ReviewOutcome {
  * lets those pass by.
  * @param options - How often to look, and how long GitLab may keep failing to answer.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
- * context a tool's action got when you call this from a tool of your own.
+ * context a tool's action got when you call this from a tool of your own. It stops the calls to
+ * GitLab; the waits between looks stop with the run.
  * @returns Whether the merge request was merged or closed, and the merge request as it was then.
  * @throws When GitLab keeps failing for longer than `toleratedOutage`, or turns the token down, and
  * when a handler throws.

@@ -57,7 +57,8 @@ export interface ReviewOutcome {
  * lets those pass by.
  * @param options - How often to look, and how long GitHub may keep failing to answer.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
- * context a tool's action got when you call this from a tool of your own.
+ * context a tool's action got when you call this from a tool of your own. It stops the calls to
+ * GitHub; the waits between looks stop with the run.
  * @returns Whether the pull request was merged or closed, and the pull request as it was then.
  * @throws When GitHub keeps failing for longer than `toleratedOutage`, or turns the token down, and
  * when a handler throws.

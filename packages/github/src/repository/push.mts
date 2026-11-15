@@ -16,7 +16,7 @@ export type { Pushed }
  * @param repository - The checkout to push, from `github.checkout`.
  * @returns The tool. Its input is `{ message }`, the commit message; it resolves to `{ pushed, head }`:
  * whether anything went up, and the branch's commit on GitHub.
- * @throws From the tool: when the branch has no commits on top of the default branch, as there is
+ * @throws From the tool: when a new branch has no commits on top of the default branch, as there is
  * nothing to push, and when GitHub turns the push down, such as for a protected branch.
  *
  * @example From code

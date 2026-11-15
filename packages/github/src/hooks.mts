@@ -63,15 +63,17 @@ export type IssueLabeled = z.infer<ReturnType<typeof issueLabeled>>
 /**
  * The `issue_comment` event for a new comment on an issue or a pull request: GitHub sends both as
  * this event. A comment a connector wrote, such as the run's own replies, doesn't fit, so the
- * engine skips it before it makes a sandbox.
+ * engine skips it before it makes a sandbox. `github.collect` writes an issue without its
+ * comments, so a workflow that answers the comment takes it from the payload, as below. Comments on
+ * closed issues fit too.
  *
  * @example
  * ```ts
- * webhook(
- * 	answer,
- * 	github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
- * 	{ name: 'answer-on-comment', ...github.triggerOptions },
- * )
+ * const commented = github.issueCommentCreated.transform((event) => ({
+ * 	issue: { repository: event.repository.full_name, number: event.issue.number },
+ * 	comment: { body: event.comment.body, url: event.comment.html_url },
+ * }))
+ * webhook(answer, commented, { name: 'answer-on-comment', ...github.triggerOptions })
  * ```
  */
 export const issueCommentCreated = z.object({
@@ -83,7 +85,11 @@ export const issueCommentCreated = z.object({
 export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
 
 /**
- * The `pull_request_review` event for a submitted review.
+ * The `pull_request_review` event for a submitted review. GitHub wraps every reply in a thread of
+ * line comments, the run's own too, in a review of its own, `commented` and without a body: such a
+ * review doesn't fit, so the engine skips it before it makes a sandbox, and neither does a review
+ * whose body a connector wrote. A person's `commented` review with only line comments looks the
+ * same and is skipped as well; `github.review` in a running workflow sees its comments.
  *
  * @example
  * ```ts
@@ -94,15 +100,16 @@ export type IssueCommentCreated = z.infer<typeof issueCommentCreated>
  * webhook(handleReview, reviewed, { name: 'handle-review', ...github.triggerOptions })
  * ```
  */
+/** What every submitted review has, whatever its state. */
+const SubmittedReview = z.object({ id: z.int(), html_url: z.url(), user: User })
+
 export const pullRequestReviewSubmitted = z.object({
 	action: z.literal('submitted'),
-	review: z.object({
-		id: z.int(),
-		body: z.string().nullable(),
-		state: z.enum(['approved', 'changes_requested', 'commented', 'dismissed']),
-		html_url: z.url(),
-		user: User,
-	}),
+	review: z.union([
+		SubmittedReview.extend({ state: z.enum(['approved', 'changes_requested', 'dismissed']), body: NotByConnector.nullable() }),
+		// A reply in a thread comes as a review of its own, `commented` without a body.
+		SubmittedReview.extend({ state: z.literal('commented'), body: NotByConnector.min(1) }),
+	]),
 	pull_request: PullRequest,
 	repository: Repository,
 })
@@ -113,13 +120,18 @@ export type PullRequestReviewSubmitted = z.infer<typeof pullRequestReviewSubmitt
  * (`in_reply_to_id`). A comment a connector wrote, such as the run's own replies, doesn't fit, so
  * the engine skips it before it makes a sandbox.
  *
+ * GitHub sends one delivery per comment, so a review with eight comments starts eight runs at once.
+ * A workflow on this event handles the one comment it was started for, from the payload, rather
+ * than watching the whole review with `github.review`, which those runs would all do at once.
+ *
  * @example
  * ```ts
  * const lineCommented = github.pullRequestReviewCommentCreated.transform((event) => ({
  * 	repository: event.repository.full_name,
  * 	number: event.pull_request.number,
+ * 	comment: { id: event.comment.id, body: event.comment.body, path: event.comment.path },
  * }))
- * webhook(handleReview, lineCommented, { name: 'handle-line-comment', ...github.triggerOptions })
+ * webhook(answerLineComment, lineCommented, { name: 'answer-line-comment', ...github.triggerOptions })
  * ```
  */
 export const pullRequestReviewCommentCreated = z.object({

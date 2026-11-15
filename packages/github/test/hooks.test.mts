@@ -36,6 +36,16 @@ function lineCommented(body: string) {
 	}
 }
 
+/** A delivery of the `pull_request_review` event for a review submitted with `state` and `body`. */
+function submitted(state: string, body: string | null) {
+	return {
+		action: 'submitted',
+		review: { id: 1, body, state, html_url: 'https://github.com/team/app/pull/3#pullrequestreview-1', user: { login: 'reviewer' } },
+		pull_request: { number: 3, title: 'Fix', html_url: 'https://github.com/team/app/pull/3' },
+		repository: { full_name: 'team/app' },
+	}
+}
+
 describe('github hooks', () => {
 	test('issueLabeled fits only the label it was made for', () => {
 		// Arrange
@@ -136,6 +146,24 @@ describe('github hooks', () => {
 		// Assert
 		expect(parsedReview.success).toBe(true)
 		expect(parsedComment.success).toBe(true)
+	})
+
+	test('a review a reply in a thread makes, commented and without a body, does not fit, also as JSON Schema', () => {
+		// Arrange
+		const deliveries = [
+			submitted('commented', null),
+			submitted('commented', ''),
+			submitted('commented', 'Looks close.'),
+			submitted('approved', null),
+		]
+
+		// Act
+		const fits = deliveries.map((delivery) => github.pullRequestReviewSubmitted.safeParse(delivery).success)
+		const asJsonSchema = z.toJSONSchema(github.pullRequestReviewSubmitted, { io: 'input' })
+
+		// Assert
+		expect(fits).toEqual([false, false, true, true])
+		expect(asJsonSchema).toHaveProperty('properties.review.anyOf')
 	})
 
 	test("the comment event schemas leave out a connector's own comments, also in the structure the engine checks", () => {

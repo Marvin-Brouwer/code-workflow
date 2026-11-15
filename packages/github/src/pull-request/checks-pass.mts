@@ -38,7 +38,7 @@ export interface ChecksPassOptions {
  * @param options - How often to look, how long to wait for checks to appear and for GitHub to
  * answer again, and the checkout whose last push to look at.
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
- * means every check passed.
+ * means every check passed, or that no check appeared within `appearWithin`.
  *
  * @example From code
  * ```ts

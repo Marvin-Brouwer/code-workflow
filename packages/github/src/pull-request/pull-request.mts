@@ -94,7 +94,9 @@ export interface UpdatedPullRequest extends PullRequest {
  * @param ref - The pull request: anything with its `repository` and `number`, such as one
  * `openPullRequest` gave.
  * @param content - The new title and description, and optionally the issue it closes. Text written
- * from another pull request than `ref` is refused.
+ * from another pull request than `ref` is refused. Leaving out `closes` takes an existing `Fixes`
+ * line out, and text without `describedSha`, such as code wrote, has the next `describe` write the
+ * text again.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The pull request as it is then, with `skipped` saying why when nothing was written:
@@ -112,7 +114,7 @@ export interface UpdatedPullRequest extends PullRequest {
  * ```ts
  * const ref = { repository: 'team/app', number: 42 }
  * const current = await github.pullRequest(ref)
- * const updated = await github.updatePullRequest(ref, { title: 'Fix the login on Safari', description: current.description })
+ * const updated = await github.updatePullRequest(ref, { title: 'Fix the login on Safari', description: current.description, closes: issue })
  * if (updated.skipped === 'closed') return
  * ```
  */

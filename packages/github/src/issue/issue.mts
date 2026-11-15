@@ -100,7 +100,7 @@ export const collect = tool('githubCollect', {
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The comment's id and its URL.
- * @throws When GitHub has no such issue, or the token may not comment on it.
+ * @throws When `body` is empty, and when GitHub has no such issue, or the token may not comment on it.
  *
  * @example
  * ```ts
@@ -130,7 +130,8 @@ export function comment(
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns Every label the issue has afterwards.
- * @throws When GitHub has no such issue, or the token may not label it.
+ * @throws When `labels` is empty or holds an empty name, and when GitHub has no such issue, or the
+ * token may not label it.
  *
  * @example
  * ```ts

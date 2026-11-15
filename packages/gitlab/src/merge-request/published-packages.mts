@@ -54,7 +54,8 @@ async function processedPackages(
  * @param options - How often to look, and how long to wait for the pipeline, the processing and
  * GitLab to answer again.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
- * context a tool's action got when you call this from a tool of your own.
+ * context a tool's action got when you call this from a tool of your own. It stops the calls to
+ * GitLab; the waits between looks stop with the run.
  * @returns Each package's name and version; none when the pipeline published no package of `type`.
  * @throws When the merge request isn't merged; when the pipeline of the merge failed, waits for a
  * person, or didn't appear within `appearWithin`; when GitLab couldn't process a package of the

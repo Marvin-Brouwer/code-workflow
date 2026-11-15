@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { z } from 'zod'
-import { commentMarker } from '../src/markers.mts'
+import { commentMarker, markerStart } from '../src/markers.mts'
 import { NotByConnector } from '../src/not-by-connector.mts'
 
 test("takes a person's comment, over several lines, and leaves out one a connector marked, also as JSON Schema", () => {
@@ -17,4 +17,15 @@ test("takes a person's comment, over several lines, and leaves out one a connect
 	// Assert
 	expect(parsed).toEqual([true, false])
 	expect(checked).toEqual([true, false])
+})
+
+test('the marker goes into the pattern as it is, so it holds no regex special characters', () => {
+	// Arrange
+	const specialCharacters = /[\\^$.*+?()[\]{}|/]/
+
+	// Act
+	const special = specialCharacters.test(markerStart)
+
+	// Assert
+	expect(special).toBe(false)
 })
