@@ -26,8 +26,8 @@ export interface BuildResult {
  * whether the build succeeded, lists its errors with file and line, counts its warnings, and holds
  * the end of the output for a failure that isn't one of MSBuild's errors, such as a missing SDK.
  *
- * @throws When `directory` isn't an absolute path, when `dotnet` can't run, such as when it isn't
- * installed, and when it writes more output than is kept.
+ * @throws When `directory` isn't an absolute path; when `dotnet` can't run, such as when it isn't
+ * installed, or writes more than 64 MiB of output; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts

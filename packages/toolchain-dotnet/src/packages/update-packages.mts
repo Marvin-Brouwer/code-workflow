@@ -98,11 +98,13 @@ const updateTool = tool('dotnetUpdatePackages', {
  * context a tool's action got when you call this from a tool of your own.
  * @returns Each reference that was moved: the project, relative to the checkout, the package, and
  * the version before and after.
- * @throws When `dotnet add package` fails, such as for a version no source has.
+ * @throws When the restore or the list of packages fails, as for a source that can't be reached;
+ * when `dotnet add package` fails, such as for a version no source has; and, with the stop's
+ * reason, when the run stops.
  *
  * @example After an upstream merge
  * ```ts
- * await dotnet.updatePackages(repository, upstream.flat())
+ * await dotnet.updatePackages(repository, upstream)
  * ```
  *
  * @example A version of your own

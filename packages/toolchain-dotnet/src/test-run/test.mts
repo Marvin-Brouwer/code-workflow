@@ -15,8 +15,8 @@ import { runTests } from './run-tests.mts'
  * `FullyQualifiedName~Login`. The result says whether the run succeeded, and lists the failed
  * tests, or the build's errors when the tests didn't get to run.
  *
- * @throws When `directory` isn't an absolute path, when `dotnet` can't run, such as when it isn't
- * installed, and when it writes more output than is kept.
+ * @throws When `directory` isn't an absolute path; when `dotnet` can't run, such as when it isn't
+ * installed, or writes more than 64 MiB of output; and, with the stop's reason, when the run stops.
  *
  * @example From code
  * ```ts

@@ -33,6 +33,9 @@ const startedMs = 300
 /** How long a busy runner may take to start the fake `dotnet`, for a test that waits until it did. */
 const fakeStartsWithinMs = 10_000
 
+/** The stop test's own limit: up to `fakeStartsWithinMs` for each of its two starts and for the folders to go. */
+const stopTestTimeoutMs = 45_000
+
 /** How long a run of the fake holds on, long enough that two runs at once would overlap. */
 const holdMs = 500
 
@@ -54,7 +57,14 @@ async function settleAfterStop(
 ): Promise<number> {
 	const controller = new AbortController()
 	const working = start({ abortSignal: controller.signal })
-	await untilStarted()
+	try {
+		await untilStarted()
+	} catch (error) {
+		// Stop the work all the same, so a fake that never started in time doesn't outlive the test.
+		controller.abort(error)
+		await working.catch(() => undefined)
+		throw error
+	}
 	const started = performance.now()
 	controller.abort(new Error('The run stopped.'))
 	await expect(working).rejects.toThrow('The run stopped.')
@@ -148,28 +158,32 @@ describe('test and tests', () => {
 		expect(findings.map((finding) => finding.source)).toEqual(['test: Api.Tests.LoginTests.SetsSameSite'])
 	})
 
-	test('settles promptly when the run stops while the tests never end, and leaves no results behind', async () => {
-		// Arrange
-		const toolDirectory = await temporaryDirectory()
-		// Runs in one directory take turns, and the first run's dotnet may still be stopping when the check starts.
-		const checkDirectory = await temporaryDirectory()
-		const cli = await fakeDotnet({ test: { hang: true } })
-		// A busy Windows runner can take longer than `startedMs` to start the fake, which then never logs its call.
-		const untilCalled = (times: number) => () =>
-			expect.poll(async () => (await cli.calls()).length, { timeout: fakeStartsWithinMs }).toBe(times)
+	test(
+		'settles promptly when the run stops while the tests never end, and leaves no results behind',
+		async () => {
+			// Arrange
+			const toolDirectory = await temporaryDirectory()
+			// Runs in one directory take turns, and the first run's dotnet may still be stopping when the check starts.
+			const checkDirectory = await temporaryDirectory()
+			const cli = await fakeDotnet({ test: { hang: true } })
+			// A busy Windows runner can take longer than `startedMs` to start the fake, which then never logs its call.
+			const untilCalled = (times: number) => () =>
+				expect.poll(async () => (await cli.calls()).length, { timeout: fakeStartsWithinMs }).toBe(times)
 
-		// Act
-		const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), untilCalled(1))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context), untilCalled(2))
+			// Act
+			const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), untilCalled(1))
+			const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context), untilCalled(2))
 
-		// Assert
-		expect(toolSettledMs).toBeLessThan(promptlyMs)
-		expect(checkSettledMs).toBeLessThan(promptlyMs)
-		const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
-		expect(results).toHaveLength(2)
-		// The stopped tool's folder goes once its dotnet is gone, which on Windows can be after the tool settled.
-		await expect.poll(() => results.filter((folder) => existsSync(folder))).toEqual([])
-	})
+			// Assert
+			expect(toolSettledMs).toBeLessThan(promptlyMs)
+			expect(checkSettledMs).toBeLessThan(promptlyMs)
+			const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
+			expect(results).toHaveLength(2)
+			// The stopped tool's folder goes once its dotnet is gone, which on Windows can be after the tool settled.
+			await expect.poll(() => results.filter((folder) => existsSync(folder)), { timeout: fakeStartsWithinMs }).toEqual([])
+		},
+		stopTestTimeoutMs,
+	)
 
 	test('the check reports the build errors when it does not build', async () => {
 		// Arrange
