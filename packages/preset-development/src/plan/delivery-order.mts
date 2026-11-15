@@ -32,7 +32,7 @@ export interface Delivery extends DependencyNode {
  *
  * @example Hand on packages only when another repository waits for them
  * ```ts
- * await inDependencyOrder(deliveryOrder(plan), async (part, upstream) => {
+ * await inDependencyOrder(deliveryOrder(plan), async (part, upstream): Promise<readonly gitlab.PublishedPackage[]> => {
  * 	const repository = await gitlab.checkout({ repository: part.repository, branch: `feature/${story.key}` })
  * 	// What each repository this one waits for handed on.
  * 	await dotnet.updatePackages(repository, upstream.flat())

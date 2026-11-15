@@ -563,7 +563,7 @@ Out of scope for now: token and cost budgets.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
-   then the `big-repo` workflow, both end to end from a CLI. Done: the `big-repo` workflow delivers
+   then the big-repo app's `develop` workflow, both end to end from a CLI. Done: `develop` delivers
    independent repositories side by side (`inDependencyOrder`); a dependent one needs the
    registry shim to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).

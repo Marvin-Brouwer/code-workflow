@@ -28,7 +28,8 @@ const Findings = z.object({
  * A check for `verify` that has `reviewer` review the changes in `repository` against the plan and
  * its recorded deviations, and reports each real problem it finds as a finding. It runs a loop of
  * its own for each state of the checkout it is handed in with, so a fixed finding isn't reported
- * again, and a rerun never takes the review of other changes for this one.
+ * again, and a rerun never takes the review of other changes for this one. The reviewer's loop
+ * stops with the run, or with the loop that verifies.
  *
  * @param reviewer - The workflow's own agent, since the package ships none. It is told to change no
  * file and only to report.
@@ -37,9 +38,8 @@ const Findings = z.object({
  * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
  * means the reviewer found no real problem.
  * @throws From the check: when git can't read the checkout's state; when the reviewer's loop fails
- * or runs out of its limit; and, with the signal's reason, when the run stops or the signal the
- * check runs with aborts. The reviewer's loop itself stops with the run, or with the loop that
- * verifies.
+ * or runs out of its limit; and, with the stop's reason, when the run stops or the check's signal
+ * aborts.
  *
  * @example From code, before a merge request is opened
  * ```ts
@@ -66,17 +66,15 @@ export function codeReview(reviewer: Agent, repository: ReviewedCheckout, plan: 
 			abortSignal,
 			files: [deviations.location()],
 		})
-		// The loop stops with the run, or with the loop that verifies; the check settles when its own signal aborts.
-		const { findings } = await untilAborted(
-			reviewer.loop`
+		const review = reviewer.loop`
 			Review the changes in ${repository}, as they are now (state ${state}): what \`git diff ${base}\` shows there,
 			committed or not, and the new files \`git status\` lists as untracked.
 			Review them against ${plan.path}, and the deviations recorded in ${deviations} when that file exists.
 			Report only real problems: bugs, missing tests, and deviations from the plan that weren't recorded. Change no file.
 			When you're done, ${succeed(Findings)}, with no findings when the changes are good.
-		`,
-			abortSignal,
-		)
+		`
+		// The loop stops with the run, or with the loop that verifies; the check settles when its own signal aborts.
+		const { findings } = await untilAborted(review, abortSignal)
 		return findings.map((finding) => ({ source: `code review: ${finding.where}`, message: finding.message }))
 	})
 }

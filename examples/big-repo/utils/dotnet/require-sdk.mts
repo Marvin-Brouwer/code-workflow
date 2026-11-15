@@ -6,11 +6,11 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-const run = promisify(execFile)
+const execFileAsync = promisify(execFile)
 
 /** Throws, naming what to do, when `dotnet --list-sdks` lists no SDK or `dotnet` can't run. */
 export async function requireDotnetSdk(abortSignal: AbortSignal): Promise<void> {
-	const sdks = await run('dotnet', ['--list-sdks'], { signal: abortSignal }).then(
+	const sdks = await execFileAsync('dotnet', ['--list-sdks'], { signal: abortSignal }).then(
 		({ stdout }) => stdout.trim(),
 		(error: unknown) => {
 			if (abortSignal.aborted) throw error

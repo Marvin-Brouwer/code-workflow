@@ -24,16 +24,25 @@ describe('appNameOf', () => {
 		expect(name).toBe('example-big-repo')
 	})
 
-	test('takes an unscoped name as it is, and a given name over the package', async () => {
+	test('takes an unscoped name as it is', async () => {
 		// Arrange
 		const directory = await packageNamed('workflows')
 
 		// Act
-		const unscoped = await appNameOf(directory, undefined)
-		const given = await appNameOf(directory, 'team-workflows')
+		const name = await appNameOf(directory, undefined)
 
 		// Assert
-		expect(unscoped).toBe('workflows')
-		expect(given).toBe('team-workflows')
+		expect(name).toBe('workflows')
+	})
+
+	test("takes a given name over the package's", async () => {
+		// Arrange
+		const directory = await packageNamed('@example/big-repo')
+
+		// Act
+		const name = await appNameOf(directory, 'team-workflows')
+
+		// Assert
+		expect(name).toBe('team-workflows')
 	})
 })

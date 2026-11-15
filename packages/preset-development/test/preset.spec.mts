@@ -185,16 +185,16 @@ describe('codeReview', () => {
 		const repository = await gitCheckout()
 		const model = scriptedModel([neverAnswers])
 		const checking = new AbortController()
-		const run = await runBody(async () => {
-			const review = runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checking.signal })
-			await expect.poll(() => model.requests.length).toBe(1)
+		const run = await runBody(
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checking.signal }),
+			model.models,
+		)
+		await expect.poll(() => model.requests.length).toBe(1)
 
-			// Act
-			checking.abort(new Error('Gave up on the review.'))
+		// Act
+		checking.abort(new Error('Gave up on the review.'))
 
-			// Assert
-			await expect(review).rejects.toThrow('Gave up on the review.')
-		}, model.models)
-		await expect(run.outcome).resolves.toMatchObject({ status: 'succeeded' })
+		// Assert
+		await expect(run.result).rejects.toThrow('Gave up on the review.')
 	})
 })
