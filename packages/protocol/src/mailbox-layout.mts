@@ -53,6 +53,12 @@ export function answerFile(layout: MailboxLayout, requestId: string): string {
 	return path.posix.join(layout.inbox, `${requestId}.json`)
 }
 
+/**
+ * The name of a staged file: the call's id and `.body`. A pattern, not a schema, since the runtime's
+ * mailbox runs in the sandbox without dependencies.
+ */
+export const stagedFileName = /^[\w-]{1,64}\.body$/
+
 /** The file a staged body is in, by the name a `PackageResponse` gives it. */
 export function stagedFile(layout: MailboxLayout, name: string): string {
 	return path.posix.join(layout.packages, name)

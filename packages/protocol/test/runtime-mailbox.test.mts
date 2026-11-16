@@ -11,6 +11,35 @@ const abortSignal = new AbortController().signal
 const pastFirstLookMs = 50
 
 describe('RuntimeMailbox', () => {
+	test('imports nothing but Node and the mailbox layout, since it runs in the sandbox without dependencies', async () => {
+		// Arrange
+		const sources = path.join(import.meta.dirname, '..', 'src')
+
+		// Act
+		const imported = await Promise.all(
+			['runtime-mailbox.mts', 'mailbox-layout.mts'].map(async (file) => {
+				const source = await readFile(path.join(sources, file), 'utf8')
+				return [...source.matchAll(/^import (?!type )[^'"]*['"]([^'"]+)['"]/gm)].map(([, specifier]) => specifier)
+			}),
+		)
+
+		// Assert
+		expect(imported.flat().filter((specifier) => !specifier?.startsWith('node:'))).toEqual(['./mailbox-layout.mts'])
+	})
+
+	test('says where a staged body is, and refuses a name that could point elsewhere', () => {
+		// Arrange
+		const mailbox = new RuntimeMailbox('/mailbox')
+
+		// Act
+		const staged = mailbox.staged('call-1.body')
+		const elsewhere = () => mailbox.staged('../outbox.jsonl')
+
+		// Assert
+		expect(staged).toBe(path.join('/mailbox', 'packages', 'call-1.body'))
+		expect(elsewhere).toThrow("isn't the name of a staged file")
+	})
+
 	test('appends every message as one line of the outbox', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ConnectorName } from './connector-name.mts'
+import { stagedFileName } from './mailbox-layout.mts'
 
 /**
  * A public package registry a run may restore packages from, through the gateway: `nuget` is
@@ -92,7 +93,7 @@ export const PackageRequest = z.object({
 export type PackageRequest = z.infer<typeof PackageRequest>
 
 /** Names a file the engine staged in the mailbox's `packages` folder: see `stagedFile`. */
-export const StagedFileName = z.string().regex(/^[\w-]{1,64}\.body$/)
+export const StagedFileName = z.string().regex(stagedFileName)
 
 /**
  * What the registry answered a package fetch with. A 404 is an answer too: package managers ask

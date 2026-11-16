@@ -1,9 +1,8 @@
 import { appendFileSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
-import { StagedFileName } from './package-registry.mts'
 import type { Answer, RuntimeMessage } from './runtime-message.mts'
-import { answerFile, mailboxEnvironmentVariable, mailboxLayout, stagedFile, type MailboxLayout } from './mailbox-layout.mts'
+import { answerFile, mailboxEnvironmentVariable, mailboxLayout, stagedFile, stagedFileName, type MailboxLayout } from './mailbox-layout.mts'
 
 /** How often the runtime looks for an answer. Only a polling interval, never a wall-clock wait. */
 const answerPollMs = 250
@@ -87,7 +86,7 @@ export class RuntimeMailbox {
 	 * answer gives it. Whoever reads it removes it.
 	 */
 	staged(name: string): string {
-		if (!StagedFileName.safeParse(name).success) throw new Error(`${name} isn't the name of a staged file.`)
+		if (!stagedFileName.test(name)) throw new Error(`${name} isn't the name of a staged file.`)
 		return stagedFile(this.#layout, name)
 	}
 
