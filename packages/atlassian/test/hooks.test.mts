@@ -67,7 +67,8 @@ describe('commentCreated', () => {
 		// Arrange
 		const personComment = 'Can you check Safari too?\n\nAnd Firefox.'
 		const answer = signed('Checked both.', 'run-1')
-		const bodies = [personComment, undefined, answer, markdownToWiki(answer)]
+		const escaped = markdownToWiki(answer).replace('@mesh-flow/*', '@mesh-flow/\\*')
+		const bodies = [personComment, undefined, answer, markdownToWiki(answer), escaped]
 		const bodyPattern = z.object({
 			properties: z.object({ comment: z.object({ properties: z.object({ body: z.object({ pattern: z.string() }) }) }) }),
 		})
@@ -75,10 +76,11 @@ describe('commentCreated', () => {
 
 		// Act
 		const fits = bodies.map((body) => jira.commentCreated.safeParse(commented(body)).success)
-		const fitsStructure = [personComment, answer, markdownToWiki(answer)].map((body) => new RegExp(pattern, 'u').test(body))
+		const fitsStructure = [personComment, answer, markdownToWiki(answer), escaped].map((body) => new RegExp(pattern, 'u').test(body))
 
 		// Assert
-		expect(fits).toEqual([true, true, false, false])
-		expect(fitsStructure).toEqual([true, false, false])
+		expect(escaped).toContain('@mesh-flow/\\*')
+		expect(fits).toEqual([true, true, false, false, false])
+		expect(fitsStructure).toEqual([true, false, false, false])
 	})
 })

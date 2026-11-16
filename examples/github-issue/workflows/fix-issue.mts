@@ -13,13 +13,13 @@ import { installDependencies } from '../utils/npm/install-dependencies.mts'
 
 export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)
-	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
 	// A run that starts over after its pull request merged, such as one whose sandbox was lost while it waited, is done.
 	if ((await github.mergedPullRequest(repository)) !== undefined) {
 		await github.close(issue)
 		return
 	}
+	await github.comment(issue, 'Picking this up. A pull request follows.', { key: 'status' })
 
 	const dependencies = await installDependencies(repository, { abortSignal })
 
