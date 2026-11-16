@@ -1,5 +1,5 @@
 import { hostTool, type CredentialStore, type HostTool } from '@mesh-flow/gateway'
-import { checkSession } from '../tools/session-tools.mts'
+import { checkSession } from '../tools/check-session.mts'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import { openAwsSession } from './aws-session.mts'
 

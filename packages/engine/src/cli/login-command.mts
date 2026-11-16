@@ -11,14 +11,20 @@ const loginTimeoutMs = 15 * 60 * 1000
 /** How often `mesh-flow login` looks for the code of the engine's sign-in. */
 const promptPollMs = 500
 
+/** What `mesh-flow login` uses of the engine: its sign-ins come first, so the runs that wait for one go on. */
+export type EngineSignIns = Pick<ControlClient, 'signIns' | 'signIn'>
+
 /** What `mesh-flow login` needs from the rest of the command line. */
 export interface LoginCommandOptions {
 	/** The gateway's credentials, for signing in on its own when no engine serves. */
 	readonly credentials: (abortSignal: AbortSignal) => Promise<CredentialStore>
 	/** The connectors the user added, loaded from where the command runs, with those credentials. */
 	readonly connectors: (credentials: CredentialStore, abortSignal: AbortSignal) => Promise<readonly LoadedConnector[]>
-	/** The engine serving this home, if one does: its sign-ins come first, so the runs that wait for one go on. */
-	readonly engine: () => Pick<ControlClient, 'signIns' | 'signIn'>
+	/**
+	 * A client for the engine serving this home. When none serves, its calls throw a `ControlError`
+	 * without a status, and the command signs in on its own.
+	 */
+	readonly engine: () => EngineSignIns
 	/** Where the prompt and progress go. Default: stderr. */
 	readonly log?: (line: string) => void
 }
@@ -56,12 +62,19 @@ export function addLoginCommand(program: Command, options: LoginCommandOptions):
 		})
 }
 
+/** What the race in {@link signInThroughEngine} settles with when the engine's sign-in hasn't. */
+const notYet = Symbol('not yet')
+
+/** The status the engine answers with when it has no connector of that name that signs in. */
+const notFoundStatus = 404
+
 /**
- * Joins the sign-in of the engine that serves, showing its code. Resolves `false` when no engine
- * serves, so the command signs in on its own.
+ * Joins the sign-in of the engine that serves, showing its code, and why a try failed. Resolves
+ * `false` when no engine serves, or the one that serves didn't load the connector, so the command
+ * signs in on its own: the session goes to the same store, which the engine reads on every call.
  */
 async function signInThroughEngine(
-	engine: Pick<ControlClient, 'signIns' | 'signIn'>,
+	engine: EngineSignIns,
 	name: string,
 	log: (line: string) => void,
 	abortSignal: AbortSignal,
@@ -72,19 +85,31 @@ async function signInThroughEngine(
 		if (error instanceof ControlError && error.status === undefined) return false
 		throw error
 	}
-	const signedIn = engine.signIn(name, abortSignal).then(() => true)
+	const signedIn = engine.signIn(name, abortSignal).then(
+		() => true,
+		(error: unknown) => {
+			if (!(error instanceof ControlError) || error.status !== notFoundStatus) throw error
+			log(`The engine that serves doesn't sign in to ${name}; signing in here. Restart it to load the connector.`)
+			return false
+		},
+	)
 	// Raced below; a failure to look for the code first mustn't leave it unhandled.
 	signedIn.catch(() => undefined)
 	let shownCode: string | undefined
+	let shownError: string | undefined
 	for (;;) {
-		const looked = delay(promptPollMs, false, { signal: abortSignal })
+		const looked = delay<typeof notYet>(promptPollMs, notYet, { signal: abortSignal })
 		looked.catch(() => undefined)
-		if (await Promise.race([signedIn, looked])) return true
-		const prompt = (await engine.signIns(abortSignal)).find((signIn) => signIn.connector === name)?.prompt
+		const settled = await Promise.race([signedIn, looked])
+		if (settled !== notYet) return settled
+		const signIn = (await engine.signIns(abortSignal)).find((candidate) => candidate.connector === name)
+		const prompt = signIn?.prompt
 		if (prompt !== undefined && prompt.code !== shownCode) {
 			shownCode = prompt.code
 			log(formatLoginPrompt(name, { url: prompt.url, code: prompt.code, expiresAt: new Date(prompt.expiresAt) }))
 		}
+		if (signIn?.error !== undefined && signIn.error !== shownError) log(`Signing in to ${name} failed, trying again: ${signIn.error}`)
+		shownError = signIn?.error
 	}
 }
 

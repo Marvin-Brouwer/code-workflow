@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest'
 import { awsHostTools } from '../src/host/aws-host-tools.mts'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
 import { signIn } from '../src/host/sign-in.mts'
-import { checkSession } from '../src/tools/session-tools.mts'
+import { checkSession } from '../src/tools/check-session.mts'
 import { fakeAws } from './support/fake-aws.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 

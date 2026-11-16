@@ -92,7 +92,8 @@ export interface ConnectorHostOptions {
 	readonly directory: string
 	/**
 	 * The connector's own credentials, named `<connector>/...`, which it may also write, such as a
-	 * session it renews. Its tools read every other credential through their context, and change none.
+	 * session it renews. Its tools read the other credentials they need through their context, and
+	 * change none.
 	 */
 	readonly credentials: CredentialStore
 }

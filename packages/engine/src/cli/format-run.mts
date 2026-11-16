@@ -1,4 +1,4 @@
-import type { SignInState } from '../engine/sign-ins.mts'
+import type { SignInState } from '../engine/sign-in-state.mts'
 import type { RunRecord } from '../runs/run-record.mts'
 
 /** One line per run, for `list`. */

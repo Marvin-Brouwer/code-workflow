@@ -53,7 +53,7 @@ mesh-flow connector add @mesh-flow/aws
 mesh-flow login aws
 ```
 
-You don't have to sign in up front. When a run's host tool needs a session there is none of, the run waits for a sign-in instead of failing, and goes on once you approved: `mesh-flow list` shows it as `needs login: aws`, and `mesh-flow show <run>` gives the URL and the code. Every run that waits for the same connector waits on one sign-in, and `mesh-flow login` joins it while the engine serves, so its code is the one the runs wait for. A run that waits for a sign-in is paused on shutdown like any other, and signs in again once it's resumed.
+You don't have to sign in up front. When a run's host tool needs a session and there is none, the run waits for a sign-in instead of failing, and goes on once you approve: `mesh-flow list` shows it as `needs login: aws`, and `mesh-flow show <run>` gives the URL and the code. Every run that waits for the same connector waits on one sign-in, and `mesh-flow login` joins it while the engine serves, so its code is the one the runs wait for. A run that waits for a sign-in is paused on shutdown like any other, and signs in again once it's resumed.
 
 ```bash
 mesh-flow list

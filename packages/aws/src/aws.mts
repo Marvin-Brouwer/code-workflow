@@ -1,5 +1,5 @@
 import { hostToolStub } from '@mesh-flow/core'
-import { checkSession as checkSessionDefinition } from './tools/session-tools.mts'
+import { checkSession as checkSessionDefinition } from './tools/check-session.mts'
 
 /**
  * Makes sure there is an AWS session, as a function and as a tool. It answers once the host can

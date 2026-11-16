@@ -101,7 +101,7 @@ describe('openGateway', () => {
 		)
 
 		// Assert
-		expect(answer.outcome).toEqual({ ok: false, error: 'Sign in to aws: `mesh-flow login aws`.', signIn: 'aws' })
+		expect(answer.outcome).toEqual({ ok: false, error: 'Sign in to aws: `mesh-flow login aws`.', signInTo: 'aws' })
 	})
 
 	test('closes every endpoint of the run when a spent token comes again', async () => {
