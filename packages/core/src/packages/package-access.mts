@@ -44,6 +44,7 @@ export async function startPackageAccess(options: PackageAccessOptions): Promise
 		// npm reads its own settings before HTTPS_PROXY, and an image may set them.
 		npm_config_https_proxy: proxy.url,
 		npm_config_proxy: proxy.url,
+		npm_config_noproxy: 'localhost,127.0.0.1',
 		NODE_EXTRA_CA_CERTS: certificate,
 		SSL_CERT_FILE: certificate,
 		// These win over SSL_CERT_FILE where they are set, as images and other tools do.

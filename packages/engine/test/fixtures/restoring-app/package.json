@@ -1,0 +1,6 @@
+{
+	"name": "restoring-app",
+	"private": true,
+	"type": "module",
+	"main": "main.mts"
+}

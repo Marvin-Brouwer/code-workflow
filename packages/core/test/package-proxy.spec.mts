@@ -71,7 +71,13 @@ function plainRequest(proxyUrl: string, target: string, method = 'GET'): Promise
 	})
 }
 
-describe('package proxy', () => {
+/**
+ * The proxy serves Linux sandboxes. On a Windows host, curl trusts only the system store and npm is
+ * `npm.cmd`, so these run on Linux and macOS only.
+ */
+const onWindows = process.platform === 'win32'
+
+describe.skipIf(onWindows)('package proxy', () => {
 	test('npm installs a package through it, from what the gateway fetched', { timeout: 60_000 }, async () => {
 		// Arrange
 		const { packument, tarball, tarballPath } = await fakeRegistry()

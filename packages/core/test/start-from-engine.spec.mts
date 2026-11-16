@@ -291,7 +291,8 @@ describe('an entry file started by the engine', () => {
 		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'The run was stopped (SIGTERM).' })
 	})
 
-	test('serves package managers a proxy that fetches through the gateway', async () => {
+	// Its workflow runs curl, which on Windows trusts only the system store. Sandboxes are Linux.
+	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
 		// Arrange
 		const tokens = ['a', 'b', 'c', 'd'].map((letter) => letter.repeat(16))
 		const run = await startLikeTheEngine(proxiedEntry, { mode: 'run', workflow: 'fetch' }, { endpoint: 'run', tokens })
