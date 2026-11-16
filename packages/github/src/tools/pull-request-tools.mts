@@ -156,17 +156,17 @@ export const replyToReviewItem = {
  * Shows the reviewer on the host that review items are being read: a 👀 reaction on a comment
  * (GitHub has none for a review), and for every item a "👀 Reading..." reply, in the thread of a
  * comment on a line and on the conversation otherwise, that the first answer to the item replaces.
- * Showing an item twice leaves one reply, and an item that was answered already is left alone. An
- * item GitHub won't take the 👀 on, say a comment deleted since, is left out of `shown`.
+ * On the conversation the reply quotes the item, from its `body`, `at` and `verdict`, with a link
+ * to its `url`. Showing an item twice leaves one reply, and an item that was answered already is
+ * left alone. An item GitHub won't take the 👀 on, say a comment deleted since, is left out of
+ * `shown`.
  */
 export const showBeingRead = {
 	name: 'githubShowBeingRead',
 	description: 'Shows the reviewer that review items on a pull request are being read',
 	input: PullRequestRef.extend({
 		items: z.array(
-			z.object({
-				id: ReviewItemId,
-				url: z.url(),
+			ReviewItem.pick({ id: true, url: true, body: true, at: true, verdict: true }).extend({
 				/** For a comment on a line that replies to another: the thread's first comment, which replies go to. */
 				thread: ReviewItemId.optional(),
 			}),

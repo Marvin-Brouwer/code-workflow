@@ -1,5 +1,5 @@
 import { commentMarker } from '@mesh-flow/code-repository'
-import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
+import { replyKey, withHeader, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
 import type { Octokit } from '@octokit/rest'
 import { splitRepositoryName } from '../repository-name.mts'
 import type { ReviewItemKind } from '../tools/pull-request-tools.mts'
@@ -9,9 +9,12 @@ import { isGone } from './transient-error.mts'
 /** The reaction that says a comment is being read. */
 const beingReadReaction = 'eyes'
 
-/** What the reply that says an item is being read says, under the header that quotes the item on the conversation. */
-export function readingNote(header: string): string {
-	return `${header}👀 Reading...`
+/** What the reply that says an item is being read says, under its header. */
+export const readingWords = '👀 Reading...'
+
+/** The reply that says an item is being read, under the header that quotes it on the conversation. */
+export function readingNote(header: string | undefined): string {
+	return withHeader(header, readingWords)
 }
 
 /**

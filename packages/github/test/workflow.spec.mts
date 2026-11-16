@@ -1,9 +1,10 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { defaultFetchRetry, signed, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
+import { defaultFetchRetry, signed, withHeader, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
+import { deletedItemHeader, quoteHeader } from '../src/host/reply-header.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { checksPass } from '../src/pull-request/checks-pass.mts'
 import { openPullRequest } from '../src/pull-request/pull-request.mts'
@@ -14,7 +15,7 @@ import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import { fakeGithub, reactionsOf, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
-import { replyingTo } from './support/replying-to.mts'
+import { beingRead, replyingTo } from './support/replying-to.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
 
@@ -276,7 +277,7 @@ describe('github', () => {
 			created_at: new Date().toISOString(),
 		})
 		const where = { repository: repositoryName, number: 12 }
-		const items = [{ id: 'comment/1', url: `${pull.html_url}#c1` }]
+		const items = [beingRead('comment', pull.comments[0])]
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
@@ -335,8 +336,8 @@ describe('github', () => {
 			created_at: new Date().toISOString(),
 		})
 		const items = [
-			{ id: 'comment/99', url: `${pull.html_url}#c99` },
-			{ id: 'comment/1', url: `${pull.html_url}#c1` },
+			{ id: 'comment/99', url: `${pull.html_url}#c99`, body: 'Gone.', at: new Date().toISOString() },
+			beingRead('comment', pull.comments[0]),
 		]
 
 		// Act
@@ -362,7 +363,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, () =>
-			stubs.showBeingRead({ repository: repositoryName, number: 17, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] }),
+			stubs.showBeingRead({ repository: repositoryName, number: 17, items: [beingRead('comment', pull.comments[0])] }),
 		)
 
 		// Assert
@@ -396,7 +397,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			const answer = reply(where)
 			await Promise.all([answer({ item: 'comment/1', text: 'Because.' }), answer({ item: 'comment/1', text: 'Also, tests.' })])
 		})
@@ -430,7 +431,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'review-comment/1', url: `${pull.html_url}#r1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('review-comment', pull.reviewComments[0])] })
 			await answer({ item: 'review-comment/1', text: 'I will rename it to `login`.', stage: 'plan' })
 			const whilePlanned = reactionsOf(pull.reviewComments[0])
 			await answer({ item: 'review-comment/1', text: 'Renamed it to `login`.' })
@@ -476,6 +477,77 @@ describe('github', () => {
 		])
 	})
 
+	test('says an answer once after a restart, also when the reviewer edited the item since', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 40)
+		pull.comments.push({
+			id: 1,
+			body: 'Why?',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const where = { repository: repositoryName, number: 40 }
+		const answer = reply(where)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			await answer({ item: 'comment/1', text: 'Because.' })
+			const asked = pull.comments[0]
+			if (asked !== undefined) asked.body = 'Why, though?'
+			await answer({ item: 'comment/1', text: 'Because.' })
+		})
+		await run.result
+
+		// Assert
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Why, though?',
+			signed(
+				withHeader(quoteHeader({ body: 'Why?', at: pull.comments[0]?.created_at ?? '', url: `${pull.html_url}#c1` }), 'Because.'),
+				run.runId,
+				['reply', 'replied:comment/1'],
+			),
+		])
+	})
+
+	test('says what it answers when the comment was deleted since', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 41)
+
+		// Act
+		const run = await runOnGateway(gateway, () => reply({ repository: repositoryName, number: 41 })({ item: 'comment/9', text: 'Done.' }))
+		await run.result
+
+		// Assert
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			signed(withHeader(deletedItemHeader('comment'), 'Done.'), run.runId, ['reply', 'replied:comment/9']),
+		])
+	})
+
+	test('stops promptly when the run stops while GitHub never answers the read of the item a reply quotes', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		api.pullRequest(repositoryName, 42)
+		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
+		api.hold = (method, requestPath) => {
+			if (method !== 'GET' || !requestPath.includes('/issues/comments/')) return undefined
+			resolve(undefined)
+			return new Promise(() => undefined)
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, () => reply({ repository: repositoryName, number: 42 })({ item: 'comment/1', text: 'Done.' }))
+		await stalled
+		const started = performance.now()
+		run.controller.abort(new Error('The run stopped.'))
+		await run.outcome
+
+		// Assert
+		expect(performance.now() - started).toBeLessThan(promptlyMs)
+	})
+
 	test('posts the answer after a plan once, when it is tried again after failing halfway', async () => {
 		// Arrange
 		const { api, gateway } = await connected(noRetry)
@@ -500,7 +572,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			const failed = await answer({ item: 'comment/1', text: 'Added one.' }).then(
 				() => false,
@@ -541,7 +613,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			const editsAfterSameWords = edits

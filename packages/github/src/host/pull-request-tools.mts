@@ -30,7 +30,7 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { pullRequestComments, readingNote } from './pull-request-comments.mts'
-import { replyHeader } from './reply-quote.mts'
+import { quoteHeader, replyHeader } from './reply-header.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -232,23 +232,20 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				const comments = pullRequestComments(client, repository, number)
 				// On the conversation, every reply says what it answers: the reading reply, the plan and the answer.
 				const header = await replyHeader(client, repository, number, { kind, commentId })
-				const reply = { item, kind, commentId, body: `${header}${body}`, stage: stage ?? defaultReplyStage, runId: context.runId }
-				return replyToItem(comments, reply)
+				const reply = { item, kind, commentId, body, stage: stage ?? defaultReplyStage, runId: context.runId }
+				return replyToItem(comments, header === undefined ? reply : { ...reply, header })
 			}),
 		),
 
 		hostTool(showBeingRead, async ({ repository, number, items }, context) => {
-			const client = await api(context)
-			const comments = pullRequestComments(client, repository, number)
-			const toShow = await Promise.all(
-				items.map(async ({ id: item, thread }) => {
-					const { kind, id: commentId } = parseItemId(item)
-					// A reply to a comment on a line goes in its thread; everything else is answered on the conversation.
-					const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
-					const note = readingNote(await replyHeader(client, repository, number, { kind, commentId }))
-					return { item, kind, commentId, note, thread: () => Promise.resolve(threadId) }
-				}),
-			)
+			const comments = pullRequestComments(await api(context), repository, number)
+			const toShow = items.map(({ id: item, thread, url, body, at, verdict }) => {
+				const { kind, id: commentId } = parseItemId(item)
+				// A reply to a comment on a line goes in its thread; everything else is answered on the conversation, under a quote.
+				const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
+				const header = kind === 'review-comment' ? undefined : quoteHeader({ body, at, url, ...(verdict === undefined ? {} : { verdict }) })
+				return { item, kind, commentId, note: readingNote(header), thread: () => Promise.resolve(threadId) }
+			})
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),
 

@@ -96,10 +96,13 @@ export async function review(
 				stubs.showBeingRead(
 					{
 						...where,
-						items: items.map((item) => ({
-							id: item.id,
-							url: item.url,
-							...(item.inReplyTo === undefined ? {} : { thread: item.inReplyTo }),
+						items: items.map(({ id, url, body, at, verdict, inReplyTo }) => ({
+							id,
+							url,
+							body,
+							at,
+							...(verdict === undefined ? {} : { verdict }),
+							...(inReplyTo === undefined ? {} : { thread: inReplyTo }),
 						})),
 					},
 					context,

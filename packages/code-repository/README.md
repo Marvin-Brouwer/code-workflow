@@ -114,7 +114,7 @@ const fetch = retryingFetch(globalThis.fetch, defaultFetchRetry)
 const body = signed('Looks good.', context.runId, ['reply:note/12'])
 ```
 
-`replyToItem` and `showItemsBeingRead` answer review items and show them as being read, through the connector's `ReviewComments`: where its code host keeps replies, and how it reacts and posts.
+`replyToItem` and `showItemsBeingRead` answer review items and show them as being read, through the connector's `ReviewComments`: where its code host keeps replies, and how it reacts and posts. A reply can start with a `header`, such as a quote of the item where the code host has no threads; `withHeader` puts it above the reply, and replies are compared without it (`withoutHeader`), so an item edited since doesn't make the same answer a new reply.
 
 ## Development
 

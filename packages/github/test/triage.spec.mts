@@ -50,7 +50,7 @@ describe('triage', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: comments.map(({ id, url }) => ({ id, url })) })
+			await stubs.showBeingRead({ ...where, items: comments.map(({ id, url, body, at }) => ({ id, url, body, at })) })
 			const repository = await checkout({ repository: repositoryName, branch })
 			return triage(writer, repository, { pullRequest: where, comments })
 		})
