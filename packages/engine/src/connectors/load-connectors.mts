@@ -20,6 +20,7 @@ import {
 	type ConnectorLoginContext,
 	type CredentialStore,
 	type HostTool,
+	type ResolveRegistryFetch,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
@@ -36,6 +37,8 @@ const HostModule = z.object({
 		name: ConnectorName,
 		tools: z.custom<ConnectorHost['tools']>((value) => typeof value === 'function'),
 		login: z.custom<ConnectorLogin>((value) => typeof value === 'function').optional(),
+		registries: z.custom<NonNullable<ConnectorHost['registries']>>((value) => typeof value === 'function').optional(),
+		missingSettings: z.custom<NonNullable<ConnectorHost['missingSettings']>>((value) => typeof value === 'function').optional(),
 	}),
 })
 
@@ -49,6 +52,10 @@ export interface LoadedConnector {
 	readonly tools: readonly HostTool[]
 	/** Signs the user in, for `mesh-flow login <name>` and runs that wait for it, when the connector's service has sessions. */
 	readonly login?: (context: LoginContext) => Promise<void>
+	/** How the gateway reaches the connector's package registries, when it has any. */
+	readonly registries?: ResolveRegistryFetch
+	/** The settings the connector still needs, each as a line that says how to set it. */
+	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<string[]>
 }
 
 /** What `loadConnectors` takes. */
@@ -75,18 +82,23 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		const directory = path.join(options.directory, host.name)
 		await mkdir(directory, { recursive: true, mode: 0o700 })
 		const credentials = connectorCredentials(options.credentials, host.name)
-		const tools = host.tools({ directory, credentials })
+		const hostOptions = { directory, credentials }
+		const tools = host.tools(hostOptions)
 		for (const tool of tools) {
 			const owner = owners.get(tool.name)
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
 			owners.set(tool.name, name)
 		}
-		const { login } = host
+		const { login, registries, missingSettings } = host
 		loaded.push({
 			package: name,
 			name: host.name,
 			tools,
 			...(login === undefined ? {} : { login: (context: LoginContext) => login({ ...context, credentials }) }),
+			...(registries === undefined ? {} : { registries: registries(hostOptions) }),
+			...(missingSettings === undefined
+				? {}
+				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(credentials, abortSignal) }),
 		})
 	}
 	return loaded
@@ -104,6 +116,12 @@ async function importHost(name: string, from: string): Promise<ConnectorHost> {
 	}
 	const parsed = HostModule.safeParse(await import(url))
 	if (!parsed.success) throw new Error(`${specifier} doesn't export a connector host: export \`connector\` made with connectorHost.`)
-	const { name: connectorName, tools, login } = parsed.data.connector
-	return { name: connectorName, tools, ...(login === undefined ? {} : { login }) }
+	const { name: connectorName, tools, login, registries, missingSettings } = parsed.data.connector
+	return {
+		name: connectorName,
+		tools,
+		...(login === undefined ? {} : { login }),
+		...(registries === undefined ? {} : { registries }),
+		...(missingSettings === undefined ? {} : { missingSettings }),
+	}
 }

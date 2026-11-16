@@ -51,6 +51,9 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 		slot(message.id).resolve({ value })
 	}
 	return {
+		staged(name) {
+			throw new Error(`These tests fetch no packages, so nothing is staged as ${name}.`)
+		},
 		send(message) {
 			if (message.type === 'cancel') running.get(message.id)?.abort(new Error('The runtime cancelled the call.'))
 			if (message.type !== 'call') return

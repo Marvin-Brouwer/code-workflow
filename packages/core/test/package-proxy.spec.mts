@@ -1,13 +1,14 @@
 import { execFile, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
+import { registryName, type ConnectorRegistry, type PackageRegistry, type PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
+import type { FetchPackage } from '../src/packages/package-proxy.mts'
 import { storedZip } from './support/stored-zip.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -34,24 +35,51 @@ const restoreTimeoutMs = 120_000
 /** How long a stopped proxy may take to settle while a fetch never does. */
 const promptlyMs = 3_000
 
-type Fetch = (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
-
-function answer(status: number, body: string | Buffer, contentType = 'application/json'): PackageResponse {
-	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body).toString('base64') }
+/** What the gateway answers in these tests, before the engine stages its body. */
+interface Answered {
+	readonly status: number
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Buffer
 }
 
-/** Starts the proxy with `fetch` behind it, stopped when the test ends. */
-async function proxyWith(fetch: Fetch): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
+type Fetch = (request: PackageRequest, abortSignal: AbortSignal) => Promise<Answered>
+
+function answer(status: number, body: string | Buffer, contentType = 'application/json'): Answered {
+	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body) }
+}
+
+/** A connector's registry with two repositories on one host, as CodeArtifact has them. */
+function connectorRegistry(repository: string): ConnectorRegistry {
+	return {
+		connector: 'cloud',
+		name: `cloud ${repository}`,
+		host: 'packages.example.com',
+		paths: [`/npm/${repository}/`],
+		settings: { repository },
+	}
+}
+
+/**
+ * Starts the proxy with `fetch` behind it, stopped when the test ends. Each answer's body is staged
+ * in `staging` first, as the engine does.
+ */
+async function proxyWith(
+	fetch: Fetch,
+	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
+): Promise<{ environment: PackageEnvironment; stop: AbortController; staging: string }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
-	const { proxy, environment } = await startPackageAccess({
-		registries: ['npm', 'nuget'],
-		fetchPackage: fetch,
-		directory,
-		abortSignal: stop.signal,
-	})
+	const staging = await temporaryDirectory()
+	let staged = 0
+	const fetchPackage: FetchPackage = async (asked, abortSignal) => {
+		const answered = await fetch(asked, abortSignal)
+		const file = path.join(staging, `call-${String(++staged)}.body`)
+		await writeFile(file, answered.body)
+		return { status: answered.status, headers: answered.headers, file, size: answered.body.length }
+	}
+	const { proxy, environment } = await startPackageAccess({ registries, fetchPackage, directory, abortSignal: stop.signal })
 	onTestFinished(() => proxy.close())
-	return { environment, stop }
+	return { environment, stop, staging }
 }
 
 /** The environment of a child process that only knows the proxy: none of the test's own proxy settings. */
@@ -99,7 +127,7 @@ const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
  * What nuget.org's v3 feed would serve for {@link fakeNuGetPackage}: the service index, the flat
  * container's version list, the package and its nuspec, by path.
  */
-function fakeNuGetFeed(): Record<string, PackageResponse> {
+function fakeNuGetFeed(): Record<string, Answered> {
 	const { id, version } = fakeNuGetPackage
 	const lowerId = id.toLowerCase()
 	const nuspec = `<?xml version="1.0" encoding="utf-8"?>
@@ -235,7 +263,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 			const { id, version } = fakeNuGetPackage
 			const restored = await readFile(path.join(packages, id.toLowerCase(), version, `${id.toLowerCase()}.nuspec`), 'utf8')
 			expect(restored).toContain(`<id>${id}</id>`)
-			const fetched = fetch.mock.calls.map(([asked]) => `${asked.registry} ${asked.path}`)
+			const fetched = fetch.mock.calls.map(([asked]) => `${registryName(asked.registry)} ${asked.path}`)
 			expect(fetched).toContain(`nuget /v3-flatcontainer/${id.toLowerCase()}/${version}/${id.toLowerCase()}.${version}.nupkg`)
 		},
 	)
@@ -346,12 +374,47 @@ describe.skipIf(onWindows)('package proxy', () => {
 		expect(status).toBe('200')
 	})
 
+	test('sends a fetch on a shared host to the registry whose path it is on, and refuses other paths', async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const { environment } = await proxyWith(fetch, [connectorRegistry('one'), connectorRegistry('two')])
+		const home = await temporaryDirectory()
+
+		// Act
+		const two = await curlStatus(environment, home, ['https://packages.example.com/npm/two/left-pad'])
+		const elsewhere = await curlStatus(environment, home, ['https://packages.example.com/npm/three/left-pad'])
+
+		// Assert
+		expect([two, elsewhere]).toEqual(['200', '403'])
+		expect(fetch.mock.calls.map(([asked]) => [asked.registry, asked.path])).toEqual([[connectorRegistry('two'), '/npm/two/left-pad']])
+	})
+
+	test('serves the staged body as it is and removes it once it sent it', async () => {
+		// Arrange
+		const body = Buffer.from(Array.from({ length: 256 }, (_, byte) => byte))
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, body, 'application/octet-stream')))
+		const { environment, staging } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+		const saved = path.join(home, 'saved.tgz')
+
+		// Act
+		await run('curl', ['--fail', '--silent', '--output', saved, 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz'], {
+			env: childEnvironment(environment, home),
+		})
+
+		// Assert
+		expect(await readFile(saved)).toEqual(body)
+		await vi.waitFor(async () => {
+			expect(await readdir(staging)).toEqual([])
+		})
+	})
+
 	test('stops promptly while a fetch never settles', async () => {
 		// Arrange
 		let fetchSignal: AbortSignal | undefined
 		const fetch = vi.fn<Fetch>((_request, abortSignal) => {
 			fetchSignal = abortSignal
-			return new Promise<PackageResponse>(() => undefined)
+			return new Promise<Answered>(() => undefined)
 		})
 		const { environment, stop } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
@@ -381,7 +444,7 @@ describe('package access', () => {
 		// Act
 		const { proxy, environment } = await startPackageAccess({
 			registries: ['npm'],
-			fetchPackage: vi.fn<Fetch>(),
+			fetchPackage: vi.fn<FetchPackage>(),
 			directory,
 			abortSignal: stop.signal,
 		})
@@ -401,7 +464,7 @@ describe('package access', () => {
 		// Act
 		const starting = startPackageAccess({
 			registries: ['npm'],
-			fetchPackage: vi.fn<Fetch>(),
+			fetchPackage: vi.fn<FetchPackage>(),
 			directory,
 			abortSignal: AbortSignal.abort(reason),
 		})

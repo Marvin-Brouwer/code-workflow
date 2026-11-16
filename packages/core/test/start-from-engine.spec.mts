@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { tokensPerEndpoint } from '@mesh-flow/gateway'
@@ -12,6 +12,7 @@ import {
 	minTokenLength,
 	runIdEnvironmentVariable,
 	RuntimeMessage,
+	stagedFile,
 } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -309,21 +310,22 @@ describe('an entry file started by the engine', () => {
 		const call = (await run.messages()).find((message) => message.type === 'call')
 
 		// Act
+		const callId = call?.type === 'call' ? call.id : ''
+		const body = '{"name":"left-pad"}'
 		const answer: CallAnswer = {
 			next: testToken(tokensPerEndpoint),
 			outcome: {
 				ok: true,
-				result: {
-					status: 200,
-					headers: { 'content-type': 'application/json' },
-					body: Buffer.from('{"name":"left-pad"}').toString('base64'),
-				},
+				result: { status: 200, headers: { 'content-type': 'application/json' }, body: `${callId}.body`, size: body.length },
 			},
 		}
-		await writeFile(answerFile(run.layout, call?.type === 'call' ? call.id : ''), JSON.stringify({ value: answer }))
+		await mkdir(run.layout.packages, { recursive: true })
+		await writeFile(stagedFile(run.layout, `${callId}.body`), body)
+		await writeFile(answerFile(run.layout, callId), JSON.stringify({ value: answer }))
 
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(0)
+		expect(await readdir(run.layout.packages)).toEqual([])
 		expect(call).toMatchObject({
 			type: 'call',
 			endpoint: 'run',

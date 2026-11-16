@@ -27,9 +27,22 @@ export {
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	runIdEnvironmentVariable,
+	stagedFile,
 	type MailboxLayout,
 } from '../mailbox-layout.mts'
-export { PackageRegistry, packageRegistryHosts, PackageRequest, PackageResponse } from '../package-registry.mts'
+export {
+	ConnectorRegistry,
+	PackageRegistry,
+	packageRegistryHosts,
+	PackageRequest,
+	PackageResponse,
+	PublicRegistry,
+	registryHost,
+	registryKey,
+	registryName,
+	registryPaths,
+	StagedFileName,
+} from '../package-registry.mts'
 export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'

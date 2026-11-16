@@ -46,7 +46,7 @@ export class GvisorSandbox implements Sandbox {
 		return result.stdout
 	}
 
-	async writeFile(path: string, content: string, signal: AbortSignal): Promise<void> {
+	async writeFile(path: string, content: string | Uint8Array, signal: AbortSignal): Promise<void> {
 		const script = 'cat > "$1.tmp" && mv -- "$1.tmp" "$1"'
 		await runscOrThrow(this.#context.runsc, ['exec', this.id, 'sh', '-c', script, 'sh', path], {
 			signal: this.#context.lifetime.bind(signal),

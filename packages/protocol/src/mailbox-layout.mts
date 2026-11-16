@@ -26,6 +26,11 @@ export interface MailboxLayout {
 	 * starts the runtime. The runtime removes it once it has read it.
 	 */
 	readonly grantFile: string
+	/**
+	 * Where the engine stages what a call fetched for the runtime, such as a package, as a file of
+	 * its own: see {@link stagedFile}. The call's answer names the file, so it stays small.
+	 */
+	readonly packages: string
 }
 
 /** The layout of a mailbox in `directory`. */
@@ -39,12 +44,18 @@ export function mailboxLayout(directory: string): MailboxLayout {
 		pidFile: path.posix.join(directory, 'runtime.pid'),
 		logFile: path.posix.join(directory, 'runtime.log'),
 		grantFile: path.posix.join(directory, 'gateway.json'),
+		packages: path.posix.join(directory, 'packages'),
 	})
 }
 
 /** The file that holds the answer to one request. */
 export function answerFile(layout: MailboxLayout, requestId: string): string {
 	return path.posix.join(layout.inbox, `${requestId}.json`)
+}
+
+/** The file a staged body is in, by the name a `PackageResponse` gives it. */
+export function stagedFile(layout: MailboxLayout, name: string): string {
+	return path.posix.join(layout.packages, name)
 }
 
 /** The default mailbox directory in a sandbox. */

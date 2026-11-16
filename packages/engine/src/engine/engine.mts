@@ -5,6 +5,7 @@ import {
 	type CallAnswer,
 	type CallMessage,
 	type LoginRequest,
+	type PackageRegistry,
 	type RunStart,
 	type RuntimeEvent,
 	type RuntimeMessage,
@@ -53,7 +54,21 @@ export interface EngineOptions {
 	 * the user has to sign in to. Without it, a run that asks for a sign-in fails.
 	 */
 	readonly signIns?: SignIns
+	/**
+	 * The settings the loaded connectors an app uses still need, each as a line that says how to set
+	 * it, such as the AWS start URL for an app that restores from CodeArtifact. Default: none missing.
+	 */
+	readonly connectorSettings?: ConnectorSettingsCheck
 }
+
+/** What an app uses connectors for: the host tools it calls and the registries it restores from. */
+export interface ConnectorUse {
+	readonly tools: readonly string[]
+	readonly registries: readonly PackageRegistry[]
+}
+
+/** The settings the connectors behind `use` still need, each as a line that says how to set it. */
+export type ConnectorSettingsCheck = (use: ConnectorUse, abortSignal: AbortSignal) => Promise<string[]>
 
 /** Which trigger of which app starts a run, and with what. */
 export interface StartRunOptions {
@@ -126,6 +141,7 @@ export class Engine {
 	readonly #now: () => Date
 	readonly #gateway: Gateway | undefined
 	readonly #signIns: SignIns | undefined
+	readonly #connectorSettings: EngineOptions['connectorSettings']
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
@@ -144,6 +160,7 @@ export class Engine {
 		this.#now = options.now ?? (() => new Date())
 		this.#gateway = options.gateway
 		this.#signIns = options.signIns
+		this.#connectorSettings = options.connectorSettings
 	}
 
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
@@ -235,10 +252,17 @@ export class Engine {
 		if (this.#gateway === undefined) return []
 		const models = await this.#gateway.unavailableModels(description.models, abortSignal)
 		const tools = this.#gateway.missingTools(description.tools)
-		if (tools.length === 0) return models
+		const { registries } = description.sandbox
+		const settings = (await this.#connectorSettings?.({ tools: description.tools, registries }, abortSignal)) ?? []
 		return [
 			...models,
-			`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+			...(tools.length === 0
+				? []
+				: [
+						`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+					]),
+			...this.#gateway.missingRegistries(registries),
+			...settings,
 		]
 	}
 
@@ -540,7 +564,7 @@ export class Engine {
 	async #accept(id: RunId, call: CallMessage, abortSignal: AbortSignal): Promise<AcceptedCall> {
 		if (this.#gateway === undefined) {
 			const answer: CallAnswer = { outcome: { ok: false, error: 'This engine has no gateway.' } }
-			return { answer: () => Promise.resolve(answer) }
+			return { answer: () => Promise.resolve(answer), body: () => undefined }
 		}
 		return this.#gateway.accept(id, call, abortSignal)
 	}
@@ -568,6 +592,9 @@ export class Engine {
 			.answer(AbortSignal.any([abortSignal, cancel.signal]))
 			.then(async (answer) => {
 				abortSignal.throwIfAborted()
+				// What the answer names, such as a package, is in the sandbox before the answer.
+				const body = accepted.body()
+				if (body !== undefined) await channel.stage(`${call.id}.body`, body, abortSignal)
 				await this.#answerFromGateway(id, channel, call.id, answer, abortSignal)
 			})
 			.catch(async (error: unknown) => {

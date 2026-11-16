@@ -1,5 +1,6 @@
 import {
 	answerFile,
+	stagedFile,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	RuntimeMessage,
@@ -45,7 +46,7 @@ export class SandboxChannel {
 
 	/** Makes the mailbox, readable for the runtime's user only. */
 	async prepare(signal: AbortSignal): Promise<void> {
-		await this.#run(['mkdir', '-p', this.#layout.inbox], signal)
+		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.packages], signal)
 		await this.#run(['chmod', '700', this.#layout.directory], signal)
 	}
 
@@ -92,6 +93,11 @@ export class SandboxChannel {
 	 */
 	async stopPolls(signal: AbortSignal): Promise<void> {
 		await this.#run(['sh', '-c', stopPollsScript, 'sh', this.#layout.polls], signal)
+	}
+
+	/** Stages a body a call fetched, such as a package, where its answer tells the runtime to look. */
+	async stage(name: string, body: Uint8Array, signal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(stagedFile(this.#layout, name), body, signal)
 	}
 
 	/** Writes the answer to a request where the runtime looks for it. */

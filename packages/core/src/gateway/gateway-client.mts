@@ -9,6 +9,8 @@ export interface GatewayChannel {
 	send(message: RuntimeMessage): void
 	/** Waits for the answer to a call, then removes it, since it holds a token. */
 	take(requestId: string, abortSignal: AbortSignal): Promise<Answer>
+	/** Where a body a call's answer names was staged, such as a package's. Whoever reads it removes it. */
+	staged(name: string): string
 }
 
 /** An endpoint on the gateway: its id and the host tools it takes. Its tokens stay in the client. */
@@ -56,6 +58,8 @@ export interface GatewayClient {
 	openLoop(tools: readonly string[], abortSignal: AbortSignal): Promise<Endpoint>
 	/** Closes a loop's endpoint once the loop has settled. */
 	closeLoop(endpoint: Endpoint, abortSignal: AbortSignal): Promise<void>
+	/** Where a body a call's answer names was staged, such as a package's. Whoever reads it removes it. */
+	staged(name: string): string
 }
 
 /** What a call answered with, once it was answered. */
@@ -155,5 +159,6 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			pools.delete(endpoint.id)
 			await call(run, { type: 'close', endpoint: endpoint.id }, abortSignal)
 		},
+		staged: (name) => channel.staged(name),
 	})
 }

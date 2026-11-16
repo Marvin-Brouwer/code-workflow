@@ -93,6 +93,34 @@ describe('loadConnectors', () => {
 		expect(await credentials.get('cloud/session', abortSignal)).toBe('token')
 	})
 
+	test("carries a connector's registries and settings check, each with the connector's own credentials", async () => {
+		// Arrange
+		const withRegistries = `export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: ({ credentials }) => async ({ path }, abortSignal) => ({
+		url: 'https://packages.cloud.example' + path,
+		headers: { authorization: 'Bearer ' + (await credentials.get('cloud/token', abortSignal)) },
+	}),
+	missingSettings: async (credentials, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? ['Set cloud/start-url.'] : []),
+}
+`
+		const from = await installed({ cloud: withRegistries })
+		const directory = await temporaryDirectory()
+		const credentials = await credentialStore()
+		await credentials.set('cloud/token', 'cloud-token', abortSignal)
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const [cloud] = await loadConnectors({ connectors: [{ package: 'cloud' }], from, directory, credentials })
+		const where = await cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+		const missing = await cloud?.missingSettings?.(abortSignal)
+
+		// Assert
+		expect(where).toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: { authorization: 'Bearer cloud-token' } })
+		expect(missing).toEqual(['Set cloud/start-url.'])
+	})
+
 	test('names the package that is not installed or has no host entry point', async () => {
 		// Arrange
 		const from = await installed({ 'no-host': undefined })

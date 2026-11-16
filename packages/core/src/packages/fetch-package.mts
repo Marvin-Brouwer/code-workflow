@@ -1,3 +1,4 @@
+import { readFile, rm } from 'node:fs/promises'
 import type { PackageRegistry } from '@mesh-flow/protocol'
 import { gatewayPackages } from '../gateway/gateway-packages.mts'
 import { findScope } from '../run/run-scope.mts'
@@ -36,5 +37,9 @@ export async function fetchPackage(request: PackageFetch, abortSignal: AbortSign
 	const gateway = findScope()?.run.gateway
 	if (gateway === undefined) throw new Error('Packages come through the gateway, and this run has none.')
 	const answer = await gatewayPackages(gateway)(request, abortSignal)
-	return { status: answer.status, headers: answer.headers, body: Buffer.from(answer.body, 'base64') }
+	try {
+		return { status: answer.status, headers: answer.headers, body: await readFile(answer.file, { signal: abortSignal }) }
+	} finally {
+		await rm(answer.file, { force: true })
+	}
 }

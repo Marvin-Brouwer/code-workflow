@@ -4,7 +4,7 @@ import { hostTool, keyFile, openCredentialStore, openGateway, openProviderSettin
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
 import { openAppStore } from '../src/apps/app-store.mts'
-import { Engine } from '../src/engine/engine.mts'
+import { Engine, type ConnectorSettingsCheck } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
@@ -28,7 +28,13 @@ async function openEngine({
 	home,
 	tools = [echo, never],
 	fetch,
-}: { readonly home?: string; readonly tools?: readonly HostTool[]; readonly fetch?: typeof globalThis.fetch } = {}) {
+	connectorSettings,
+}: {
+	readonly home?: string
+	readonly tools?: readonly HostTool[]
+	readonly fetch?: typeof globalThis.fetch
+	readonly connectorSettings?: ConnectorSettingsCheck
+} = {}) {
 	onTestFinished(() => {
 		started.mockClear()
 	})
@@ -45,7 +51,15 @@ async function openEngine({
 	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(
-		{ backend, store: openRunStore(path.join(directory, 'runs')), apps, gateway, layout: hostSandboxLayout, log },
+		{
+			backend,
+			store: openRunStore(path.join(directory, 'runs')),
+			apps,
+			gateway,
+			layout: hostSandboxLayout,
+			log,
+			...(connectorSettings === undefined ? {} : { connectorSettings }),
+		},
 		abortSignal,
 	)
 	onTestFinished(() => engine.close(deadlines()))
@@ -117,7 +131,7 @@ mailbox.send({ type: 'succeeded' })
 		expect(existsSync(path.join(gatewayHome, 'runs', `${run.id}.json`))).toBe(false)
 	})
 
-	test('fetches packages from the registries the app restores from, and no other', async () => {
+	test('fetches packages from the registries the app restores from, staging each body for the sandbox, and no other', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
 		const { engine, apps } = await openEngine({ fetch: sent })
@@ -127,7 +141,9 @@ mailbox.send({ type: 'succeeded' })
 				calls: callingScript(`
 const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.tokens[0])
 const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next)
-event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome })
+const { readFile } = await import('node:fs/promises')
+const staged = await readFile(mailbox.staged(npm.outcome.result.body), 'utf8')
+event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome, staged })
 mailbox.send({ type: 'succeeded' })
 `),
 			},
@@ -141,8 +157,9 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		const [done] = await engine.events(run.id)
 		expect(done).toMatchObject({
-			npm: { ok: true, result: { status: 200, body: Buffer.from('{"name":"left-pad"}').toString('base64') } },
+			npm: { ok: true, result: { status: 200, body: 'call-1.body', size: '{"name":"left-pad"}'.length } },
 			nuget: { ok: false },
+			staged: '{"name":"left-pad"}',
 		})
 		expect(JSON.stringify(done)).toContain("doesn't restore from nuget")
 		expect(sent).toHaveBeenCalledOnce()
@@ -319,6 +336,27 @@ mailbox.send({ type: 'succeeded' })
 		expect(missing).toHaveLength(2)
 		expect(missing[0]).toContain('No model providers are set up')
 		expect(missing[1]).toContain('host tools githubComment')
+	})
+
+	test("lists what the connectors behind the app's registries still need, and a registry whose connector isn't loaded", async () => {
+		// Arrange
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/packages/'], settings: {} }
+		const connectorSettings = vi.fn<ConnectorSettingsCheck>(() =>
+			Promise.resolve(['Set the cloud start URL: `mesh-flow credential set cloud/start-url`.']),
+		)
+		const { engine, apps } = await openEngine({ connectorSettings })
+		const deployed = await deployTestApp(
+			apps,
+			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
+			{ tools: ['echo'], registries: ['npm', registry] },
+		)
+
+		// Act
+		const missing = await engine.missingSettings(deployed.manifest.description, abortSignal)
+
+		// Assert
+		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud'), expect.stringContaining('cloud start URL')])
+		expect(connectorSettings).toHaveBeenCalledWith({ tools: ['echo'], registries: ['npm', registry] }, abortSignal)
 	})
 
 	test('refuses a run before its sandbox when no loaded connector brings a host tool the app lists', async () => {

@@ -1,8 +1,12 @@
+import { createReadStream } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { createServer, STATUS_CODES, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { TLSSocket } from 'node:tls'
-import { packageRegistryHosts, PackageRequest, type PackageRegistry, type PackageResponse } from '@mesh-flow/protocol'
+import { PackageRequest, registryHost, registryPaths, type PackageRegistry } from '@mesh-flow/protocol'
+import type { StagedPackage } from '../gateway/gateway-packages.mts'
 import { describeError } from '../run/describe-error.mts'
 import type { CertificateAuthority } from './certificate-authority.mts'
 
@@ -18,8 +22,8 @@ export interface PackageProxyOptions {
 	readonly abortSignal: AbortSignal
 }
 
-/** How the proxy fetches a package: through the gateway, in the runtime. */
-export type FetchPackage = (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
+/** How the proxy fetches a package: through the gateway, in the runtime. The proxy removes the staged body once it sent it. */
+export type FetchPackage = (request: PackageRequest, abortSignal: AbortSignal) => Promise<StagedPackage>
 
 /** A running package proxy. */
 export interface PackageProxy {
@@ -55,6 +59,20 @@ function normalizedHost(host: string): string {
 }
 
 /**
+ * The registry on `host` that `path` is on: the one with the longest of its paths that `path` starts
+ * with, so two repositories on one host each get their own fetches.
+ */
+function registryOfPath(registries: readonly PackageRegistry[], path: string): PackageRegistry | undefined {
+	let found: { registry: PackageRegistry; length: number } | undefined
+	for (const registry of registries) {
+		for (const prefix of registryPaths(registry)) {
+			if (path.startsWith(prefix) && prefix.length > (found?.length ?? -1)) found = { registry, length: prefix.length }
+		}
+	}
+	return found?.registry
+}
+
+/**
  * The proxy package managers in the sandbox reach on `HTTPS_PROXY`, such as `npm ci` and
  * `dotnet restore`. The sandbox has no network, so nothing it tunnels goes out: for the hosts of
  * the app's registries it ends TLS itself, with a certificate from the sandbox's own authority, and
@@ -63,12 +81,13 @@ function normalizedHost(host: string): string {
  */
 export async function startPackageProxy(options: PackageProxyOptions): Promise<PackageProxy> {
 	options.abortSignal.throwIfAborted()
-	const registryOfHost = new Map(options.registries.map((registry) => [packageRegistryHosts[registry], registry]))
-	const registryOfSocket = new WeakMap<Socket, PackageRegistry>()
+	const registriesOfHost = Map.groupBy(options.registries, registryHost)
+	const registriesOfSocket = new WeakMap<Socket, readonly PackageRegistry[]>()
 	const connections = new Set<Duplex>()
 
 	const serve = async (request: IncomingMessage, response: ServerResponse) => {
-		const registry = registryOfSocket.get(request.socket)
+		const registries = registriesOfSocket.get(request.socket) ?? []
+		const registry = request.url === undefined ? undefined : registryOfPath(registries, request.url)
 		if (registry === undefined || request.url === undefined) {
 			refuse(response, forbidden, 'Not a registry this run restores from.')
 			return
@@ -88,10 +107,14 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			stopped.abort(new Error('The package manager went away.'))
 		})
 		try {
-			const answer = await options.fetchPackage(asked.data, AbortSignal.any([stopped.signal, options.abortSignal]))
-			const body = Buffer.from(answer.body, 'base64')
-			response.writeHead(answer.status, { ...answer.headers, 'content-length': String(body.length) })
-			response.end(body)
+			const stopping = AbortSignal.any([stopped.signal, options.abortSignal])
+			const answer = await options.fetchPackage(asked.data, stopping)
+			try {
+				response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
+				await pipeline(createReadStream(answer.file), response, { signal: stopping })
+			} finally {
+				await rm(answer.file, { force: true })
+			}
 		} catch (error) {
 			refuse(response, badGateway, describeError(error))
 		}
@@ -111,8 +134,8 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		client.on('error', () => client.destroy())
 		const [requestedHost = '', port] = (request.url ?? '').split(':')
 		const host = normalizedHost(requestedHost)
-		const registry = registryOfHost.get(host)
-		if (registry === undefined || port !== httpsPort) {
+		const registries = registriesOfHost.get(host)
+		if (registries === undefined || port !== httpsPort) {
 			client.end(statusLine(forbidden))
 			return
 		}
@@ -121,7 +144,7 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		const secure = new TLSSocket(client, { isServer: true, secureContext: options.authority.contextFor(host) })
 		secure.on('error', () => secure.destroy())
 		track(connections, secure)
-		registryOfSocket.set(secure, registry)
+		registriesOfSocket.set(secure, registries)
 		inner.emit('connection', secure)
 	})
 

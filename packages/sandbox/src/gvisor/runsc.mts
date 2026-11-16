@@ -14,7 +14,7 @@ export interface RunscConfig {
 export interface RunscCall {
 	readonly signal: AbortSignal
 	/** Written to stdin. */
-	readonly input?: string
+	readonly input?: string | Uint8Array
 	/**
 	 * Sends output to this file instead of returning it. `run --detach` and `restore --detach`
 	 * need it: the container keeps the stdio it was started with open. Each call starts the file

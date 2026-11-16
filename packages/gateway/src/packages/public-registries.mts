@@ -1,4 +1,4 @@
-import { packageRegistryHosts, type PackageRegistry } from '@mesh-flow/protocol'
+import { packageRegistryHosts, type PublicRegistry as PublicRegistryName } from '@mesh-flow/protocol'
 
 /** Where a public registry is, and the paths on it that are package fetches. */
 export interface PublicRegistry {
@@ -14,7 +14,7 @@ export interface PublicRegistry {
  * (version lists and packages). On the npm registry, package documents and tarballs are below the
  * package's name; `/-/` is the registry's own API (search, audit, users), which restore doesn't need.
  */
-export const publicRegistries: Readonly<Record<PackageRegistry, PublicRegistry>> = Object.freeze({
+export const publicRegistries: Readonly<Record<PublicRegistryName, PublicRegistry>> = Object.freeze({
 	nuget: {
 		origin: `https://${packageRegistryHosts.nuget}`,
 		fetches: (pathname) => pathname.startsWith('/v3/') || pathname.startsWith('/v3-flatcontainer/'),
