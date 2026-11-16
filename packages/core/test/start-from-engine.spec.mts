@@ -6,7 +6,7 @@ import { tokensPerEndpoint } from '@mesh-flow/gateway'
 import {
 	answerFile,
 	type CallAnswer,
-	type EndpointGrant,
+	type RunGrant,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	minTokenLength,
@@ -31,7 +31,7 @@ const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
  * Starts an entry file the way the engine does: `node <file>`, the mailbox in the environment and
  * the start file in it, and the gateway's grant when there is one.
  */
-async function startLikeTheEngine(source: string, start: unknown, grant?: EndpointGrant) {
+async function startLikeTheEngine(source: string, start: unknown, grant?: RunGrant) {
 	const directory = await temporaryDirectory()
 	const mailbox = path.join(directory, 'mailbox')
 	const layout = mailboxLayout(mailbox)
@@ -303,7 +303,12 @@ describe('an entry file started by the engine', () => {
 	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
 		// Arrange
 		const tokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(index))
-		const run = await startLikeTheEngine(proxiedEntry, { mode: 'run', workflow: 'fetch' }, { endpoint: 'run', tokens })
+		const packageTokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(tokensPerEndpoint + 1 + index))
+		const run = await startLikeTheEngine(
+			proxiedEntry,
+			{ mode: 'run', workflow: 'fetch' },
+			{ endpoint: 'run', tokens, packages: { endpoint: 'packages', tokens: packageTokens } },
+		)
 		await expect
 			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
 			.toBe(true)
@@ -326,9 +331,10 @@ describe('an entry file started by the engine', () => {
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(0)
 		expect(await readdir(run.layout.packages)).toEqual([])
+		expect(packageTokens).toContain(call?.type === 'call' ? call.token : undefined)
 		expect(call).toMatchObject({
 			type: 'call',
-			endpoint: 'run',
+			endpoint: 'packages',
 			call: { type: 'package', request: { registry: 'npm', path: '/left-pad' } },
 		})
 	})

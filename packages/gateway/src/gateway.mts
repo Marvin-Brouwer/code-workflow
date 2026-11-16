@@ -3,6 +3,7 @@ import type {
 	CallAnswer,
 	CallMessage,
 	EndpointGrant,
+	RunGrant,
 	GatewayCall,
 	ModelResponse,
 	PackageRegistry,
@@ -84,11 +85,13 @@ export interface InterruptedCall {
  */
 export interface Gateway {
 	/**
-	 * Opens the run's own endpoint, for the host tools and package registries its app lists, and
-	 * returns its tokens: one per call that may run at the same time. Opening it again, for a
-	 * restart, closes the earlier attempt's endpoints. The run's usage so far stays.
+	 * Opens the run's own endpoint, for the host tools its app lists, and returns its tokens: one per
+	 * call that may run at the same time. When the app restores packages, it also opens the run's
+	 * package endpoint, which only takes package fetches, with {@link packageTokens} tokens of its
+	 * own. Opening them again, for a restart, closes the earlier attempt's endpoints. The run's usage
+	 * so far stays.
 	 */
-	readonly openRun: (runId: string, access: RunAccess, abortSignal: AbortSignal) => Promise<EndpointGrant>
+	readonly openRun: (runId: string, access: RunAccess, abortSignal: AbortSignal) => Promise<RunGrant>
 	/**
 	 * Takes a call: checks its endpoint and token, spends the token and keeps the call as in flight,
 	 * on disk, before it resolves. Save that the call was read only after this, and answer it with
@@ -124,8 +127,17 @@ export interface Gateway {
 /** How many calls on one endpoint may run at the same time: the tokens it hands out at once. */
 export const tokensPerEndpoint = 4
 
+/**
+ * How many package fetches may run at the same time, on the run's package endpoint. A restore
+ * fetches many small files; npm and NuGet each fetch several at once.
+ */
+export const packageTokens = 8
+
 /** The id of a run's own endpoint. */
 const runEndpoint = 'run'
+
+/** The id of a run's package endpoint. */
+const packageEndpoint = 'packages'
 
 /** The answer to a call that came again after an engine restart: it may or may not have run. */
 const interruptedError = 'The engine stopped while this call ran, so whether it took effect is unknown.'
@@ -191,6 +203,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 			if (tool === undefined) throw new Error(`This gateway has no host tool ${call.tool}.`)
 			return tool.run(call.input, { abortSignal, credentials: options.credentials, runId })
 		}
+		if (endpoint.packages !== (call.type === 'package'))
+			throw new Error(
+				endpoint.packages ? 'The package endpoint only takes package fetches.' : 'Package fetches go on the package endpoint.',
+			)
 		if (endpoint.loop) throw new Error(`A loop's endpoint only takes its tools, not a ${call.type} call.`)
 		if (call.type === 'open') return openLoop(runId, call.tools, abortSignal)
 		if (call.type === 'close') return closeLoop(runId, call.endpoint, abortSignal)
@@ -223,7 +239,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 				if (unknown.length > 0) throw new Error(`The app doesn't list ${unknown.join(', ')}, so no loop can call them.`)
 				const endpoint = newLoopEndpointId()
 				const tokens = newTokens()
-				const opened: EndpointState = { loop: true, tools: [...new Set(loopTools)], tokens: tokens.map(tokenHash) }
+				const opened: EndpointState = { loop: true, packages: false, tools: [...new Set(loopTools)], tokens: tokens.map(tokenHash) }
 				return {
 					state: { ...state, endpoints: { ...state.endpoints, [endpoint]: opened } },
 					value: { endpoint, tokens } satisfies EndpointGrant,
@@ -288,14 +304,28 @@ export function openGateway(options: GatewayOptions): Gateway {
 				(state) => {
 					const tokens = newTokens()
 					const runTools = [...new Set(access.tools)]
+					const registries = [...new Map((access.registries ?? []).map((registry) => [registryKey(registry), registry])).values()]
+					const fetchTokens = registries.length === 0 ? [] : newTokens(packageTokens)
 					const fresh: RunState = {
 						tools: runTools,
-						registries: [...new Set(access.registries ?? [])],
-						endpoints: { [runEndpoint]: { loop: false, tools: runTools, tokens: tokens.map(tokenHash) } },
+						registries,
+						endpoints: {
+							[runEndpoint]: { loop: false, packages: false, tools: runTools, tokens: tokens.map(tokenHash) },
+							...(fetchTokens.length === 0
+								? {}
+								: { [packageEndpoint]: { loop: false, packages: true, tools: [], tokens: fetchTokens.map(tokenHash) } }),
+						},
 						inFlight: {},
 						usage: state?.usage ?? {},
 					}
-					return { state: fresh, value: { endpoint: runEndpoint, tokens } }
+					return {
+						state: fresh,
+						value: {
+							endpoint: runEndpoint,
+							tokens,
+							...(fetchTokens.length === 0 ? {} : { packages: { endpoint: packageEndpoint, tokens: fetchTokens } }),
+						},
+					}
 				},
 				abortSignal,
 			),
@@ -400,8 +430,8 @@ export function openGateway(options: GatewayOptions): Gateway {
 	})
 }
 
-function newTokens(): string[] {
-	return Array.from({ length: tokensPerEndpoint }, newToken)
+function newTokens(count = tokensPerEndpoint): string[] {
+	return Array.from({ length: count }, newToken)
 }
 
 function acceptedWith(answer: CallAnswer): AcceptedCall {

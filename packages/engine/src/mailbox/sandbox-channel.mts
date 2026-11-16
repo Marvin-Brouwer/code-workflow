@@ -5,7 +5,7 @@ import {
 	mailboxLayout,
 	RuntimeMessage,
 	type Answer,
-	type EndpointGrant,
+	type RunGrant,
 	type MailboxLayout,
 	type RunStart,
 } from '@mesh-flow/protocol'
@@ -56,7 +56,7 @@ export class SandboxChannel {
 	}
 
 	/** Hands the runtime the run's gateway endpoint. Written before it starts; the runtime removes it once read. */
-	async writeGrant(grant: EndpointGrant, abortSignal: AbortSignal): Promise<void> {
+	async writeGrant(grant: RunGrant, abortSignal: AbortSignal): Promise<void> {
 		await this.#sandbox.writeFile(this.#layout.grantFile, JSON.stringify(grant), abortSignal)
 	}
 

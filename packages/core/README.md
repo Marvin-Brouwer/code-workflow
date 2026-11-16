@@ -293,7 +293,7 @@ The sandbox has no network. Package managers in it still restore from the regist
 - For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime.
 - Each `GET` it gets is a call to the gateway, which fetches the package on the host, with the connector's credential for a connector's registry. A host with several registries, such as two CodeArtifact repositories in one domain, sends each fetch to the registry whose path it's below. Other hosts and paths, plain HTTP and writes are refused. A fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB).
 - The engine writes each fetched body into the sandbox as a file, and the proxy streams it from there and removes it, so a package isn't held in the runtime's memory. The gateway keeps the packages it fetched on the host, so a warm restore doesn't go to the registry.
-- Package fetches share the run's gateway endpoint, and its `tokensPerEndpoint` (four) tokens, with the workflow's tool and model calls, so at most that many go at once.
+- Package fetches go on the run's package endpoint, with `packageTokens` (eight) tokens of their own, so at most that many go at once and a restore doesn't hold up the workflow's tool and model calls.
 
 Code can make the same call itself, with `fetchPackage`:
 

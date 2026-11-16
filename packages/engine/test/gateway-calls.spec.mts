@@ -77,12 +77,12 @@ async function untilStatus(engine: Engine, id: string, status: RunStatus): Promi
 	)
 }
 
-/** A runtime that takes its grant and calls the gateway with `call(id, call, token)`, which resolves to the answer's value. */
+/** A runtime that takes its grant and calls the gateway with `call(id, call, token, endpoint?)` (the run's endpoint by default), which resolves to the answer's value. */
 function callingScript(body: string): string {
 	return runtimeScript(`
 const grant = await mailbox.takeGrant(signal)
-const call = async (id, gatewayCall, token) => {
-	mailbox.send({ type: 'call', id, endpoint: grant.endpoint, token, call: gatewayCall })
+const call = async (id, gatewayCall, token, endpoint = grant.endpoint) => {
+	mailbox.send({ type: 'call', id, endpoint, token, call: gatewayCall })
 	return (await mailbox.take(id, signal)).value
 }
 ${body}
@@ -139,8 +139,8 @@ mailbox.send({ type: 'succeeded' })
 			apps,
 			{
 				calls: callingScript(`
-const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.tokens[0])
-const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next)
+const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.packages.tokens[0], grant.packages.endpoint)
+const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next, grant.packages.endpoint)
 const { readFile } = await import('node:fs/promises')
 const staged = await readFile(mailbox.staged(npm.outcome.result.body), 'utf8')
 event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome, staged })

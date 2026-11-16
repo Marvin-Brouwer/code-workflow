@@ -1,4 +1,4 @@
-import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RuntimeMessage } from '@mesh-flow/protocol'
+import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RunGrant, type RuntimeMessage } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { waitingOnHuman } from '../loop/loop-clock.mts'
 import { untilAborted } from '../run/until-aborted.mts'
@@ -48,6 +48,8 @@ export class GatewayCallError extends Error {
 export interface GatewayClient {
 	/** The run's own endpoint, for calls from workflow code and for model calls. */
 	readonly run: Endpoint
+	/** The run's package endpoint, for package fetches only, when the app restores packages. */
+	readonly packages: Endpoint | undefined
 	/**
 	 * Calls the gateway on `endpoint` and resolves to the result. Throws a {@link GatewayCallError}
 	 * when the host says no. When the host says the user has to sign in to a connector first, it
@@ -70,7 +72,7 @@ type CallOutcome = CallAnswer['outcome']
  * call the caller stopped waiting for is cancelled on the host, and its answer, with the next
  * token, is still picked up until the run ends.
  */
-export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
+export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
 	let callCount = 0
 	let loginCount = 0
 	/** The sign-ins asked for and not answered yet, by connector, so calls that need the same one share it. */
@@ -78,7 +80,9 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 	/** How many sign-ins were answered, so a call that was sent before one was answered tries again without asking. */
 	let signedIn = 0
 	const pools = new Map<string, TokenPool>([[grant.endpoint, new TokenPool(grant.tokens)]])
+	if (grant.packages !== undefined) pools.set(grant.packages.endpoint, new TokenPool(grant.packages.tokens))
 	const run: Endpoint = Object.freeze({ id: grant.endpoint, tools: undefined })
+	const packages: Endpoint | undefined = grant.packages && Object.freeze({ id: grant.packages.endpoint, tools: new Set<string>() })
 	const poolOf = (endpoint: Endpoint) => {
 		const pool = pools.get(endpoint.id)
 		if (pool === undefined) throw new GatewayCallError(`Endpoint ${endpoint.id} is closed.`)
@@ -149,6 +153,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 
 	return Object.freeze<GatewayClient>({
 		run,
+		packages,
 		call,
 		async openLoop(tools, abortSignal) {
 			const opened = EndpointGrant.parse(await call(run, { type: 'open', tools: [...tools] }, abortSignal))

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { EndpointGrant, registryName, runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
+import { registryName, RunGrant, runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
 import { describeApp } from '../app/describe-app.mts'
@@ -146,7 +146,7 @@ const callIdPrefixLength = 8
 async function gatewayOf(channel: RuntimeMailbox, abortSignal: AbortSignal): Promise<GatewayClient | undefined> {
 	const grant = await channel.takeGrant(abortSignal)
 	if (grant === undefined) return undefined
-	return gatewayClient(channel, EndpointGrant.parse(grant), randomUUID().slice(0, callIdPrefixLength), abortSignal)
+	return gatewayClient(channel, RunGrant.parse(grant), randomUUID().slice(0, callIdPrefixLength), abortSignal)
 }
 
 /** The workflow called `name` among those the entry file's modules define. */

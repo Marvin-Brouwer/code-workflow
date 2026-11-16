@@ -19,6 +19,7 @@ export {
 	ModelRequest,
 	ModelResponse,
 	ResolvedModel,
+	RunGrant,
 	ToolName,
 } from '../gateway-call.mts'
 export {

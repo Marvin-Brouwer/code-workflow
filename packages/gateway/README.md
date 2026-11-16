@@ -189,7 +189,8 @@ async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer)
 
 `accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way. After a resume, call `forgetInterrupted` once the outbox was read past where it was.
 
-- **A run's endpoint** takes calls from workflow code, the model calls, package fetches, and opening and closing loop endpoints.
+- **A run's endpoint** takes calls from workflow code, the model calls, and opening and closing loop endpoints.
+- **A run's package endpoint** takes package fetches only, with `packageTokens` (eight) tokens of its own, so a restore doesn't hold up the run's other calls. `openRun` opens it, in the grant's `packages`, when the app restores from a registry.
 - **A loop's endpoint** takes only the tools in that loop's template. The runtime opens it when the loop starts and closes it when the loop settles.
 - **Every token is good for one call**, and the answer carries the next. An endpoint hands out four at a time, so calls can run at the same time. A token that comes again, or one never handed out, closes every endpoint of the run and `accept` says so in `compromised`: the engine fails the run.
 - **Only hashes of tokens are kept on disk**, in `runs/<run>.json`, so a run paused across an engine restart can go on calling. A call that was taken but not answered when the engine stopped is answered as interrupted after the restart, with its next token: whether it took effect is unknown, so it isn't run again.

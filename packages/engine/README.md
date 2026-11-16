@@ -198,7 +198,7 @@ The engine makes every call. To read the outbox it runs a short POSIX shell loop
 
 ### Gateway calls
 
-Calls that need a credential go through the same mailbox: the runtime appends a `call` message with its endpoint and a token, and the engine writes the answer to the inbox ([protocol: Calls](../protocol/README.md#calls)). Before the runtime starts, the engine opens the run's endpoint on the gateway, for the host tools the app's build lists, and writes its tokens to `gateway.json`, which the runtime removes once it has read it.
+Calls that need a credential go through the same mailbox: the runtime appends a `call` message with its endpoint and a token, and the engine writes the answer to the inbox ([protocol: Calls](../protocol/README.md#calls)). Before the runtime starts, the engine opens the run's endpoint on the gateway, for the host tools the app's build lists, and, when the app restores packages, its package endpoint, and writes their tokens to `gateway.json` (a `RunGrant`), which the runtime removes once it has read it.
 
 - **A call is taken before the engine saves that it read it.** The gateway spends the token and keeps the call as in flight on disk first. A call that was taken but not answered when the engine stopped is answered as interrupted when the run is resumed, with its next token: whether it took effect is unknown, so it isn't run again.
 - **A `cancel` message stops a call.** It is still answered, so the runtime gets its next token.

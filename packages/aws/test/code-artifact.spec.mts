@@ -8,7 +8,7 @@ import {
 	type CredentialStore,
 	type Gateway,
 } from '@mesh-flow/gateway'
-import type { CallAnswer, ConnectorRegistry, EndpointGrant } from '@mesh-flow/protocol'
+import type { CallAnswer, ConnectorRegistry, RunGrant } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { codeArtifact } from '../src/code-artifact.mts'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
@@ -68,15 +68,17 @@ async function setUp({
 }
 
 /** Fetches paths on `registry`, each call on the next token: an answer hands out the next. */
-function fetcher(gateway: Gateway, grant: EndpointGrant, registry: ConnectorRegistry) {
-	const tokens = [...grant.tokens]
+function fetcher(gateway: Gateway, grant: RunGrant, registry: ConnectorRegistry) {
+	if (grant.packages === undefined) throw new Error('The run has no package endpoint.')
+	const { endpoint } = grant.packages
+	const tokens = [...grant.packages.tokens]
 	let calls = 0
 	return async (fetchPath: string) => {
 		const id = `call-${String(++calls)}`
 		const token = tokens.shift() ?? ''
 		const accepted = await gateway.accept(
 			runId,
-			{ type: 'call', id, endpoint: grant.endpoint, token, call: { type: 'package', request: { registry, path: fetchPath } } },
+			{ type: 'call', id, endpoint, token, call: { type: 'package', request: { registry, path: fetchPath } } },
 			abortSignal,
 		)
 		const answer: CallAnswer = await accepted.answer(abortSignal)

@@ -1,6 +1,7 @@
 import {
 	EndpointGrant,
 	type CallAnswer,
+	type RunGrant,
 	type ConnectorRegistry,
 	ModelResponse,
 	type PackageRegistry,
@@ -8,7 +9,7 @@ import {
 } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
-import type { GatewayOptions } from '../src/gateway.mts'
+import { packageTokens, type GatewayOptions } from '../src/gateway.mts'
 import type { ResolveRegistryFetch } from '../src/packages/connector-registry.mts'
 import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
@@ -29,6 +30,12 @@ function tokenOf(grant: EndpointGrant, index = 0): string {
 	const token = grant.tokens[index]
 	if (token === undefined) throw new Error(`The grant has no token ${String(index)}.`)
 	return token
+}
+
+/** The run's package endpoint, which a test knows was opened. */
+function packagesOf(grant: RunGrant): EndpointGrant {
+	if (grant.packages === undefined) throw new Error('The run has no package endpoint.')
+	return grant.packages
 }
 
 function errorOf(answer: CallAnswer | undefined): string {
@@ -530,7 +537,7 @@ async function packageRun(
 		callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, tokenOf(grant, used++), {
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant), used++), {
 				type: 'package',
 				request: { registry, path, ...(accept === undefined ? {} : { accept }) },
 			}),
@@ -684,7 +691,10 @@ describe('package calls', () => {
 		const { answer } = await callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }),
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: 'nuget', path: '/v3/index.json' },
+			}),
 		)
 
 		// Assert
@@ -692,23 +702,49 @@ describe('package calls', () => {
 		expect(sent).not.toHaveBeenCalled()
 	})
 
-	test("refuses package calls on a loop's endpoint", async () => {
+	test("refuses package calls on the run's and a loop's endpoint: they go on the package endpoint", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
 		const { gateway, grant } = await packageRun(sent)
 		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
 		const loop = EndpointGrant.parse(resultOf(opened))
+		const request = { registry: 'npm', path: '/left-pad' } as const
 
 		// Act
-		const { answer } = await callGateway(
-			gateway,
-			runId,
-			callOf(loop.endpoint, tokenOf(loop), { type: 'package', request: { registry: 'npm', path: '/left-pad' } }),
-		)
+		const onRun = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 1), { type: 'package', request }))
+		const onLoop = await callGateway(gateway, runId, callOf(loop.endpoint, tokenOf(loop), { type: 'package', request }))
 
 		// Assert
-		expect(errorOf(answer)).toContain('only takes its tools')
+		expect([errorOf(onRun.answer), errorOf(onLoop.answer)]).toEqual([
+			'Package fetches go on the package endpoint.',
+			'Package fetches go on the package endpoint.',
+		])
 		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test('opens a package endpoint with tokens of its own, which takes package fetches only', async () => {
+		// Arrange
+		const { gateway, grant } = await packageRun(vi.fn<typeof fetch>())
+		const packages = packagesOf(grant)
+
+		// Act
+		const opening = await callGateway(gateway, runId, callOf(packages.endpoint, tokenOf(packages), { type: 'open', tools: [] }))
+
+		// Assert
+		expect(packages.tokens).toHaveLength(packageTokens)
+		expect(packages.tokens.some((token) => grant.tokens.includes(token))).toBe(false)
+		expect(errorOf(opening.answer)).toBe('The package endpoint only takes package fetches.')
+	})
+
+	test('opens no package endpoint for a run whose app restores from no registry', async () => {
+		// Arrange
+		const { gateway } = await testGateway()
+
+		// Act
+		const grant = await gateway.openRun(runId, { tools: [] }, abortSignal)
+
+		// Assert
+		expect(grant.packages).toBeUndefined()
 	})
 	test('keeps a package it fetched whole, also for a gateway opened later, and fetches it only once', async () => {
 		// Arrange
@@ -775,7 +811,10 @@ describe('package calls', () => {
 		const { answer } = await callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: cloudRegistry, path: '/npm/packages/left-pad' } }),
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: cloudRegistry, path: '/npm/packages/left-pad' },
+			}),
 		)
 
 		// Assert
@@ -863,7 +902,10 @@ describe('package calls', () => {
 		const { gateway, grant } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
 		const accepted = await gateway.accept(
 			runId,
-			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: cloudRegistry, path: '/npm/packages/left-pad' } }),
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: cloudRegistry, path: '/npm/packages/left-pad' },
+			}),
 			abortSignal,
 		)
 		const controller = new AbortController()

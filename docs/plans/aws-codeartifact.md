@@ -225,5 +225,6 @@ Stacked PRs, each on the previous one's branch:
    token, caps the body and caches `.nupkg` and `.tgz` packages on the host by registry, path and
    `accept`. The engine writes each body into the sandbox's `mailbox/packages/` before the answer
    names it, and the proxy streams it from there. `deploy` and `trigger` report the AWS settings
-   missing for an app that restores from CodeArtifact or calls an AWS tool. Still on the run's
-   endpoint and its four tokens: package fetches don't have tokens of their own yet.
+   missing for an app that restores from CodeArtifact or calls an AWS tool. Package fetches go on
+   a package endpoint of the run's own (a `RunGrant`'s `packages`, eight tokens), which takes
+   nothing else; the run's endpoint takes no package fetches.

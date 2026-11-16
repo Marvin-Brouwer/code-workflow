@@ -119,3 +119,11 @@ export type CallAnswer = z.infer<typeof CallAnswer>
 /** An endpoint and its tokens, one per call that may run at the same time. */
 export const EndpointGrant = z.object({ endpoint: EndpointId, tokens: z.array(EndpointToken).min(1) })
 export type EndpointGrant = z.infer<typeof EndpointGrant>
+
+/**
+ * The run's own endpoint, for workflow code, tools and model calls, and, when its app restores
+ * packages, an endpoint for package fetches only, with tokens of its own: a restore that fetches
+ * many packages at once doesn't hold up the run's other calls.
+ */
+export const RunGrant = EndpointGrant.extend({ packages: EndpointGrant.optional() })
+export type RunGrant = z.infer<typeof RunGrant>
