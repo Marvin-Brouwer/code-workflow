@@ -5,7 +5,9 @@ import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
 
-const sandbox = { image: 'host', cpus: 1, memoryMb: 512, registries: [] }
+/** The sandbox a run record keeps, and the app's description of it, which adds the registries. */
+const sandbox = { image: 'host', cpus: 1, memoryMb: 512 }
+const sandboxDescription = { ...sandbox, registries: [] }
 const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workflow: 'report', cron: '* * * * * *' }
 const everyOtherSecond = { kind: 'schedule' as const, id: 'report */2 * * * * *', workflow: 'report', cron: '*/2 * * * * *' }
 
@@ -17,7 +19,13 @@ function teamApp(version: string, triggers: TriggerDescription[] = [everySecond]
 		manifest: {
 			entry: 'main.mjs',
 			platform: { os: 'linux', cpu: 'x64' },
-			description: { sandbox, workflows: [{ name: 'report', parameters: { type: 'object' } }], triggers, tools: [], models: [] },
+			description: {
+				sandbox: sandboxDescription,
+				workflows: [{ name: 'report', parameters: { type: 'object' } }],
+				triggers,
+				tools: [],
+				models: [],
+			},
 			builtAt: '2026-11-09T09:00:00.000Z',
 		},
 		tarball: `/apps/team/${version}/app.tgz`,
@@ -37,7 +45,7 @@ function fakeEngine(status: RunStatus = 'running') {
 				name: options.app,
 				version: 'v1',
 				entry: 'main.mjs',
-				sandbox: { image: sandbox.image, cpus: sandbox.cpus, memoryMb: sandbox.memoryMb },
+				sandbox,
 				tools: [],
 				registries: [],
 			},

@@ -16,6 +16,12 @@ export const packageRegistryHosts: Readonly<Record<PackageRegistry, string>> = O
 	npm: 'registry.npmjs.org',
 })
 
+/** The longest path and query a fetch may have: package managers' URLs are far shorter. */
+const maxPathLength = 2048
+
+/** The longest `accept` header a fetch may send: npm's longest is about a hundred characters. */
+const maxAcceptLength = 512
+
 /**
  * A package fetch, as a package manager in the sandbox made it: the registry and the path on it,
  * with its query. Only reads: the gateway turns down anything but a fetch of a package or its
@@ -24,9 +30,9 @@ export const packageRegistryHosts: Readonly<Record<PackageRegistry, string>> = O
 export const PackageRequest = z.object({
 	registry: PackageRegistry,
 	/** The path on the registry's host and the query, such as `/v3-flatcontainer/newtonsoft.json/index.json`. */
-	path: z.string().startsWith('/').max(2048),
+	path: z.string().startsWith('/').max(maxPathLength),
 	/** The `accept` header the package manager sent: npm asks for abbreviated package documents with it. */
-	accept: z.string().max(512).optional(),
+	accept: z.string().max(maxAcceptLength).optional(),
 })
 export type PackageRequest = z.infer<typeof PackageRequest>
 

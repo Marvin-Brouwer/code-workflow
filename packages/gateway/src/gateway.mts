@@ -125,7 +125,7 @@ function setKeyHint(provider: string): string {
 export function openGateway(options: GatewayOptions): Gateway {
 	const states = openRunStates(path.join(options.home, 'runs'))
 	const tools = new Map((options.tools ?? []).map((tool) => [tool.name, tool]))
-	const send = options.fetch ?? fetch
+	const fetchFromHost = options.fetch ?? fetch
 
 	const perform = async (
 		runId: string,
@@ -150,7 +150,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'package') {
 			if (!state.registries.includes(call.request.registry))
 				throw new Error(`The app doesn't restore from ${call.request.registry}: add it to the sandbox's registries.`)
-			return fetchPackage(call.request, send, abortSignal)
+			return fetchPackage(call.request, fetchFromHost, abortSignal)
 		}
 		return callModel(runId, call.request, abortSignal)
 	}
@@ -202,7 +202,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		const choice = chosenModel(await options.providers.list(abortSignal), request.provider, request.model)
 		const key = await options.credentials.get(providerCredential(choice.provider.name), abortSignal)
 		if (key === undefined) throw new Error(`Provider ${choice.provider.name} has no API key. ${setKeyHint(choice.provider.name)}`)
-		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: send, abortSignal })
+		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: fetchFromHost, abortSignal })
 		const used = usageOf(response.body, choice.model)
 		await states.update(
 			runId,

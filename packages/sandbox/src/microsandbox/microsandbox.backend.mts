@@ -8,7 +8,7 @@ import { assertSandboxId, isSandboxId, newSandboxId } from '../sandbox-id.mts'
 import type { Sandbox } from '../sandbox.mts'
 import { SandboxSpec } from '../sandbox-spec.mts'
 import { MicrosandboxSandbox } from './microsandbox.sandbox.mts'
-import { noNetwork } from './network-policy.mts'
+import { noNetwork } from './no-network.mts'
 import { ownedSnapshots } from './snapshots.mts'
 import { allSandboxes, removeSandbox, removeSandboxAndSnapshots } from './vms.mts'
 

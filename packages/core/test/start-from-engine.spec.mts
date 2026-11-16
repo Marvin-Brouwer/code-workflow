@@ -11,6 +11,7 @@ import {
 	runIdEnvironmentVariable,
 	RuntimeMessage,
 } from '@mesh-flow/protocol'
+import { tokensPerEndpoint } from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -115,6 +116,14 @@ export default defineMeshFlow({ sandbox: image({ name: 'node:26-slim', registrie
 /** The error of a `failed` message, or `undefined` for any other message. */
 function errorOf(message: RuntimeMessage | undefined): string | undefined {
 	return message?.type === 'failed' ? message.error : undefined
+}
+
+/** The shortest token an endpoint takes. */
+const minimumTokenLength = 16
+
+/** A token the engine could hand over, different for each `index`. */
+function testToken(index: number): string {
+	return String(index).padStart(minimumTokenLength, 't')
 }
 
 describe('an entry file started by the engine', () => {
@@ -294,7 +303,7 @@ describe('an entry file started by the engine', () => {
 	// Its workflow runs curl, which on Windows trusts only the system store. Sandboxes are Linux.
 	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
 		// Arrange
-		const tokens = ['a', 'b', 'c', 'd'].map((letter) => letter.repeat(16))
+		const tokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(index))
 		const run = await startLikeTheEngine(proxiedEntry, { mode: 'run', workflow: 'fetch' }, { endpoint: 'run', tokens })
 		await expect
 			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
@@ -303,7 +312,7 @@ describe('an entry file started by the engine', () => {
 
 		// Act
 		const answer: CallAnswer = {
-			next: 'e'.repeat(16),
+			next: testToken(tokensPerEndpoint),
 			outcome: {
 				ok: true,
 				result: {

@@ -1,4 +1,5 @@
-import { CallAnswer, EndpointGrant, type Answer, type GatewayCall, type RuntimeMessage } from '@mesh-flow/protocol'
+import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RuntimeMessage } from '@mesh-flow/protocol'
+import { z } from 'zod'
 import { TokenPool } from './token-pool.mts'
 
 /** How the gateway client reaches the engine: the runtime's mailbox, or a test's own. */
@@ -67,6 +68,9 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 	}
 
 	const call = async (endpoint: Endpoint, gatewayCall: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
+		// The engine reads the outbox strictly: a call it can't read would fail the whole run.
+		const checked = GatewayCall.safeParse(gatewayCall)
+		if (!checked.success) throw new GatewayCallError(`The ${gatewayCall.type} call isn't valid:\n${z.prettifyError(checked.error)}`)
 		const pool = poolOf(endpoint)
 		const token = await pool.take(abortSignal)
 		const id = `call-${idPrefix}-${String(++callCount)}`

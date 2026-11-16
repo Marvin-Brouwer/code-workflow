@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { PackageRegistry, PackageRequest, PackageResponse } from '@mesh-flow/protocol'
+import type { PackageRegistry } from '@mesh-flow/protocol'
 import { newCertificateAuthority } from './certificate-authority.mts'
-import { startPackageProxy, type PackageProxy } from './package-proxy.mts'
+import { startPackageProxy, type FetchPackage, type PackageProxy } from './package-proxy.mts'
 
 /** What package managers in the sandbox need to restore through the proxy. */
 export interface PackageAccessOptions {
 	readonly registries: readonly PackageRegistry[]
 	/** Fetches a package, through the gateway. */
-	readonly fetch: (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
+	readonly fetchPackage: FetchPackage
 	/** Where the authority's certificate goes. */
 	readonly directory: string
 	readonly abortSignal: AbortSignal
@@ -16,6 +16,15 @@ export interface PackageAccessOptions {
 
 /** The environment that points package managers at the proxy and makes them trust it. */
 export type PackageEnvironment = Readonly<Record<string, string>>
+
+/** The running proxy, and the environment that sends package managers to it. */
+export interface PackageAccess {
+	readonly proxy: PackageProxy
+	readonly environment: PackageEnvironment
+}
+
+/** Loopback, which never goes through the proxy. */
+const noProxyHosts = 'localhost,127.0.0.1'
 
 /** The certificate's file in {@link PackageAccessOptions.directory}. */
 const certificateFile = 'package-proxy-ca.pem'
@@ -27,7 +36,8 @@ const certificateFile = 'package-proxy-ca.pem'
  * (`SSL_CERT_FILE`), and by the variables curl and Python's requests read before that. The sandbox
  * has no network, so only the authority's certificates are needed.
  */
-export async function startPackageAccess(options: PackageAccessOptions): Promise<{ proxy: PackageProxy; environment: PackageEnvironment }> {
+export async function startPackageAccess(options: PackageAccessOptions): Promise<PackageAccess> {
+	options.abortSignal.throwIfAborted()
 	const authority = newCertificateAuthority()
 	await mkdir(options.directory, { recursive: true })
 	const certificate = path.join(options.directory, certificateFile)
@@ -38,13 +48,13 @@ export async function startPackageAccess(options: PackageAccessOptions): Promise
 		https_proxy: proxy.url,
 		HTTP_PROXY: proxy.url,
 		http_proxy: proxy.url,
-		NO_PROXY: 'localhost,127.0.0.1',
-		no_proxy: 'localhost,127.0.0.1',
+		NO_PROXY: noProxyHosts,
+		no_proxy: noProxyHosts,
 		NODE_USE_ENV_PROXY: '1',
 		// npm reads its own settings before HTTPS_PROXY, and an image may set them.
 		npm_config_https_proxy: proxy.url,
 		npm_config_proxy: proxy.url,
-		npm_config_noproxy: 'localhost,127.0.0.1',
+		npm_config_noproxy: noProxyHosts,
 		NODE_EXTRA_CA_CERTS: certificate,
 		SSL_CERT_FILE: certificate,
 		// These win over SSL_CERT_FILE where they are set, as images and other tools do.

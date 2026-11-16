@@ -9,9 +9,9 @@ export const jobFifo = `${jobDirectory}/start`
  * The container's init, a shell that starts each job named on the FIFO as its own child.
  *
  * Processes started with `runsc exec` don't survive a checkpoint, children of init do. So a
- * background process goes through init rather than through exec. Init holds the FIFO open for reading and writing, so `read` never
- * sees end of file and the loop never ends. Jobs don't get that descriptor. Each time a job
- * arrives, `jobs` lets the shell reap the ones that ended since.
+ * background process goes through init rather than through exec. Init holds the FIFO open for
+ * reading and writing, so `read` never sees end of file and the loop never ends. Jobs don't get
+ * that descriptor. Each time a job arrives, `jobs` lets the shell reap the ones that ended since.
  */
 export function initCommand(): string[] {
 	const script = [

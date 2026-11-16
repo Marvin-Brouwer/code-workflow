@@ -18,13 +18,19 @@ const backdateDays = 1
 
 const msPerDay = 24 * 60 * 60 * 1000
 
+/** The size of every key: what browsers and package managers take. */
+const rsaKeyBits = 2048
+
+/** A `dNSName` among X.509's kinds of `GeneralName`. */
+const dnsNameType = 2
+
 /** Bytes of a serial number: random, and positive in DER, so the first bit is cleared. */
 const serialBytes = 16
 
 /** An RSA key pair, made by Node's crypto: forge's own key generation is pure JavaScript and slow. */
 function newKeys(): forge.pki.rsa.KeyPair {
 	const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-		modulusLength: 2048,
+		modulusLength: rsaKeyBits,
 		publicKeyEncoding: { type: 'spki', format: 'pem' },
 		privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
 	})
@@ -37,15 +43,16 @@ function newSerial(): string {
 	return bytes.toString('hex')
 }
 
-function certificate(subject: forge.pki.CertificateField[], publicKey: forge.pki.PublicKey): forge.pki.Certificate {
-	const made = forge.pki.createCertificate()
+/** A certificate for `subject` and its key, valid from now on; the caller sets its issuer and extensions, then signs it. */
+function newCertificate(subject: forge.pki.CertificateField[], publicKey: forge.pki.PublicKey): forge.pki.Certificate {
+	const unsigned = forge.pki.createCertificate()
 	const now = Date.now()
-	made.serialNumber = newSerial()
-	made.publicKey = publicKey
-	made.validity.notBefore = new Date(now - backdateDays * msPerDay)
-	made.validity.notAfter = new Date(now + validDays * msPerDay)
-	made.setSubject(subject)
-	return made
+	unsigned.serialNumber = newSerial()
+	unsigned.publicKey = publicKey
+	unsigned.validity.notBefore = new Date(now - backdateDays * msPerDay)
+	unsigned.validity.notAfter = new Date(now + validDays * msPerDay)
+	unsigned.setSubject(subject)
+	return unsigned
 }
 
 /**
@@ -55,7 +62,7 @@ function certificate(subject: forge.pki.CertificateField[], publicKey: forge.pki
 export function newCertificateAuthority(): CertificateAuthority {
 	const authorityKeys = newKeys()
 	const name = [{ name: 'commonName', value: 'mesh-flow sandbox package proxy' }]
-	const authority = certificate(name, authorityKeys.publicKey)
+	const authority = newCertificate(name, authorityKeys.publicKey)
 	authority.setIssuer(name)
 	authority.setExtensions([
 		{ name: 'basicConstraints', cA: true, critical: true },
@@ -72,17 +79,17 @@ export function newCertificateAuthority(): CertificateAuthority {
 	const contextFor = (host: string): SecureContext => {
 		const known = contexts.get(host)
 		if (known !== undefined) return known
-		const made = certificate([{ name: 'commonName', value: host }], hostKeys.publicKey)
-		made.setIssuer(authority.subject.attributes)
-		made.setExtensions([
+		const hostCertificate = newCertificate([{ name: 'commonName', value: host }], hostKeys.publicKey)
+		hostCertificate.setIssuer(authority.subject.attributes)
+		hostCertificate.setExtensions([
 			{ name: 'basicConstraints', cA: false },
 			{ name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
 			{ name: 'extKeyUsage', serverAuth: true },
-			{ name: 'subjectAltName', altNames: [{ type: 2, value: host }] },
+			{ name: 'subjectAltName', altNames: [{ type: dnsNameType, value: host }] },
 			{ name: 'authorityKeyIdentifier', keyIdentifier: authority.generateSubjectKeyIdentifier().getBytes() },
 		])
-		made.sign(authorityKeys.privateKey, forge.md.sha256.create())
-		const context = createSecureContext({ key: hostKeyPem, cert: forge.pki.certificateToPem(made) })
+		hostCertificate.sign(authorityKeys.privateKey, forge.md.sha256.create())
+		const context = createSecureContext({ key: hostKeyPem, cert: forge.pki.certificateToPem(hostCertificate) })
 		contexts.set(host, context)
 		return context
 	}

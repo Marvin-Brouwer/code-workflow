@@ -75,7 +75,7 @@ async function dispatch(
 	}
 	const runId = environment[runIdEnvironmentVariable]
 	const gateway = await gatewayOf(channel, abortSignal)
-	const proxy = await packageProxyOf(app, gateway, abortSignal)
+	const proxy = await servePackages(app, gateway, abortSignal)
 	try {
 		const outcome = await runAnyWorkflow(begun.workflow, {
 			parameters: begun.parameters,
@@ -96,7 +96,7 @@ async function dispatch(
  * Starts the package proxy for the registries the app's sandbox lists, and points this process's
  * environment at it, so every command the workflow and its agents run inherits it.
  */
-async function packageProxyOf(
+async function servePackages(
 	app: MeshFlowApp,
 	gateway: GatewayClient | undefined,
 	abortSignal: AbortSignal,
@@ -107,7 +107,7 @@ async function packageProxyOf(
 		throw new Error(`The app restores from ${registries.join(', ')}, which takes a gateway, and this run has none.`)
 	const { proxy, environment } = await startPackageAccess({
 		registries,
-		fetch: gatewayPackages(gateway),
+		fetchPackage: gatewayPackages(gateway),
 		directory: path.join(homedir(), '.mesh-flow'),
 		abortSignal,
 	})

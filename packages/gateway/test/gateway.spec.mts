@@ -1,7 +1,8 @@
-import { EndpointGrant, type CallAnswer, ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
+import { EndpointGrant, type CallAnswer, ModelResponse, type PackageRegistry, ResolvedModel } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
+import { maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -487,16 +488,17 @@ describe('model calls', () => {
 })
 
 /** A run of an app that restores from npm, on a gateway that fetches with `sent`. */
-async function npmRun(sent: typeof fetch) {
+/** A run that restores from `registry`, on a gateway that fetches with `sent`, and a call that fetches a path there. */
+async function packageRun(sent: typeof fetch, registry: PackageRegistry = 'npm') {
 	const { gateway } = await testGateway({ fetch: sent })
-	const grant = await gateway.openRun(runId, { tools: [], registries: ['npm'] }, abortSignal)
+	const grant = await gateway.openRun(runId, { tools: [], registries: [registry] }, abortSignal)
 	const fetchPath = (path: string, accept?: string) =>
 		callGateway(
 			gateway,
 			runId,
 			callOf(grant.endpoint, tokenOf(grant), {
 				type: 'package',
-				request: { registry: 'npm', path, ...(accept === undefined ? {} : { accept }) },
+				request: { registry, path, ...(accept === undefined ? {} : { accept }) },
 			}),
 		)
 	return { gateway, grant, fetchPath }
@@ -508,7 +510,7 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() =>
 			Promise.resolve(new Response('tarball', { headers: { 'content-type': 'application/octet-stream', 'set-cookie': 'a=b' } })),
 		)
-		const { fetchPath } = await npmRun(sent)
+		const { fetchPath } = await packageRun(sent)
 
 		// Act
 		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
@@ -526,7 +528,7 @@ describe('package calls', () => {
 
 	test("passes the registry's 404 on: package managers ask for what may not exist", async () => {
 		// Arrange
-		const { fetchPath } = await npmRun(vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status: 404 }))))
+		const { fetchPath } = await packageRun(vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status: 404 }))))
 
 		// Act
 		const { answer } = await fetchPath('/no-such-package')
@@ -535,26 +537,75 @@ describe('package calls', () => {
 		expect(resultOf(answer)).toMatchObject({ status: 404 })
 	})
 
-	test.each(['/-/npm/v1/security/advisories/bulk', '/left-pad/../-/whoami', '//evil.example/left-pad', '/'])(
-		'refuses %s, which is no package fetch, and sends nothing',
-		async (path) => {
-			// Arrange
-			const sent = vi.fn<typeof fetch>()
-			const { fetchPath } = await npmRun(sent)
+	test.each<[PackageRegistry, string]>([
+		['npm', '/-/npm/v1/security/advisories/bulk'],
+		['npm', '/left-pad/../-/whoami'],
+		['npm', '/left-pad/%2e%2e/-/whoami'],
+		['npm', '//evil.example/left-pad'],
+		['npm', '/\\evil.example/left-pad'],
+		['npm', '/left-pad#fragment'],
+		['npm', '/'],
+		['nuget', '/v3x/index.json'],
+		['nuget', '/v3-flatcontainer/../api/v2/package/x'],
+		['nuget', '/api/v2/package/newtonsoft.json'],
+	])('refuses %s %s, which is no package fetch, and sends nothing', async (registry, path) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { fetchPath } = await packageRun(sent, registry)
 
-			// Act
-			const { answer } = await fetchPath(path)
+		// Act
+		const { answer } = await fetchPath(path)
 
-			// Assert
-			expect(errorOf(answer)).toContain("isn't a package fetch")
-			expect(sent).not.toHaveBeenCalled()
-		},
-	)
+		// Assert
+		expect(errorOf(answer)).toContain("isn't a package fetch")
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test.each(['/v3/index.json', '/v3-flatcontainer/newtonsoft.json/index.json'])('fetches %s from nuget.org', async (path) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
+		const { fetchPath } = await packageRun(sent, 'nuget')
+
+		// Act
+		const { answer } = await fetchPath(path)
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 200 })
+		expect(sent.mock.calls[0]?.[0]).toBe(`https://api.nuget.org${path}`)
+	})
+
+	test('hands a redirect back instead of following it, so the next fetch is checked too', async () => {
+		// Arrange
+		const location = 'https://elsewhere.example/left-pad'
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 302, headers: { location } })))
+		const { fetchPath } = await packageRun(sent)
+
+		// Act
+		const { answer } = await fetchPath('/left-pad')
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 302, headers: { location } })
+		expect(sent).toHaveBeenCalledOnce()
+		expect(sent.mock.calls[0]?.[1]).toMatchObject({ redirect: 'manual' })
+	})
+
+	test('refuses a body larger than a package fetch takes', async () => {
+		// Arrange
+		const headers = { 'content-length': String(maxPackageBytes + 1) }
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('too large', { headers })))
+		const { fetchPath } = await packageRun(sent)
+
+		// Act
+		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(errorOf(answer)).toContain('the most a package fetch takes')
+	})
 
 	test("refuses a registry the run's app doesn't restore from", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { gateway, grant } = await npmRun(sent)
+		const { gateway, grant } = await packageRun(sent)
 
 		// Act
 		const { answer } = await callGateway(
@@ -571,7 +622,7 @@ describe('package calls', () => {
 	test("refuses package calls on a loop's endpoint", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { gateway, grant } = await npmRun(sent)
+		const { gateway, grant } = await packageRun(sent)
 		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
 		const loop = EndpointGrant.parse(resultOf(opened))
 

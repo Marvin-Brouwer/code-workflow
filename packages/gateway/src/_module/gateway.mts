@@ -27,6 +27,7 @@ export {
 	type FetchRetryOptions,
 	type OutgoingRequest,
 } from '../http/retrying-fetch.mts'
+export { maxPackageBytes } from '../packages/fetch-package.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'

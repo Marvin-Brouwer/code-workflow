@@ -27,6 +27,12 @@ const backendName = process.env.MESH_FLOW_ENGINE_TESTS
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(60_000), backend: AbortSignal.timeout(60_000) })
 
+/** How long the restore test may take, and its parts: pulling the image is most of it. */
+const restoreTimeoutMs = 300_000
+const buildTimeoutMs = 120_000
+const restoredWithinMs = 240_000
+const pollIntervalMs = 500
+
 /** Loads only the backend under test, so the other's SDK isn't needed. */
 async function openBackend(): Promise<SandboxBackend> {
 	if (backendName === 'microsandbox') return (await import('@mesh-flow/sandbox/microsandbox')).microsandboxBackend()
@@ -125,7 +131,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		}, 60_000)
 	})
 
-	test("restores packages with npm through the runtime's proxy, in a sandbox with no network", { timeout: 300_000 }, async () => {
+	test("restores packages with npm through the runtime's proxy, in a sandbox with no network", { timeout: restoreTimeoutMs }, async () => {
 		// Arrange
 		const home = await temporaryDirectory()
 		const served = await fakeRegistry()
@@ -133,16 +139,17 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			const { pathname } = new URL(input instanceof Request ? input.url : input)
 			return Promise.resolve(served[pathname]?.clone() ?? new Response('{}', { status: 404 }))
 		})
+		const gatewayHome = path.join(home, 'gateway')
 		const gateway = openGateway({
-			home: path.join(home, 'gateway'),
-			credentials: openCredentialStore(path.join(home, 'gateway', 'credentials.json'), keyFile(path.join(home, 'gateway', 'store.key'))),
-			providers: openProviderSettings(path.join(home, 'gateway', 'providers.json')),
+			home: gatewayHome,
+			credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
+			providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 			tools: [],
 			fetch,
 		})
 		const apps = await openAppStore(path.join(home, 'apps'), signal)
 		const built = path.join(home, 'built')
-		await buildApp({ directory: restoringApp, out: built, abortSignal: AbortSignal.timeout(120_000) })
+		await buildApp({ directory: restoringApp, out: built, abortSignal: AbortSignal.timeout(buildTimeoutMs) })
 		await withPackedApp(built, (tarball) => apps.deploy(testAppName, tarball, signal), signal)
 		const engine = await Engine.open({ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), apps, gateway }, signal)
 		onTestFinished(() => engine.close(deadlines()))
@@ -157,7 +164,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 				if (!finishedStatuses.has(record.status)) throw new Error(`The run is ${record.status}.`)
 				return record
 			},
-			{ timeout: 240_000, interval: 500 },
+			{ timeout: restoredWithinMs, interval: pollIntervalMs },
 		)
 		expect(finished.status, finished.error).toBe('succeeded')
 		const fetched = fetch.mock.calls.map(([input]) => new URL(input instanceof Request ? input.url : input).pathname)

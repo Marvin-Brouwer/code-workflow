@@ -128,6 +128,19 @@ describe('gateway', () => {
 		await expect(run.result).rejects.toThrow(GatewayCallError)
 	})
 
+	test("refuses a call the engine couldn't read, and sends nothing, so the run goes on", async () => {
+		// Arrange
+		const { client, calls } = await withGateway()
+		const gateway = client(abortSignal)
+
+		// Act
+		const calling = gateway.call(gateway.run, { type: 'package', request: { registry: 'npm', path: 'left-pad' } }, abortSignal)
+
+		// Assert
+		await expect(calling).rejects.toThrow(GatewayCallError)
+		expect(calls).toEqual([])
+	})
+
 	test("runs an agent's host tool on the loop's own endpoint, and closes it after the loop", async () => {
 		// Arrange
 		const { client, calls } = await withGateway()

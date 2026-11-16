@@ -7,22 +7,28 @@
  */
 import { createServer, request } from 'node:http'
 
+/** What a host that didn't answer gets, as curl prints it. */
+const unreachable = '000'
+
+/** The loopback address, which the proxy listens on. */
+const loopbackHost = '127.0.0.1'
+
 async function status(host: string): Promise<string> {
 	try {
 		const response = await fetch(`https://${host}/`, { signal: AbortSignal.timeout(10_000) })
 		return String(response.status)
 	} catch {
-		return '000'
+		return unreachable
 	}
 }
 
 function loopback(): Promise<string> {
 	return new Promise((resolve) => {
 		const server = createServer((_request, response) => response.end('ok'))
-		server.listen(0, '127.0.0.1', () => {
+		server.listen(0, loopbackHost, () => {
 			const address = server.address()
 			const port = typeof address === 'object' && address !== null ? address.port : 0
-			const asked = request({ host: '127.0.0.1', port, path: '/' }, (response) => {
+			const asked = request({ host: loopbackHost, port, path: '/' }, (response) => {
 				response.setEncoding('utf8')
 				let body = ''
 				response.on('data', (chunk: string) => (body += chunk))
@@ -33,7 +39,7 @@ function loopback(): Promise<string> {
 			})
 			asked.once('error', () => {
 				server.close()
-				resolve('000')
+				resolve(unreachable)
 			})
 			asked.end()
 		})

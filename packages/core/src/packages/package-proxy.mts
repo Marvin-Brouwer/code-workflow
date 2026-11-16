@@ -1,8 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer, STATUS_CODES, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { TLSSocket } from 'node:tls'
-import { packageRegistryHosts, type PackageRegistry, type PackageRequest, type PackageResponse } from '@mesh-flow/protocol'
+import { packageRegistryHosts, PackageRequest, type PackageRegistry, type PackageResponse } from '@mesh-flow/protocol'
 import { describeError } from '../run/describe-error.mts'
 import type { CertificateAuthority } from './certificate-authority.mts'
 
@@ -13,18 +13,24 @@ export interface PackageProxyOptions {
 	/** Signs the certificates the proxy shows for the registries' hosts. */
 	readonly authority: CertificateAuthority
 	/** Fetches a package, through the gateway. */
-	readonly fetch: (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
-	/** Stops the proxy: every request it still serves is aborted. */
+	readonly fetchPackage: FetchPackage
+	/** Stops the proxy, as {@link PackageProxy.close} does: every request it still serves is aborted. */
 	readonly abortSignal: AbortSignal
 }
+
+/** How the proxy fetches a package: through the gateway, in the runtime. */
+export type FetchPackage = (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
 
 /** A running package proxy. */
 export interface PackageProxy {
 	/** Where it listens, as `HTTPS_PROXY` takes it: `http://127.0.0.1:<port>`. */
 	readonly url: string
-	/** Stops listening and drops every connection. */
+	/** Stops listening and drops every connection, as aborting its signal does. */
 	readonly close: () => Promise<void>
 }
+
+/** How much of a refused path the answer repeats. */
+const maxEchoedLength = 200
 
 /** Where the proxy listens: loopback, the only network a sandbox has. */
 const loopback = '127.0.0.1'
@@ -32,9 +38,21 @@ const loopback = '127.0.0.1'
 /** The only port it tunnels to: package managers fetch over HTTPS. */
 const httpsPort = '443'
 
+const established = 200
+const badRequest = 400
 const forbidden = 403
 const methodNotAllowed = 405
 const badGateway = 502
+
+/** The status line that starts an answer to `CONNECT`, which isn't sent through a `ServerResponse`. */
+function statusLine(status: number): string {
+	return `HTTP/1.1 ${String(status)} ${STATUS_CODES[status] ?? ''}\r\n\r\n`
+}
+
+/** A host as `CONNECT` names it, compared as DNS does: in lower case, without a trailing dot. */
+function normalizedHost(host: string): string {
+	return host.toLowerCase().replace(/\.$/, '')
+}
 
 /**
  * The proxy package managers in the sandbox reach on `HTTPS_PROXY`, such as `npm ci` and
@@ -44,6 +62,7 @@ const badGateway = 502
  * write, is refused here.
  */
 export async function startPackageProxy(options: PackageProxyOptions): Promise<PackageProxy> {
+	options.abortSignal.throwIfAborted()
 	const registryOfHost = new Map(options.registries.map((registry) => [packageRegistryHosts[registry], registry]))
 	const registryOfSocket = new WeakMap<Socket, PackageRegistry>()
 	const connections = new Set<Duplex>()
@@ -58,16 +77,18 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			refuse(response, methodNotAllowed, 'Package registries are only read from here.')
 			return
 		}
+		const accept = request.headers.accept
+		const asked = PackageRequest.safeParse({ registry, path: request.url, ...(accept === undefined ? {} : { accept }) })
+		if (!asked.success) {
+			refuse(response, badRequest, `Not a package fetch: ${request.url.slice(0, maxEchoedLength)}`)
+			return
+		}
 		const stopped = new AbortController()
 		response.once('close', () => {
 			stopped.abort(new Error('The package manager went away.'))
 		})
 		try {
-			const accept = request.headers.accept
-			const answer = await options.fetch(
-				{ registry, path: request.url, ...(accept === undefined ? {} : { accept }) },
-				AbortSignal.any([stopped.signal, options.abortSignal]),
-			)
+			const answer = await options.fetchPackage(asked.data, AbortSignal.any([stopped.signal, options.abortSignal]))
 			const body = Buffer.from(answer.body, 'base64')
 			response.writeHead(answer.status, { ...answer.headers, 'content-length': String(body.length) })
 			response.end(body)
@@ -86,13 +107,16 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		track(connections, socket)
 	})
 	outer.on('connect', (request: IncomingMessage, client: Duplex, head: Buffer) => {
-		const [host = '', port] = (request.url ?? '').split(':')
+		// Node leaves the socket without an error listener here: a client that resets it mustn't crash the runtime.
+		client.on('error', () => client.destroy())
+		const [requestedHost = '', port] = (request.url ?? '').split(':')
+		const host = normalizedHost(requestedHost)
 		const registry = registryOfHost.get(host)
 		if (registry === undefined || port !== httpsPort) {
-			client.end('HTTP/1.1 403 Forbidden\r\n\r\n')
+			client.end(statusLine(forbidden))
 			return
 		}
-		client.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+		client.write(statusLine(established))
 		if (head.length > 0) client.unshift(head)
 		const secure = new TLSSocket(client, { isServer: true, secureContext: options.authority.contextFor(host) })
 		secure.on('error', () => secure.destroy())
@@ -111,7 +135,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 	const address = outer.address()
 	const port = typeof address === 'object' && address !== null ? address.port : 0
 
+	const closed = new AbortController()
 	const close = async () => {
+		closed.abort()
 		for (const connection of connections) connection.destroy()
 		await new Promise<void>((resolve) => {
 			outer.close(() => {
@@ -125,8 +151,13 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		() => {
 			void close()
 		},
-		{ once: true },
+		{ once: true, signal: closed.signal },
 	)
+	// Stopped while it started listening: the listener above came too late.
+	if (options.abortSignal.aborted) {
+		await close()
+		options.abortSignal.throwIfAborted()
+	}
 	return Object.freeze({ url: `http://${loopback}:${String(port)}`, close })
 }
 

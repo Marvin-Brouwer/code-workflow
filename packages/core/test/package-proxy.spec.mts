@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
+import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
@@ -27,7 +28,12 @@ function answer(status: number, body: string | Buffer, contentType = 'applicatio
 async function proxyWith(fetch: Fetch): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
-	const { proxy, environment } = await startPackageAccess({ registries: ['npm', 'nuget'], fetch, directory, abortSignal: stop.signal })
+	const { proxy, environment } = await startPackageAccess({
+		registries: ['npm', 'nuget'],
+		fetchPackage: fetch,
+		directory,
+		abortSignal: stop.signal,
+	})
 	onTestFinished(() => proxy.close())
 	return { environment, stop }
 }
@@ -57,6 +63,18 @@ async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tar
 	})
 	return { packument, tarball, tarballPath }
 }
+
+/** Runs curl with `args` through the proxy, and resolves to the status it got, `000` when it got none. */
+async function curlStatus(environment: PackageEnvironment, home: string, args: readonly string[]): Promise<string> {
+	// curl prints the status and fails on a refused tunnel alike; either way, stdout has the status.
+	const result: unknown = await run('curl', ['--silent', '--output', '/dev/null', '--write-out', '%{http_code}', ...args], {
+		env: childEnvironment(environment, home),
+	}).catch((error: unknown) => error)
+	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : ''
+}
+
+/** A path longer than a package fetch may be. */
+const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
 
 /** Sends a request for `target` through the proxy as a plain-HTTP proxy request, and resolves to its status. */
 function plainRequest(proxyUrl: string, target: string, method = 'GET'): Promise<number> {
@@ -132,7 +150,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 		expect(fetch).not.toHaveBeenCalled()
 	})
 
-	test('refuses plain HTTP and writes', async () => {
+	test('refuses plain HTTP, reads and writes alike', async () => {
 		// Arrange
 		const fetch = vi.fn<Fetch>()
 		const { environment } = await proxyWith(fetch)
@@ -144,6 +162,67 @@ describe.skipIf(onWindows)('package proxy', () => {
 		// Assert
 		expect([plain, written]).toEqual([403, 403])
 		expect(fetch).not.toHaveBeenCalled()
+	})
+
+	test('refuses a write over HTTPS, and anything but a read', async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>()
+		const { environment } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+
+		// Act
+		const written = await curlStatus(environment, home, ['--request', 'PUT', 'https://registry.npmjs.org/left-pad'])
+		const head = await curlStatus(environment, home, ['--head', 'https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect([written, head]).toEqual(['405', '405'])
+		expect(fetch).not.toHaveBeenCalled()
+	})
+
+	test("answers 400 to a fetch the gateway couldn't take, and sends nothing", async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>()
+		const { environment } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+
+		// Act
+		const status = await curlStatus(environment, home, [`https://registry.npmjs.org${tooLongPath}`])
+
+		// Assert
+		expect(status).toBe('400')
+		expect(fetch).not.toHaveBeenCalled()
+	})
+
+	test('takes a registry host in any case, and with a trailing dot', async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const { environment } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+
+		// Act
+		const status = await curlStatus(environment, home, ['https://Registry.NPMJS.org./left-pad'])
+
+		// Assert
+		expect(status).toBe('200')
+		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'npm', path: '/left-pad' }), expect.any(AbortSignal))
+	})
+
+	test('keeps serving when a client resets a refused tunnel', async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const { environment } = await proxyWith(fetch)
+		const proxy = new URL(environment.HTTPS_PROXY ?? '')
+		const home = await temporaryDirectory()
+		const socket = connect(Number(proxy.port), proxy.hostname)
+		await new Promise((resolve) => socket.once('connect', resolve))
+
+		// Act
+		socket.write('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n')
+		socket.resetAndDestroy()
+		const status = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect(status).toBe('200')
 	})
 
 	test('stops promptly while a fetch never settles', async () => {
@@ -176,13 +255,12 @@ describe('package access', () => {
 	test('writes the authority it trusts where the environment says', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		await mkdir(directory, { recursive: true })
 		const stop = new AbortController()
 
 		// Act
 		const { proxy, environment } = await startPackageAccess({
 			registries: ['npm'],
-			fetch: vi.fn<Fetch>(),
+			fetchPackage: vi.fn<Fetch>(),
 			directory,
 			abortSignal: stop.signal,
 		})
@@ -192,5 +270,24 @@ describe('package access', () => {
 		expect(environment.NODE_EXTRA_CA_CERTS).toBe(environment.SSL_CERT_FILE)
 		expect(await readFile(environment.SSL_CERT_FILE ?? '', 'utf8')).toContain('BEGIN CERTIFICATE')
 		expect(environment.HTTPS_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+	})
+})
+
+describe('package proxy start', () => {
+	test('throws on a signal that is aborted already', async () => {
+		// Arrange
+		const directory = await temporaryDirectory()
+		const reason = new Error('The run stopped.')
+
+		// Act
+		const starting = startPackageAccess({
+			registries: ['npm'],
+			fetchPackage: vi.fn<Fetch>(),
+			directory,
+			abortSignal: AbortSignal.abort(reason),
+		})
+
+		// Assert
+		await expect(starting).rejects.toBe(reason)
 	})
 })

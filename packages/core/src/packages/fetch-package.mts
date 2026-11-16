@@ -35,6 +35,6 @@ export interface FetchedPackage {
 export async function fetchPackage(request: PackageFetch, abortSignal: AbortSignal): Promise<FetchedPackage> {
 	const gateway = findScope()?.run.gateway
 	if (gateway === undefined) throw new Error('Packages come through the gateway, and this run has none.')
-	const answer = await gatewayPackages(gateway)({ ...request }, abortSignal)
+	const answer = await gatewayPackages(gateway)(request, abortSignal)
 	return { status: answer.status, headers: answer.headers, body: Buffer.from(answer.body, 'base64') }
 }
