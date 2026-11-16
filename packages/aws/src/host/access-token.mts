@@ -71,6 +71,7 @@ export function sessionAccessTokens({ credentials, endpoints, now }: SessionAcce
 		return current !== undefined && current.refreshToken !== session.refreshToken ? current.accessToken : undefined
 	}
 
+	/** Renews the session with its refresh token on signals of its own, and resolves the access token that counts afterwards. */
 	const renewAccessToken = async (settings: AwsSettings, session: StoredSession): Promise<string> => {
 		if (session.refreshToken === undefined) throw sessionEnded()
 		const oidc = oidcClient(settings, endpoints)
@@ -100,6 +101,7 @@ export function sessionAccessTokens({ credentials, endpoints, now }: SessionAcce
 		return keptAccessToken(settings, session, renewed)
 	}
 
+	/** Starts a renewal and remembers it as the one under way until it settles, so a later caller with the same refresh token waits for it. */
 	const startRenewal = (settings: AwsSettings, session: StoredSession): Renewal => {
 		const started: Renewal = { refreshToken: session.refreshToken, accessToken: renewAccessToken(settings, session) }
 		const forget = () => {
