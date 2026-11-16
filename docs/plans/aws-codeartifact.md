@@ -107,31 +107,44 @@ an expired token, so a long run whose session runs out asks once and goes on.
 
 ### 4. The registry shim (sandbox)
 
-A read-only package feed inside the sandbox, served by the runtime, that turns each request into a
-host tool call:
+The sandbox gets no direct egress at all (Marvin, 2026-11-16): every package fetch, from
+CodeArtifact and from public registries alike, is a tool call to the host. That supersedes "public
+package sources stay reachable directly" in the [gateway plan](gateway-tool-calls.md) and the
+`egress` hosts of PR #26; the sandbox runs without a network on every backend.
 
-- **NuGet v3**: the service index, the flat container (version lists and `.nupkg` downloads) and the
-  registration resources restore reads. **npm**: package documents and tarballs.
-- One host tool, `codeArtifactFetch({ repository, format, path })`, which only accepts those read
-  paths for the repositories the app declared, and sends the request to CodeArtifact with the
-  authorization token. There is no write path, so the shim can't publish or delete.
-- Answers are cached in the sandbox for the run, so a second restore doesn't cross again.
-- Packages that aren't in CodeArtifact are its upstreams' job (nuget.org, npmjs) as CodeArtifact
-  is normally set up; nothing in the shim decides that.
+- **Fetches are tool calls**, so code and a user can make them too, not only a package manager:
+  `codeArtifact.fetch({ repository, format, path })` with the CodeArtifact token on the host, and
+  `registry.fetch({ registry, format, path })` for the public registries the app allows (nuget.org,
+  npmjs), without a credential. Both only accept the read paths of the format: for **NuGet v3** the
+  service index, the flat container (version lists and `.nupkg` downloads) and the registration
+  resources restore reads; for **npm** package documents and tarballs. There is no write path, so
+  nothing can publish or delete through them.
+- **The package manager reaches them through a proxy in the sandbox.** The sandbox's
+  `HTTPS_PROXY` points at a proxy served by the runtime, the way gVisor's egress forwarder already
+  is today. Package managers keep their config: a repository's `nuget.config` that names
+  CodeArtifact's own URL works unchanged, nothing has to be rewritten in a checkout, and nothing
+  can end up in a commit. The proxy terminates TLS with a CA made in the sandbox for that run and
+  put in its trust store (and `NODE_EXTRA_CA_CERTS` for npm); the CA's key unlocks nothing outside
+  the sandbox. It answers each request it recognizes with the matching tool call and refuses
+  everything else, so there's no way out but the tools.
+- **Answers are cached** in the sandbox for the run, so a second restore doesn't cross again.
+- Whether a package comes from CodeArtifact or its upstreams (nuget.org, npmjs) stays
+  CodeArtifact's setup, as the repository's config names it.
 
-The app declares which repositories it restores from, next to the sandbox's egress, since it's
-non-secret team config that belongs in git:
+The app declares where it restores from, since it's non-secret team config that belongs in git:
 
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
-import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { defineMeshFlow, image, registry, userTrigger } from '@mesh-flow/core'
 
 export default defineMeshFlow({
 	sandbox: image({
 		name: sandboxImage,
 		memoryMb: 4096,
-		egress: ['api.nuget.org'],
-		registries: [codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
+		registries: [
+			registry.nuget(),
+			codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' }),
+		],
 	}),
 	workflows: [userTrigger(develop)],
 })
@@ -139,19 +152,11 @@ export default defineMeshFlow({
 
 ## Open questions
 
-1. **How the package manager finds the shim.** A real repository's `nuget.config` names
-   CodeArtifact's own HTTPS URL, and NuGet has no setting that swaps a source's URL from outside.
-   Options:
-   - **a. Take over the hostname** (recommended): the sandbox resolves the declared CodeArtifact
-     hostnames to the shim, which serves HTTPS with a CA made in the sandbox for that run and put
-     in its trust store. The repository's config works unchanged and nothing can end up in a
-     commit. The CA's key unlocks nothing outside the sandbox. microsandbox already intercepts TLS
-     this way for its egress, so the trust store part is known to work there.
-   - **b. Rewrite the source in the checkout** before restore (`dotnet nuget update source`, an
-     `.npmrc` override). Simple, but the push tools commit every change, so it has to be undone
-     before each push or kept out of git.
-   - **c. A machine-wide config** that adds the shim as a source. NuGet merges configs and the
-     repository's wins, so the CodeArtifact source still fails.
+1. **No network means every backend changes.** gVisor already runs without one. microsandbox and
+   E2B get no egress rules at all, and the `egress` option goes away, as do the package egress
+   conformance tests of PR #26, replaced by restores through the proxy on every backend. The
+   runtime's proxy replaces gVisor's forwarder. This is the bigger part of the work and worth its
+   own PR before the AWS one.
 2. **Large packages over the mailbox.** Answers are whole JSON messages, base64 for bytes, like the
    git bundles. Fine for most packages; a package of hundreds of MB would sit in memory twice.
    Proposed: answers above a size go into a file the engine writes next to the inbox instead. Measure
@@ -164,7 +169,7 @@ export default defineMeshFlow({
 
 - Publishing to CodeArtifact (an upstream repository's packages, for dependent repositories).
 - AWS operations as host tools beyond CodeArtifact.
-- pip, Maven/Gradle, Go and Cargo, each with its own egress conformance test.
+- pip, Maven/Gradle, Go and Cargo, each with its own conformance test through the proxy.
 - The settings UI and how signing in looks there: designed with the UI (roadmap 6).
 - Other ways to authenticate to AWS (access keys, IAM Roles Anywhere): IAM Identity Center only.
 
@@ -172,11 +177,14 @@ export default defineMeshFlow({
 
 Stacked PRs, each on the previous one's branch:
 
-1. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
+1. No direct egress: the runtime's proxy with its sandbox CA, `registry.fetch` for nuget.org and
+   npmjs, `registries` in `image` replacing `egress`, no network on every backend. Conformance:
+   NuGet and npm restores through the proxy, and any other host refused, on every backend.
+2. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.
-2. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.
+3. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.
    Functional tests: a run that waits for a sign-in, across an engine restart, and shutdown while it
    waits.
-3. The registry shim: `registries` in `image`, NuGet and npm feeds, `codeArtifactFetch`. Conformance
-   test on gVisor and microsandbox against a fake CodeArtifact; then the real one by hand.
+4. `codeArtifact.fetch` behind the proxy. Conformance test against a fake CodeArtifact; then the
+   real one by hand.
