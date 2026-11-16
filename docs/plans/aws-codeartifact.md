@@ -213,7 +213,17 @@ Stacked PRs, each on the previous one's branch:
    again, sharing one request per connector. The engine keeps one sign-in per connector for every
    waiting run, starts a new code when one runs out, and `mesh-flow login` joins it while the engine
    serves. Connectors get only their own credentials (`<connector>/...`), writable, for their tools
-   and their sign-in. A resumed run starts a new device authorization. Still open for step 4:
-   `deploy` and `trigger` saying when the AWS settings are missing.
-4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files. Conformance test
-   against a fake CodeArtifact; then the real one by hand.
+   and their sign-in. A resumed run starts a new device authorization. `deploy` and `trigger`
+   saying when the AWS settings are missing came with step 4.
+4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files (built). Conformance
+   test against a fake CodeArtifact; then the real one by hand. As built: `codeArtifact(...)` is a
+   connector's registry (connector, host, paths, settings) in `registries`, and code fetches from
+   it with `fetchPackage({ registry, path })` from `@mesh-flow/core`, as from a public registry,
+   instead of a `codeArtifact.fetch` tool of its own. The connector only says where a fetch goes
+   and adds the CodeArtifact token (bearer for npm, `aws:<token>` for NuGet), on its own domain's
+   host only; the gateway checks the path, follows redirects to signed downloads without the
+   token, caps the body and caches `.nupkg` and `.tgz` packages on the host by registry, path and
+   `accept`. The engine writes each body into the sandbox's `mailbox/packages/` before the answer
+   names it, and the proxy streams it from there. `deploy` and `trigger` report the AWS settings
+   missing for an app that restores from CodeArtifact or calls an AWS tool. Still on the run's
+   endpoint and its four tokens: package fetches don't have tokens of their own yet.

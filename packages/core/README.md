@@ -287,11 +287,12 @@ A trigger listed twice, in the app or across its bundles, is an error.
 
 ### Packages
 
-The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org) and `npm` (the npm registry), with their own config and no changes to a repository:
+The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org), `npm` (the npm registry) and a connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md), with their own config and no changes to a repository:
 
 - Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
 - For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime.
-- Each `GET` it gets is a call to the gateway, which fetches the package on the host. Other hosts, plain HTTP and writes are refused. A redirect is handed back to the package manager, not followed, and a fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB). Until packages are staged as files, a fetch goes through the runtime's memory a few times over, so give a sandbox that restores packages near that size `memoryMb` to spare.
+- Each `GET` it gets is a call to the gateway, which fetches the package on the host, with the connector's credential for a connector's registry. A host with several registries, such as two CodeArtifact repositories in one domain, sends each fetch to the registry whose path it's below. Other hosts and paths, plain HTTP and writes are refused. A fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB).
+- The engine writes each fetched body into the sandbox as a file, and the proxy streams it from there and removes it, so a package isn't held in the runtime's memory. The gateway keeps the packages it fetched on the host, so a warm restore doesn't go to the registry.
 - Package fetches share the run's gateway endpoint, and its `tokensPerEndpoint` (four) tokens, with the workflow's tool and model calls, so at most that many go at once.
 
 Code can make the same call itself, with `fetchPackage`:

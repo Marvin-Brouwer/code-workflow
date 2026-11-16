@@ -90,7 +90,7 @@ const answer = CallAnswer.parse((await mailbox.take('call-1', abortSignal)).valu
 | `{ type: 'close', endpoint }` | nothing: the loop's endpoint is closed. Only on the run's endpoint |
 | `{ type: 'resolve-model', model }` | a `ResolvedModel`: the first of the user's providers that offers the model |
 | `{ type: 'model', request }` | a `ModelResponse`: what the provider answered, with the credential added on the host |
-| `{ type: 'package', request }` | a `PackageResponse`: what one of the app's package registries answered a `PackageRequest`, the body base64. Only on the run's endpoint |
+| `{ type: 'package', request }` | a `PackageResponse`: what one of the app's package registries answered a `PackageRequest`. The body isn't in it: the engine writes it to the mailbox's `packages` folder first, and the answer names the file (`RuntimeMailbox.staged(name)` says where it is); whoever reads it removes it. Only on the run's endpoint |
 
 A token is good for one call. One that comes again, or one the endpoint never handed out, closes the endpoint and fails the run: someone else had it. Tokens live only in the runtime's memory, which is why `takeGrant` and `take` remove the files they read.
 

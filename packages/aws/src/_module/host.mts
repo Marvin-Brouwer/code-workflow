@@ -6,7 +6,7 @@
  * @module
  */
 export { type AwsEndpoints } from '../host/aws-endpoints.mts'
-export { awsHostTools, type AwsHostToolsOptions } from '../host/aws-host-tools.mts'
+export { awsHostTools } from '../host/aws-host-tools.mts'
 export {
 	openAwsSession,
 	type AwsSession,
@@ -17,6 +17,7 @@ export {
 	type RoleCredentials,
 } from '../host/aws-session.mts'
 export { awsCredentialNames, readAwsSettings, type AwsSettings } from '../host/aws-settings.mts'
-export { connector } from '../host/connector.mts'
+export { codeArtifactFetch } from '../host/code-artifact-fetch.mts'
+export { awsConnectorHost, connector, type AwsConnectorOptions } from '../host/connector.mts'
 export { signIn, type SignInOptions } from '../host/sign-in.mts'
 export { AwsSignInNeeded } from '../host/sign-in-needed.mts'

@@ -79,8 +79,8 @@ The sandbox has no other way out with a credential, so these are tool calls like
 - **Package registries.** The package manager in the sandbox goes through a proxy on loopback
   that turns each package fetch into a read-only gateway call. Since 2026-11-16 this covers
   public package sources too: the sandbox has no direct egress at all
-  ([plan](aws-codeartifact.md)). Private registries (CodeArtifact NuGet/npm) come next, the same
-  way.
+  ([plan](aws-codeartifact.md)). Private registries (CodeArtifact NuGet/npm) go the same way, as
+  a connector's registry whose credential the connector adds on the host.
 - **AWS.** Host-side tools per operation a workflow needs, using the gateway's role credentials.
   No credential handout to the sandbox, so no raw `aws` CLI there.
 

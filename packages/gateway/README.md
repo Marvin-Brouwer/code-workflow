@@ -37,11 +37,21 @@ The gateway sends the Anthropic Messages, OpenAI Chat Completions and OpenAI Res
 
 ## Packages
 
-A sandbox has no network, so its package fetches come here too: a `package` call names one of the public registries the run's app restores from (`nuget` or `npm`, which `openRun` gets in `registries`) and a path on it. The gateway sends it only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. The registry's answer goes back whole, a 404 too, with the body base64 and only `content-type`, `etag`, `last-modified` and `location` of its headers. A redirect isn't followed: it goes back as it is, so the next fetch is checked too. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
+A sandbox has no network, so its package fetches come here too: a `package` call names one of the registries the run's app restores from (which `openRun` gets in `registries`) and a path on it.
+
+- **Public registries**, `nuget` (nuget.org) and `npm`: the gateway sends the fetch only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. A redirect isn't followed: it goes back as it is, so the next fetch is checked too.
+- **A connector's registry**, such as a CodeArtifact repository from `@mesh-flow/aws`: the path has to be below one of the registry's paths, already normalized, and the connector's `ResolveRegistryFetch` says where it goes and with which credential. The gateway follows up to three HTTPS redirects, as to a signed download, and sends the connector's headers to the registry's own host only.
+
+The registry's answer goes back whole, a 404 too, with only `content-type`, `etag`, `last-modified` and `location` of its headers. The body isn't in the answer: `AcceptedCall.body()` hands it to the engine, which writes it into the sandbox as a file the answer names (see [`@mesh-flow/protocol`](../protocol/README.md)), so the mailbox only carries small JSON. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
+
+A published package never changes, so a `.nupkg` or `.tgz` fetched whole is kept in the gateway's `packages` folder, shared by every run, and the next fetch of it doesn't go to the registry. Version lists and other metadata are fetched each time.
 
 ```ts
-const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm'] }, abortSignal)
+const gateway = openGateway({ home, credentials, providers, registries: { aws: codeArtifactFetch(session) } })
+const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm', packages] }, abortSignal)
 ```
+
+`missingRegistries(registries)` says which registries' connectors aren't loaded, for a trigger to report before a run starts.
 
 ## Host tools
 

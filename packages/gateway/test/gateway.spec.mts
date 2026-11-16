@@ -538,6 +538,9 @@ async function packageRun(
 	return { gateway, grant, fetchPath }
 }
 
+/** A fetch or a connector stuck on the network, which ignores its signal. */
+const never = () => new Promise<never>(() => undefined)
+
 /** A connector's registry, as `@mesh-flow/aws` describes a CodeArtifact repository. */
 const cloudRegistry: ConnectorRegistry = {
 	connector: 'cloud',
@@ -848,6 +851,30 @@ describe('package calls', () => {
 		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud')])
 		expect(errorOf(answer)).toContain("needs connector cloud, which isn't loaded")
 		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		['the connector', 'resolve'],
+		['the registry', 'fetch'],
+	])('settles a package call promptly when it is stopped, even if %s never answers', async (_who, stuck) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(stuck === 'fetch' ? never : () => Promise.resolve(new Response('{}')))
+		const resolve = vi.fn<ResolveRegistryFetch>(stuck === 'resolve' ? never : cloudResolve)
+		const { gateway, grant } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
+		const accepted = await gateway.accept(
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: cloudRegistry, path: '/npm/packages/left-pad' } }),
+			abortSignal,
+		)
+		const controller = new AbortController()
+
+		// Act
+		const answering = accepted.answer(controller.signal)
+		controller.abort(new Error('cancelled'))
+
+		// Assert
+		expect((await answering).outcome.ok).toBe(false)
+		expect(accepted.body()).toBeUndefined()
 	})
 
 	test('passes on the sign-in a connector needs to fetch from its registry', async () => {

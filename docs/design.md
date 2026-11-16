@@ -374,7 +374,7 @@ No credential ever enters the sandbox. Full rules in
 |---|---|
 | **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, AWS operations; git clone/fetch/push as functions for workflow code only |
 | **Model calls** over the same channel, native request and response passed through | model providers |
-| **Package proxy** in the sandbox turning package fetches into read-only calls | every package registry: public ones (nuget.org, npm) now, private ones (CodeArtifact NuGet/npm) next ([plan](plans/aws-codeartifact.md)) |
+| **Package proxy** in the sandbox turning package fetches into read-only calls | every package registry: public ones (nuget.org, npm) and connectors' private ones (CodeArtifact NuGet/npm, [plan](plans/aws-codeartifact.md)) |
 
 The sandbox has no network at all (2026-11-16): not even public package sources are reachable
 directly. Package managers keep working through the proxy on `HTTPS_PROXY`.

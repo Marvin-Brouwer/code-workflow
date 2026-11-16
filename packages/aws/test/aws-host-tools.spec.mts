@@ -2,6 +2,7 @@ import path from 'node:path'
 import { keyFile, openCredentialStore, signInOf, type HostToolContext } from '@mesh-flow/gateway'
 import { describe, expect, test } from 'vitest'
 import { awsHostTools } from '../src/host/aws-host-tools.mts'
+import { openAwsSession } from '../src/host/aws-session.mts'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
 import { signIn } from '../src/host/sign-in.mts'
 import { checkSession } from '../src/tools/session-tools.mts'
@@ -24,7 +25,7 @@ async function setUp() {
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
 	for (const [name, value] of Object.entries(settings)) await credentials.set(name, value, abortSignal)
 	const aws = await fakeAws(now, {})
-	const tools = new Map(awsHostTools({ credentials, endpoints: aws.endpoints, now }).map((tool) => [tool.name, tool]))
+	const tools = new Map(awsHostTools(openAwsSession({ credentials, endpoints: aws.endpoints, now })).map((tool) => [tool.name, tool]))
 	const context: HostToolContext = { abortSignal, credentials, runId: 'run-1' }
 	const login = () =>
 		signIn({ credentials, show: () => undefined, abortSignal }, { endpoints: aws.endpoints, now, wait: () => Promise.resolve() })
