@@ -13,7 +13,6 @@
 		"**/node_modules/",
 		"**/dist/",
 		"examples/example/",
-		"packages/atlassian/",
 		"packages/gitlab/",
 		"packages/preset-development/",
 		"packages/toolchain-dotnet/"
