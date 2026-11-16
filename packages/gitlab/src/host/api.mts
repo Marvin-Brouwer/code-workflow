@@ -1,5 +1,11 @@
-import { defaultFetchRetry, retryingFetch, unavailable, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
-import { HostToolTransientError, type HostToolContext } from '@mesh-flow/gateway'
+import {
+	defaultFetchRetry,
+	HostToolTransientError,
+	retryingFetch,
+	unavailable,
+	type FetchRetryOptions,
+	type HostToolContext,
+} from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { GitlabRequestError } from './request-error.mts'
 import { readSite } from './site.mts'

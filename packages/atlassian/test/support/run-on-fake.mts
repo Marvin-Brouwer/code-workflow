@@ -1,9 +1,9 @@
-import { atlassianHostTools, defaultRequestRetry } from '../../src/_module/host.mts'
+import { atlassianHostTools, defaultFetchRetry } from '../../src/_module/host.mts'
 import { fakeAtlassian, type FakeIssue, type FakePage, type FakeUser } from './fake-atlassian.mts'
 import { runOnGateway, testGateway } from './test-run.mts'
 
 /** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
-export const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
+export const quickRetry = { ...defaultFetchRetry, firstDelayMs: 1 }
 
 /** What the fake holds before a run. */
 export interface Arrangement {

@@ -1,5 +1,5 @@
-import type { HostToolContext } from '@mesh-flow/gateway'
-import { defaultRequestRetry, type AtlassianHostOptions } from '../host-options.mts'
+import { defaultFetchRetry, retryingFetch, type HostToolContext } from '@mesh-flow/gateway'
+import { atlassianResends, type AtlassianHostOptions } from '../host-options.mts'
 import { readSite } from '../site.mts'
 import type { Download } from './attachments.mts'
 import { jiraCloud } from './jira-cloud.mts'
@@ -17,15 +17,17 @@ export type JiraApi = (context: HostToolContext) => Promise<JiraSite>
 export function jiraApi(options: AtlassianHostOptions = {}): JiraApi {
 	return async (context) => {
 		const site = await readSite('jira', context)
+		const send = options.fetch ?? fetch
+		// The client sends each request once; what may be sent again is sent again here, as by the code host connectors.
+		const retrying = retryingFetch(send, options.retry ?? defaultFetchRetry, atlassianResends)
 		const common = {
 			host: site.url,
-			retry: options.retry ?? defaultRequestRetry,
 			// A site's custom configuration often differs from Atlassian's schema; the connector reads what it needs itself.
 			onSchemaMismatch: 'silent' as const,
-			...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+			fetch: retrying,
 		}
-		// An attachment is read past the client, which has no call for its bytes, signed in the way the client is.
-		const send = options.fetch ?? fetch
+		// An attachment is read past the client, which has no call for its bytes, signed in the way the client is, and
+		// tried once: the issue is still worth reading without it.
 		if (site.deployment === 'cloud') {
 			const basic = Buffer.from(`${site.email}:${site.token}`).toString('base64')
 			return jiraCloud(

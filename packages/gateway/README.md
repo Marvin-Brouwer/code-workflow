@@ -88,6 +88,15 @@ export const comment = hostTool(commentDefinition, ({ issue, body }, { abortSign
 )
 ```
 
+A connector's host half sends its requests through `retryingFetch(fetch, defaultFetchRetry)`: a request the service didn't answer in time, or answered with a 5xx or 429, is sent again with a doubling wait, or the wait its `retry-after` asks for. Only reads are, by default, since a write whose answer was lost may have been made; a service whose updates can be sent twice says which with `resends`. `unavailable(status)` and the statuses `unauthorized`, `notFound` and `gone` tell its answers apart.
+
+```ts
+import { defaultFetchRetry, readsOnly, retryingFetch } from '@mesh-flow/gateway'
+
+// Reads, and the updates that set a value, which the service may get twice.
+const send = retryingFetch(fetch, defaultFetchRetry, (request) => readsOnly(request) || request.method === 'PUT')
+```
+
 `projectUrl` is where the footer of a post a connector signs links to, so every connector's footer points at the same place.
 
 A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.

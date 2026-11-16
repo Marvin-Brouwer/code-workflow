@@ -12,14 +12,14 @@ import { jiraHostTools } from './jira/jira-host-tools.mts'
  * your own, or to test a workflow against a fake site.
  *
  * @param options - What the tools send requests with, and how they retry. Defaults: the global
- * `fetch` and `defaultRequestRetry`.
+ * `fetch` and `defaultFetchRetry`.
  * @returns The host tools, for the gateway.
  *
  * @example A test against a fake site
  * ```ts
- * import { atlassianHostTools, defaultRequestRetry } from '@mesh-flow/atlassian/host'
+ * import { atlassianHostTools, defaultFetchRetry } from '@mesh-flow/atlassian/host'
  *
- * const tools = atlassianHostTools({ fetch: fakeSite.fetch, retry: { ...defaultRequestRetry, maxAttempts: 1 } })
+ * const tools = atlassianHostTools({ fetch: fakeSite.fetch, retry: { ...defaultFetchRetry, attempts: 1 } })
  * ```
  */
 export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool[] {

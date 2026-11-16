@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { retryingFetch, type FetchRetryOptions } from '../src/host/retrying-fetch.mts'
+import { retryingFetch, type FetchRetryOptions } from '../src/http/retrying-fetch.mts'
 
 const url = 'https://api.github.example/repos/team/app'
 /** Host retries that are over in a moment. */
@@ -8,6 +8,9 @@ const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRet
 
 /** A GitHub response with `status`. */
 const answer = (status: number, headers: Record<string, string> = {}) => new Response(status === 204 ? null : '{}', { status, headers })
+/** A service whose updates may be sent twice. */
+const putsToo = (request: { readonly method: string }) => request.method === 'PUT'
+
 /** The error `fetch` throws when the connection drops. */
 const dropped = () => new TypeError('fetch failed', { cause: new Error('write ECONNABORTED') })
 
@@ -62,6 +65,18 @@ describe('retryingFetch', () => {
 			expect(send).toHaveBeenCalledTimes(1)
 		},
 	)
+
+	test('sends a write again that the service says may be sent twice', async () => {
+		// Arrange
+		const send = vi.fn<typeof fetch>().mockResolvedValueOnce(answer(503)).mockResolvedValue(answer(200))
+
+		// Act
+		const response = await retryingFetch(send, quickRetry, putsToo)(url, { method: 'PUT', body: '{"value":1}' })
+
+		// Assert
+		expect(response.status).toBe(200)
+		expect(send).toHaveBeenCalledTimes(2)
+	})
 
 	test('sends a Request object once, since its body may be used up', async () => {
 		// Arrange

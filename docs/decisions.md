@@ -176,7 +176,7 @@ Came out of building `@mesh-flow/engine` in November 2026; its
   - **It retries writes.** A 429 or 502 is sent again for every method, `POST` too. When GitLab
     made the note or the merge request and only the answer was lost, the retry makes it twice.
     The connector tries reads again and never a write (see `retryingFetch` in
-    `@mesh-flow/code-repository/host`).
+    `@mesh-flow/gateway`).
 
   Working around both takes a requester of our own per host call, which is what the connector's
   client is already, and leaves gitbeaker's types, which the connector wouldn't use: every answer

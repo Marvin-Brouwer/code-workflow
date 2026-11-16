@@ -1,4 +1,4 @@
-import { gone, notFound, unauthorized } from '@mesh-flow/code-repository/host'
+import { gone, notFound, unauthorized } from '@mesh-flow/gateway'
 
 /** GitLab's answer to a request that wasn't served, with its status, so a caller can tell a 404 from the rest. */
 export class GitlabRequestError extends Error {

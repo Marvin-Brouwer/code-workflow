@@ -703,4 +703,16 @@ describe('trouble', () => {
 		expect(result.key).toBe('PROJ-7')
 		expect(fake.requests).toHaveLength(2)
 	})
+
+	test('a rate limit is sent again before the call fails', async () => {
+		// Arrange
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], failNext: [429] }
+
+		// Act
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
+
+		// Assert
+		expect(result.key).toBe('PROJ-7')
+		expect(fake.requests).toHaveLength(2)
+	})
 })

@@ -4,6 +4,6 @@
  *
  * @module
  */
-export { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
+export { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
 export { connector, gitlabHostTools, type GitlabHostOptions } from '../host/connector.mts'
 export { tokenCredential, urlCredential } from '../host/site.mts'

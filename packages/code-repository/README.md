@@ -90,12 +90,12 @@ const pipelinePasses = (sha: string) =>
 
 ## The host half
 
-`@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, a `fetch` that tries again when the connection drops, the footer every post is signed with, and the replies to review items:
+`@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, the footer every post is signed with, and the replies to review items. A connector sends its API requests through the gateway's `retryingFetch`:
 
 ```ts
 import type { GitTools } from '@mesh-flow/code-repository'
-import { defaultFetchRetry, gitHostTools, gitRemote, retryingFetch, signed } from '@mesh-flow/code-repository/host'
-import type { HostToolContext } from '@mesh-flow/gateway'
+import { gitHostTools, gitRemote, signed } from '@mesh-flow/code-repository/host'
+import { defaultFetchRetry, retryingFetch, type HostToolContext } from '@mesh-flow/gateway'
 import { basicAuthHeaderEnv } from '@mesh-flow/git'
 
 declare const context: HostToolContext

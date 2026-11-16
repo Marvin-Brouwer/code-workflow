@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { unavailable } from '@mesh-flow/code-repository/host'
+import { unavailable } from '@mesh-flow/gateway'
 import { notModified } from './github-statuses.mts'
 import { keptAnswers } from './kept-answers.mts'
 
