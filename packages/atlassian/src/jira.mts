@@ -1,3 +1,4 @@
-export { key } from './key.mts'
-export { collect, comment, dump, transition } from './story.mts'
-export { search } from './search.mts'
+export { collect, comment, dump, key, transition, type IssueRef, type JiraIssue } from './issue/issue.mts'
+export { search } from './issue/search.mts'
+export type { FoundIssue } from './tools/issue-search-tools.mts'
+export type { IssueAttachment, IssueComment, IssueData, IssueLink, PostedComment, RelatedIssue } from './tools/issue-tools.mts'
