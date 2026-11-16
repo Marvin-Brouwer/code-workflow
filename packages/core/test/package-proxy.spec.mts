@@ -64,6 +64,9 @@ async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tar
 	return { packument, tarball, tarballPath }
 }
 
+/** What curl prints for the status when it got none. */
+const noStatus = '000'
+
 /** Runs curl with `args` through the proxy, and resolves to the status it got, `000` when it got none. */
 async function curlStatus(environment: PackageEnvironment, home: string, args: readonly string[]): Promise<string> {
 	// curl prints the status and fails on a refused tunnel alike; either way, stdout has the status.
@@ -72,9 +75,6 @@ async function curlStatus(environment: PackageEnvironment, home: string, args: r
 	}).catch((error: unknown) => error)
 	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : noStatus
 }
-
-/** What curl prints for the status when it got none. */
-const noStatus = '000'
 
 /** A path longer than a package fetch may be. */
 const tooLongPath = `/left-pad?${'a'.repeat(4096)}`

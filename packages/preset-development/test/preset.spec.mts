@@ -12,6 +12,7 @@ const reviewer = agent({ model: modelId })
 
 /** Long enough for a scripted review. */
 const checkTimeoutMs = 10_000
+
 /**
  * How long a review may take to ask the reviewer: it reads the checkout's state with git first,
  * which takes seconds on a Windows runner.
