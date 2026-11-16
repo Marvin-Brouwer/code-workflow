@@ -2,14 +2,16 @@ import { mkdir } from 'node:fs/promises'
 import { createServer, type RequestListener, type Server } from 'node:http'
 import path from 'node:path'
 import { getRequestListener } from '@hono/node-server'
-import { openGateway, type GatewayHome, type HostTool } from '@mesh-flow/gateway'
+import { openGateway, type CredentialStore, type GatewayHome } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { openAppStore, type AppStore } from '../apps/app-store.mts'
+import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { settleWithin } from '../engine/settle-within.mts'
+import { openSignIns } from '../engine/sign-ins.mts'
 import { messageOf } from '../errors.mts'
 import { openRunStore } from '../runs/run-store.mts'
 import { createScheduler } from '../triggers/scheduler.mts'
@@ -39,8 +41,11 @@ export interface ServeEngineOptions {
 	 * tunnel or a reverse proxy with TLS in front of it to reach it from outside.
 	 */
 	readonly webhooks?: { readonly port: number; readonly host?: string }
-	/** The host halves of the tools apps may call through the gateway. Default: none. */
-	readonly tools?: readonly HostTool[]
+	/**
+	 * Loads the connectors whose host tools apps may call through the gateway, and whose sign-ins
+	 * runs may wait for, with the gateway's credentials. Default: none.
+	 */
+	readonly connectors?: (credentials: CredentialStore, abortSignal: AbortSignal) => Promise<readonly LoadedConnector[]>
 	/** Whether the credential store's key may be kept in the OS keychain. Default: yes. */
 	readonly keychain?: boolean
 	/** Bounds starting up: taking the socket and reconciling. */
@@ -89,11 +94,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	try {
 		gatewayHome = await openEngineGatewayHome(options.home, options.abortSignal, options)
 		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyLocation}.`)
+		const connectors = (await options.connectors?.(gatewayHome.credentials, options.abortSignal)) ?? []
 		const gateway = openGateway({
 			home: gatewayHome.directory,
 			credentials: gatewayHome.credentials,
 			providers: gatewayHome.providers,
-			tools: options.tools ?? [],
+			tools: connectors.flatMap((connector) => connector.tools),
 		})
 		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal, log)
 		engine = await Engine.open(
@@ -102,6 +108,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 				store: openRunStore(path.join(options.home, 'runs')),
 				apps,
 				gateway,
+				signIns: openSignIns({ connectors, log }),
 				...(options.layout ? { layout: options.layout } : {}),
 				log,
 			},

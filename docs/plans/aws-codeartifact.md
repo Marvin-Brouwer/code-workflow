@@ -1,10 +1,11 @@
 # Plan: AWS sign-in and CodeArtifact restores
 
-Status: agreed 2026-11-16; delivery steps 1 (no direct egress) and 2 (the AWS host half) built,
-the rest not. Covers the first part of roadmap step 5 of [`../design.md`](../design.md#roadmap):
-an AWS session on the host that the user signs in to interactively, `checkSession`, and package restores from a private CodeArtifact
-repository in the sandbox. Publishing to CodeArtifact, other AWS operations and the package managers
-beyond npm and NuGet come later.
+Status: agreed 2026-11-16; delivery steps 1 (no direct egress), 2 (the AWS host half) and 3 (the
+`login` request) built, step 4 not. Covers the first part of roadmap step 5 of
+[`../design.md`](../design.md#roadmap): an AWS session on the host that the user signs in to
+interactively, `checkSession`, and package restores from a private CodeArtifact repository in the
+sandbox. Publishing to CodeArtifact, other AWS operations and the package managers beyond npm and
+NuGet come later.
 
 ## Goal
 
@@ -205,8 +206,14 @@ Stacked PRs, each on the previous one's branch:
 2. `@mesh-flow/aws` host half (built): device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.
-3. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.
-   Functional tests: a run that waits for a sign-in, across an engine restart, and shutdown while it
-   waits.
+3. The `login` request (built): protocol, engine, `checkSession` as function and tool,
+   `list`/`show`. Functional tests: a run that waits for a sign-in, across an engine restart, and
+   shutdown while it waits. As built: a host tool throws `SignInNeeded` (from `@mesh-flow/gateway`)
+   and its answer names the connector; the runtime's gateway client asks for the `login` and calls
+   again, sharing one request per connector. The engine keeps one sign-in per connector for every
+   waiting run, starts a new code when one runs out, and `mesh-flow login` joins it while the engine
+   serves. Connectors get only their own credentials (`<connector>/...`), writable, for their tools
+   and their sign-in. A resumed run starts a new device authorization. Still open for step 4:
+   `deploy` and `trigger` saying when the AWS settings are missing.
 4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files. Conformance test
    against a fake CodeArtifact; then the real one by hand.

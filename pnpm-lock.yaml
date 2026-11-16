@@ -131,6 +131,9 @@ importers:
       '@aws-sdk/client-sso-oidc':
         specifier: ^3.1169.0
         version: 3.1169.0
+      '@mesh-flow/core':
+        specifier: workspace:*
+        version: link:../core
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway

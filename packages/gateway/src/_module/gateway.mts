@@ -5,6 +5,7 @@
  *
  * @module
  */
+export { connectorCredentials } from '../credentials/connector-credentials.mts'
 export { CredentialName, openCredentialStore, type CredentialReader, type CredentialStore } from '../credentials/credential-store.mts'
 export { siteUrl } from '../credentials/site-url.mts'
 export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, type StoreKey } from '../credentials/store-key.mts'
@@ -43,7 +44,6 @@ export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
 export type { ConnectorLogin, ConnectorLoginContext, LoginPrompt } from '../tools/connector-login.mts'
 export {
 	connectorHost,
-	ConnectorName,
 	hostTool,
 	HostToolInputError,
 	HostToolTransientError,
@@ -55,3 +55,4 @@ export {
 	type HostToolContext,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
+export { SignInNeeded, signInOf } from '../tools/sign-in-needed.mts'

@@ -1,5 +1,7 @@
 import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RuntimeMessage } from '@mesh-flow/protocol'
 import { z } from 'zod'
+import { waitingOnHuman } from '../loop/loop-clock.mts'
+import { untilAborted } from '../run/until-aborted.mts'
 import { TokenPool } from './token-pool.mts'
 
 /** How the gateway client reaches the engine: the runtime's mailbox, or a test's own. */
@@ -44,13 +46,20 @@ export class GatewayCallError extends Error {
 export interface GatewayClient {
 	/** The run's own endpoint, for calls from workflow code and for model calls. */
 	readonly run: Endpoint
-	/** Calls the gateway on `endpoint` and resolves to the result. Throws a {@link GatewayCallError} when the host says no. */
+	/**
+	 * Calls the gateway on `endpoint` and resolves to the result. Throws a {@link GatewayCallError}
+	 * when the host says no. When the host says the user has to sign in to a connector first, it
+	 * asks the engine for a `login`, waits for it as for a human, and calls again.
+	 */
 	call(endpoint: Endpoint, call: GatewayCall, abortSignal: AbortSignal): Promise<unknown>
 	/** Opens an endpoint for one loop that takes only `tools`. */
 	openLoop(tools: readonly string[], abortSignal: AbortSignal): Promise<Endpoint>
 	/** Closes a loop's endpoint once the loop has settled. */
 	closeLoop(endpoint: Endpoint, abortSignal: AbortSignal): Promise<void>
 }
+
+/** What a call answered with, once it was answered. */
+type CallOutcome = CallAnswer['outcome']
 
 /**
  * A client on `channel` for the run's endpoint in `grant`. `runAbortSignal` is the run's signal: a
@@ -59,6 +68,11 @@ export interface GatewayClient {
  */
 export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
 	let callCount = 0
+	let loginCount = 0
+	/** The sign-ins asked for and not answered yet, by connector, so calls that need the same one share it. */
+	const signIns = new Map<string, Promise<void>>()
+	/** How many sign-ins were answered, so a call that was sent before one was answered tries again without asking. */
+	let signedIn = 0
 	const pools = new Map<string, TokenPool>([[grant.endpoint, new TokenPool(grant.tokens)]])
 	const run: Endpoint = Object.freeze({ id: grant.endpoint, tools: undefined })
 	const poolOf = (endpoint: Endpoint) => {
@@ -67,14 +81,11 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		return pool
 	}
 
-	const call = async (endpoint: Endpoint, gatewayCall: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
-		// The engine reads the outbox strictly: a call it can't read would fail the whole run.
-		const checked = GatewayCall.safeParse(gatewayCall)
-		if (!checked.success) throw new GatewayCallError(`The ${gatewayCall.type} call isn't valid:\n${z.prettifyError(checked.error)}`)
+	const callOnce = async (endpoint: Endpoint, checked: GatewayCall, abortSignal: AbortSignal): Promise<CallOutcome> => {
 		const pool = poolOf(endpoint)
 		const token = await pool.take(abortSignal)
 		const id = `call-${idPrefix}-${String(++callCount)}`
-		channel.send({ type: 'call', id, endpoint: endpoint.id, token, call: checked.data })
+		channel.send({ type: 'call', id, endpoint: endpoint.id, token, call: checked })
 		// Whether the answer was taken already, so a stop that comes after it doesn't wait for it again.
 		const progress = { taken: false }
 		const answered = channel.take(id, AbortSignal.any([abortSignal, runAbortSignal])).then((answer) => {
@@ -84,9 +95,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			return parsed
 		})
 		try {
-			const { outcome } = await answered
-			if (!outcome.ok) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
-			return outcome.result
+			return (await answered).outcome
 		} catch (error) {
 			if (progress.taken || !abortSignal.aborted || runAbortSignal.aborted) throw error
 			channel.send({ type: 'cancel', id })
@@ -97,6 +106,40 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			})
 			recovered.catch(() => undefined)
 			throw error
+		}
+	}
+
+	/** Asks the engine for a sign-in to `connector` and waits for it, as for a human: it doesn't count toward a loop's `limit`. */
+	const signIn = (connector: string, abortSignal: AbortSignal): Promise<void> => {
+		const shared = signIns.get(connector) ?? askForSignIn(connector)
+		return waitingOnHuman(() => untilAborted(shared, abortSignal))
+	}
+
+	const askForSignIn = (connector: string): Promise<void> => {
+		const id = `login-${idPrefix}-${String(++loginCount)}`
+		channel.send({ type: 'request', request: { kind: 'login', id, connector } })
+		const asked = channel.take(id, runAbortSignal).then(() => {
+			signedIn++
+		})
+		const forget = () => {
+			signIns.delete(connector)
+		}
+		void asked.then(forget, forget)
+		signIns.set(connector, asked)
+		return asked
+	}
+
+	const call = async (endpoint: Endpoint, gatewayCall: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
+		// The engine reads the outbox strictly: a call it can't read would fail the whole run.
+		const checked = GatewayCall.safeParse(gatewayCall)
+		if (!checked.success) throw new GatewayCallError(`The ${gatewayCall.type} call isn't valid:\n${z.prettifyError(checked.error)}`)
+		for (;;) {
+			const signedInBefore = signedIn
+			const outcome = await callOnce(endpoint, checked.data, abortSignal)
+			if (outcome.ok) return outcome.result
+			if (outcome.signIn === undefined) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
+			// A sign-in answered while the call was on its way may be the one it needs.
+			if (signedIn === signedInBefore) await signIn(outcome.signIn, abortSignal)
 		}
 	}
 

@@ -1,15 +1,23 @@
-import type { GatewayHome, LoginPrompt } from '@mesh-flow/gateway'
+import { setTimeout as delay } from 'node:timers/promises'
+import type { CredentialStore, LoginPrompt } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
+import { ControlError, type ControlClient } from '../control/control-client.mts'
 
 /** How long `mesh-flow login` waits for the approval: longer than a device code lasts. */
 const loginTimeoutMs = 15 * 60 * 1000
 
+/** How often `mesh-flow login` looks for the code of the engine's sign-in. */
+const promptPollMs = 500
+
 /** What `mesh-flow login` needs from the rest of the command line. */
 export interface LoginCommandOptions {
-	readonly gatewayHome: (abortSignal: AbortSignal) => Promise<GatewayHome>
-	/** The connectors the user added, loaded from where the command runs. */
-	readonly connectors: (abortSignal: AbortSignal) => Promise<readonly LoadedConnector[]>
+	/** The gateway's credentials, for signing in on its own when no engine serves. */
+	readonly credentials: (abortSignal: AbortSignal) => Promise<CredentialStore>
+	/** The connectors the user added, loaded from where the command runs, with those credentials. */
+	readonly connectors: (credentials: CredentialStore, abortSignal: AbortSignal) => Promise<readonly LoadedConnector[]>
+	/** The engine serving this home, if one does: its sign-ins come first, so the runs that wait for one go on. */
+	readonly engine: () => Pick<ControlClient, 'signIns' | 'signIn'>
 	/** Where the prompt and progress go. Default: stderr. */
 	readonly log?: (line: string) => void
 }
@@ -24,8 +32,9 @@ export function formatLoginPrompt(connector: string, prompt: LoginPrompt): strin
 
 /**
  * `mesh-flow login <connector>`: signs in to the service of a connector the user added, such as
- * `aws`, and keeps the session in the gateway's credential store, so runs don't have to ask. Waits
- * until the user approves in the browser; Ctrl+C stops waiting.
+ * `aws`, and keeps the session in the gateway's credential store, so runs don't have to ask. When an
+ * engine serves, it joins the engine's sign-in, so runs waiting for one share its code and go on.
+ * Waits until the user approves in the browser; Ctrl+C stops waiting.
  */
 export function addLoginCommand(program: Command, options: LoginCommandOptions): void {
 	const log =
@@ -45,24 +54,66 @@ export function addLoginCommand(program: Command, options: LoginCommandOptions):
 			process.once('SIGINT', interrupt)
 			try {
 				const abortSignal = AbortSignal.any([stop.signal, AbortSignal.timeout(loginTimeoutMs)])
-				const connectors = await options.connectors(abortSignal)
-				const connector = connectors.find((candidate) => candidate.name === name)
-				if (connector === undefined) {
-					const known = connectors.map((candidate) => candidate.name).join(', ') || 'none'
-					throw new Error(`There is no connector ${name}. Added connectors: ${known}. Add one with \`mesh-flow connector add\`.`)
-				}
-				if (connector.login === undefined) throw new Error(`Connector ${name} has nothing to sign in to.`)
-				const { credentials } = await options.gatewayHome(abortSignal)
-				await connector.login({
-					credentials,
-					show: (prompt) => {
-						log(formatLoginPrompt(name, prompt))
-					},
-					abortSignal,
-				})
+				const joined = await signInThroughEngine(options.engine(), name, log, abortSignal)
+				if (!joined) await signInHere(options, name, log, abortSignal)
 				log(`Signed in to ${name}.`)
 			} finally {
 				process.off('SIGINT', interrupt)
 			}
 		})
+}
+
+/**
+ * Joins the sign-in of the engine that serves, showing its code. Resolves `false` when no engine
+ * serves, so the command signs in on its own.
+ */
+async function signInThroughEngine(
+	engine: Pick<ControlClient, 'signIns' | 'signIn'>,
+	name: string,
+	log: (line: string) => void,
+	abortSignal: AbortSignal,
+): Promise<boolean> {
+	try {
+		await engine.signIns(abortSignal)
+	} catch (error) {
+		if (error instanceof ControlError && error.status === undefined) return false
+		throw error
+	}
+	const signedIn = engine.signIn(name, abortSignal).then(() => true)
+	// Raced below; a failure to look for the code first mustn't leave it unhandled.
+	signedIn.catch(() => undefined)
+	let shownCode: string | undefined
+	for (;;) {
+		const looked = delay(promptPollMs, false, { signal: abortSignal })
+		looked.catch(() => undefined)
+		if (await Promise.race([signedIn, looked])) return true
+		const prompt = (await engine.signIns(abortSignal)).find((signIn) => signIn.connector === name)?.prompt
+		if (prompt !== undefined && prompt.code !== shownCode) {
+			shownCode = prompt.code
+			log(formatLoginPrompt(name, { url: prompt.url, code: prompt.code, expiresAt: new Date(prompt.expiresAt) }))
+		}
+	}
+}
+
+/** Signs in with the connector's own sign-in, in this process, when no engine serves. */
+async function signInHere(
+	options: LoginCommandOptions,
+	name: string,
+	log: (line: string) => void,
+	abortSignal: AbortSignal,
+): Promise<void> {
+	const credentials = await options.credentials(abortSignal)
+	const connectors = await options.connectors(credentials, abortSignal)
+	const connector = connectors.find((candidate) => candidate.name === name)
+	if (connector === undefined) {
+		const known = connectors.map((candidate) => candidate.name).join(', ') || 'none'
+		throw new Error(`There is no connector ${name}. Added connectors: ${known}. Add one with \`mesh-flow connector add\`.`)
+	}
+	if (connector.login === undefined) throw new Error(`Connector ${name} has nothing to sign in to.`)
+	await connector.login({
+		show: (prompt) => {
+			log(formatLoginPrompt(name, prompt))
+		},
+		abortSignal,
+	})
 }

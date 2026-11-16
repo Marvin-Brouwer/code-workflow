@@ -6,6 +6,7 @@
  */
 export { AppManifest, appManifestFile, AppPlatform } from '../app-manifest.mts'
 export { appSourceMapMarker } from '../app-source-map.mts'
+export { ConnectorName } from '../connector-name.mts'
 export {
 	CallAnswer,
 	CallMessage,
@@ -32,7 +33,7 @@ export { PackageRegistry, packageRegistryHosts, PackageRequest, PackageResponse 
 export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'
-export { InputRequest, RuntimeRequest, WakeRequest } from '../runtime-request.mts'
+export { InputRequest, LoginRequest, RuntimeRequest, WakeRequest } from '../runtime-request.mts'
 export { RunStart, TriggerRef } from '../run-start.mts'
 export {
 	JsonSchema,

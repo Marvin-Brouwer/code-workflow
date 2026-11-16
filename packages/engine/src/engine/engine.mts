@@ -4,6 +4,7 @@ import {
 	type Answer,
 	type CallAnswer,
 	type CallMessage,
+	type LoginRequest,
 	type RunStart,
 	type RuntimeEvent,
 	type RuntimeMessage,
@@ -25,6 +26,7 @@ import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
 import { setUpRuntime } from './set-up-runtime.mts'
 import { settleWithin } from './settle-within.mts'
+import type { SignIns, SignInState } from './sign-ins.mts'
 import { wakeAt } from './wake-at.mts'
 
 /** What an engine runs on. */
@@ -46,6 +48,11 @@ export interface EngineOptions {
 	 * gateway endpoint, and its agents have no model to run on.
 	 */
 	readonly gateway?: Gateway
+	/**
+	 * The sign-ins of the connectors the engine loaded, for runs whose host tools need a session
+	 * the user has to sign in to. Without it, a run that asks for a sign-in fails.
+	 */
+	readonly signIns?: SignIns
 }
 
 /** Which trigger of which app starts a run, and with what. */
@@ -118,6 +125,7 @@ export class Engine {
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
 	readonly #gateway: Gateway | undefined
+	readonly #signIns: SignIns | undefined
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
@@ -135,6 +143,7 @@ export class Engine {
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
 		this.#gateway = options.gateway
+		this.#signIns = options.signIns
 	}
 
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
@@ -170,6 +179,21 @@ export class Engine {
 		const record = RunId.safeParse(id).success ? this.#records.get(id) : undefined
 		if (!record) throw new EngineError('not-found', `There is no run ${id}.`)
 		return record
+	}
+
+	/** The sign-ins under way, for runs or for `mesh-flow login`, with where to sign in. */
+	signIns(): SignInState[] {
+		return this.#signIns?.list() ?? []
+	}
+
+	/**
+	 * Waits until the user signed in to `connector`, joining the sign-in runs wait for, if one is under
+	 * way, so `mesh-flow login` and the runs share one code. Aborting `signal` stops waiting.
+	 */
+	async signIn(connector: string, signal: AbortSignal): Promise<void> {
+		this.#assertOpen()
+		if (this.#signIns?.has(connector) !== true) throw new EngineError('not-found', `There is no connector ${connector} that signs in.`)
+		await this.#signIns.waitFor(connector, this.#withLifetime(signal))
 	}
 
 	/** The run's event tree so far, in the order the runtime sent it. */
@@ -599,10 +623,41 @@ export class Engine {
 		return mergeUsage(earlier ?? {}, used)
 	}
 
-	/** Wakes are answered by the engine's own clock, through the channel of the attempt that asked. */
+	/**
+	 * Answers what the engine answers itself, through the channel of the attempt that asked: a wake
+	 * on its own clock, a login once the user signed in. Input waits for a human.
+	 */
 	#schedule(id: RunId, channel: SandboxChannel, request: RuntimeRequest, signal: AbortSignal): void {
-		if (request.kind !== 'wake') return
-		wakeAt(new Date(request.at), () => void this.#wake(id, channel, request, signal), signal, this.#now)
+		if (request.kind === 'wake') wakeAt(new Date(request.at), () => void this.#wake(id, channel, request, signal), signal, this.#now)
+		else if (request.kind === 'login') void this.#login(id, channel, request, signal)
+	}
+
+	/** Waits for the sign-in a run asked for, then answers it, so the runtime calls its host tool again. */
+	async #login(id: RunId, channel: SandboxChannel, request: LoginRequest, signal: AbortSignal): Promise<void> {
+		if (this.#signIns?.has(request.connector) !== true) {
+			// Nothing would ever answer it: the run would wait until it's stopped.
+			this.#log(`Run ${id} needs a sign-in to ${request.connector}, which no connector of this engine does.`)
+			try {
+				await this.#halt(id, this.#cleanupSignal())
+				await this.#fail(
+					id,
+					new Error(
+						`The run needs a sign-in to ${request.connector}, and this engine has no connector ${request.connector} that signs in.`,
+					),
+				)
+			} catch (error) {
+				this.#log(`Couldn't fail run ${id} after a sign-in it can't get: ${messageOf(error)}`)
+			}
+			return
+		}
+		try {
+			await this.#signIns.waitFor(request.connector, signal)
+			// A sign-in an attempt that ended waited for isn't for the next one.
+			if (this.#active.get(id)?.channel !== channel) return
+			await this.#deliver(id, request.id, {}, signal)
+		} catch (error) {
+			if (!signal.aborted) this.#log(`Answering the sign-in ${request.id} of run ${id} failed: ${messageOf(error)}`)
+		}
 	}
 
 	async #wake(id: RunId, channel: SandboxChannel, request: WakeRequest, signal: AbortSignal): Promise<void> {

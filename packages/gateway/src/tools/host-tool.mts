@@ -1,6 +1,6 @@
-import { ToolName } from '@mesh-flow/protocol'
+import { ConnectorName, ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
-import type { CredentialReader } from '../credentials/credential-store.mts'
+import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import type { ConnectorLogin } from './connector-login.mts'
 
 /** What a host tool's action gets besides its input. */
@@ -90,6 +90,11 @@ export function hostTool<Input extends z.ZodType, Output>(
 export interface ConnectorHostOptions {
 	/** A directory of the connector's own in the gateway's home, for what it keeps between calls, such as clones. */
 	readonly directory: string
+	/**
+	 * The connector's own credentials, named `<connector>/...`, which it may also write, such as a
+	 * session it renews. Its tools read every other credential through their context, and change none.
+	 */
+	readonly credentials: CredentialStore
 }
 
 /**
@@ -113,9 +118,6 @@ export interface ConnectorHost {
 export interface ConnectorHostExtras {
 	readonly login?: ConnectorLogin
 }
-
-/** Connector names: they go into directory names. */
-export const ConnectorName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'Use lowercase letters, digits and dashes.')
 
 /** Defines the host half of a connector, checked. */
 export function connectorHost(name: string, tools: ConnectorHost['tools'], extras: ConnectorHostExtras = {}): ConnectorHost {

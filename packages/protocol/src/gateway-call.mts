@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ConnectorName } from './connector-name.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
 
@@ -105,6 +106,11 @@ export const CallAnswer = z.object({
 			error: z.string(),
 			/** The failure may pass on another try: the network or the service was down, or the engine stopped mid-call. */
 			transient: z.boolean().optional(),
+			/**
+			 * The call needs a session with this connector's service, and there is none: the user has to
+			 * sign in. The tool did nothing, so the runtime asks for a `login` and calls again.
+			 */
+			signIn: ConnectorName.optional(),
 		}),
 	]),
 })

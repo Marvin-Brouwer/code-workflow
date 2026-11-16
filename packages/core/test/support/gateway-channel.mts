@@ -3,11 +3,22 @@ import type { Answer, CallMessage } from '@mesh-flow/protocol'
 import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
 
+/** What else the channel answers besides calls. */
+export interface GatewayChannelOptions {
+	/** Answers a `login` request once it resolves, as the engine does once the user signed in. Without it, a login is never answered. */
+	readonly signIn?: (connector: string) => Promise<void>
+}
+
 /**
  * A channel straight to a gateway in this process, as the engine would carry the calls: each call
  * is accepted, answered and settled, and a cancel stops the call it names.
  */
-export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal): GatewayChannel {
+export function gatewayChannel(
+	gateway: Gateway,
+	runId: string,
+	lifetime: AbortSignal,
+	options: GatewayChannelOptions = {},
+): GatewayChannel {
 	const answers = new Map<string, PromiseWithResolvers<Answer>>()
 	const running = new Map<string, AbortController>()
 	const slot = (id: string) => {
@@ -30,6 +41,17 @@ export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortS
 	return {
 		send(message) {
 			if (message.type === 'cancel') running.get(message.id)?.abort(new Error('The runtime cancelled the call.'))
+			if (message.type === 'request' && message.request.kind === 'login') {
+				const { id, connector } = message.request
+				options.signIn?.(connector).then(
+					() => {
+						slot(id).resolve({})
+					},
+					(error: unknown) => {
+						slot(id).reject(error)
+					},
+				)
+			}
 			if (message.type !== 'call') return
 			answer(message).catch((error: unknown) => {
 				slot(message.id).reject(error)

@@ -24,6 +24,11 @@
 	"type": "module",
 	"sideEffects": false,
 	"exports": {
+		".": {
+			"source": "./src/_module/aws.mts",
+			"types": "./dist/aws.d.mts",
+			"import": "./dist/aws.mjs"
+		},
 		"./host": {
 			"source": "./src/_module/host.mts",
 			"types": "./dist/host.d.mts",
@@ -45,6 +50,7 @@
 		"@aws-sdk/client-codeartifact": "^3.1169.0",
 		"@aws-sdk/client-sso": "^3.1169.0",
 		"@aws-sdk/client-sso-oidc": "^3.1169.0",
+		"@mesh-flow/core": "workspace:*",
 		"@mesh-flow/gateway": "workspace:*",
 		"zod": "^4.6.7"
 	},

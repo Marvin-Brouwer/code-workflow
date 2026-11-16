@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
 import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
+import { SignInNeeded } from '../src/tools/sign-in-needed.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -84,6 +85,23 @@ describe('openGateway', () => {
 		// Assert
 		expect(transient.answer.outcome).toEqual({ ok: false, error: 'write ECONNABORTED', transient: true })
 		expect(permanent.answer.outcome).toEqual({ ok: false, error: 'Bad credentials' })
+	})
+
+	test('says which connector to sign in to when a host tool needs a session', async () => {
+		// Arrange
+		const needsSession = hostTool({ name: 'needsSession', input: z.object({}) }, () => Promise.reject(new SignInNeeded('aws')))
+		const { gateway } = await testGateway({ tools: [needsSession] })
+		const grant = await gateway.openRun(runId, { tools: ['needsSession'] }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'needsSession', input: {} }),
+		)
+
+		// Assert
+		expect(answer.outcome).toEqual({ ok: false, error: 'Sign in to aws: `mesh-flow login aws`.', signIn: 'aws' })
 	})
 
 	test('closes every endpoint of the run when a spent token comes again', async () => {

@@ -19,6 +19,7 @@ import { chosenModel, resolveModel } from './providers/resolve-model.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import { isTransient, type HostTool } from './tools/host-tool.mts'
+import { signInOf } from './tools/sign-in-needed.mts'
 import { untilAborted } from './until-aborted.mts'
 
 /** What a gateway runs on. */
@@ -119,6 +120,17 @@ const neverAborted = new AbortController().signal
 /** What a provider without a key needs. */
 function setKeyHint(provider: string): string {
 	return `Set it with \`mesh-flow provider key ${provider}\`.`
+}
+
+/** What a call that failed answers: why, and whether another try, or a sign-in first, may help. */
+function failedOutcome(error: unknown): CallAnswer['outcome'] {
+	const signIn = signInOf(error)
+	return {
+		ok: false,
+		error: messageOf(error),
+		...(isTransient(error) ? { transient: true } : {}),
+		...(signIn === undefined ? {} : { signIn }),
+	}
 }
 
 /** Opens a gateway. Nothing is read until a run calls. */
@@ -275,7 +287,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 										next,
 										outcome: callSignal.aborted
 											? { ok: false, error: `The call was stopped: ${messageOf(callSignal.reason)}` }
-											: { ok: false, error: messageOf(error), ...(isTransient(error) ? { transient: true } : {}) },
+											: failedOutcome(error),
 									}
 								}
 							},

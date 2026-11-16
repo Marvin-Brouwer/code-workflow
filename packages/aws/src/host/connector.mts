@@ -1,10 +1,11 @@
 import { connectorHost, type ConnectorHost } from '@mesh-flow/gateway'
+import { awsHostTools } from './aws-host-tools.mts'
 import { signIn } from './sign-in.mts'
 
 /**
- * The AWS connector's host half, as `mesh-flow connector add @mesh-flow/aws` loads it. It signs in
- * to IAM Identity Center for `mesh-flow login aws`. Its host tools, such as CodeArtifact fetches,
- * come with the registry shim.
+ * The AWS connector's host half, as `mesh-flow connector add @mesh-flow/aws` loads it: the host
+ * tools, on one session per engine, and the IAM Identity Center sign-in for `mesh-flow login aws`
+ * and for runs that wait for one.
  *
  * @example
  * ```sh
@@ -16,4 +17,6 @@ import { signIn } from './sign-in.mts'
  * mesh-flow login aws
  * ```
  */
-export const connector: ConnectorHost = connectorHost('aws', () => [], { login: (context) => signIn(context) })
+export const connector: ConnectorHost = connectorHost('aws', ({ credentials }) => awsHostTools({ credentials }), {
+	login: (context) => signIn(context),
+})

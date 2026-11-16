@@ -1,18 +1,14 @@
+import { SignInNeeded } from '@mesh-flow/gateway'
+
 /**
  * AWS can't be reached until the user signs in again: there was no session, or Identity Center
- * ended it, and what the host derived from it ran out. Checked by its `signInNeeded` field, as
- * `isTransient` checks `transient`, since a connector may bring its own copy of this package.
+ * ended it, and what the host derived from it ran out. A host tool that throws it makes the run
+ * wait for `mesh-flow login aws`, or the sign-in `mesh-flow show <run>` points to, and call again.
  */
-export class AwsSignInNeeded extends Error {
+export class AwsSignInNeeded extends SignInNeeded {
 	override readonly name = 'AwsSignInNeeded'
-	readonly signInNeeded = true
 
 	constructor(message = 'Sign in to AWS: `mesh-flow login aws`.') {
-		super(message)
+		super('aws', message)
 	}
-}
-
-/** Whether `error` says the user has to sign in to AWS again. */
-export function isSignInNeeded(error: unknown): boolean {
-	return error instanceof Error && 'signInNeeded' in error && error.signInNeeded === true
 }

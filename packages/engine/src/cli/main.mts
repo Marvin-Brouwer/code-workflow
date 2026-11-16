@@ -274,13 +274,15 @@ export async function main(argv: readonly string[]): Promise<void> {
 	addCredentialCommands(program, gatewayHome)
 	addConnectorCommands(program, home)
 	addLoginCommand(program, {
-		gatewayHome,
-		connectors: async (abortSignal) =>
+		credentials: async (abortSignal) => (await gatewayHome(abortSignal)).credentials,
+		connectors: async (credentials, abortSignal) =>
 			loadConnectors({
 				connectors: await openConnectorSettings(connectorSettingsFile(home())).list(abortSignal),
 				from: process.cwd(),
 				directory: connectorsDirectory(home()),
+				credentials,
 			}),
+		engine: client,
 	})
 
 	program
@@ -297,7 +299,10 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Shows a run, with what it waits for.')
 		.argument('<run>')
 		.action(async (run: string) => {
-			console.log(formatRun(await client().get(run, requestSignal())))
+			const signal = requestSignal()
+			const record = await client().get(run, signal)
+			const waitsForSignIn = record.pending.some((request) => request.kind === 'login')
+			console.log(formatRun(record, waitsForSignIn ? await client().signIns(signal) : []))
 		})
 
 	program
@@ -353,15 +358,22 @@ function connectorsDirectory(home: string): string {
  * Serves an engine with the host tools of the connector packages the user added, resolved from the
  * directory `mesh-flow serve` runs in.
  */
-async function serveWithConnectors(home: string, options: Omit<ServeEngineOptions, 'home' | 'tools'>): Promise<ServedEngine> {
-	const connectors = await loadConnectors({
-		connectors: await openConnectorSettings(connectorSettingsFile(home)).list(options.abortSignal),
-		from: process.cwd(),
-		directory: connectorsDirectory(home),
+async function serveWithConnectors(home: string, options: Omit<ServeEngineOptions, 'home' | 'connectors'>): Promise<ServedEngine> {
+	return serveEngine({
+		home,
+		connectors: async (credentials, abortSignal) => {
+			const connectors = await loadConnectors({
+				connectors: await openConnectorSettings(connectorSettingsFile(home)).list(abortSignal),
+				from: process.cwd(),
+				directory: connectorsDirectory(home),
+				credentials,
+			})
+			for (const connector of connectors)
+				log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
+			return connectors
+		},
+		...options,
 	})
-	for (const connector of connectors)
-		log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
-	return serveEngine({ home, tools: connectors.flatMap((connector) => connector.tools), ...options })
 }
 
 function parseBackend(value: string): BackendName {

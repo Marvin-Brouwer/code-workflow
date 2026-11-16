@@ -13,7 +13,15 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ConnectorName, type ConnectorHost, type ConnectorLogin, type HostTool } from '@mesh-flow/gateway'
+import {
+	connectorCredentials,
+	type ConnectorHost,
+	type ConnectorLogin,
+	type ConnectorLoginContext,
+	type CredentialStore,
+	type HostTool,
+} from '@mesh-flow/gateway'
+import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
@@ -31,13 +39,16 @@ const HostModule = z.object({
 	}),
 })
 
+/** What a loaded connector's sign-in takes: it has the connector's own credentials already. */
+export type LoginContext = Omit<ConnectorLoginContext, 'credentials'>
+
 /** A connector the engine loaded: where it came from, the host tools it brought, and how to sign in to its service. */
 export interface LoadedConnector {
 	readonly package: string
 	readonly name: string
 	readonly tools: readonly HostTool[]
-	/** Signs the user in, for `mesh-flow login <name>`, when the connector's service has sessions. */
-	readonly login?: ConnectorLogin
+	/** Signs the user in, for `mesh-flow login <name>` and runs that wait for it, when the connector's service has sessions. */
+	readonly login?: (context: LoginContext) => Promise<void>
 }
 
 /** What `loadConnectors` takes. */
@@ -47,6 +58,8 @@ export interface LoadConnectorsOptions {
 	readonly from: string
 	/** Where connectors keep what they hold between calls: each gets a folder of its own in it. */
 	readonly directory: string
+	/** The gateway's credentials. Each connector gets the ones named after it, `<connector>/...`, to write too. */
+	readonly credentials: CredentialStore
 }
 
 /**
@@ -61,13 +74,20 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		const host = await importHost(name, options.from)
 		const directory = path.join(options.directory, host.name)
 		await mkdir(directory, { recursive: true, mode: 0o700 })
-		const tools = host.tools({ directory })
+		const credentials = connectorCredentials(options.credentials, host.name)
+		const tools = host.tools({ directory, credentials })
 		for (const tool of tools) {
 			const owner = owners.get(tool.name)
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
 			owners.set(tool.name, name)
 		}
-		loaded.push({ package: name, name: host.name, tools, ...(host.login === undefined ? {} : { login: host.login }) })
+		const { login } = host
+		loaded.push({
+			package: name,
+			name: host.name,
+			tools,
+			...(login === undefined ? {} : { login: (context: LoginContext) => login({ ...context, credentials }) }),
+		})
 	}
 	return loaded
 }
