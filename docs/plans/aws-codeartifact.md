@@ -165,7 +165,8 @@ export default defineMeshFlow({
 - Publishing to CodeArtifact (an upstream repository's packages, for dependent repositories).
 - AWS operations as host tools beyond CodeArtifact.
 - pip, Maven/Gradle, Go and Cargo, each with its own egress conformance test.
-- The settings UI and its sign-in button (roadmap 6).
+- The settings UI and how signing in looks there: designed with the UI (roadmap 6).
+- Other ways to authenticate to AWS (access keys, IAM Roles Anywhere): IAM Identity Center only.
 
 ## Delivery
 
