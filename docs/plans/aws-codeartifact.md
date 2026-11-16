@@ -28,7 +28,8 @@ the host use the AWS SDK v3 clients (`@aws-sdk/client-sso-oidc`, `@aws-sdk/clien
 
 IAM Identity Center with the OIDC device flow, as [design section 7](../design.md#aws) says:
 
-1. `RegisterClient` once per engine home (the client registration is kept, it lasts about 90 days).
+1. `RegisterClient` at each sign-in. The registration lasts about 90 days, so it always outlasts
+   the session, whose refresh token only works with the client it was handed to.
 2. `StartDeviceAuthorization` gives a verification URL and a user code.
 3. The user opens the URL and approves. The host polls `CreateToken` meanwhile.
 4. The access token and refresh token go into the sealed credential store (`aws/session`). They
@@ -203,17 +204,17 @@ Stacked PRs, each on the previous one's branch:
    `npm install` through the proxy in a gVisor and a microsandbox sandbox. `dotnet restore` runs
    through the proxy on the Linux CI host, which has the SDK; inside a real backend it waits for an
    image with Node and the .NET SDK (inline Dockerfiles, issue #36).
-2. `@mesh-flow/aws` host half (built): device flow, session in the credential store, `mesh-flow login aws`,
-   role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
-   check against your real Identity Center.
+2. `@mesh-flow/aws` host half (built): device flow, session in the credential store,
+   `mesh-flow login aws`, role credentials and the CodeArtifact token. Tests against a fake
+   SSO/OIDC endpoint; one manual check against your real Identity Center.
 3. The `login` request (built): protocol, engine, `checkSession` as function and tool,
    `list`/`show`. Functional tests: a run that waits for a sign-in, across an engine restart, and
-   shutdown while it waits. As built: a host tool throws `SignInNeeded` (from `@mesh-flow/gateway`)
-   and its answer names the connector; the runtime's gateway client asks for the `login` and calls
-   again, sharing one request per connector. The engine keeps one sign-in per connector for every
-   waiting run, starts a new code when one runs out, and `mesh-flow login` joins it while the engine
-   serves. Connectors get only their own credentials (`<connector>/...`), writable, for their tools
-   and their sign-in. A resumed run starts a new device authorization. Still open for step 4:
-   `deploy` and `trigger` saying when the AWS settings are missing.
+   shutdown while it waits. As built: a host tool throws `SignInNeededError` (from
+   `@mesh-flow/gateway`) and its answer names the connector; the runtime's gateway client asks for
+   the `login` and calls again, sharing one request per connector. The engine keeps one sign-in per
+   connector for every waiting run, starts a new code when one runs out, and `mesh-flow login` joins
+   it while the engine serves. Connectors get only their own credentials (`<connector>/...`),
+   writable, for their tools and their sign-in. A resumed run starts a new device authorization.
+   Still open for step 4: `deploy` and `trigger` saying when the AWS settings are missing.
 4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files. Conformance test
    against a fake CodeArtifact; then the real one by hand.

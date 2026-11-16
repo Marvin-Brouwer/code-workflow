@@ -1,15 +1,12 @@
-import type { PackageRegistry } from '@mesh-flow/protocol'
+import type { PackageRequest } from '@mesh-flow/protocol'
 import { gatewayPackages } from '../gateway/gateway-packages.mts'
 import { findScope } from '../run/run-scope.mts'
 
-/** What {@link fetchPackage} fetches: a path on one of the app's registries. */
-export interface PackageFetch {
-	readonly registry: PackageRegistry
-	/** The path and query on the registry's host, such as `/v3-flatcontainer/newtonsoft.json/index.json`. */
-	readonly path: string
-	/** The `accept` header to send, such as npm's `application/vnd.npm.install-v1+json`. */
-	readonly accept?: string
-}
+/**
+ * What {@link fetchPackage} fetches: a path on one of the app's registries, with the `accept`
+ * header to send, such as npm's `application/vnd.npm.install-v1+json`.
+ */
+export type PackageFetch = PackageRequest
 
 /** What the registry answered. */
 export interface FetchedPackage {

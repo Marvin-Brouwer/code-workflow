@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
 import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
-import { SignInNeeded } from '../src/tools/sign-in-needed.mts'
+import { SignInNeededError } from '../src/tools/sign-in-needed.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -89,7 +89,7 @@ describe('openGateway', () => {
 
 	test('says which connector to sign in to when a host tool needs a session', async () => {
 		// Arrange
-		const needsSession = hostTool({ name: 'needsSession', input: z.object({}) }, () => Promise.reject(new SignInNeeded('aws')))
+		const needsSession = hostTool({ name: 'needsSession', input: z.object({}) }, () => Promise.reject(new SignInNeededError('aws')))
 		const { gateway } = await testGateway({ tools: [needsSession] })
 		const grant = await gateway.openRun(runId, { tools: ['needsSession'] }, abortSignal)
 
@@ -578,7 +578,13 @@ describe('package calls', () => {
 		expect(sent).not.toHaveBeenCalled()
 	})
 
-	test.each(['/v3/index.json', '/v3-flatcontainer/newtonsoft.json/index.json'])('fetches %s from nuget.org', async (path) => {
+	test.each([
+		'/v3/index.json',
+		'/v3-flatcontainer/newtonsoft.json/index.json',
+		'/v3/vulnerabilities/index.json',
+		'/v3-vulnerabilities/2026.11.16.05.40.00/vulnerability.base.json',
+		'/v3-index/repository-signatures/5.0.0/index.json',
+	])('fetches %s from nuget.org', async (path) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
 		const { fetchPath } = await packageRun(sent, 'nuget')
@@ -619,11 +625,82 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 
 		// Act
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, sent, abortSignal, maxBytes)
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
 
 		// Assert
 		await expect(fetching).rejects.toThrow('the most a package fetch takes')
 		expect(cancelled).toHaveBeenCalledOnce()
+	})
+
+	test('settles a package fetch when it is stopped, even if the registry never answers', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
+		const stop = new AbortController()
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		await vi.waitFor(() => {
+			expect(sent).toHaveBeenCalled()
+		})
+
+		// Act
+		stop.abort(new Error('The run stopped.'))
+
+		// Assert
+		await expect(fetching).rejects.toThrow('The run stopped.')
+	})
+
+	test('settles a package fetch when it is stopped while the body never comes', async () => {
+		// Arrange
+		const body = new ReadableStream<Uint8Array>()
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
+		const stop = new AbortController()
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		await vi.waitFor(() => {
+			expect(sent).toHaveBeenCalled()
+		})
+
+		// Act
+		stop.abort(new Error('The run stopped.'))
+
+		// Assert
+		await expect(fetching).rejects.toThrow('The run stopped.')
+	})
+
+	test.each([
+		['the host cannot reach the registry', () => Promise.reject(new TypeError('fetch failed'))],
+		[
+			'the connection drops while the body comes',
+			() =>
+				Promise.resolve(
+					new Response(
+						new ReadableStream<Uint8Array>({
+							pull(controller) {
+								controller.error(new Error('socket hang up'))
+							},
+						}),
+					),
+				),
+		],
+	])('answers a fetch that failed because %s as one that may pass', async (_what, failing) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(failing)
+		const { fetchPath } = await packageRun(sent)
+
+		// Act
+		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(answer.outcome).toMatchObject({ ok: false, transient: true })
+	})
+
+	test("answers a path that isn't a package fetch as a refusal, which another try won't change", async () => {
+		// Arrange
+		const { fetchPath } = await packageRun(vi.fn<typeof fetch>())
+
+		// Act
+		const { answer } = await fetchPath('/-/whoami')
+
+		// Assert
+		expect(answer.outcome).toEqual({ ok: false, error: expect.stringContaining("isn't a package fetch") as unknown })
 	})
 
 	test('refuses a body larger than a package fetch takes', async () => {

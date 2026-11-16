@@ -1,7 +1,7 @@
 /**
  * Runs inside the sandbox: requests https://<host>/ for each host on the command line and prints
- * `{ host: status }` as JSON, with '000' for anything that didn't get through. Then it checks that
- * loopback works, which the runtime's package proxy needs, and prints it as `loopback`.
+ * `{ hosts: { host: status }, loopback }` as JSON, with '000' for a host that didn't get through,
+ * and in `loopback` whether loopback works, which the runtime's package proxy needs.
  *
  * The test transpiles it to JavaScript first.
  */
@@ -46,7 +46,6 @@ function loopback(): Promise<string> {
 	})
 }
 
-const result: Record<string, string> = {}
-for (const host of process.argv.slice(2)) result[host] = await status(host)
-result.loopback = await loopback()
-console.log(JSON.stringify(result))
+const hosts: Record<string, string> = {}
+for (const host of process.argv.slice(2)) hosts[host] = await status(host)
+console.log(JSON.stringify({ hosts, loopback: await loopback() }))

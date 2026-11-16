@@ -98,9 +98,9 @@ export interface ConnectorHostOptions {
 }
 
 /**
- * The host half of a connector package, as its `host` entry point exports it: a name, and the
- * host tools it brings. The engine loads the connectors the user added and gives every run the
- * tools of them its app lists.
+ * The host half of a connector package, as its `host` entry point exports it: a name, the host
+ * tools it brings, and, for a service with sessions, a `login`. The engine loads the connectors
+ * the user added and gives every run the tools of them its app lists.
  *
  * ```ts
  * export const connector = connectorHost('github', ({ directory }) => githubHostTools({ directory }))
@@ -115,9 +115,7 @@ export interface ConnectorHost {
 }
 
 /** What else a connector's host half brings besides its tools. */
-export interface ConnectorHostExtras {
-	readonly login?: ConnectorLogin
-}
+export type ConnectorHostExtras = Pick<ConnectorHost, 'login'>
 
 /** Defines the host half of a connector, checked. */
 export function connectorHost(name: string, tools: ConnectorHost['tools'], extras: ConnectorHostExtras = {}): ConnectorHost {

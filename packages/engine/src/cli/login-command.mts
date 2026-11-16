@@ -1,8 +1,9 @@
 import { setTimeout as delay } from 'node:timers/promises'
-import type { CredentialStore, LoginPrompt } from '@mesh-flow/gateway'
+import type { CredentialStore } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { ControlError, type ControlClient } from '../control/control-client.mts'
+import { formatLoginPrompt } from './format-login-prompt.mts'
 
 /** How long `mesh-flow login` waits for the approval: longer than a device code lasts. */
 const loginTimeoutMs = 15 * 60 * 1000
@@ -20,14 +21,6 @@ export interface LoginCommandOptions {
 	readonly engine: () => Pick<ControlClient, 'signIns' | 'signIn'>
 	/** Where the prompt and progress go. Default: stderr. */
 	readonly log?: (line: string) => void
-}
-
-/** The lines that tell the user where to sign in. */
-export function formatLoginPrompt(connector: string, prompt: LoginPrompt): string {
-	return [
-		`Sign in to ${connector}: open ${prompt.url}`,
-		`and check that it shows ${prompt.code}. The code works until ${prompt.expiresAt.toLocaleTimeString()}.`,
-	].join('\n')
 }
 
 /**

@@ -14,7 +14,7 @@ export interface AwsHostToolsOptions {
 }
 
 /**
- * The AWS host tools, sharing one session. Each throws an `AwsSignInNeeded` before it does
+ * The AWS host tools, sharing one session. Each throws an `AwsSignInNeededError` before it does
  * anything when the user has to sign in, so the run waits for the sign-in and calls again.
  */
 export function awsHostTools(options: AwsHostToolsOptions): HostTool[] {

@@ -32,9 +32,13 @@ None of the four settings is a secret. They are in the credential store because 
 
 Signing in up front is optional: a run that needs AWS and finds no session waits for a sign-in, `mesh-flow list` shows it as `needs login: aws`, and `mesh-flow show <run>` or `mesh-flow login aws` shows where to approve it.
 
-`mesh-flow login aws` uses Identity Center's device flow. It registers the engine with Identity Center once (the registration lasts about 90 days), prints the URL to open and the code to check, and waits until you approve. The session's access token and refresh token go into the sealed credential store under `aws/session`.
+`mesh-flow login aws` uses Identity Center's device flow. It registers the engine with Identity Center (the registration lasts about 90 days, longer than any session), prints the URL to open and the code to check, and waits until you approve. The session's access token and refresh token, and the registration they belong to, go into the sealed credential store under `aws/session`.
 
-## The session
+## Usage
+
+Workflows don't import this package yet: the registry shim, which restores packages from CodeArtifact, and `checkSession` come in the next steps of the [plan](../../docs/plans/aws-codeartifact.md). Until then, what is here is the host half.
+
+## The host half
 
 One sign-in lasts as long as Identity Center's session does, a limit its admin sets. The engine has no timer of its own. Every run on the engine shares the session, and an engine restart keeps it.
 
@@ -42,16 +46,19 @@ One sign-in lasts as long as Identity Center's session does, a limit its admin s
 
 ```ts
 import { openAwsSession } from '@mesh-flow/aws/host'
+import { keyFile, openCredentialStore } from '@mesh-flow/gateway'
 
+const credentials = openCredentialStore('/srv/mesh-flow/credentials.json', keyFile('/srv/mesh-flow/store.key'))
+const abortSignal = AbortSignal.timeout(30_000)
 const aws = openAwsSession({ credentials })
 const { accessKeyId, secretAccessKey, sessionToken } = await aws.roleCredentials(abortSignal)
 const { token } = await aws.codeArtifactToken({ domain: 'example', owner: '123456789012', region: 'eu-west-1' }, abortSignal)
 ```
 
-- Role credentials come from the access portal for the account and role in the settings. They are kept in memory only, and fetched again when they near their end.
-- The access token is renewed with the refresh token while the session lives, and the renewed session is written back.
+- Role credentials come from the access portal for the account and role in the settings. They are kept in memory only, fetched again when they near their end, and at once when the settings change.
+- The access token is renewed with the refresh token while the session lives, and the renewed session is written back, unless a new sign-in came between. A renewal runs to its end even when the call that started it stops, since Identity Center's old refresh token stops working once it hands out a new one.
 - A CodeArtifact token is fetched with the role credentials and lasts as long as they do, so the two are renewed together.
-- Once Identity Center ends the session, the last role credentials and tokens are used until they run out, so a restore under way isn't cut off. After that, every call throws an `AwsSignInNeeded`, and `status` says `sign-in-needed`. Thrown from a host tool, it makes the run wait for a sign-in and call the tool again.
+- Once Identity Center ends the session, the last role credentials and tokens are used until they run out, so a restore under way isn't cut off. After that, every call throws an `AwsSignInNeededError`, and `status` says `sign-in-needed`. Thrown from a host tool, it makes the run wait for a sign-in and call the tool again.
 
 The connector gets only the credentials named `aws/...`, so it can renew its session without reaching anything else in the store. `awsHostTools({ credentials })` makes its host tools on one session.
 

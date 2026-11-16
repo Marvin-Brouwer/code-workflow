@@ -3,13 +3,14 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
+import type { CredentialStore } from '@mesh-flow/gateway'
 import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
 import { AppName, WebhookName } from '../apps/names.mts'
 import { openConnectorSettings } from '../connectors/connector-settings.mts'
-import { loadConnectors } from '../connectors/load-connectors.mts'
+import { loadConnectors, type LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
 import { controlSocketPath } from '../control/control-socket.mts'
 import { messageOf } from '../errors.mts'
@@ -275,13 +276,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 	addConnectorCommands(program, home)
 	addLoginCommand(program, {
 		credentials: async (abortSignal) => (await gatewayHome(abortSignal)).credentials,
-		connectors: async (credentials, abortSignal) =>
-			loadConnectors({
-				connectors: await openConnectorSettings(connectorSettingsFile(home())).list(abortSignal),
-				from: process.cwd(),
-				directory: connectorsDirectory(home()),
-				credentials,
-			}),
+		connectors: (credentials, abortSignal) => loadAddedConnectors(home(), credentials, abortSignal),
 		engine: client,
 	})
 
@@ -354,6 +349,16 @@ function connectorsDirectory(home: string): string {
 	return path.join(home, 'connectors')
 }
 
+/** The connector packages the user added, resolved from the directory the command runs in. */
+async function loadAddedConnectors(home: string, credentials: CredentialStore, abortSignal: AbortSignal): Promise<LoadedConnector[]> {
+	return loadConnectors({
+		connectors: await openConnectorSettings(connectorSettingsFile(home)).list(abortSignal),
+		from: process.cwd(),
+		directory: connectorsDirectory(home),
+		credentials,
+	})
+}
+
 /**
  * Serves an engine with the host tools of the connector packages the user added, resolved from the
  * directory `mesh-flow serve` runs in.
@@ -362,12 +367,7 @@ async function serveWithConnectors(home: string, options: Omit<ServeEngineOption
 	return serveEngine({
 		home,
 		connectors: async (credentials, abortSignal) => {
-			const connectors = await loadConnectors({
-				connectors: await openConnectorSettings(connectorSettingsFile(home)).list(abortSignal),
-				from: process.cwd(),
-				directory: connectorsDirectory(home),
-				credentials,
-			})
+			const connectors = await loadAddedConnectors(home, credentials, abortSignal)
 			for (const connector of connectors)
 				log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
 			return connectors
