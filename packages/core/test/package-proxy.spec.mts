@@ -70,8 +70,11 @@ async function curlStatus(environment: PackageEnvironment, home: string, args: r
 	const result: unknown = await run('curl', ['--silent', '--output', '/dev/null', '--write-out', '%{http_code}', ...args], {
 		env: childEnvironment(environment, home),
 	}).catch((error: unknown) => error)
-	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : ''
+	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : noStatus
 }
+
+/** What curl prints for the status when it got none. */
+const noStatus = '000'
 
 /** A path longer than a package fetch may be. */
 const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
@@ -216,7 +219,8 @@ describe.skipIf(onWindows)('package proxy', () => {
 		const socket = connect(Number(proxy.port), proxy.hostname)
 		await new Promise((resolve) => socket.once('connect', resolve))
 
-		// Act
+		// Act: whether the reset lands while the proxy writes its 403 is up to timing, so this shows
+		// the proxy survives; without its error listener the reset failed this test as an unhandled error.
 		socket.write('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n')
 		socket.resetAndDestroy()
 		const status = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
@@ -271,9 +275,7 @@ describe('package access', () => {
 		expect(await readFile(environment.SSL_CERT_FILE ?? '', 'utf8')).toContain('BEGIN CERTIFICATE')
 		expect(environment.HTTPS_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
 	})
-})
 
-describe('package proxy start', () => {
 	test('throws on a signal that is aborted already', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()

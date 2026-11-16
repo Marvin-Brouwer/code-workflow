@@ -74,7 +74,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		const pool = poolOf(endpoint)
 		const token = await pool.take(abortSignal)
 		const id = `call-${idPrefix}-${String(++callCount)}`
-		channel.send({ type: 'call', id, endpoint: endpoint.id, token, call: gatewayCall })
+		channel.send({ type: 'call', id, endpoint: endpoint.id, token, call: checked.data })
 		// Whether the answer was taken already, so a stop that comes after it doesn't wait for it again.
 		const progress = { taken: false }
 		const answered = channel.take(id, AbortSignal.any([abortSignal, runAbortSignal])).then((answer) => {

@@ -2,16 +2,17 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { tokensPerEndpoint } from '@mesh-flow/gateway'
 import {
 	answerFile,
 	type CallAnswer,
 	type EndpointGrant,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
+	minTokenLength,
 	runIdEnvironmentVariable,
 	RuntimeMessage,
 } from '@mesh-flow/protocol'
-import { tokensPerEndpoint } from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -118,12 +119,9 @@ function errorOf(message: RuntimeMessage | undefined): string | undefined {
 	return message?.type === 'failed' ? message.error : undefined
 }
 
-/** The shortest token an endpoint takes. */
-const minimumTokenLength = 16
-
 /** A token the engine could hand over, different for each `index`. */
 function testToken(index: number): string {
-	return String(index).padStart(minimumTokenLength, 't')
+	return String(index).padStart(minTokenLength, 't')
 }
 
 describe('an entry file started by the engine', () => {

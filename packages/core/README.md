@@ -291,8 +291,8 @@ The sandbox has no network. Package managers in it still restore from the regist
 
 - Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
 - For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime.
-- Each `GET` it gets is a call to the gateway, which fetches the package on the host. Other hosts, plain HTTP and writes are refused. A redirect is handed back to the package manager, not followed, and a fetch takes at most 256 MB.
-- Package fetches share the run's gateway endpoint, and its four tokens, with the workflow's tool and model calls, so at most four go at once.
+- Each `GET` it gets is a call to the gateway, which fetches the package on the host. Other hosts, plain HTTP and writes are refused. A redirect is handed back to the package manager, not followed, and a fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB). Until packages are staged as files, a fetch goes through the runtime's memory a few times over, so give a sandbox that restores packages near that size `memoryMb` to spare.
+- Package fetches share the run's gateway endpoint, and its `tokensPerEndpoint` (four) tokens, with the workflow's tool and model calls, so at most that many go at once.
 
 Code can make the same call itself, with `fetchPackage`:
 

@@ -1,8 +1,8 @@
 import { EndpointGrant, type CallAnswer, ModelResponse, type PackageRegistry, ResolvedModel } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
+import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
-import { maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -487,7 +487,6 @@ describe('model calls', () => {
 	})
 })
 
-/** A run of an app that restores from npm, on a gateway that fetches with `sent`. */
 /** A run that restores from `registry`, on a gateway that fetches with `sent`, and a call that fetches a path there. */
 async function packageRun(sent: typeof fetch, registry: PackageRegistry = 'npm') {
 	const { gateway } = await testGateway({ fetch: sent })
@@ -587,6 +586,26 @@ describe('package calls', () => {
 		expect(resultOf(answer)).toMatchObject({ status: 302, headers: { location } })
 		expect(sent).toHaveBeenCalledOnce()
 		expect(sent.mock.calls[0]?.[1]).toMatchObject({ redirect: 'manual' })
+	})
+
+	test('stops reading a body that grows larger than it takes, and cancels the rest', async () => {
+		// Arrange
+		const maxBytes = 8
+		const cancelled = vi.fn()
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				controller.enqueue(new Uint8Array(maxBytes))
+			},
+			cancel: cancelled,
+		})
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
+
+		// Act
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, sent, abortSignal, maxBytes)
+
+		// Assert
+		await expect(fetching).rejects.toThrow('the most a package fetch takes')
+		expect(cancelled).toHaveBeenCalledOnce()
 	})
 
 	test('refuses a body larger than a package fetch takes', async () => {

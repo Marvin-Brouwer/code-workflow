@@ -4,7 +4,8 @@ import { publicRegistries } from './public-registries.mts'
 
 /**
  * The headers of a registry's answer that a package manager uses: what the body is, what version of
- * it, and where a redirect goes. The proxy in the sandbox refuses a redirect to another host.
+ * it, and where a redirect goes. A redirect goes back to the package manager: one to another host
+ * fails at the proxy's `CONNECT`, and one on the same registry is checked here again.
  */
 const keptHeaders = ['content-type', 'etag', 'last-modified', 'location']
 
@@ -29,13 +30,15 @@ export const maxPackageBytes = 256 * bytesPerMb
  * answers is the answer, a 404 too; package managers ask for what may not exist. A redirect isn't
  * followed here: it's handed back, so the next fetch goes through the same checks.
  *
+ * @param maxBytes - The largest body it takes. Default: {@link maxPackageBytes}.
  * @throws When the path isn't a package fetch on that registry, and when the body is larger than
- * {@link maxPackageBytes}.
+ * `maxBytes`.
  */
 export async function fetchPackage(
 	request: PackageRequest,
 	fetchFromHost: typeof fetch,
 	abortSignal: AbortSignal,
+	maxBytes = maxPackageBytes,
 ): Promise<PackageResponse> {
 	const registry = publicRegistries[request.registry]
 	const url = new URL(request.path, registry.origin)
@@ -46,17 +49,17 @@ export async function fetchPackage(
 		redirect: 'manual',
 		signal: abortSignal,
 	})
-	const body = (await cappedBody(response, `${request.registry} ${request.path}`)).toString('base64')
+	const body = (await cappedBody(response, maxBytes, `${request.registry} ${request.path}`)).toString('base64')
 	const headers = Object.fromEntries(
 		keptHeaders.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),
 	)
 	return { status: response.status, headers, body }
 }
 
-/** The response's body, read until it's over {@link maxPackageBytes}. */
-async function cappedBody(response: Response, what: string): Promise<Buffer> {
-	const tooLarge = () => new Error(`${what} is larger than ${String(maxPackageBytes / bytesPerMb)} MB, the most a package fetch takes.`)
-	if (Number(response.headers.get('content-length') ?? 0) > maxPackageBytes) {
+/** The response's body, read until it's over `maxBytes`. `fetched` says what it is, for the error. */
+async function cappedBody(response: Response, maxBytes: number, fetched: string): Promise<Buffer> {
+	const tooLarge = () => new Error(`${fetched} is larger than ${megabytes(maxBytes)}, the most a package fetch takes.`)
+	if (Number(response.headers.get('content-length') ?? 0) > maxBytes) {
 		await response.body?.cancel()
 		throw tooLarge()
 	}
@@ -69,11 +72,16 @@ async function cappedBody(response: Response, what: string): Promise<Buffer> {
 		const { done, value } = await reader.read()
 		if (done) break
 		size += value.byteLength
-		if (size > maxPackageBytes) {
+		if (size > maxBytes) {
 			await reader.cancel()
 			throw tooLarge()
 		}
 		chunks.push(Buffer.from(value))
 	}
 	return Buffer.concat(chunks)
+}
+
+/** A size in bytes as MB, or in bytes when it's smaller than one. */
+function megabytes(bytes: number): string {
+	return bytes < bytesPerMb ? `${String(bytes)} bytes` : `${String(bytes / bytesPerMb)} MB`
 }

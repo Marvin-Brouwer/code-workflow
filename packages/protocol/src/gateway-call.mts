@@ -6,8 +6,14 @@ import { RequestId } from './request-id.mts'
 export const EndpointId = z.string().regex(/^[\w-]{1,64}$/)
 export type EndpointId = z.infer<typeof EndpointId>
 
+/** The shortest token an endpoint takes. */
+export const minTokenLength = 16
+
+/** The longest token an endpoint takes. */
+const maxTokenLength = 128
+
 /** A single-use token for one call on an endpoint. The answer to the call carries the next one. */
-export const EndpointToken = z.string().regex(/^[\w-]{16,128}$/)
+export const EndpointToken = z.string().regex(new RegExp(`^[\\w-]{${String(minTokenLength)},${String(maxTokenLength)}}$`))
 export type EndpointToken = z.infer<typeof EndpointToken>
 
 /** Names a tool that runs on the host, as a model provider takes tool names. */

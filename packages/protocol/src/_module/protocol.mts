@@ -13,6 +13,7 @@ export {
 	EndpointGrant,
 	EndpointId,
 	EndpointToken,
+	minTokenLength,
 	GatewayCall,
 	ModelRequest,
 	ModelResponse,
