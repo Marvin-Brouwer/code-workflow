@@ -133,6 +133,8 @@ function writeText<Closes>(
 
 		${lintPart(brief, request)}
 
+		The ${request} shows its title above the description, so don't repeat it as a \`#\` heading at the top, and
+		start sections at \`##\` unless a template says otherwise.
 		The reference that closes the issue and the signature are added for you: leave them out.
 		When both are written, ${succeed(text)}.
 		${options.limit ?? defaultLimit}

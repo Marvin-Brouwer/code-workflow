@@ -94,6 +94,7 @@ describe('describe', () => {
 		// Assert
 		expect(prompts[0]).toContain('no pull request template')
 		expect(prompts[0]).toContain('`## What changes`, `## Why` and `## Testing`')
+		expect(prompts[0]).toContain("don't repeat it as a `#` heading at the top")
 	})
 
 	test('asks for a short title without lint settings', async () => {
