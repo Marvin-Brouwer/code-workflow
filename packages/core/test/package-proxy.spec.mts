@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
@@ -8,12 +8,28 @@ import { promisify } from 'node:util'
 import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
+import { storedZip } from './support/stored-zip.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const run = promisify(execFile)
 
 /** A package that isn't on the real npm registry: an install that finds it went through the proxy. */
 const fakePackage = { name: 'mesh-flow-proxy-check', version: '1.0.0' }
+
+/** A package that isn't on nuget.org: a restore that finds it went through the proxy. */
+const fakeNuGetPackage = { id: 'MeshFlow.ProxyCheck', version: '1.0.0' }
+
+/** The .NET SDK's major version on this machine, or `undefined` without one. */
+function dotnetSdkMajor(): string | undefined {
+	const result = spawnSync('dotnet', ['--version'], { encoding: 'utf8' })
+	if (result.error !== undefined) return undefined
+	return /^(\d+)\./.exec(result.stdout)?.[1]
+}
+
+const dotnetMajor = dotnetSdkMajor()
+
+/** How long a first `dotnet restore` may take: the SDK sets itself up on its first run. */
+const restoreTimeoutMs = 120_000
 
 /** How long a stopped proxy may take to settle while a fetch never does. */
 const promptlyMs = 3_000
@@ -79,6 +95,73 @@ async function curlStatus(environment: PackageEnvironment, home: string, args: r
 /** A path longer than a package fetch may be. */
 const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
 
+/**
+ * What nuget.org's v3 feed would serve for {@link fakeNuGetPackage}: the service index, the flat
+ * container's version list, the package and its nuspec, by path.
+ */
+function fakeNuGetFeed(): Record<string, PackageResponse> {
+	const { id, version } = fakeNuGetPackage
+	const lowerId = id.toLowerCase()
+	const nuspec = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+	<metadata>
+		<id>${id}</id>
+		<version>${version}</version>
+		<authors>mesh-flow</authors>
+		<description>Checks a restore through the package proxy.</description>
+	</metadata>
+</package>
+`
+	const flatContainer = `/v3-flatcontainer/${lowerId}`
+	return {
+		'/v3/index.json': answer(
+			200,
+			JSON.stringify({
+				version: '3.0.0',
+				resources: [{ '@id': 'https://api.nuget.org/v3-flatcontainer/', '@type': 'PackageBaseAddress/3.0.0' }],
+			}),
+		),
+		[`${flatContainer}/index.json`]: answer(200, JSON.stringify({ versions: [version] })),
+		[`${flatContainer}/${version}/${lowerId}.nuspec`]: answer(200, nuspec, 'application/xml'),
+		[`${flatContainer}/${version}/${lowerId}.${version}.nupkg`]: answer(
+			200,
+			storedZip({ [`${id}.nuspec`]: nuspec }),
+			'application/octet-stream',
+		),
+	}
+}
+
+/** A project that references {@link fakeNuGetPackage}, restoring from nuget.org only. */
+async function restoringProject(): Promise<string> {
+	const project = await temporaryDirectory()
+	const { id, version } = fakeNuGetPackage
+	await writeFile(
+		path.join(project, 'Project.csproj'),
+		`<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net${dotnetMajor ?? ''}.0</TargetFramework>
+		<NuGetAudit>false</NuGetAudit>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="${id}" Version="${version}" />
+	</ItemGroup>
+</Project>
+`,
+	)
+	await writeFile(
+		path.join(project, 'nuget.config'),
+		`<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+	<packageSources>
+		<clear />
+		<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+	</packageSources>
+</configuration>
+`,
+	)
+	return project
+}
+
 /** Sends a request for `target` through the proxy as a plain-HTTP proxy request, and resolves to its status. */
 function plainRequest(proxyUrl: string, target: string, method = 'GET'): Promise<number> {
 	const proxy = new URL(proxyUrl)
@@ -122,6 +205,40 @@ describe.skipIf(onWindows)('package proxy', () => {
 		expect(installed).toMatchObject(fakePackage)
 		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'npm', path: tarballPath }), expect.any(AbortSignal))
 	})
+
+	// .NET reads SSL_CERT_FILE on Linux only; on macOS it trusts the keychain. CI's Linux runners have the SDK.
+	test.runIf(process.platform === 'linux' && (dotnetMajor !== undefined || process.env.CI === 'true'))(
+		'dotnet restores a package through it, from what the gateway fetched',
+		{ timeout: restoreTimeoutMs },
+		async () => {
+			// Arrange
+			const feed = fakeNuGetFeed()
+			const fetch = vi.fn<Fetch>((asked) => Promise.resolve(feed[asked.path] ?? answer(404, '{}')))
+			const { environment } = await proxyWith(fetch)
+			const project = await restoringProject()
+			const packages = path.join(project, 'packages')
+
+			// Act
+			await run('dotnet', ['restore'], {
+				cwd: project,
+				env: {
+					...childEnvironment(environment, project),
+					DOTNET_CLI_HOME: project,
+					DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+					DOTNET_NOLOGO: '1',
+					DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
+					NUGET_PACKAGES: packages,
+				},
+			})
+
+			// Assert
+			const { id, version } = fakeNuGetPackage
+			const restored = await readFile(path.join(packages, id.toLowerCase(), version, `${id.toLowerCase()}.nuspec`), 'utf8')
+			expect(restored).toContain(`<id>${id}</id>`)
+			const fetched = fetch.mock.calls.map(([asked]) => `${asked.registry} ${asked.path}`)
+			expect(fetched).toContain(`nuget /v3-flatcontainer/${id.toLowerCase()}/${version}/${id.toLowerCase()}.${version}.nupkg`)
+		},
+	)
 
 	test('curl, which trusts what OpenSSL trusts, as .NET does, gets the feed through it', async () => {
 		// Arrange

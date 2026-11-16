@@ -199,8 +199,9 @@ Stacked PRs, each on the previous one's branch:
    and curl (OpenSSL's trust, as .NET's) through the proxy on the host, other hosts and writes
    refused, a run's commands finding the proxy in their environment; the backends' conformance
    suite checks there is no network but loopback, and the engine's real-backend CI jobs run
-   `npm install` through the proxy in a gVisor and a microsandbox sandbox. A `dotnet restore`
-   inside a real backend is still checked by hand: it needs an image with Node and the .NET SDK.
+   `npm install` through the proxy in a gVisor and a microsandbox sandbox. `dotnet restore` runs
+   through the proxy on the Linux CI host, which has the SDK; inside a real backend it waits for an
+   image with Node and the .NET SDK (inline Dockerfiles, issue #36).
 2. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.
