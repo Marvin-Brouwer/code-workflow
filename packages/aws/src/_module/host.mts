@@ -17,4 +17,4 @@ export {
 export { awsCredentialNames, readAwsSettings, type AwsSettings } from '../host/aws-settings.mts'
 export { connector } from '../host/connector.mts'
 export { signIn, type SignInOptions } from '../host/sign-in.mts'
-export { AwsSignInNeeded, isSignInNeeded } from '../host/sign-in-needed.mts'
+export { AwsSignInNeededError, isSignInNeeded } from '../host/sign-in-needed.mts'

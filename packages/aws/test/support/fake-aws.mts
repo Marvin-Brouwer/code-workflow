@@ -2,23 +2,41 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { text } from 'node:stream/consumers'
 import { onTestFinished } from 'vitest'
 import type { AwsEndpoints } from '../../src/host/aws-endpoints.mts'
+import { refreshTokenGrant } from '../../src/host/oidc.mts'
 
 const msPerSecond = 1000
+
+/** How long a client registration lasts: Identity Center's 90 days. */
+const registrationSeconds = 90 * 24 * 3600
+
+/** How long a device code lasts. */
+const deviceCodeSeconds = 600
+
+/** How often the device flow may look for the approval. */
+const lookIntervalSeconds = 1
 
 /** How the fake Identity Center, access portal and CodeArtifact behave, changed as a test goes. */
 export interface FakeAwsState {
 	/** How many looks for the approval answer `authorization_pending` before it's approved. `Infinity`: never. */
 	pendingLooks: number
+	/** How many looks for the approval answer `slow_down` first. */
+	slowDowns: number
 	/** The user denied the sign-in. */
 	denied: boolean
+	/** Identity Center ended the device code before the user approved it. */
+	deviceCodeExpired: boolean
 	/** Seconds an access token lasts. */
 	accessTokenSeconds: number
 	/** Whether a refresh token is handed out, and whether it still works: `false` once the session ended. */
 	refreshWorks: boolean
 	/** Milliseconds role credentials last, from when they are fetched. */
 	roleCredentialsMs: number
-	/** Whether the access portal takes the access token. */
-	portalWorks: boolean
+	/** How many fetches of role credentials the portal turns down next. `Infinity`: every one. */
+	portalRejects: number
+	/** How many token fetches CodeArtifact turns down next, as if the role credentials ended. */
+	codeArtifactRejects: number
+	/** Awaited before a request to `path` is answered, such as to hold it, or never answer. */
+	hold: ((path: string, grantType: unknown) => Promise<void>) | undefined
 }
 
 /** What the fake was asked, as `METHOD /path`, in order. */
@@ -46,29 +64,52 @@ function json(response: ServerResponse, status: number, body: unknown, errorType
 	response.end(JSON.stringify(body))
 }
 
-/** One fake for the three AWS services the connector talks to, on loopback, closed when the test ends. */
+/**
+ * One fake for the three AWS services the connector talks to, on loopback, closed when the test
+ * ends. Like Identity Center, it hands out a new refresh token on each renewal, and takes each
+ * one only once, and only from the client it was handed to.
+ */
 export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> = {}): Promise<FakeAws> {
 	const state: FakeAwsState = {
 		pendingLooks: 0,
+		slowDowns: 0,
 		denied: false,
+		deviceCodeExpired: false,
 		accessTokenSeconds: 3600,
 		refreshWorks: true,
 		roleCredentialsMs: 3_600_000,
-		portalWorks: true,
+		portalRejects: 0,
+		codeArtifactRejects: 0,
+		hold: undefined,
 		...overrides,
 	}
 	const requests: FakeAwsRequests = []
 	let looks = 0
 	let issued = 0
+	let registered = 0
 	const nextToken = (kind: string) => `${kind}-${String(++issued)}`
+	/** The refresh tokens that still work, and the client each was handed to. */
+	const liveRefreshTokens = new Map<string, unknown>()
 
-	const tokens = (response: ServerResponse) => {
+	const tokens = (response: ServerResponse, clientId: unknown) => {
+		const accessToken = nextToken('access')
+		const refreshToken = state.refreshWorks ? nextToken('refresh') : undefined
+		if (refreshToken !== undefined) liveRefreshTokens.set(refreshToken, clientId)
 		json(response, 200, {
-			accessToken: nextToken('access'),
+			accessToken,
 			tokenType: 'Bearer',
 			expiresIn: state.accessTokenSeconds,
-			...(state.refreshWorks ? { refreshToken: nextToken('refresh') } : {}),
+			...(refreshToken === undefined ? {} : { refreshToken }),
 		})
+	}
+
+	const deviceToken = (response: ServerResponse, clientId: unknown) => {
+		if (state.denied) json(response, 400, { error: 'access_denied' }, 'AccessDeniedException')
+		else if (state.deviceCodeExpired) json(response, 400, { error: 'expired_token' }, 'ExpiredTokenException')
+		else if (looks++ < state.slowDowns) json(response, 400, { error: 'slow_down' }, 'SlowDownException')
+		else if (looks <= state.slowDowns + state.pendingLooks)
+			json(response, 400, { error: 'authorization_pending' }, 'AuthorizationPendingException')
+		else tokens(response, clientId)
 	}
 
 	const serve = async (request: IncomingMessage, response: ServerResponse) => {
@@ -77,12 +118,14 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 		const body: unknown = request.method === 'POST' ? JSON.parse((await text(request)) || '{}') : {}
 		const field = (name: string): unknown =>
 			typeof body === 'object' && body !== null ? Object.entries(body).find(([key]) => key === name)?.[1] : undefined
+		await state.hold?.(url.pathname, field('grantType'))
 		if (url.pathname === '/client/register') {
+			registered++
 			json(response, 200, {
-				clientId: 'client-1',
-				clientSecret: 'client-secret-1',
+				clientId: `client-${String(registered)}`,
+				clientSecret: `client-secret-${String(registered)}`,
 				clientIdIssuedAt: Math.floor(now().getTime() / msPerSecond),
-				clientSecretExpiresAt: Math.floor(now().getTime() / msPerSecond) + 90 * 24 * 3600,
+				clientSecretExpiresAt: Math.floor(now().getTime() / msPerSecond) + registrationSeconds,
 			})
 			return
 		}
@@ -93,24 +136,30 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 				userCode,
 				verificationUri: verificationUrl,
 				verificationUriComplete: `${verificationUrl}?user_code=${userCode}`,
-				expiresIn: 600,
-				interval: 1,
+				expiresIn: deviceCodeSeconds,
+				interval: lookIntervalSeconds,
 			})
 			return
 		}
 		if (url.pathname === '/token') {
-			if (field('grantType') === 'refresh_token') {
-				if (!state.refreshWorks) json(response, 400, { error: 'invalid_grant' }, 'InvalidGrantException')
-				else tokens(response)
+			if (field('grantType') !== refreshTokenGrant) {
+				deviceToken(response, field('clientId'))
 				return
 			}
-			if (state.denied) json(response, 400, { error: 'access_denied' }, 'AccessDeniedException')
-			else if (looks++ < state.pendingLooks) json(response, 400, { error: 'authorization_pending' }, 'AuthorizationPendingException')
-			else tokens(response)
+			const refreshToken = field('refreshToken')
+			const live = typeof refreshToken === 'string' && liveRefreshTokens.get(refreshToken) === field('clientId')
+			if (!state.refreshWorks || !live) {
+				json(response, 400, { error: 'invalid_grant' }, 'InvalidGrantException')
+				return
+			}
+			liveRefreshTokens.delete(refreshToken)
+			tokens(response, field('clientId'))
 			return
 		}
 		if (url.pathname === '/federation/credentials') {
-			if (!state.portalWorks || request.headers['x-amz-sso_bearer_token'] === undefined) {
+			const rejected = state.portalRejects > 0 || request.headers['x-amz-sso_bearer_token'] === undefined
+			if (rejected) {
+				state.portalRejects = Math.max(0, state.portalRejects - 1)
 				json(response, 401, { message: 'Session token not found or invalid' }, 'UnauthorizedException')
 				return
 			}
@@ -125,6 +174,11 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 			return
 		}
 		if (url.pathname === '/v1/authorization-token') {
+			if (state.codeArtifactRejects > 0) {
+				state.codeArtifactRejects--
+				json(response, 403, { message: 'The security token included in the request is expired' }, 'ExpiredTokenException')
+				return
+			}
 			json(response, 200, {
 				authorizationToken: nextToken(`codeartifact-${url.searchParams.get('domain') ?? ''}`),
 				expiration: Math.floor((now().getTime() + state.roleCredentialsMs) / msPerSecond),

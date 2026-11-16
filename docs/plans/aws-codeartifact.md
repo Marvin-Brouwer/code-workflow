@@ -2,9 +2,9 @@
 
 Status: agreed 2026-11-16; delivery steps 1 (no direct egress) and 2 (the AWS host half) built,
 the rest not. Covers the first part of roadmap step 5 of [`../design.md`](../design.md#roadmap):
-an AWS session on the host that the user signs in to interactively, `checkSession`, and package restores from a private CodeArtifact
-repository in the sandbox. Publishing to CodeArtifact, other AWS operations and the package managers
-beyond npm and NuGet come later.
+an AWS session on the host that the user signs in to interactively, `checkSession`, and package
+restores from a private CodeArtifact repository in the sandbox. Publishing to CodeArtifact, other
+AWS operations and the package managers beyond npm and NuGet come later.
 
 ## Goal
 
@@ -27,7 +27,8 @@ the host use the AWS SDK v3 clients (`@aws-sdk/client-sso-oidc`, `@aws-sdk/clien
 
 IAM Identity Center with the OIDC device flow, as [design section 7](../design.md#aws) says:
 
-1. `RegisterClient` once per engine home (the client registration is kept, it lasts about 90 days).
+1. `RegisterClient` at each sign-in. The registration lasts about 90 days, so it always outlasts
+   the session, whose refresh token only works with the client it was handed to.
 2. `StartDeviceAuthorization` gives a verification URL and a user code.
 3. The user opens the URL and approves. The host polls `CreateToken` meanwhile.
 4. The access token and refresh token go into the sealed credential store (`aws/session`). They
@@ -202,9 +203,9 @@ Stacked PRs, each on the previous one's branch:
    `npm install` through the proxy in a gVisor and a microsandbox sandbox. `dotnet restore` runs
    through the proxy on the Linux CI host, which has the SDK; inside a real backend it waits for an
    image with Node and the .NET SDK (inline Dockerfiles, issue #36).
-2. `@mesh-flow/aws` host half (built): device flow, session in the credential store, `mesh-flow login aws`,
-   role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
-   check against your real Identity Center.
+2. `@mesh-flow/aws` host half (built): device flow, session in the credential store,
+   `mesh-flow login aws`, role credentials and the CodeArtifact token. Tests against a fake
+   SSO/OIDC endpoint; one manual check against your real Identity Center.
 3. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.
    Functional tests: a run that waits for a sign-in, across an engine restart, and shutdown while it
    waits.

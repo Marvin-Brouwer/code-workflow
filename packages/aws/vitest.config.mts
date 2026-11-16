@@ -5,7 +5,8 @@ const source = (relative: string) => fileURLToPath(new URL(relative, import.meta
 
 export default defineConfig({
 	resolve: {
-		// Workspace packages resolve to their sources, so nothing has to be built first.
+		// Workspace packages resolve to their sources, so nothing has to be built first: protocol too,
+		// which gateway's sources import.
 		alias: {
 			'@mesh-flow/protocol': source('../protocol/src/_module/protocol.mts'),
 			'@mesh-flow/gateway': source('../gateway/src/_module/gateway.mts'),

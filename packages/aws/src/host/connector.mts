@@ -16,4 +16,5 @@ import { signIn } from './sign-in.mts'
  * mesh-flow login aws
  * ```
  */
+// Wrapped, not `{ login: signIn }`: the engine's login must not reach the test seams in `SignInOptions`.
 export const connector: ConnectorHost = connectorHost('aws', () => [], { login: (context) => signIn(context) })

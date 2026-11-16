@@ -10,3 +10,8 @@ export interface AwsEndpoints {
 	/** CodeArtifact, which hands out authorization tokens. */
 	readonly codeArtifact?: string
 }
+
+/** An AWS client's `endpoint` option for `url`: none when it's left out, so the client uses AWS's own. */
+export function endpointOption(url: string | undefined): { readonly endpoint?: string } {
+	return url === undefined ? {} : { endpoint: url }
+}

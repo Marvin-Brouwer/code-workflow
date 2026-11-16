@@ -407,13 +407,15 @@ directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
 
 ### AWS
 
-- **Host session:** IAM Identity Center via device flow, started from the UI. The gateway holds
-  the access and refresh tokens. Nothing outlives the session maximum set by the Identity Center
-  admin.
+- **Host session:** IAM Identity Center via device flow, started with `mesh-flow login aws` (the
+  UI later). The gateway holds the access and refresh tokens, and renews the access token while
+  the session lives; the session lasts as long as the Identity Center admin set, with no timer of
+  the engine's own.
 - **Per run:** the gateway fetches role credentials (`GetRoleCredentials`) for the configured
-  account and permission set, refreshes them while the run is active and refreshing needs no
-  interaction, and adds `aws:SourceIp` so they only work from the gateway's egress. AWS
-  operations are host-side tools; no credential is handed to the sandbox.
+  account and permission set, and fetches them again while the session lives. Once the session
+  ended, the last role credentials and CodeArtifact tokens are used until they run out, so a
+  restore under way isn't cut off. AWS operations are host-side tools; no credential is handed
+  to the sandbox.
 - **Lazy login:** when a run needs AWS and the session is missing, expired or within the renew
   threshold, the run raises an input request with a notification. One login resumes every run
   waiting on it. When a session is close to expiring while runs use it, the user is warned ahead

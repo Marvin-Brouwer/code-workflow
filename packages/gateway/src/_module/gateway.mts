@@ -55,3 +55,4 @@ export {
 	type HostToolContext,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
+export { untilAborted } from '../until-aborted.mts'
