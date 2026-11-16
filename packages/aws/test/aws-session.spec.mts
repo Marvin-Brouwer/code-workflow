@@ -1,10 +1,10 @@
+import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
 import { renewAheadMs } from '../src/host/renewal.mts'
-import { refreshTokenGrant } from '../src/host/oidc.mts'
 import { AwsSignInNeededError } from '../src/host/sign-in-needed.mts'
 import { msPerMinute } from '../src/host/time.mts'
-import { abortSignal, domain, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
+import { abortSignal, domain, holdRefreshes, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
 
 /** How long role credentials last in these tests. */
 const roleCredentialsMinutes = 60
@@ -26,6 +26,9 @@ const shortRoleCredentialsMinutes = 10
 
 /** Minutes after which an access token of an hour, the fake's default, is renewed. */
 const accessTokenOverMinutes = 60
+
+/** Long enough for a call to reach what it waits on: a renewal under way, or a request of its own. */
+const waitingMs = 100
 
 /** Never settles: a request AWS never answers. */
 const never = () => new Promise<void>(() => undefined)
@@ -96,8 +99,7 @@ describe('the AWS session', () => {
 		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
 		await login()
 		clock.advance(accessTokenNearEndMinutes)
-		const answer = Promise.withResolvers<undefined>()
-		aws.state.hold = (_requested, grantType) => (grantType === refreshTokenGrant ? answer.promise : Promise.resolve())
+		const refreshes = holdRefreshes(aws)
 		const stop = new AbortController()
 		const fetching = session().roleCredentials(stop.signal)
 		await vi.waitFor(() => {
@@ -107,7 +109,7 @@ describe('the AWS session', () => {
 		// Act
 		stop.abort(new Error('stop'))
 		await expect(fetching).rejects.toThrow('stop')
-		answer.resolve(undefined)
+		refreshes.release()
 
 		// Assert
 		await vi.waitFor(async () => {
@@ -121,8 +123,7 @@ describe('the AWS session', () => {
 		const { aws, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
 		await login()
 		clock.advance(accessTokenNearEndMinutes)
-		const answer = Promise.withResolvers<undefined>()
-		aws.state.hold = (_requested, grantType) => (grantType === refreshTokenGrant ? answer.promise : Promise.resolve())
+		const refreshes = holdRefreshes(aws)
 		const opened = session()
 		const stop = new AbortController()
 		const stopped = opened.roleCredentials(stop.signal)
@@ -135,11 +136,14 @@ describe('the AWS session', () => {
 
 		// Act
 		const next = opened.roleCredentials(abortSignal)
-		answer.resolve(undefined)
+		await sleep(waitingMs)
+		const pending = aws.requests.filter((request) => request === 'POST /token').length
+		refreshes.release()
 		const fetched = await next
 
 		// Assert
 		expect(fetched.accessKeyId).toMatch(/^key-/)
+		expect(pending).toBe(2)
 		expect(aws.requests.filter((request) => request === 'POST /token')).toHaveLength(2)
 	})
 
@@ -148,8 +152,7 @@ describe('the AWS session', () => {
 		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
 		await login()
 		clock.advance(accessTokenNearEndMinutes)
-		const answer = Promise.withResolvers<undefined>()
-		aws.state.hold = (_requested, grantType) => (grantType === refreshTokenGrant ? answer.promise : Promise.resolve())
+		const refreshes = holdRefreshes(aws)
 		const fetching = session().roleCredentials(abortSignal)
 		await vi.waitFor(() => {
 			expect(aws.requests.filter((request) => request === 'POST /token')).toHaveLength(2)
@@ -157,11 +160,33 @@ describe('the AWS session', () => {
 
 		// Act
 		await login()
-		answer.resolve(undefined)
+		refreshes.release()
 		await fetching
 
 		// Assert
 		expect(await storedSession(credentials)).toMatchObject({ clientId: 'client-2', accessToken: 'access-3', refreshToken: 'refresh-4' })
+	})
+
+	test('uses the session of a sign-in that came between, when Identity Center refuses the renewal it replaced', async () => {
+		// Arrange
+		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		await login()
+		clock.advance(accessTokenNearEndMinutes)
+		const refreshes = holdRefreshes(aws)
+		const fetching = session().roleCredentials(abortSignal)
+		await vi.waitFor(() => {
+			expect(aws.requests.filter((request) => request === 'POST /token')).toHaveLength(2)
+		})
+
+		// Act
+		await login()
+		aws.state.refreshWorks = false
+		refreshes.release()
+		const fetched = await fetching
+
+		// Assert
+		expect(fetched.accessKeyId).toMatch(/^key-/)
+		expect(await storedSession(credentials)).toMatchObject({ clientId: 'client-2', accessToken: 'access-3' })
 	})
 
 	test('renews the access token once when the portal turns it down before its time', async () => {

@@ -2,9 +2,10 @@ import path from 'node:path'
 import { keyFile, openCredentialStore, type CredentialStore, type LoginPrompt } from '@mesh-flow/gateway'
 import { openAwsSession } from '../../src/host/aws-session.mts'
 import { awsCredentialNames } from '../../src/host/aws-settings.mts'
+import { refreshTokenGrant } from '../../src/host/oidc.mts'
 import { signIn } from '../../src/host/sign-in.mts'
 import { msPerMinute } from '../../src/host/time.mts'
-import { fakeAws, type FakeAwsState } from './fake-aws.mts'
+import { fakeAws, type FakeAws, type FakeAwsState } from './fake-aws.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 
 export const abortSignal = new AbortController().signal
@@ -68,4 +69,15 @@ export async function setUp(options: SetUpOptions = {}) {
 /** The session as the credential store keeps it. */
 export async function storedSession(credentials: CredentialStore): Promise<unknown> {
 	return JSON.parse((await credentials.get(awsCredentialNames.session, abortSignal)) ?? 'null')
+}
+
+/** Holds Identity Center's answers to refreshes until `release` is called. */
+export function holdRefreshes(aws: FakeAws): { readonly release: () => void } {
+	const answer = Promise.withResolvers<undefined>()
+	aws.state.hold = (_requested, grantType) => (grantType === refreshTokenGrant ? answer.promise : Promise.resolve())
+	return {
+		release: () => {
+			answer.resolve(undefined)
+		},
+	}
 }
