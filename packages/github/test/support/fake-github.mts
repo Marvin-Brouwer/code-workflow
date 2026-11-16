@@ -295,6 +295,11 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	issues.post('/pulls', async (context) => {
 		const name = nameOf(context)
 		const body = PullBody.parse(await context.req.json())
+		const open = [...repository(name).pulls.values()].find(
+			(pull) => pull.state === 'open' && pull.head.ref === body.head && pull.base.ref === body.base,
+		)
+		if (open !== undefined)
+			return context.json({ message: 'Validation Failed', errors: [{ message: `A pull request already exists for ${body.head}.` }] }, 422)
 		const number = repository(name).pulls.size + 1
 		const pull = pullOf(name, number, {
 			title: body.title,

@@ -32,7 +32,7 @@ import { pageSize, type ApiClient } from './api.mts'
 import { pullRequestComments, readingNote } from './pull-request-comments.mts'
 import { quoteHeader, replyHeader } from './reply-header.mts'
 import { verdictField } from './review-verdict.mts'
-import { refusedToken } from './transient-error.mts'
+import { isUnprocessable, refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
 interface ApiPullRequest {
@@ -78,6 +78,25 @@ async function openOnBranch(
 }
 
 /**
+ * Opens a pull request from `head` onto `base`, or takes the one another call opened for the branch
+ * meanwhile, as when two runs open it at once: GitHub turns the second one down with a 422.
+ */
+async function opened(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	request: { readonly head: string; readonly base: string; readonly title: string; readonly body: string },
+): Promise<ApiPullRequest> {
+	try {
+		return (await client.rest.pulls.create({ ...where, ...request })).data
+	} catch (error) {
+		if (!isUnprocessable(error)) throw error
+		const meanwhile = await openOnBranch(client, where, request.head, request.base)
+		if (meanwhile === undefined) throw error
+		return meanwhile
+	}
+}
+
+/**
  * The latest pull request of the repository's own branch `head` that was merged into `base` and
  * that run `runId` signed, when there is one. Only the run's own: a branch named after an issue may
  * have been merged before, by an earlier run or by a person, and that is no delivery of this run's.
@@ -109,8 +128,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			const existing = await openOnBranch(client, where, head, base)
 			if (existing === undefined) {
-				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
-				return pullRequestData(repository, data)
+				return pullRequestData(repository, await opened(client, where, { head, base, title, body: signedBody }))
 			}
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.body, closes)

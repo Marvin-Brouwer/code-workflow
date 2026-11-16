@@ -55,6 +55,28 @@ describe('openPullRequest', () => {
 		)
 	})
 
+	test('takes the pull request another call opened for the branch while it opened one', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		api.hold = (method, requestPath) => {
+			if (method === 'POST' && requestPath.endsWith('/pulls') && !api.repository(repositoryName).pulls.has(firstPullRequest))
+				api.pullRequest(repositoryName, firstPullRequest, { head: { ref: branch, sha: '1'.repeat(40) }, body: 'Opened meanwhile.' })
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			return openPullRequest(repository, sameSite)
+		})
+		const opened = await run.result
+
+		// Assert
+		expect(opened.number).toBe(firstPullRequest)
+		expect([...api.repository(repositoryName).pulls.keys()]).toEqual([firstPullRequest])
+	})
+
 	test('keeps the text of the open pull request when it is opened again for the same commit', async () => {
 		// Arrange
 		const { gateway } = await connectedGithub()
