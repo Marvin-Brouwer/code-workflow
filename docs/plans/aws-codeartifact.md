@@ -45,6 +45,21 @@ without asking. An engine restart keeps the session, since it's in the credentia
 user is asked again only when the Identity Center session ends, a limit its admin sets (8 hours by
 default) and a refresh token doesn't outlive. Nothing to configure on the engine's side.
 
+**A run that started can finish past the session's end, within limits.** What the host derives from
+the session outlives it: role credentials last the permission set's session duration (1 to 12
+hours, its admin's setting) from when they were fetched, and a CodeArtifact token lasts up to 12
+hours, but no longer than the credentials it was fetched with (to check while building). So the host:
+
+- fetches role credentials for the longest duration allowed, and fetches them again, with a new
+  CodeArtifact token, whenever the current ones near their end while the session still lives;
+- once the session has ended, keeps using the last ones until they expire, so a running restore
+  isn't cut off; only after that does a run ask for a sign-in.
+
+Nothing can be renewed after the session ends, since every renewal needs the session's token, and
+role chaining (`AssumeRole` from role credentials) is capped at 1 hour, so it doesn't stretch
+this either. Identity Center doesn't tell when its session ends, so the host only finds out when a
+refresh is refused.
+
 Settings, until the settings UI (roadmap 6) takes them over: the start URL, the SSO region, the
 account and the role are user settings in the credential store, like `jira/url`:
 
