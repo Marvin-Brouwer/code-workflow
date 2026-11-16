@@ -34,6 +34,9 @@ async function openEngine(login: (context: LoginContext) => Promise<void>, home?
 	return { engine, apps, home: directory }
 }
 
+/** How long the runtime that cancels its login waits before it does, so the sign-in has started. */
+const cancelAfterMs = 1_000
+
 /** How long and how often the tests look for a run to get where they wait for it. */
 const untilOptions = { timeout: 20_000, interval: 50 }
 
@@ -158,7 +161,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		const { engine, apps } = await openEngine(login)
 		const cancelling = runtimeScript(`
 mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: 'cloud' } })
-await new Promise((resolve) => setTimeout(resolve, 1_000))
+await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfterMs)}))
 mailbox.send({ type: 'cancel', id: 'login-1' })
 await mailbox.answer('never', signal)
 `)
@@ -166,7 +169,7 @@ await mailbox.answer('never', signal)
 		const { id } = await engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilCalled(login)
 
-		// Act
+		// Act: the runtime cancels its login after a while
 		await vi.waitFor(() => {
 			expect(contexts[0]?.abortSignal.aborted).toBe(true)
 		}, untilOptions)

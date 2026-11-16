@@ -540,9 +540,10 @@ export class Engine {
 			for (const request of waited) this.#schedule(id, channel, request, signal)
 			for (const taken of accepted) this.#answerCall(id, channel, taken.call, taken.accepted, signal)
 			// After the calls of this delivery are running, so a cancel read with its call still stops it.
+			const cancelling = this.#active.get(id)
 			for (const cancelled of cancels) {
-				this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
-				this.#active.get(id)?.logins.get(cancelled)?.abort(new Error('The runtime cancelled the sign-in.'))
+				cancelling?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
+				cancelling?.logins.get(cancelled)?.abort(new Error('The runtime cancelled the sign-in.'))
 			}
 		}
 	}

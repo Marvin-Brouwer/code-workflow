@@ -59,8 +59,8 @@ export interface GatewayClient {
 }
 
 /**
- * How many sign-ins a call waits through before it fails: one for the session it needed, and one
- * more for a sign-in that another call asked for while it was on its way.
+ * How many times a call goes on after its tool asked for a sign-in, before it fails: once for the
+ * session it needed, and once more in case the sign-in it went on after was another call's.
  */
 const maxSignInsPerCall = 2
 
@@ -68,6 +68,7 @@ const maxSignInsPerCall = 2
 interface SignIn {
 	/** Settles when the engine answered that the user signed in. */
 	readonly answered: Promise<void>
+	/** How many calls wait for it now. At 0 it is stopped. */
 	waiters: number
 	/** Stops waiting for the answer, and tells the engine nothing waits for it any more. */
 	readonly stop: () => void
@@ -171,14 +172,15 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		// The engine reads the outbox strictly: a call it can't read would fail the whole run.
 		const checked = GatewayCall.safeParse(gatewayCall)
 		if (!checked.success) throw new GatewayCallError(`The ${gatewayCall.type} call isn't valid:\n${z.prettifyError(checked.error)}`)
-		const answeredFirst = answeredSignIns
+		let signInRounds = 0
 		for (;;) {
 			const answeredBefore = answeredSignIns
 			const outcome = await callOnce(endpoint, checked.data, abortSignal)
 			if (outcome.ok) return outcome.result
 			if (outcome.signInTo === undefined) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
 			// A tool that still asks after the user signed in won't stop asking: the run gets why.
-			if (answeredSignIns - answeredFirst >= maxSignInsPerCall) throw new GatewayCallError(outcome.error)
+			if (signInRounds >= maxSignInsPerCall) throw new GatewayCallError(outcome.error)
+			signInRounds++
 			// A sign-in answered while the call was on its way may be the one it needs.
 			if (answeredSignIns === answeredBefore) await waitForSignIn(outcome.signInTo, abortSignal)
 		}
