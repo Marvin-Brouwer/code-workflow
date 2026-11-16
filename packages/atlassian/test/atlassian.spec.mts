@@ -4,18 +4,11 @@ import { toPrompt } from '@mesh-flow/core'
 import { describe, expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
-import { atlassianHostTools, defaultRequestRetry } from '../src/_module/host.mts'
+import { atlassianHostTools } from '../src/_module/host.mts'
 import { maxImageBytes, maxImageBytesPerIssue } from '../src/host/jira/attachments.mts'
 import { keyedCommentProperty } from '../src/host/jira/jira-host-tools.mts'
-import {
-	fakeAtlassian,
-	fakeIssue,
-	type FakeAtlassian,
-	type FakeIssue,
-	type FakePage,
-	type FakeRequest,
-	type FakeUser,
-} from './support/fake-atlassian.mts'
+import { fakeAtlassian, fakeIssue, pngSignature, type FakeAtlassian, type FakeRequest } from './support/fake-atlassian.mts'
+import { quickRetry, runOnFake, type Arrangement } from './support/run-on-fake.mts'
 import { runOnGateway, testGateway } from './support/test-run.mts'
 
 const deployments = [
@@ -56,11 +49,24 @@ const deployments = [
 ] as const
 const [, dataCenter] = deployments
 
-/** The first bytes of a PNG file: enough of an image for the fake to serve. */
-const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-
 /** Whether a request read an attachment's bytes. */
 const isAttachmentRequest = (request: FakeRequest) => request.path.startsWith('/secure/attachment/')
+
+/**
+ * A fetch that answers `status` to the requests `fails` picks, and passes the rest to `fake`, with
+ * the requests it failed.
+ */
+function failing(fake: FakeAtlassian, status: number, fails: (method: string, pathname: string) => boolean) {
+	const failed: string[] = []
+	const send: typeof fetch = async (input, init) => {
+		const { pathname } = new URL(input instanceof Request ? input.url : input)
+		const method = init?.method ?? 'GET'
+		if (!fails(method, pathname)) return fake.fetch(input, init)
+		failed.push(`${method} ${pathname}`)
+		return new Response('{}', { status })
+	}
+	return { send, failed }
+}
 
 /** Collects an issue and reads back its Markdown. */
 async function collectMarkdown(key: string) {
@@ -68,38 +74,11 @@ async function collectMarkdown(key: string) {
 	return { story, markdown: await readFile(story[toPrompt](), 'utf8') }
 }
 
-/** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
-const quickRetry = { ...defaultRequestRetry, initialDelayMs: 1, backoffFactor: 1 }
-
 /** The YAML between the `---` lines a written issue or page starts with. */
 function frontmatterOf(markdown: string): unknown {
 	const [, yaml] = /^---\n([\s\S]*?)\n---\n/.exec(markdown) ?? []
 	if (yaml === undefined) throw new Error('The Markdown has no frontmatter.')
 	return parse(yaml)
-}
-
-/** What the fake holds before a run. */
-interface Arrangement {
-	readonly issues?: readonly FakeIssue[]
-	readonly pages?: readonly FakePage[]
-	readonly failNext?: readonly number[]
-	readonly losesAnswers?: readonly string[]
-	readonly latencyMs?: number
-	readonly users?: Readonly<Record<string, FakeUser>>
-}
-
-/** Runs `body` against a fake with the deployment's settings, and hands back what the fake saw. */
-async function run<T>(settings: Readonly<Record<string, string>>, arrangement: Arrangement, body: () => Promise<T>) {
-	const fake = fakeAtlassian()
-	for (const issue of arrangement.issues ?? []) fake.issues.set(issue.key, issue)
-	for (const page of arrangement.pages ?? []) fake.pages.set(page.id, page)
-	fake.failNext.push(...(arrangement.failNext ?? []))
-	for (const request of arrangement.losesAnswers ?? []) fake.losesAnswers.add(request)
-	fake.latencyMs = arrangement.latencyMs ?? 0
-	for (const [id, user] of Object.entries(arrangement.users ?? {})) fake.users.set(id, user)
-	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
-	const started = await runOnGateway(gateway, body)
-	return { fake, started, result: await started.result }
 }
 
 describe.each(deployments)(
@@ -124,7 +103,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, async () => {
+			const { fake, started, result } = await runOnFake(settings, arrangement, async () => {
 				const story = await jira.collect('PROJ-7')
 				return { story, rendered: story[toPrompt](), markdown: await readFile(story[toPrompt](), 'utf8') }
 			})
@@ -169,7 +148,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, started, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const image = path.join(started.workspace, 'jira', 'PROJ-7', '10001-login_page.png')
@@ -210,7 +189,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`![huge](${jiraUrl}/secure/attachment/10003/huge.png)`)
@@ -239,7 +218,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			const rita = `\`@mention({ name: "Rita Reporter", email: "rita@example.com", id: "${mentionId}" })\``
@@ -256,7 +235,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
@@ -269,7 +248,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain(`Ask \`@mention({ name: "Rita Reporter", id: "${mentionId}" })\`.`)
@@ -289,7 +268,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, () => collectMarkdown('PROJ-7'))
+			const { result } = await runOnFake(settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 			// Assert
 			expect(result.markdown).toContain('<img src="PROJ-7/10001-shot.png">')
@@ -301,7 +280,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => [
+			const { fake, result } = await runOnFake(settings, arrangement, async () => [
 				await jira.transition('PROJ-7', 'in progress'),
 				await jira.transition({ key: 'PROJ-7' }, 'In Progress'),
 			])
@@ -317,7 +296,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const outcome = run(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
+			const outcome = runOnFake(settings, arrangement, () => jira.transition('PROJ-7', 'In Review'))
 
 			// Assert
 			await expect(outcome).rejects.toThrow("PROJ-7 can't move from To Do to In Review. It can move to: In Progress, Done.")
@@ -328,7 +307,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { fake, started, result } = await run(settings, arrangement, async () => {
+			const { fake, started, result } = await runOnFake(settings, arrangement, async () => {
 				const first = await jira.comment('PROJ-7', 'Merge request: **one**', { key: 'mr-api' })
 				const again = await jira.comment('PROJ-7', 'Merge request: **two**', { key: 'mr-api' })
 				return { first, again }
@@ -352,7 +331,9 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }))
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
+				jira.comment('PROJ-7', 'Merge request: three', { key: 'mr-api' }),
+			)
 
 			// Assert
 			expect(result.id).not.toBe('999')
@@ -364,7 +345,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () =>
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
 				Promise.all([jira.comment('PROJ-7', 'API', { key: 'mr-api' }), jira.comment('PROJ-7', 'Web', { key: 'mr-web' })]),
 			)
 
@@ -379,7 +360,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () =>
+			const { fake, result } = await runOnFake(settings, arrangement, () =>
 				Promise.all([jira.comment('PROJ-7', 'one', { key: 'status' }), jira.comment('PROJ-7', 'two', { key: 'status' })]),
 			)
 
@@ -411,7 +392,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
+			const { fake, result } = await runOnFake(settings, arrangement, () => jira.transition('PROJ-7', 'In Progress'))
 
 			// Assert
 			expect(result).toEqual({ moved: true })
@@ -423,7 +404,7 @@ describe.each(deployments)(
 			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })] }
 
 			// Act
-			const { result } = await run(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
+			const { result } = await runOnFake(settings, arrangement, () => jira.search({ jql: 'project = PROJ', limit: 5 }))
 
 			// Assert
 			expect(result).toEqual({
@@ -448,7 +429,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, async () => {
+			const { result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect('12345')
 				return { markdown: await readFile(page[toPrompt](), 'utf8') }
 			})
@@ -464,7 +445,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { result } = await run(settings, arrangement, async () => {
+			const { result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect('12345')
 				return { markdown: await readFile(page[toPrompt](), 'utf8') }
 			})
@@ -480,7 +461,7 @@ describe.each(deployments)(
 			}
 
 			// Act
-			const { fake, result } = await run(settings, arrangement, async () => {
+			const { fake, result } = await runOnFake(settings, arrangement, async () => {
 				const page = await confluence.collect(`${pageUrl}/Guidelines`)
 				return { page, markdown: await readFile(page[toPrompt](), 'utf8'), found: await confluence.search({ text: 'conventional' }) }
 			})
@@ -517,7 +498,7 @@ describe('attachments', () => {
 		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7', attachments })] }
 
 		// Act
-		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.story.attachments.filter((attachment) => attachment.file !== undefined)).toHaveLength(fit)
@@ -541,7 +522,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.markdown).toContain(
@@ -558,7 +539,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.story.attachments).toEqual([
@@ -586,7 +567,7 @@ describe('attachments', () => {
 		}
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => collectMarkdown('PROJ-7'))
 
 		// Assert
 		expect(result.markdown).toContain(`![](${dataCenter.jiraUrl}/secure/attachment/10001/shot.png)`)
@@ -598,10 +579,10 @@ describe('attachments', () => {
 describe('settings', () => {
 	test('a missing site says how to set it', async () => {
 		// Act
-		const outcome = run({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
+		const outcome = runOnFake({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
 
 		// Assert
-		await expect(outcome).rejects.toThrow('There is no jira site. Set it with `mesh-flow credential set jira/url`.')
+		await expect(outcome).rejects.toThrow('There is no Jira site. Set it with `mesh-flow credential set jira/url`.')
 	})
 })
 
@@ -620,7 +601,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[0]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[0]?.abortSignal?.aborted).toBe(true)
 	})
 
 	test('stopping the run settles a collect whose image never arrives', async () => {
@@ -641,7 +622,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[1]?.abortSignal?.aborted).toBe(true)
 	})
 
 	test.each([
@@ -680,7 +661,7 @@ describe('stopping', () => {
 		// Assert
 		await expect(started.outcome).resolves.toBeDefined()
 		await expect(started.result).rejects.toThrow()
-		await expect.poll(() => fake.requests[1]?.signal?.aborted).toBe(true)
+		await expect.poll(() => fake.requests[1]?.abortSignal?.aborted).toBe(true)
 	})
 })
 
@@ -701,7 +682,7 @@ describe('Confluence sites', () => {
 		const arrangement: Arrangement = { pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<p>Hi</p>', version: 1 }] }
 
 		// Act
-		const { fake } = await run({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
+		const { fake } = await runOnFake({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
 
 		// Assert
 		expect(fake.requests[0]?.path).toBe(expected)
@@ -717,7 +698,7 @@ test('a Data Center page names a mentioned person by their username', async () =
 	}
 
 	// Act
-	const { fake, result } = await run(dataCenter.settings, arrangement, async () =>
+	const { fake, result } = await runOnFake(dataCenter.settings, arrangement, async () =>
 		readFile((await confluence.collect('12345'))[toPrompt](), 'utf8'),
 	)
 
@@ -732,7 +713,66 @@ describe('trouble', () => {
 		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], failNext: [503] }
 
 		// Act
-		const { fake, result } = await run(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
+
+		// Assert
+		expect(result.key).toBe('PROJ-7')
+		expect(fake.requests).toHaveLength(2)
+	})
+
+	test('a new comment the site answered 503 to is not sent again', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7' }))
+		const { send, failed } = failing(fake, 503, (method, pathname) => method === 'POST' && pathname.endsWith('/comment'))
+		const gateway = await testGateway(atlassianHostTools({ fetch: send, retry: quickRetry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => jira.comment('PROJ-7', 'Picked up'))
+
+		// Assert
+		await expect(started.result).rejects.toThrow()
+		expect(failed).toHaveLength(1)
+	})
+
+	test('a look-up of who a mention names is tried once, and the mention keeps what its link holds', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>Ask ${dataCenter.mention('Rita Reporter')}.</p>` }))
+		fake.users.set('rita', { displayName: 'Rita Reporter', email: 'rita@example.com' })
+		const { send, failed } = failing(fake, 503, (_method, pathname) => pathname.endsWith('/user'))
+		const gateway = await testGateway(atlassianHostTools({ fetch: send, retry: quickRetry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => collectMarkdown('PROJ-7'))
+		const { markdown } = await started.result
+
+		// Assert
+		expect(markdown).toContain('Ask `@mention({ name: "Rita Reporter", id: "rita" })`.')
+		expect(failed).toHaveLength(1)
+	})
+
+	test('a read the site never answers fails as one that may pass', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.hanging.add('/rest/api/2/issue/PROJ-7')
+		const retry = { ...quickRetry, attemptTimeoutMs: 1 }
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => jira.collect('PROJ-7'))
+
+		// Assert
+		await expect(started.result).rejects.toMatchObject({ transient: true })
+		expect(fake.requests).toHaveLength(retry.attempts)
+	})
+
+	test('a rate limit is sent again before the call fails', async () => {
+		// Arrange
+		const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], failNext: [429] }
+
+		// Act
+		const { fake, result } = await runOnFake(dataCenter.settings, arrangement, () => jira.collect('PROJ-7'))
 
 		// Assert
 		expect(result.key).toBe('PROJ-7')

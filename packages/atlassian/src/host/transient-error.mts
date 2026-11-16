@@ -15,7 +15,7 @@ export function mayPass(error: unknown): boolean {
  * retries, as a {@link HostToolTransientError}, so a caller that waits can look again later.
  * Anything else, such as a bad token, a missing permission, a 404 or an abort, comes back as it is.
  */
-export async function markingTransient<T>(call: () => Promise<T>): Promise<T> {
+export async function withTransientFailures<T>(call: () => Promise<T>): Promise<T> {
 	try {
 		return await call()
 	} catch (error) {

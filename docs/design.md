@@ -1,15 +1,14 @@
 # Design
 
 Status: design converged (option C: plain async TypeScript). The sandbox and typing spikes are
-done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). Sketches of the
-reference workflow and packages live in `examples/example/` and `packages/`; they haven't been
-type-checked yet.
+done; the MVP build plan is in [`plans/mvp-build.md`](plans/mvp-build.md). The reference
+workflow lives in `examples/big-repo/`, and the packages it uses in `packages/`.
 
 ## 1. Goal
 
 Durable workflows that live in git instead of being clicked together in a UI. A workflow is a
 deterministic TypeScript program that dispatches to AI agents where that makes sense. The
-reference use case (`example`):
+reference use case (`big-repo`):
 
 - collect a Jira story
 - research it (agent), asking the user when unclear
@@ -156,11 +155,10 @@ A loop can be limited as a whole, with one interpolated line at the end of the t
 the exits:
 
 ```ts
-const description = await planner.loop`
-    Write a short merge request description for the changes in ${repository},
-    based on ${plan.path}. ${succeed(gitlab.Description)}
-    ${limit({ turns: 4, minutes: 20 })}
-`;
+await developer.loop`
+	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository))}.
+	${limit({ turns: 40, minutes: 45 })}
+`
 ```
 
 - **Loop-wide only.** There are no limits per tool: a tool doesn't know how often it's reasonable
@@ -214,7 +212,7 @@ Packages export three kinds of things, and nothing else:
 - **Tools** for agents: `jira.search`, `gitlab.searchRepositories`, `gitlab.push(repository)`.
   Every tool is also callable as a function. A tool validates its own arguments, retries its own
   transient failures and caps its own output ([Context](#context)).
-- **Checks** for `verify`: `dotnet.tests(repository)`, `codeReview(reviewer, repository, plan)`,
+- **Checks** for `verify`: `dotnet.testsPass(repository)`, `codeReview(reviewer, repository, plan)`,
   `gitlab.pipelinePasses(mergeRequest)`. Lazy: they run when `verify` asks. A check may wait on
   something external (a pipeline).
 
@@ -254,7 +252,7 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 // main.mts, the package's `main`
 export default defineMeshFlow({
 	sandbox: image({
-		name: 'node:22-slim',
+		name: 'node:26-slim',
 		egress: ['api.github.com'],
 	}),
 	workflows: [
@@ -311,16 +309,17 @@ export default defineMeshFlow({
   go to the run that waits for them, not to a trigger.
 - **Webhook payloads are checked in two steps.** The engine checks a delivery's signature and the
   input side of the schema as JSON Schema (structure, literals, enums) before it creates a sandbox,
-  so an unrelated event never costs a run: it gets a 4xx. `.refine` and `.transform` are code, so
-  they run in the sandbox when the run starts; a payload they reject ends the run as *not for this
-  workflow*, which isn't a failure. Filters belong in the schema's structure where they can
+  so an unrelated event never costs a run: it is skipped with a `200`, since senders such as GitLab
+  disable a webhook that keeps getting a 4xx. `.refine` and `.transform` are code, so they run in
+  the sandbox when the run starts; a payload they reject ends the run as *not for this workflow*,
+  which isn't a failure. Filters belong in the schema's structure where they can
   (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled(label)`
   does.
 
 ### Plan deviations (preset pattern)
 
 The approved `plan.md` is never rewritten. Later findings (review comments, a repository that
-turns out differently) are recorded with a `recordDeviation` tool in `plan-deviations.md`, and
+turns out differently) are recorded with `deviations.record` in `plan-deviations.md`, and
 every later task prompt reads both. Repositories delivered later in the dependency order thereby
 pick up deviations found earlier.
 
@@ -510,17 +509,17 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
    [gvisor-pause](../pocs/gvisor-pause/README.md)). Backends as in section 3.
 2. **Typing spike.** Infer `loop`'s result type from the exits in a tagged template's values,
    including `succeed(folder)`, `propose`, `verify` and no exit at all. Types only.
-3. **The plan as file plus data.** `workspace.file('plan.md', { schema: Plan })`: renders as the
-   file in prompts, gives code the validated data (repositories, dependency graph).
+3. **The plan as file plus data.** Answered: the planner writes `planFile` and proposes the data
+   with `propose(Plan)`, whose `path` is the file (`@mesh-flow/preset-development`).
 4. **Checks and the agent's latest output.** Checks run when the agent hands in; does a check ever
    need what the agent handed in?
 5. **`inDependencyOrder` failure semantics** as tests: dependents blocked, independents continue,
    partial results reported.
 6. **Opt-in `checkpoint()`** for expensive non-agent work, if reruns after a lost snapshot turn out
    too costly.
-7. **Merge request watching** (GitLab connector, on the engine's durable external-event primitive):
-   serialize handlers per merge request, drop events for superseded commits, coalesce one review
-   round.
+7. **Merge request watching** (GitLab connector): it polls with an engine-side `wait` for now,
+   one review round per look, handlers in turn. On the durable external-event primitive, once it's
+   built: drop events for superseded commits, coalesce one review round.
 8. **Hosted OAuth.** CLI-style OAuth with a localhost callback doesn't work hosted; prefer device
    flows, register own OAuth apps otherwise. Check provider terms before offering subscription
    logins (as opposed to API keys).
@@ -564,14 +563,15 @@ Out of scope for now: token and cost budgets.
 2. MVP ([build plan](plans/mvp-build.md)): workflow runtime with events, `loop` with exits and
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
-   then the `example` workflow, both end to end from a CLI with sequential repositories.
+   then the big-repo app's `develop` workflow, both end to end from a CLI. Done: `develop` delivers
+   independent repositories side by side (`inDependencyOrder`); a dependent one needs the
+   registry shim to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
-4. `inDependencyOrder` with concurrency.
-5. GitLab review watching; AWS and CodeArtifact through the gateway; `checkSession`; package
-   managers beyond npm and NuGet, each with a conformance test that installs through egress, one
-   per way of trusting certificates and proxies: pip (its own certifi bundle), Maven and Gradle
-   (the JVM's keystore, and proxy settings as system properties instead of `HTTPS_PROXY`), Go and
-   Cargo.
+4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
+5. AWS and CodeArtifact through the gateway; `checkSession`; package managers beyond npm and
+   NuGet, each with a conformance test that installs through egress, one per way of trusting
+   certificates and proxies: pip (its own certifi bundle), Maven and Gradle (the JVM's keystore,
+   and proxy settings as system properties instead of `HTTPS_PROXY`), Go and Cargo.
 6. UI, settings wizard, credential store.
 7. Hosted, multi-user.
 

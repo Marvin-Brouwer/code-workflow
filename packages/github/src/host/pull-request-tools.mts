@@ -1,23 +1,21 @@
+import { defaultReplyStage, isMarked, sameText } from '@mesh-flow/code-repository'
 import {
 	descriptionOf,
 	footerCloses,
 	later,
-	oneAtATime,
 	replyToItem,
 	sameBody,
 	showItemsBeingRead,
+	signedBy,
 	signedDescription,
 } from '@mesh-flow/code-repository/host'
-import { hostTool, type HostTool } from '@mesh-flow/gateway'
+import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
-import { sameText } from '../pull-request/pull-request-text.mts'
 import { splitRepositoryName } from '../repository-name.mts'
-import { isMarked } from '../tools/issue-tools.mts'
 import {
 	checksOnRef,
 	type ChecksStatus,
-	defaultReplyStage,
 	findPullRequest,
 	getPullRequest,
 	openPullRequest,
@@ -32,7 +30,9 @@ import {
 } from '../tools/pull-request-tools.mts'
 import { pageSize, type ApiClient } from './api.mts'
 import { pullRequestComments, readingNote } from './pull-request-comments.mts'
-import { refusedToken } from './transient-error.mts'
+import { quoteHeader, replyHeader } from './reply-header.mts'
+import { verdictField } from './review-verdict.mts'
+import { isUnprocessable, refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
 interface ApiPullRequest {
@@ -61,14 +61,6 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 	}
 }
 
-/** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
-const verdicts: Record<string, ReviewItem['verdict']> = {
-	APPROVED: 'approved',
-	CHANGES_REQUESTED: 'changes_requested',
-	COMMENTED: 'commented',
-	DISMISSED: 'dismissed',
-}
-
 /** Check conclusions and status states that count as failed. */
 const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'error'])
 
@@ -85,6 +77,48 @@ async function openOnBranch(
 	return open[0]
 }
 
+/**
+ * Opens a pull request from `head` onto `base`, or finds the one another call opened for the branch
+ * meanwhile, as when two runs open it at once: GitHub turns the second one down with a 422. Only
+ * one this call opened is `ours`: one found is still described for the other call's commit.
+ */
+async function opened(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	request: { readonly head: string; readonly base: string; readonly title: string; readonly body: string },
+): Promise<{ readonly pull: ApiPullRequest; readonly ours: boolean }> {
+	try {
+		return { pull: (await client.rest.pulls.create({ ...where, ...request })).data, ours: true }
+	} catch (error) {
+		if (!isUnprocessable(error)) throw error
+		const pull = await openOnBranch(client, where, request.head, request.base)
+		if (pull === undefined) throw error
+		return { pull, ours: false }
+	}
+}
+
+/**
+ * The latest pull request of the repository's own branch `head` that was merged into `base` and
+ * that run `runId` signed, when there is one. Only the run's own: a branch named after an issue may
+ * have been merged before, by an earlier run or by a person, and that is no delivery of this run's.
+ */
+async function mergedOnBranch(
+	client: Octokit,
+	where: { owner: string; repo: string },
+	{ head, base, runId }: { head: string; base: string; runId: string },
+): Promise<ApiPullRequest | undefined> {
+	const closed = await client.paginate(client.rest.pulls.list, {
+		...where,
+		state: 'closed',
+		head: `${where.owner}:${head}`,
+		base,
+		per_page: pageSize,
+	})
+	return closed
+		.filter((pull) => (pull.merged_at ?? null) !== null && signedBy(pull.body ?? '', runId))
+		.toSorted((one, other) => other.number - one.number)[0]
+}
+
 /** The host halves of the pull request tools. */
 export function pullRequestHostTools(api: ApiClient): HostTool[] {
 	const perItem = oneAtATime()
@@ -93,11 +127,10 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			const existing = await openOnBranch(client, where, head, base)
-			if (existing === undefined) {
-				const { data } = await client.rest.pulls.create({ ...where, head, base, title, body: signedBody })
-				return pullRequestData(repository, data)
-			}
+			const found = await openOnBranch(client, where, head, base)
+			const { pull: existing, ours } =
+				found === undefined ? await opened(client, where, { head, base, title, body: signedBody }) : { pull: found, ours: false }
+			if (ours) return pullRequestData(repository, existing)
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.body, closes)
 			if (descriptionOf(existing.body).describedSha === describedSha && closesAlready) return pullRequestData(repository, existing)
@@ -122,9 +155,13 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			return pullRequestData(repository, data)
 		}),
 
-		hostTool(findPullRequest, async ({ repository, head, base }, context) => {
+		hostTool(findPullRequest, async ({ repository, head, base, state }, context) => {
 			const client = await api(context)
-			const found = await openOnBranch(client, splitRepositoryName(repository), head, base)
+			const where = splitRepositoryName(repository)
+			const found =
+				state === 'open'
+					? await openOnBranch(client, where, head, base)
+					: await mergedOnBranch(client, where, { head, base, runId: context.runId })
 			return found === undefined ? null : pullRequestData(repository, found)
 		}),
 
@@ -181,7 +218,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						body: review.body,
 						url: review.html_url,
 						at: review.submitted_at ?? new Date().toISOString(),
-						...(verdicts[review.state] === undefined ? {} : { verdict: verdicts[review.state] }),
+						...verdictField(review.state),
 					})),
 				...comments
 					.filter((comment) => isNew(comment.created_at) && !isMarked(comment.body))
@@ -203,18 +240,24 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			// One answer at a time per item: two at once would both find the reading reply, and one would overwrite the other.
 			perItem(`${repository}#${String(number)}#${item}`, context.abortSignal, async () => {
 				const { kind, id: commentId } = parseItemId(item)
-				const comments = pullRequestComments(await api(context), repository, number)
-				return replyToItem(comments, { item, kind, commentId, body, stage: stage ?? defaultReplyStage, runId: context.runId })
+				const client = await api(context)
+				const comments = pullRequestComments(client, repository, number)
+				// On the conversation, every reply says what it answers: the reading reply, the plan and the answer.
+				const header = await replyHeader(client, repository, number, { kind, commentId })
+				const reply = { item, kind, commentId, body, stage: stage ?? defaultReplyStage, runId: context.runId }
+				return replyToItem(comments, { ...reply, ...(header === undefined ? {} : { header }) })
 			}),
 		),
 
 		hostTool(showBeingRead, async ({ repository, number, items }, context) => {
 			const comments = pullRequestComments(await api(context), repository, number)
-			const toShow = items.map(({ id: item, url, thread }) => {
+			const toShow = items.map(({ id: item, thread, url, body, at, verdict }) => {
 				const { kind, id: commentId } = parseItemId(item)
-				// A reply to a comment on a line goes in its thread; everything else is answered on the conversation.
-				const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
-				return { item, kind, commentId, note: readingNote(kind, url), thread: () => Promise.resolve(threadId) }
+				// A reply to a comment on a line goes in its thread; everything else is answered on the conversation, under a quote.
+				const onLine = kind === 'review-comment'
+				const threadId = onLine ? parseItemId(thread ?? item).id : undefined
+				const header = onLine ? undefined : quoteHeader({ body, at, url, ...(verdict === undefined ? {} : { verdict }) })
+				return { item, kind, commentId, note: readingNote(header), thread: () => Promise.resolve(threadId) }
 			})
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),

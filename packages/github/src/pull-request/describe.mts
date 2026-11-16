@@ -1,14 +1,13 @@
+import { branchHeadTool, describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Issue } from '../issue/issue.mts'
 import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
-import { branchHead } from './branch-head.mts'
 import { githubTerms } from './github-terms.mts'
+import { githubLayout } from './layout.mts'
 import { PullRequestText, type PullRequestContent } from './pull-request-text.mts'
 import { findOpenPullRequest, pullRequest, type PullRequest } from './pull-request.mts'
-import { githubLayout } from './repository-files.mts'
 
 /** What `describe` takes besides the agent and the checkout. */
 export interface DescribeOptions {
@@ -52,13 +51,34 @@ export interface DescribeOptions {
  * It stops with the run, as the loop does: an agent's loop follows the run's signal, not one of
  * the caller's.
  *
+ * @param agent - The agent that writes the text: the workflow's own, as the package ships none.
+ * @param repository - The checkout whose branch to describe, from `github.checkout`.
+ * @param options - The issue it closes, the pull request to describe again, and the loop's limit.
+ * @returns The title and description, the commit they describe, and what they close, ready for
+ * `github.openPullRequest` or `github.updatePullRequest`.
+ * @throws When the branch has no commits of its own, when `pullRequest` is of another branch or
+ * onto another branch than the default one, and when the loop fails or runs out of its limit.
+ *
+ * @example A new pull request
  * ```ts
  * const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
- * // After a round of review:
+ * ```
+ *
+ * @example After a round of review
+ * ```ts
  * await github.updatePullRequest(pullRequest, await github.describe(writer, repository, { issue, pullRequest }))
  * ```
+ *
+ * @example Reading the text before opening it
+ * ```ts
+ * const content = await github.describe(writer, repository, { issue })
+ * // A rerun describes the open pull request again, with the number in its title already.
+ * const prefix = `#${String(issue.number)}: `
+ * const title = content.title.includes(prefix) ? content.title : `${prefix}${content.title}`
+ * const pullRequest = await github.openPullRequest(repository, { ...content, title })
+ * ```
  */
-export async function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
+export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<PullRequestContent> {
 	return describeChange(agent, repository, githubDescribe, {
 		...(options.issue === undefined ? {} : { closes: options.issue }),
 		...(options.pullRequest === undefined ? {} : { request: options.pullRequest }),
@@ -74,5 +94,5 @@ const githubDescribe: DescribeCodeHost<Repository, PullRequest, PullRequestRef> 
 	sameRepository: sameRepositoryName,
 	findOpen: (repository) => findOpenPullRequest(repository),
 	read: (ref) => pullRequest(ref),
-	head: (repository, pushed) => branchHead(repository)({ pushed }),
+	head: (repository, pushed) => branchHeadTool(githubTerms, repository)({ pushed }),
 }

@@ -1,5 +1,6 @@
 import { commentMarker, isMarked } from '@mesh-flow/code-repository'
-import { notFound, replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
+import { replyKey, type OwnReply, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
+import { notFound } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import type { ReviewItem } from '../tools/merge-request-tools.mts'
 import { projectSegment, type GitlabClient } from './api.mts'
@@ -31,8 +32,8 @@ const Note = z.object({ id: z.int() })
 /** The emoji that says a note is being read. */
 const beingReadEmoji = 'eyes'
 
-/** What the reply that says an item is being read says. It goes in the item's thread, so it needs no link. */
-export const readingNote = '👀 Reading...'
+/** What the reply that says an item is being read says. It goes in the item's thread, so it needs no header. */
+export const readingWords = '👀 Reading...'
 
 /** Where merge request `number` of `project` is on the API. */
 export function mergeRequestPath(project: string, number: number): string {

@@ -4,6 +4,8 @@
  *
  * @module
  */
+export { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
 export { atlassianHostTools, connector } from '../host/connector.mts'
-export { defaultRequestRetry, type AtlassianHostOptions, type RequestRetry } from '../host/host-options.mts'
-export { settingNames, type Product } from '../host/site-settings.mts'
+export { atlassianResends } from '../host/atlassian-resends.mts'
+export type { AtlassianHostOptions } from '../host/host-options.mts'
+export { credentialNames, type Product } from '../host/site.mts'

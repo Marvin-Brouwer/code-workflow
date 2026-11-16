@@ -25,7 +25,11 @@ export const egressMountPoint = '/run/mesh-flow'
  * ```
  */
 export class Layout {
-	constructor(readonly directory: string) {}
+	readonly directory: string
+
+	constructor(directory: string) {
+		this.directory = directory
+	}
 
 	get runscRoot(): string {
 		return path.join(this.directory, 'runsc')

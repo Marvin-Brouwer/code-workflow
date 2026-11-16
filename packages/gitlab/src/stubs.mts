@@ -10,7 +10,7 @@ import {
 	updateMergeRequest,
 } from './tools/merge-request-tools.mts'
 import { pipelineOnCommit, pipelinePackages } from './tools/pipeline-tools.mts'
-import { searchProjects } from './tools/project-tools.mts'
+import { searchRepositories } from './tools/search-tools.mts'
 
 /**
  * The sandbox's stubs of the host tools: what the connector's functions and tools call. Each runs
@@ -19,7 +19,7 @@ import { searchProjects } from './tools/project-tools.mts'
 export const stubs = Object.freeze({
 	cloneRepository: hostToolStub(cloneRepository),
 	pushBundle: hostToolStub(pushBundle),
-	searchProjects: hostToolStub(searchProjects),
+	searchRepositories: hostToolStub(searchRepositories),
 	openMergeRequest: hostToolStub(openMergeRequest),
 	updateMergeRequest: hostToolStub(updateMergeRequest),
 	findMergeRequest: hostToolStub(findMergeRequest),

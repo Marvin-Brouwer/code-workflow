@@ -1,13 +1,8 @@
+import { isGoneReply, triageItems, type PlannedChange as SharedPlannedChange, type TriageCodeHost } from '@mesh-flow/code-repository'
 import type { Agent, Limit } from '@mesh-flow/core'
-import {
-	triageItems,
-	triageResult as sharedTriageResult,
-	type PlannedChange as SharedPlannedChange,
-	type TriageCodeHost,
-} from '@mesh-flow/code-repository'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { isGoneReply, ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
+import { ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
 import { githubTerms } from './github-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
@@ -34,8 +29,30 @@ export type PlannedChange = SharedPlannedChange<ReviewItem>
  * Code posts the replies, not the agent, once the loop is done. A line comment deleted since it was
  * read is left out. Stopping the run stops the loop and any reply still in flight.
  *
+ * @param agent - The agent that sorts the items: the workflow's own, as the package ships none.
+ * @param repository - The checkout of the pull request's branch, which the agent reads to answer.
+ * @param options - The pull request, the items `review` handed over, and the loop's limit.
+ * @returns The items that ask for a change, each with the agent's plan for it. Empty when every
+ * item was a question or a change the agent won't make, which got its answer already.
+ * @throws When the loop fails or runs out of its limit; and, with the stop's reason, when the run stops.
+ *
+ * @example Sorting a round of review
  * ```ts
  * const changes = await github.triage(developer, repository, { pullRequest, comments })
+ * ```
+ *
+ * @example Making the changes
+ * ```ts
+ * await github.review(pullRequest, {
+ * 	comments: async (comments) => {
+ * 		const changes = await github.triage(developer, repository, { pullRequest, comments })
+ * 		for (const change of changes)
+ * 			await developer.loop`
+ * 				Make ${change.plan} in ${repository}, push with ${github.push(repository)},
+ * 				and reply to ${change.item.id} with ${github.reply(pullRequest)}.
+ * 			`
+ * 	},
+ * })
  * ```
  */
 export function triage(agent: Agent, repository: Repository, options: TriageOptions): Promise<readonly PlannedChange[]> {
@@ -56,9 +73,4 @@ function githubTriage(pullRequest: PullRequestRef): TriageCodeHost<ReviewItem> {
 			gone: isGoneReply(await stubs.replyToReviewItem({ ...pullRequest, item: item.id, body, stage })),
 		}),
 	}
-}
-
-/** What the agent finishes with: every item in `comments`, once, with what it asks for and its reply. */
-export function triageResult(comments: readonly ReviewItem[]) {
-	return sharedTriageResult(comments, ReviewItemId)
 }

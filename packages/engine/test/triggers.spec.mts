@@ -155,18 +155,25 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(await client.list(signal)).toHaveLength(1)
 	})
 
-	test('answer a payload that does not fit with a 4xx, before any sandbox is made for it', async () => {
+	test('skip a signed payload that does not fit with a 2xx, so the sender keeps the webhook on, and make no sandbox for it', async () => {
 		// Arrange
-		const { client, deliver, created } = await serve()
+		const { client, deliver, created, log } = await serve()
+		const notForTrigger = JSON.stringify({ label: 'ai-fix' })
 
 		// Act
-		const response = await deliver('fix-issue', JSON.stringify({ label: 'ai-fix' }), { 'x-webhook-secret': secret })
+		const response = await deliver('fix-issue', notForTrigger, { 'x-webhook-secret': secret })
+		await deliver('fix-issue', notForTrigger, { 'x-webhook-secret': secret })
 
 		// Assert
-		expect(response.status).toBe(422)
-		expect(await response.json()).toMatchObject({ problems: ["/ must have required property 'issue'"] })
+		expect(response.status).toBe(200)
+		expect(await response.json()).toMatchObject({
+			skipped: 'The delivery is not for webhook fix-issue.',
+			problems: ["/ must have required property 'issue'"],
+		})
 		expect(created).not.toHaveBeenCalled()
 		expect(await client.list(signal)).toEqual([])
+		const skips = log.mock.calls.filter(([message]) => message.startsWith('Skipped a delivery'))
+		expect(skips).toEqual([[expect.stringContaining("must have required property 'issue'")]])
 	})
 
 	test('refuse a delivery that is not signed with the secret, and make no sandbox for it', async () => {

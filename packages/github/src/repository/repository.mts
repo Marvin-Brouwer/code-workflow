@@ -1,7 +1,7 @@
+import { BranchName, checkoutFolder, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { tool } from '@mesh-flow/core'
-import { BranchName, checkoutRepository, type Checkout } from '@mesh-flow/code-repository'
 import { z } from 'zod'
-import { githubRemoteUrl, RepositoryName, splitRepositoryName } from '../repository-name.mts'
+import { githubRemoteUrl, RepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'
 
 /**
@@ -15,15 +15,29 @@ export interface Repository extends Checkout {
 	readonly defaultBranch: BranchName
 }
 
-export { origin, trackingRef } from '@mesh-flow/code-repository'
-
 /**
  * Checks a repository out into the workspace, on `branch`, which is made from the default branch
  * when GitHub doesn't have it yet. The clone comes from the host as a git bundle, so no credential
  * reaches the sandbox. A checkout of the repository that is already there is reused, switched to
  * `branch` when it is on another; a folder left half-cloned is cloned again, and a folder of the
- * workflow's own that is no checkout is left alone, with an error.
+ * workflow's own that isn't a checkout is left alone, and the call throws. The checkout goes in a
+ * folder at the repository's name, `owner/repo`, in lower case, under `repositories/`.
  *
+ * A tool for agents and a function for code. In a prompt the result renders as the checkout's
+ * absolute path; in code, `directory` is where it is on disk.
+ *
+ * Input: `{ repository, branch }`. `repository` is `owner/name`; `branch` is the branch to work on.
+ *
+ * @throws When GitHub has no such repository or the token can't read it, and when the checkout's
+ * folder holds files of the workflow's own that aren't a checkout.
+ *
+ * @example From code
+ * ```ts
+ * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
+ * const packageJson = JSON.parse(await readFile(path.join(repository.directory, 'package.json'), 'utf8'))
+ * ```
+ *
+ * @example In a prompt
  * ```ts
  * const repository = await github.checkout({ repository: 'team/app', branch: `fix/${String(issue.number)}` })
  * await developer.loop`Fix ${issue} in ${repository}, then push with ${github.push(repository)}.`
@@ -36,7 +50,7 @@ export const checkout = tool('githubCheckout', {
 		checkoutRepository(
 			{
 				...input,
-				folder: splitRepositoryName(input.repository).repo,
+				folder: checkoutFolder(input.repository),
 				remote: githubRemoteUrl(input.repository),
 				clone: stubs.cloneRepository,
 			},

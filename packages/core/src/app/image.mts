@@ -2,7 +2,7 @@ import type { SandboxDescription } from '@mesh-flow/protocol'
 
 /** The sandbox of {@link image}: an OCI image and what it may use. */
 export interface ImageOptions {
-	/** An OCI image reference with Node.js 22.18 or newer, such as `node:22-slim`. */
+	/** An OCI image reference with Node.js 26.18 or newer, such as `node:26-slim`. */
 	readonly name: string
 	/** The CPUs the sandbox gets. Default: 2. */
 	readonly cpus?: number
@@ -21,7 +21,7 @@ const defaultMemoryMb = 2048
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:22-slim', memoryMb: 4096, egress: ['api.example.com'] }),
+ * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, egress: ['api.example.com'] }),
  * 	workflows: [userTrigger(develop)],
  * })
  * ```

@@ -1,5 +1,5 @@
-import { tool, type Tool } from '@mesh-flow/core'
 import { pushCheckout, type Pushed } from '@mesh-flow/code-repository'
+import { tool, type Tool } from '@mesh-flow/core'
 import { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import type { Repository } from './repository.mts'
@@ -10,8 +10,22 @@ export type { Pushed }
  * The tool that commits every change in the checkout and pushes the branch, for an agent to call
  * when its work is ready, and for code before a pull request. The commits go to the host as a git
  * bundle of what the remote doesn't have yet (on top of the default branch for a new branch), and
- * the host pushes them with the credential.
+ * the host pushes them with the credential. A checkout without changes since the last push pushes
+ * nothing, so calling it again is safe.
  *
+ * @param repository - The checkout to push, from `github.checkout`.
+ * @returns The tool. Its input is `{ message }`, the commit message; it resolves to `{ pushed, head }`:
+ * whether anything went up, and the branch's commit on GitHub.
+ * @throws From the tool: when a new branch has no commits on top of the default branch, as there is
+ * nothing to push, and when GitHub turns the push down, such as for a protected branch.
+ *
+ * @example From code
+ * ```ts
+ * await writeFile(path.join(repository.directory, '.nvmrc'), '26\n')
+ * const { head } = await github.push(repository)({ message: 'Run on Node.js 26' })
+ * ```
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Fix ${issue} in ${repository}. Push with ${github.push(repository)}, then ${succeed()}.`
  * ```

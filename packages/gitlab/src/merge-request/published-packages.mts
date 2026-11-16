@@ -1,5 +1,5 @@
-import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
 import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/code-repository'
+import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 import type { PackageType, PublishedPackage } from '../tools/pipeline-tools.mts'
@@ -15,13 +15,17 @@ export interface PublishedPackagesOptions {
 	readonly appearWithin?: WaitSpec
 	/** How long GitLab may take to process the packages the pipeline uploaded. Default: 10 minutes. */
 	readonly processWithin?: WaitSpec
-	/** How long looks at GitLab may keep failing before it fails with the last error. Default: 10 minutes. */
+	/**
+	 * How long looks at GitLab may keep failing before `publishedPackages` fails with the last error.
+	 * Default: 10 minutes.
+	 */
 	readonly toleratedOutage?: WaitSpec
 }
 
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
- * name and version after the upload, in the background. Fails when that takes more than `looks`.
+ * name and version after the upload, in the background. Fails when that takes more
+ * than `looks` looks.
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
@@ -40,11 +44,32 @@ async function processedPackages(
  * the commit the merge left on the target branch to complete, then lists the packages in the
  * project's package registry that pipeline built. A merge request that isn't merged, a pipeline
  * that failed or waits for a person to start a job, or no pipeline within `appearWithin`, fails
- * the call: the packages a dependent project would take don't exist, or may not yet.
+ * the call: the packages a dependent project would take don't exist, or may not yet. GitLab reads a
+ * NuGet package's name and version after the upload, in the background, so it also waits, for up
+ * to `processWithin`, until every package of that pipeline is processed. A look that fails is tried
+ * again on the next one, for up to `toleratedOutage`.
  *
+ * @param on - The merged merge request: anything with its `repository` and `number`.
+ * @param type - The kind of package: `nuget`, `npm`, `maven`, `pypi` or `generic`.
+ * @param options - How often to look, and how long to wait for the pipeline, the processing and
+ * GitLab to answer again.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own. It stops the calls to
+ * GitLab; the waits between looks stop with the run.
+ * @returns Each package's name and version; none when the pipeline published no package of `type`.
+ * @throws When the merge request isn't merged; when the pipeline of the merge failed, waits for a
+ * person, or didn't appear within `appearWithin`; when GitLab couldn't process a package of the
+ * pipeline, or still processes one after `processWithin`; and when looks at GitLab kept failing for
+ * longer than `toleratedOutage`.
+ *
+ * @example Hand a library's new version to the projects that use it
  * ```ts
- * await gitlab.review(mergeRequest, handlers)
- * const packages = await gitlab.publishedPackages(mergeRequest, 'nuget')
+ * const { state } = await gitlab.review(libraryMergeRequest, handlers)
+ * if (state === 'closed') throw new Error(`${libraryMergeRequest.url} was closed without a merge.`)
+ * const packages = await gitlab.publishedPackages(libraryMergeRequest, 'nuget')
+ * if (packages.length === 0) return
+ * await dotnet.updatePackages(consumer, packages)
+ * await gitlab.push(consumer)({ message: `Update to ${packages.map((published) => `${published.name} ${published.version}`).join(', ')}` })
  * ```
  */
 export async function publishedPackages(

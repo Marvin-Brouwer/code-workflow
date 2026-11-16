@@ -2,7 +2,7 @@ import { hostTool, type HostTool } from '@mesh-flow/gateway'
 import { defaultPageSearchLimit, getPage, searchPages } from '../../tools/page-tools.mts'
 import { htmlToMarkdown } from '../html-to-markdown.mts'
 import { peopleIn } from '../people.mts'
-import { markingTransient } from '../transient-error.mts'
+import { withTransientFailures } from '../transient-error.mts'
 import type { ConfluenceApi } from './confluence-api.mts'
 import { pageSearchCql } from './cql-string.mts'
 import { linksOf, type RawPage } from './raw-page.mts'
@@ -15,7 +15,7 @@ export function confluenceHostTools(api: ConfluenceApi): HostTool[] {
 	return [
 		hostTool(getPage, async ({ id }, context) => {
 			const site = await api(context)
-			const page = await markingTransient(() => site.page(id, context.abortSignal))
+			const page = await withTransientFailures(() => site.page(id, context.abortSignal))
 			const html = page.body?.view?.value
 			const people = await peopleIn([html], site.user, context.abortSignal)
 			return {
@@ -32,7 +32,7 @@ export function confluenceHostTools(api: ConfluenceApi): HostTool[] {
 		hostTool(searchPages, async ({ text, space, limit = defaultPageSearchLimit }, context) => {
 			const site = await api(context)
 			const cql = pageSearchCql(text, space)
-			const found = await markingTransient(() => site.search(cql, limit, context.abortSignal))
+			const found = await withTransientFailures(() => site.search(cql, limit, context.abortSignal))
 			return {
 				pages: found.results.map(({ content: page, excerpt }) => ({
 					id: page.id,

@@ -1,9 +1,8 @@
 import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
-import { mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
+import { mergedMergeRequest, mergeRequest, openMergeRequest, updateMergeRequest } from '../src/merge-request/merge-request.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { searchRepositories } from '../src/repository/search.mts'
-import { forkProjectId } from './support/fake-gitlab.mts'
 import {
 	branch,
 	changeLogin,
@@ -14,6 +13,7 @@ import {
 	sameSite,
 	story,
 } from './support/connected-gitlab.mts'
+import { forkProjectId } from './support/fake-gitlab.mts'
 import { runOnGateway, testToken } from './support/test-run.mts'
 
 /** The text after the second fix, which adds Secure to the cookie. */
@@ -26,7 +26,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const opened = await openMergeRequest(repository, { ...sameSite, closes: story })
 			return { opened, head: await remote.head(branch) }
@@ -48,7 +48,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await openMergeRequest(repository, sameSite)
 			return openMergeRequest(repository, secure)
@@ -66,7 +66,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await openMergeRequest(repository, sameSite)
 			await changeLogin(repository, 'SameSite=None; Secure\n')
@@ -79,7 +79,7 @@ describe('openMergeRequest', () => {
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 
-	test('takes the merge request another run opened for the branch meanwhile', async () => {
+	test('takes the merge request another call opened for the branch meanwhile, and describes it for its own commit', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.hold = (method, requestPath) => {
@@ -90,14 +90,14 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
 		const opened = await run.result
 
 		// Assert
-		expect(opened).toMatchObject({ number: firstMergeRequest, title: 'Opened meanwhile' })
+		expect(opened).toMatchObject({ number: firstMergeRequest, ...sameSite })
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 
@@ -108,7 +108,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -125,7 +125,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const opened = await openMergeRequest(repository, sameSite)
 			api.mergeRequest(projectPath, opened.number, { title: `Draft: ${sameSite.title}` })
@@ -145,7 +145,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -166,7 +166,7 @@ describe('openMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			return openMergeRequest(repository, sameSite)
 		})
@@ -187,7 +187,7 @@ describe('updateMergeRequest', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const repository = await checkout(projectPath, { branch })
+			const repository = await checkout({ repository: projectPath, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const opened = await openMergeRequest(repository, sameSite)
 			const first = await updateMergeRequest(opened, secure)
@@ -220,8 +220,54 @@ describe('updateMergeRequest', () => {
 	})
 })
 
+describe('mergedMergeRequest', () => {
+	test('finds the merge request the run opened once it merged, and none that another run or a person merged', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 1, { state: 'merged', source_branch: branch, description: signed('Earlier.', 'run-earlier', []) })
+		api.mergeRequest(projectPath, 2, { state: 'merged', source_branch: branch, description: 'Merged by a person.' })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: projectPath, branch })
+			const before = await mergedMergeRequest(repository)
+			await changeLogin(repository, 'SameSite=None\n')
+			const opened = await openMergeRequest(repository, sameSite)
+			const signedByRun = api.mergeRequest(projectPath, opened.number, { state: 'merged' }).description
+			// From a fork, onto another branch, and the branch open again: none of them is the delivery.
+			api.mergeRequest(projectPath, 4, {
+				state: 'merged',
+				source_branch: branch,
+				source_project_id: forkProjectId,
+				description: signedByRun,
+			})
+			api.mergeRequest(projectPath, 5, { state: 'merged', source_branch: 'feature/PROJ-8', description: signedByRun })
+			api.mergeRequest(projectPath, 6, { state: 'opened', source_branch: branch, description: signedByRun })
+			return { before, opened, after: await mergedMergeRequest(repository) }
+		})
+		const { before, opened, after } = await run.result
+
+		// Assert
+		expect(before).toBeUndefined()
+		expect(after).toMatchObject({ number: opened.number, merged: true })
+	})
+
+	test('finds none for a branch that was never merged', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGitlab()
+		api.mergeRequest(projectPath, 2, { state: 'closed', source_branch: branch })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => mergedMergeRequest(await checkout({ repository: projectPath, branch })))
+		const found = await run.result
+
+		// Assert
+		expect(found).toBeUndefined()
+	})
+})
+
 describe('searchRepositories', () => {
-	test('finds projects by their path, with what checkout takes', async () => {
+	test('finds repositories by their path, with what checkout takes', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.project('team/frontend/web', { description: 'The web app' })
@@ -232,7 +278,7 @@ describe('searchRepositories', () => {
 
 		// Assert
 		expect(found).toEqual({
-			projects: [
+			repositories: [
 				{
 					repository: projectPath,
 					name: 'api',

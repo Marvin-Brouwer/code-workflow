@@ -1,5 +1,6 @@
+import { signed } from '@mesh-flow/code-repository/host'
 import { describe, expect, test } from 'vitest'
-import { openPullRequest, pullRequest as getPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
+import { mergedPullRequest, openPullRequest, pullRequest as getPullRequest, updatePullRequest } from '../src/pull-request/pull-request.mts'
 import { push } from '../src/repository/push.mts'
 import { checkout } from '../src/repository/repository.mts'
 import {
@@ -52,6 +53,31 @@ describe('openPullRequest', () => {
 				`<!-- mesh-flow:described:${head} -->`,
 			].join('\n'),
 		)
+	})
+
+	test('takes the pull request another call opened for the branch while it opened one, and describes it for its own commit', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		/** What the other call pushed before it opened its pull request. */
+		const otherCallSha = '1'.repeat(40)
+		api.hold = (method, requestPath) => {
+			if (method === 'POST' && requestPath.endsWith('/pulls') && !api.repository(repositoryName).pulls.has(firstPullRequest))
+				api.pullRequest(repositoryName, firstPullRequest, { head: { ref: branch, sha: otherCallSha }, body: 'Opened meanwhile.' })
+			return undefined
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			await changeLogin(repository, 'SameSite=None\n')
+			return openPullRequest(repository, sameSite)
+		})
+		const opened = await run.result
+
+		// Assert
+		expect(opened.number).toBe(firstPullRequest)
+		expect(opened).toMatchObject(sameSite)
+		expect([...api.repository(repositoryName).pulls.keys()]).toEqual([firstPullRequest])
 	})
 
 	test('keeps the text of the open pull request when it is opened again for the same commit', async () => {
@@ -505,5 +531,37 @@ describe('pullRequest', () => {
 
 		// Assert
 		expect(edited.describedSha).toBeUndefined()
+	})
+})
+
+describe('mergedPullRequest', () => {
+	test('finds the pull request the run opened once it merged, and none that another run or a person merged', async () => {
+		// Arrange
+		const { api, gateway } = await connectedGithub()
+		const onBranch = { head: { ref: branch, sha: '0'.repeat(40) }, base: { ref: 'main' } }
+		api.pullRequest(repositoryName, 1, { ...onBranch, state: 'closed', merged: true, body: signed('Earlier.', 'run-earlier', []) })
+		api.pullRequest(repositoryName, 2, { ...onBranch, state: 'closed', merged: true, body: 'Merged by a person.' })
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const repository = await checkout({ repository: repositoryName, branch })
+			const before = await mergedPullRequest(repository)
+			await changeLogin(repository, 'SameSite=None\n')
+			const opened = await openPullRequest(repository, sameSite)
+			const signedByRun = api.pullRequest(repositoryName, opened.number).body
+			// Closed without a merge, onto another branch, and open again: none of them is the delivery.
+			api.pullRequest(repositoryName, 4, { ...onBranch, state: 'closed', merged: false, body: signedByRun })
+			api.pullRequest(repositoryName, 5, { ...onBranch, base: { ref: 'release' }, state: 'closed', merged: true, body: signedByRun })
+			api.pullRequest(repositoryName, 6, { ...onBranch, state: 'open', body: signedByRun })
+			const whileOpen = await mergedPullRequest(repository)
+			api.pullRequest(repositoryName, opened.number, { state: 'closed', merged: true })
+			return { before, whileOpen, after: await mergedPullRequest(repository), opened: opened.number }
+		})
+		const { before, whileOpen, after, opened } = await run.result
+
+		// Assert
+		expect(before).toBeUndefined()
+		expect(whileOpen).toBeUndefined()
+		expect(after?.number).toBe(opened)
 	})
 })

@@ -1,7 +1,7 @@
-import { replyKey, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
+import { commentMarker } from '@mesh-flow/code-repository'
+import { replyKey, withHeader, type PostedReply, type ReviewComments } from '@mesh-flow/code-repository/host'
 import type { Octokit } from '@octokit/rest'
 import { splitRepositoryName } from '../repository-name.mts'
-import { commentMarker } from '../tools/issue-tools.mts'
 import type { ReviewItemKind } from '../tools/pull-request-tools.mts'
 import { pageSize } from './api.mts'
 import { isGone } from './transient-error.mts'
@@ -9,9 +9,12 @@ import { isGone } from './transient-error.mts'
 /** The reaction that says a comment is being read. */
 const beingReadReaction = 'eyes'
 
-/** What the reply that says an item is being read says: a link on the conversation, where it isn't next to the item. */
-export function readingNote(kind: ReviewItemKind, url: string): string {
-	return kind === 'review-comment' ? '👀 Reading...' : `👀 Reading [this ${kind}](${url})...`
+/** What the reply that says an item is being read says, under its header. */
+const readingWords = '👀 Reading...'
+
+/** The reply that says an item is being read, under the header that quotes it on the conversation. */
+export function readingNote(header: string | undefined): string {
+	return withHeader(header, readingWords)
 }
 
 /**

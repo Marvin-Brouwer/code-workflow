@@ -18,7 +18,7 @@ export interface VerifyOptions {
  * them: the checks run when the agent calls one of those.
  *
  * ```ts
- * await developer.loop`Implement ${plan.path}, then hand in with ${verify(dotnet.tests(repository))}.`
+ * await developer.loop`Implement ${plan.path}, then hand in with ${verify(dotnet.testsPass(repository))}.`
  * ```
  */
 export function verify(...checks: readonly Check[]): Gate

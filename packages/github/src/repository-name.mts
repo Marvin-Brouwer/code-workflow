@@ -6,7 +6,22 @@ const ownerPattern = /^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$/
 /** A repository name as GitHub takes one, and never `.` or `..`, which would leave the owner's directory on the host. */
 const namePattern = /^(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/
 
-/** A repository as GitHub names it: `owner/name`. */
+/**
+ * A repository as GitHub names it: `owner/name`. A zod schema, for a workflow parameter or a plan's
+ * field, that turns down a bare name, a URL and a name GitHub wouldn't take.
+ *
+ * @example
+ * ```ts
+ * import { succeed, workflow } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github'
+ * import { developer } from '../agents.mts'
+ *
+ * export const bump = workflow('bump', { repository: github.RepositoryName }, async ({ parameters }) => {
+ * 	const repository = await github.checkout({ repository: parameters.repository, branch: 'chore/bump-node' })
+ * 	await developer.loop`Bump Node.js in ${repository}, then ${succeed()}.`
+ * })
+ * ```
+ */
 export const RepositoryName = z.string().refine(
 	(full) => {
 		const parts = full.split('/')

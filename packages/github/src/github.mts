@@ -1,12 +1,19 @@
+export { BranchName, type ReplyInput } from '@mesh-flow/code-repository'
 export { close, collect, comment, issue, label, type Issue, type IssueRef } from './issue/issue.mts'
 export { checksPass, type ChecksPassOptions } from './pull-request/checks-pass.mts'
 export { describe, type DescribeOptions } from './pull-request/describe.mts'
 export { PullRequestText, type PullRequestContent } from './pull-request/pull-request-text.mts'
-export { openPullRequest, pullRequest, updatePullRequest, type PullRequest, type UpdatedPullRequest } from './pull-request/pull-request.mts'
-export { reply, type ReplyInput } from './pull-request/reply.mts'
+export {
+	mergedPullRequest,
+	openPullRequest,
+	pullRequest,
+	updatePullRequest,
+	type PullRequest,
+	type UpdatedPullRequest,
+} from './pull-request/pull-request.mts'
+export { reply } from './pull-request/reply.mts'
 export { review, type ChecksFailed, type ReviewHandlers, type ReviewOptions, type ReviewOutcome } from './pull-request/review.mts'
 export { triage, type PlannedChange, type TriageOptions } from './pull-request/triage.mts'
-export { BranchName } from '@mesh-flow/code-repository'
 export { RepositoryName } from './repository-name.mts'
 export { push, type Pushed } from './repository/push.mts'
 export { checkout, type Repository } from './repository/repository.mts'

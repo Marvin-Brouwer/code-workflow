@@ -10,7 +10,7 @@ import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 import { fakeContainerFile, fakeRunsc, type FakeRunscOptions } from '../support/fake-runsc.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
-const spec: SandboxSpec = { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
 
 function timeout(): AbortSignal {
 	return AbortSignal.timeout(5000)

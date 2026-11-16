@@ -1,6 +1,5 @@
 import { createCloudClient, type ClientConfig } from 'jira.js'
 import { markdownToAdf } from 'marklassian'
-import { sentOnce } from '../host-options.mts'
 import type { Download } from './attachments.mts'
 import type { JiraSite } from './jira-site.mts'
 import { issueFields, RawFoundIssue, RawIssue, searchFields } from './raw-issue.mts'
@@ -12,8 +11,6 @@ import { orWhenNotFound } from './when-not-found.mts'
  */
 export function jiraCloud(config: ClientConfig & { readonly host: string }, download: Download): JiraSite {
 	const client = createCloudClient(config)
-	// Requests that make something new are sent once, as a retry after a lost answer would make it twice, and so are user lookups.
-	const once = createCloudClient({ ...config, retry: sentOnce })
 	return {
 		url: config.host,
 		async issue(key, abortSignal) {
@@ -35,10 +32,10 @@ export function jiraCloud(config: ClientConfig & { readonly host: string }, down
 			)
 		},
 		async moveIssue(key, transitionId, abortSignal) {
-			await once.issues.doTransition({ issueIdOrKey: key, transition: { id: transitionId } }, { signal: abortSignal })
+			await client.issues.doTransition({ issueIdOrKey: key, transition: { id: transitionId } }, { signal: abortSignal })
 		},
 		async addComment(key, markdown, abortSignal) {
-			const comment = await once.issueComments.addComment({ issueIdOrKey: key, body: markdownToAdf(markdown) }, { signal: abortSignal })
+			const comment = await client.issueComments.addComment({ issueIdOrKey: key, body: markdownToAdf(markdown) }, { signal: abortSignal })
 			if (comment.id === undefined) throw new Error(`Jira added a comment to ${key} without an id.`)
 			return comment.id
 		},
@@ -59,10 +56,9 @@ export function jiraCloud(config: ClientConfig & { readonly host: string }, down
 		async setProperty(key, name, value, abortSignal) {
 			await client.issueProperties.setIssueProperty({ issueIdOrKey: key, propertyKey: name, body: value }, { signal: abortSignal })
 		},
-		// Who a mention names is worth one try: without an answer, the mention keeps what its link holds.
 		async user({ accountId }, abortSignal) {
 			if (accountId === undefined) return undefined
-			const user = await once.users.getUser({ accountId }, { signal: abortSignal })
+			const user = await client.users.getUser({ accountId }, { signal: abortSignal })
 			return { name: user.displayName, email: user.emailAddress }
 		},
 		download,

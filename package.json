@@ -8,7 +8,7 @@
 		"poc:microsandbox-pause": "pnpm --filter @pocs/microsandbox-pause start",
 		"poc:gvisor-pause": "pnpm --filter @pocs/gvisor-pause start",
 		"poc:sandbox-pause": "pnpm --filter @pocs/sandbox-pause start",
-		"build": "pnpm -r --filter=!example build",
+		"build": "pnpm -r build",
 		"test": "pnpm -r test",
 		"format": "oxfmt",
 		"format:check": "oxfmt --check",
@@ -22,7 +22,7 @@
 		"typescript": "~6.0.3"
 	},
 	"engines": {
-		"node": ">=22.18",
+		"node": ">=26",
 		"pnpm": ">=10"
 	}
 }

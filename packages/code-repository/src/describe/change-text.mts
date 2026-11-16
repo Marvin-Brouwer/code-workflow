@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { withUnixLineBreaks } from '../line-breaks.mts'
+import type { CodeHostTerms } from './change-request.mts'
 import { fenced } from './fenced.mts'
 
 /** The title and description of a pull or merge request. */
@@ -14,14 +15,14 @@ export interface ChangeText {
  */
 export const footerRoomCharacters = 5_536
 
-/** A code host's limits on a title and a description. */
+/** A code host's limits on a title and a description, and what it calls the change. */
 export interface ChangeTextLimits {
 	/** The longest title the code host takes. */
 	readonly maxTitleCharacters: number
 	/** The longest description the code host takes. The agent gets less: {@link footerRoomCharacters} is kept for the footer. */
 	readonly maxDescriptionCharacters: number
-	/** What the code host calls the change, for the field descriptions: `pull request` or `merge request`. */
-	readonly request: string
+	/** What the code host calls things: its `request` names the change in the field descriptions. */
+	readonly terms: CodeHostTerms
 }
 
 /**
@@ -36,12 +37,12 @@ export function changeTextSchema(limits: ChangeTextLimits) {
 			.min(1)
 			.max(limits.maxTitleCharacters)
 			.regex(/^[^\r\n]+$/, 'Write the title on one line.')
-			.describe(`The ${limits.request}'s title, one line`),
+			.describe(`The ${limits.terms.request}'s title, one line`),
 		description: z
 			.string()
 			.min(1)
 			.max(limits.maxDescriptionCharacters - footerRoomCharacters)
-			.describe(`The ${limits.request}'s description, in Markdown`),
+			.describe(`The ${limits.terms.request}'s description, in Markdown`),
 	})
 }
 

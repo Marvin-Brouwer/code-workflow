@@ -1,6 +1,6 @@
 # `@mesh-flow/gitlab`
 
-The GitLab connector for mesh-flow, for gitlab.com and for a GitLab of your own. It gives workflows functions for code, tools for agents, a check for `verify`, and GitLab's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
+The GitLab connector for mesh-flow. A connector gives workflows one outside system; this one gives them GitLab, on gitlab.com and on a GitLab of your own: functions for code, tools for agents, a check for `verify`, and GitLab's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
 It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other code host connectors through `@mesh-flow/code-repository`, so a workflow reads the same on each.
 
@@ -8,11 +8,11 @@ It shares its checkouts, `describe`, `review`, `triage` and `reply` with the oth
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token: a personal, group or project access token with the `api` scope. For a GitLab of your own, set its URL too; without one, the connector goes to gitlab.com.
 
-```bash
+```sh
 pnpm add @mesh-flow/gitlab
 mesh-flow connector add @mesh-flow/gitlab
 mesh-flow credential set gitlab/token < token.txt
-mesh-flow credential set gitlab/url # https://gitlab.example.com
+echo 'https://gitlab.example.com' | mesh-flow credential set gitlab/url
 ```
 
 The sandbox image needs `git` next to `node`.
@@ -23,23 +23,26 @@ The agents are the workflow repository's own; the package takes them as paramete
 
 ```ts
 // workflows/develop.mts
-import { jira } from '@mesh-flow/atlassian'
-import { succeed, verify, workflow } from '@mesh-flow/core'
+import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { succeed, verify, workflow, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
-import { developer, writer } from '../agents.mts'
 
-export const develop = workflow('develop', { key: jira.key }, async ({ parameters }) => {
+// The workflow repository's own agents: packages ship none.
+declare const developer: Agent
+declare const writer: Agent
+
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
 	const story = await jira.collect(parameters.key)
-	const repository = await gitlab.checkout('team/backend/api', { branch: `feature/${story.key}` })
+	const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
 
 	await developer.loop`Implement ${story} in ${repository}. Push with ${gitlab.push(repository)}, then ${succeed()}.`
 
-	const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+	const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
 
 	await gitlab.review(mergeRequest, {
 		pipelineFailed: ({ failures }) => developer.loop`
 			The pipeline of ${mergeRequest} failed: ${failures}. Fix it in ${repository}, push with ${gitlab.push(repository)},
-			and hand in with ${verify(gitlab.pipelinePasses(mergeRequest))}.
+			and hand in with ${verify(gitlab.pipelinePasses(mergeRequest, { checkout: repository }))}.
 		`,
 		async comments(comments) {
 			const changes = await gitlab.triage(developer, repository, { mergeRequest, comments })
@@ -48,7 +51,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 				Make these changes in ${repository}, as you planned them: ${changes}. Push with ${gitlab.push(repository)},
 				then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}. When every item is done, ${succeed()}.
 			`
-			await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { closes: story, mergeRequest }))
+			await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
 		},
 	})
 
@@ -56,17 +59,17 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 })
 ```
 
-### Projects
+### Repositories
 
 `gitlab.searchRepositories` is a tool for an agent that has to find where a change goes: it searches the projects the token's user is a member of by words in their name, path or description, and lists each with the path `gitlab.checkout` takes.
 
-`gitlab.checkout(project, { branch })` puts a checkout of the project in the workspace, in a folder named after the project's last segment, on the branch, made from the default branch when GitLab doesn't have it yet. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
+`gitlab.checkout({ repository, branch })` puts a checkout of the project in the workspace, on the branch, made from the default branch when GitLab doesn't have it yet. Its folder is `repositories/<project path>` in lower case, so `team/backend/api` and `team/frontend/api` never share one. A project is named by its whole path, groups and subgroups too: `team/backend/api`. `gitlab.push(repository)` is the tool that commits and pushes. Both go through the host as git bundles: the host fetches and pushes with the token, and the sandbox only gets the commits.
 
 ### Merge requests
 
-`gitlab.describe(agent, repository, { closes, mergeRequest, limit })` has the agent write the title and description, from the branch's commits and diff, the project's merge request templates (the Markdown files in `.gitlab/merge_request_templates/`), and its settings that lint commit messages or titles: commitlint's, or a job in `.gitlab-ci.yml` or `.gitlab/ci/*.yml` that runs commitlint or a title check. The title is at most 255 characters. `closes` is the issue the merge request closes, by its `key`: `Fixes PROJ-7` goes in the footer, which GitLab's Jira integration acts on.
+`gitlab.describe(agent, repository, { issue, mergeRequest, limit })` has the agent write the title and description, from the branch's commits and diff, the project's merge request templates (the Markdown files in `.gitlab/merge_request_templates/`), and its settings that lint commit messages or titles: commitlint's, or a job in `.gitlab-ci.yml` or `.gitlab/ci/*.yml` that runs commitlint or a title check. The title is at most 255 characters. `issue` is the issue the merge request closes, by its `key`: `Fixes PROJ-7` goes in the footer, which GitLab's Jira integration acts on.
 
-`gitlab.openMergeRequest(repository, text)` opens the merge request of the checkout's branch onto its default branch, or takes the one that is open already, and gives it the text unless it was written for the same commit. GitLab keeps one open merge request per branch, so one onto another target fails the call, naming it. `gitlab.updateMergeRequest(mergeRequest, text)` writes new text, unless someone edited it since `describe` read it: then the person is asked whether to overwrite the edit first. A merged or closed merge request keeps its text. `gitlab.mergeRequest(ref)` reads one. A merge request is named by its project and its iid, the number after `!`: `{ repository: 'team/backend/api', number: 7 }`.
+`gitlab.openMergeRequest(repository, text)` opens the merge request of the checkout's branch onto its default branch, or takes the one that is open already, and gives it the text unless it was written for the same commit, also when another run opened it at the same moment. GitLab keeps one open merge request per branch, so one onto another target fails the call, naming it. `gitlab.updateMergeRequest(mergeRequest, text)` writes new text, unless someone edited it since `describe` read it: then the person is asked whether to overwrite the edit first. A merged or closed merge request keeps its text. `gitlab.mergeRequest(ref)` reads one, and `gitlab.mergedMergeRequest(repository)` finds the one the run opened that merged the checkout's branch, for a run that starts over after it was delivered; a merge by another run or a person doesn't count. A merge request is named by its project and its iid, the number after `!`: `{ repository: 'team/backend/api', number: 7 }`.
 
 ### Review
 
@@ -74,7 +77,7 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 
 `gitlab.triage(agent, repository, { mergeRequest, comments })` has the agent sort a round of notes into questions, changes it will make and changes it won't, in a loop that changes nothing. It answers the questions and the declined changes, puts the plan under each change it will make, and resolves to those changes.
 
-`gitlab.pipelinePasses(mergeRequest, { every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the head commit's pipeline to complete and reports each failed job as a finding. The merge request's own pipeline counts first, the one GitLab gates the merge on: a merged results pipeline, which runs on GitLab's merge of the head into the target, counts as the head's. A pipeline that waits on a manual job counts as completed: nothing runs until someone starts it, so `review` reports the jobs that failed before it, if any, and a check that waits for it doesn't hang. A project without CI passes once no pipeline appeared within `appearWithin` (10 minutes).
+`gitlab.pipelinePasses(mergeRequest, { checkout, every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the head commit's pipeline to complete and reports each failed job as a finding. With `checkout`, the commit is the one last pushed from that checkout: GitLab updates a merge request's head a few seconds after a push, so a check right after a push would otherwise look at the commit before it. The merge request's own pipeline counts first, the one GitLab gates the merge on: a merged results pipeline, which runs on GitLab's merge of the head into the target, counts as the head's. A pipeline that waits on a manual job counts as completed: nothing runs until someone starts it, so `review` reports the jobs that failed before it, if any, and a check that waits for it doesn't hang. A project without CI passes once no pipeline appeared within `appearWithin` (10 minutes).
 
 ### Packages
 
@@ -87,9 +90,39 @@ export const develop = workflow('develop', { key: jira.key }, async ({ parameter
 ```ts
 import { webhook } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab/hooks'
+import { release } from './workflows/release.mts'
 
-const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ project: event.project.path_with_namespace }))
+const merged = gitlab.mergeRequestEvent('merge').transform((event) => ({ repository: event.project.path_with_namespace }))
 export const onMerge = webhook(release, merged, { name: 'release-on-merge', ...gitlab.triggerOptions })
 ```
 
+A delivery that doesn't fit a schema, such as a merge request that was only updated, is skipped with a `200` before the engine makes a sandbox, so GitLab doesn't disable the webhook for it. `mergeRequestNote` leaves out the notes a connector wrote, such as the run's own replies, so a workflow that answers notes isn't started again by its answers. `pipelineEvent` also takes pipelines of the default branch and of tags; extend it with a `merge_request` object to take only those of a merge request.
+
 Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitLab as the webhook's secret token, with the webhook URL `mesh-flow serve --webhook-port` prints.
+
+## The host half
+
+`@mesh-flow/gitlab/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `gitlab/token` (`tokenCredential`) and the GitLab under `gitlab/url` (`urlCredential`, gitlab.com when it isn't set) on every call, so a changed credential counts at once, try reads again when the connection drops or GitLab answers 500, 502, 503, 504 or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per project in the connector's directory in the engine's home. They speak to GitLab's REST API through a small `fetch` client of the connector's own rather than gitbeaker, which can't take a call's abort signal and retries writes: [decisions.md](../../docs/decisions.md#connectors) has the reasons. For a test, `gitlabHostTools` points them at servers of your own:
+
+```ts
+import { defaultFetchRetry, gitlabHostTools } from '@mesh-flow/gitlab/host'
+
+const tools = gitlabHostTools({
+	directory: '/tmp/gitlab-host',
+	fetch: (input, init) => fetch(String(input).replace('https://gitlab.com', 'http://127.0.0.1:4010'), init),
+	remoteUrl: (project) => `file:///tmp/remotes/${project}.git`,
+	retry: { ...defaultFetchRetry, attempts: 1 },
+})
+```
+
+`retry` sets how requests are tried again (`defaultFetchRetry`: five attempts over about fifteen seconds); a test can turn it off as above, so a failing server fails at once.
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/gitlab typecheck
+pnpm --filter @mesh-flow/gitlab test
+pnpm --filter @mesh-flow/gitlab build
+```
+
+Tests run against an in-memory GitLab API and a local bare repository, so they need no token and no network. They need `git` on the machine.

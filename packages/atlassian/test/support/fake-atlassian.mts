@@ -8,7 +8,7 @@ export interface FakeRequest {
 	readonly authorization: string | null
 	readonly body: unknown
 	/** The request's signal, so a test sees that a stopped call stopped its request. */
-	readonly signal: AbortSignal | undefined
+	readonly abortSignal: AbortSignal | undefined
 }
 
 /** A comment on a fake issue. */
@@ -92,6 +92,17 @@ export interface FakeAtlassian {
 	/** How long each answer takes, in milliseconds: room for calls to interleave. */
 	latencyMs: number
 }
+
+/** The first bytes of a PNG file: enough of an image for the fake to serve. */
+export const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+
+/** Rita, as a Cloud site knows her: her account id, her profile, and how Jira and Confluence render a mention of her. */
+export const rita = Object.freeze({
+	accountId: '5b10',
+	user: Object.freeze({ displayName: 'Rita Reporter', email: 'rita@example.com' }),
+	jiraMention: '<a href="/secure/ViewProfile.jspa?accountId=5b10" class="user-hover" data-account-id="5b10">@Rita Reporter</a>',
+	confluenceMention: '<a href="/wiki/people/5b10" class="confluence-userlink user-mention" data-account-id="5b10">Rita Reporter</a>',
+})
 
 /** An issue with the defaults filled in. */
 export function fakeIssue(issue: Partial<FakeIssue> & { key: string }): FakeIssue {
@@ -235,7 +246,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			query: url.searchParams,
 			authorization: headers.get('authorization'),
 			body,
-			signal: init?.signal ?? undefined,
+			abortSignal: init?.signal ?? undefined,
 		})
 		if (state.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, state.latencyMs))
 		if (hanging.has(url.pathname))

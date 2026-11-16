@@ -1,6 +1,6 @@
 import { check, type Check, type Finding } from '@mesh-flow/core'
-import { targetOf, type DotnetRepository, type DotnetTargetOptions } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 
 /** Problems whose level starts with this, such as `info` or `Information`, say nothing is wrong. */
 const informationalLevelPrefix = 'info'
@@ -17,11 +17,26 @@ const findingSource = 'vulnerable packages'
  * `options.target` names the solution or project when the checkout has none at its root, or more
  * than one.
  *
+ * @param repository - The checkout to look at: anything with a `directory`, such as a connector's
+ * checkout.
+ * @param options - `target`: the solution or project, relative to the checkout.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means no package has a known vulnerability.
+ * @throws From the check: when `dotnet` can't tell which packages are vulnerable, such as when a
+ * source has no vulnerability data; and, with the stop's reason, when the run stops.
+ *
+ * @example From code
+ * ```ts
+ * const findings = await runCheck(dotnet.security(repository), { abortSignal })
+ * for (const finding of findings) await jira.comment(story, finding.message)
+ * ```
+ *
+ * @example For an agent
  * ```ts
  * await developer.loop`Implement ${plan} in ${repository}, then hand in with ${verify(dotnet.security(repository))}.`
  * ```
  */
-export function security(repository: DotnetRepository, options: DotnetTargetOptions = {}): Check {
+export function security(repository: DotnetCheckout, options: DotnetTargetOptions = {}): Check {
 	return check('security', async ({ abortSignal }) => {
 		const list = await listPackages(targetOf(repository, options), ['--vulnerable', '--include-transitive'], abortSignal)
 		const packages = list.projects.flatMap((project) =>

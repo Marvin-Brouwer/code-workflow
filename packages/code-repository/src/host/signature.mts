@@ -1,8 +1,6 @@
+import { projectUrl } from '@mesh-flow/gateway'
 import { withUnixLineBreaks } from '../line-breaks.mts'
 import { commentMarker, markerStart } from '../markers.mts'
-
-/** Where the footer of a post links to. */
-const projectUrl = 'https://github.com/Marvin-Brouwer/code-workflow'
 
 /** The rule the footer starts with, under a blank line. */
 const footerRule = '---'
@@ -66,6 +64,11 @@ export function runIdLine(body: string): string | undefined {
 	const lines = linesOf(body)
 	const start = footerStart(lines)
 	return start === -1 ? undefined : lines[runIdLineIndex(start)]
+}
+
+/** Whether the connector's last footer in `body` names `runId`: whether that run wrote the post, or last rewrote it. */
+export function signedBy(body: string, runId: string): boolean {
+	return runIdLine(body)?.startsWith(`\`${runId}\``) ?? false
 }
 
 /**

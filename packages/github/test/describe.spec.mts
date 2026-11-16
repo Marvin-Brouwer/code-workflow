@@ -72,7 +72,7 @@ describe('describe', () => {
 		await run.result
 
 		// Assert
-		const diffFile = path.join(run.workspace, 'pull-requests/app/fix/7.diff')
+		const diffFile = path.join(run.workspace, 'pull-requests/team/app/fix/7.diff')
 		expect(prompts[0]).toContain(diffFile)
 		expect(await readFile(diffFile, 'utf8')).toContain('+SameSite=None')
 	})
@@ -94,6 +94,7 @@ describe('describe', () => {
 		// Assert
 		expect(prompts[0]).toContain('no pull request template')
 		expect(prompts[0]).toContain('`## What changes`, `## Why` and `## Testing`')
+		expect(prompts[0]).toContain("don't repeat it as a `#` heading at the top")
 	})
 
 	test('asks for a short title without lint settings', async () => {

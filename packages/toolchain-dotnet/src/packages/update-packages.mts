@@ -1,9 +1,10 @@
 import path from 'node:path'
 import { tool, type ToolContext } from '@mesh-flow/core'
 import { z } from 'zod'
-import { Directory, targetOf, workingDirectoryOf, type DotnetRepository, type DotnetTargetOptions } from '../directory.mts'
+import { Directory, workingDirectoryOf } from '../directory.mts'
 import { listPackages } from '../package-list.mts'
 import { outputTail, runDotnet } from '../run-dotnet.mts'
+import { targetOf, type DotnetCheckout, type DotnetTargetOptions } from '../target.mts'
 
 /** A package at a version, such as one an upstream merge published. */
 export interface PackageVersion {
@@ -64,7 +65,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 				if (current === undefined || asksFor(current.requestedVersion, wanted.version)) continue
 				// One at a time: `dotnet add` writes the project file, or Directory.Packages.props under central package management.
 				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
-				if (!added.ok) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
+				if (!added.succeeded) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
 					projectPath: project.path,
 					name: current.id,
@@ -85,12 +86,35 @@ const updateTool = tool('dotnetUpdatePackages', {
  * packages, no work. Resolves to what was updated. `options.target` names the solution or project
  * when the checkout has none at its root, or more than one.
  *
+ * Runs in the sandbox, with the SDK of the sandbox's image; the packages come from the NuGet
+ * sources the checkout restores from.
+ *
+ * @param repository - The checkout to update: anything with a `directory`, such as a connector's
+ * checkout.
+ * @param packages - The packages and the versions to move to, such as
+ * `gitlab.publishedPackages` gives. Package ids are compared without regard to case, as NuGet does.
+ * @param options - `target`: the solution or project, relative to the checkout.
+ * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
+ * context a tool's action got when you call this from a tool of your own.
+ * @returns Each reference that was moved: the project, relative to the checkout, the package, and
+ * the version before and after.
+ * @throws When the restore or the list of packages fails, as for a source that can't be reached;
+ * when `dotnet add package` fails, such as for a version no source has; and, with the stop's
+ * reason, when the run stops.
+ *
+ * @example After an upstream merge
  * ```ts
- * await dotnet.updatePackages(repository, upstream.flatMap((dependency) => dependency.packages))
+ * await dotnet.updatePackages(repository, upstream)
+ * ```
+ *
+ * @example A version of your own
+ * ```ts
+ * const updates = await dotnet.updatePackages(repository, [{ name: 'Serilog', version: '4.3.0' }])
+ * if (updates.length > 0) await gitlab.push(repository)({ message: 'Update Serilog to 4.3.0' })
  * ```
  */
 export async function updatePackages(
-	repository: DotnetRepository,
+	repository: DotnetCheckout,
 	packages: readonly PackageVersion[],
 	options: DotnetTargetOptions = {},
 	context?: ToolContext,

@@ -1,4 +1,4 @@
-import { BranchName, Sha } from '@mesh-flow/code-repository'
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { ProjectPath } from '../project-path.mts'
 
@@ -49,7 +49,10 @@ export const ReviewItem = z.object({
 })
 export type ReviewItem = z.infer<typeof ReviewItem>
 
-/** What a merge request closes when it merges: an issue in the project (`#7`), in another (`group/project#7`), or a Jira issue (`PROJ-7`). */
+/**
+ * What a merge request closes when it merges: an issue in the project (`#7`), in another
+ * (`group/project#7`), or a Jira issue (`PROJ-7`).
+ */
 export const ClosingReference = z.string().regex(/^(([\w.-]+\/)+[\w.-]+)?#\d+$|^[A-Z][A-Z0-9_]+-[1-9]\d*$/)
 
 /**
@@ -72,13 +75,6 @@ export const openMergeRequest = {
 	output: MergeRequestData,
 }
 
-/**
- * Why `updateMergeRequest` wrote nothing. `closed`: a closed merge request keeps its text.
- * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
- */
-export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
-export type UpdateSkip = z.infer<typeof UpdateSkip>
-
 /** Gives an open merge request on the host a new title and description; a closed one is left as it is. */
 export const updateMergeRequest = {
 	name: 'gitlabUpdateMergeRequest',
@@ -88,7 +84,10 @@ export const updateMergeRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: ClosingReference.optional(),
-		/** What the merge request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		/**
+		 * What the merge request said when it was last looked at: when it says something else now,
+		 * someone edited it since, and nothing is written.
+		 */
 		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
 	/** With `skipped` when nothing was written. */
@@ -96,13 +95,14 @@ export const updateMergeRequest = {
 }
 
 /**
- * Finds on the host the open merge request of a branch onto a target branch, when it has one. GitLab
- * keeps one open merge request per branch, so one onto another target fails the call, naming it.
+ * Finds on the host the merge request of a branch onto a target branch in `state`, when it has one.
+ * GitLab keeps one open merge request per branch, so an open one onto another target fails the
+ * call, naming it. Of the merged ones, the latest that the calling run signed.
  */
 export const findMergeRequest = {
 	name: 'gitlabFindMergeRequest',
-	description: 'Finds the open merge request of a branch on GitLab',
-	input: z.object({ repository: ProjectPath, head: BranchName, base: BranchName }),
+	description: 'Finds the open or the merged merge request of a branch on GitLab',
+	input: z.object({ repository: ProjectPath, head: BranchName, base: BranchName, state: z.enum(['opened', 'merged']) }),
 	output: MergeRequestData.nullable(),
 }
 
@@ -131,27 +131,12 @@ export const reviewActivity = {
 	}),
 }
 
-/**
- * Whether a reply is a plan, what will be done before anything changes, or the answer: to a
- * question, or what was done.
- */
-export const ReplyStage = z.enum(['plan', 'answer'])
-export type ReplyStage = z.infer<typeof ReplyStage>
-
 /** A note that was posted or edited. */
 export const PostedNote = z.object({ id: z.int(), url: z.url() })
-
-/** A reply that found its item gone. */
-const GoneReply = z.object({ gone: z.literal(true) })
 
 /** What came of a reply: the note posted or edited, or that the item is gone, deleted since it was read. */
 export const ReplyOutcome = z.union([PostedNote, GoneReply])
 export type ReplyOutcome = z.infer<typeof ReplyOutcome>
-
-/** Whether a reply found its item gone: a note deleted since it was read. */
-export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
-	return 'gone' in outcome
-}
 
 /**
  * Replies on the host in the item's thread, with a footer naming the run and a marker in the body

@@ -29,6 +29,24 @@ describe('tool', () => {
 		await expect(calling).rejects.toThrow(ToolInputError)
 	})
 
+	test('rejects once with the reason of a stop that came before the call, also when the action sees the stop itself', async () => {
+		// Arrange
+		const stopped = AbortSignal.abort(new Error('The run stopped.'))
+		const record = tool('record', {
+			input: z.object({}),
+			action: async (_input, context) => {
+				context.abortSignal.throwIfAborted()
+				return 'recorded'
+			},
+		})
+
+		// Act
+		const calling = record({}, { abortSignal: stopped })
+
+		// Assert
+		await expect(calling).rejects.toThrow('The run stopped.')
+	})
+
 	test('refuses a call outside a run without an abort signal', async () => {
 		// Arrange
 		const search = tool('search', { input: z.object({}), action: async () => [] })

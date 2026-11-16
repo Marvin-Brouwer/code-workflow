@@ -1,5 +1,4 @@
-import { defaultFetchRetry, retryingFetch, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
-import type { HostToolContext } from '@mesh-flow/gateway'
+import { defaultFetchRetry, retryingFetch, type FetchRetryOptions, type HostToolContext } from '@mesh-flow/gateway'
 import { Octokit } from '@octokit/rest'
 import { conditionalFetch, defaultConditionalFetch } from './conditional-fetch.mts'
 import { markedTransient } from './transient-error.mts'
@@ -13,7 +12,7 @@ export interface GithubApiOptions {
 	readonly apiUrl?: string
 	/** Sends the requests. Default: the global `fetch`. */
 	readonly fetch?: typeof fetch
-	/** How a request that GitHub didn't answer is tried again. Default: {@link defaultFetchRetry}. */
+	/** How a read that GitHub didn't answer is tried again. Default: {@link defaultFetchRetry}. */
 	readonly retry?: FetchRetryOptions
 }
 
@@ -52,6 +51,8 @@ export function githubApi(options: GithubApiOptions = {}): ApiClient {
 			request: { signal: context.abortSignal, fetch: send },
 		})
 		octokit.hook.error('request', (error) => {
+			// A stopped run's call failed because it stopped, not because GitHub may pass later.
+			if (context.abortSignal.aborted) throw error
 			throw markedTransient(error)
 		})
 		return octokit

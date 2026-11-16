@@ -1,20 +1,28 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
+import { gitlabTerms } from './gitlab-terms.mts'
 
 /** The longest title GitLab takes. */
 const maxTitleCharacters = 255
 
 /** The longest description GitLab takes: a mebibyte's worth of characters. */
-const gitlabDescriptionCharacters = 1_048_576
+const maxDescriptionCharacters = 1_048_576
 
 /**
  * What a merge request says: its title and its description, as the agent of `describe` writes them,
- * within GitLab's limits, less the room for the footer.
+ * within GitLab's limits, less the room for the footer. A zod schema, for an agent of your own that
+ * writes the text with `succeed(gitlab.MergeRequestText)`, or to check text code wrote.
+ *
+ * @example
+ * ```ts
+ * const text = await writer.loop`Write the merge request for ${repository} in the team's style, then ${succeed(gitlab.MergeRequestText)}.`
+ * const mergeRequest = await gitlab.openMergeRequest(repository, { ...text, closes: story })
+ * ```
  */
 export const MergeRequestText = changeTextSchema({
 	maxTitleCharacters,
-	maxDescriptionCharacters: gitlabDescriptionCharacters,
-	request: 'merge request',
+	maxDescriptionCharacters,
+	terms: gitlabTerms,
 })
 export type MergeRequestText = z.infer<typeof MergeRequestText>
 

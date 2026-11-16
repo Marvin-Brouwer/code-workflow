@@ -12,7 +12,7 @@ export interface WorkflowBundle {
  * ```ts
  * export const issueWorkflows = defineWorkflows(userTrigger(fixIssue), schedule(triage, 'daily'))
  *
- * export default defineMeshFlow({ sandbox: image({ name: 'node:22-slim' }), workflows: [issueWorkflows] })
+ * export default defineMeshFlow({ sandbox: image({ name: 'node:26-slim' }), workflows: [issueWorkflows] })
  * ```
  */
 export function defineWorkflows(...triggers: Trigger[]): WorkflowBundle {

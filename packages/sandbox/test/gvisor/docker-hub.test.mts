@@ -3,9 +3,9 @@ import { parseImage } from '../../src/gvisor/docker-hub.mts'
 
 describe('parseImage', () => {
 	test.each([
-		['node:22-slim', 'library/node', '22-slim'],
+		['node:26-slim', 'library/node', '26-slim'],
 		['node', 'library/node', 'latest'],
-		['bitnami/node:22', 'bitnami/node', '22'],
+		['bitnami/node:26', 'bitnami/node', '26'],
 		['node@sha256:0123', 'library/node', 'sha256:0123'],
 	])('reads %s', (image, name, reference) => {
 		// Act

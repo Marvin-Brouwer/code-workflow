@@ -1,9 +1,8 @@
+import { branchHeadTool, describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import type { Agent, Limit } from '@mesh-flow/core'
-import { describeChange, type DescribeCodeHost } from '@mesh-flow/code-repository'
 import { sameProjectPath } from '../project-path.mts'
 import type { Repository } from '../repository/repository.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
-import { branchHead } from './branch-head.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 import { gitlabLayout } from './layout.mts'
 import { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request-text.mts'
@@ -15,7 +14,7 @@ export interface DescribeOptions {
 	 * The issue the branch resolves, which the agent reads for the why, and which the result closes.
 	 * Pass it again when describing a merge request again, or the `Fixes` line is gone.
 	 */
-	readonly closes?: ClosesIssue
+	readonly issue?: ClosesIssue
 	/**
 	 * The merge request the branch already has, to describe again: the agent starts from its title
 	 * and description, for the branch as it was last pushed, and no loop runs when they already
@@ -46,13 +45,36 @@ export interface DescribeOptions {
  * Writing the text is up to the caller: the result goes to `openMergeRequest` or
  * `updateMergeRequest` as it is. It stops with the run, as the loop does.
  *
+ * @param agent - The agent that writes the text: the workflow's own, as the package ships none.
+ * @param repository - The checkout whose branch to describe, from `gitlab.checkout`.
+ * @param options - The issue it closes, the merge request to describe again, and the loop's limit.
+ * @returns The title and description, the commit they describe, and what they close, ready for
+ * `gitlab.openMergeRequest` or `gitlab.updateMergeRequest`.
+ * @throws When the branch has no commits of its own, when `mergeRequest` is of another branch or
+ * onto another branch than the default one, and when the loop fails or runs out of its limit.
+ *
+ * @example A new merge request
  * ```ts
- * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { closes: story }))
+ * const mergeRequest = await gitlab.openMergeRequest(repository, await gitlab.describe(writer, repository, { issue: story }))
+ * ```
+ *
+ * @example After a round of review
+ * ```ts
+ * await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { issue: story, mergeRequest }))
+ * ```
+ *
+ * @example Reading the text before opening it
+ * ```ts
+ * const content = await gitlab.describe(writer, repository, { issue: story })
+ * // A rerun describes the open merge request again, with the key in its title already.
+ * const prefix = `${story.key}: `
+ * const title = content.title.includes(prefix) ? content.title : `${prefix}${content.title}`
+ * const mergeRequest = await gitlab.openMergeRequest(repository, { ...content, title })
  * ```
  */
 export function describe(agent: Agent, repository: Repository, options: DescribeOptions = {}): Promise<MergeRequestContent> {
 	return describeChange(agent, repository, gitlabDescribe, {
-		...(options.closes === undefined ? {} : { closes: options.closes }),
+		...(options.issue === undefined ? {} : { closes: options.issue }),
 		...(options.mergeRequest === undefined ? {} : { request: options.mergeRequest }),
 		...(options.limit === undefined ? {} : { limit: options.limit }),
 	})
@@ -66,5 +88,5 @@ const gitlabDescribe: DescribeCodeHost<Repository, MergeRequest, MergeRequestRef
 	sameRepository: sameProjectPath,
 	findOpen: (repository) => findOpenMergeRequest(repository),
 	read: (ref) => mergeRequest(ref),
-	head: (repository, pushed) => branchHead(repository)({ pushed }),
+	head: (repository, pushed) => branchHeadTool(gitlabTerms, repository)({ pushed }),
 }

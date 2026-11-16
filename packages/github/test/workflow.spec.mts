@@ -1,9 +1,11 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { signed, withHeader } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
-import { defaultFetchRetry, signed, type FetchRetryOptions } from '@mesh-flow/code-repository/host'
+import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
+import { deletedItemHeader, quoteHeader } from '../src/host/reply-header.mts'
 import { close, collect, comment, label } from '../src/issue/issue.mts'
 import { checksPass } from '../src/pull-request/checks-pass.mts'
 import { openPullRequest } from '../src/pull-request/pull-request.mts'
@@ -14,6 +16,7 @@ import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import { fakeGithub, reactionsOf, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
+import { beingRead, replyingTo } from './support/review-items.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
 
@@ -106,8 +109,8 @@ describe('github', () => {
 		const result = await run.result
 
 		// Assert
-		expect(result.rendered).toBe(path.join(run.workspace, 'app'))
-		expect(result.repository.directory).toBe(path.join(run.workspace, 'app'))
+		expect(result.rendered).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
+		expect(result.repository.directory).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
 		expect(result.pushed).toMatchObject({ pushed: true, head: await remote.head('fix/7') })
 		expect(result.nothing).toMatchObject({ pushed: false })
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'fix.txt'])
@@ -136,6 +139,20 @@ describe('github', () => {
 
 		// Assert
 		expect(await remote.files('fix/7')).toEqual(['README.md', 'earlier.txt', 'later.txt'])
+	})
+
+	test('refuses to push a new branch that holds nothing the default branch does not, naming it', async () => {
+		// Arrange
+		const { remote, gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () =>
+			push(await checkout({ repository: repositoryName, branch: 'fix/7' }))({ message: 'Nothing' }),
+		)
+
+		// Assert
+		await expect(run.result).rejects.toThrow('fix/7 in team/app has no commits on top of main, so there is nothing to push.')
+		await expect(remote.head('fix/7')).rejects.toThrow()
 	})
 
 	test("watches a pull request: hands new review items to the handler with eyes on them, leaves the run's own out, and ends when it is merged", async () => {
@@ -202,11 +219,8 @@ describe('github', () => {
 		expect(pull.comments.map((posted) => [posted.body, reactionsOf(posted)])).toEqual([
 			['Working on it.\n\n<!-- mesh-flow:key:status -->', []],
 			['Also the README.', ['eyes']],
-			[signed(`👀 Reading [this review](${pull.html_url}#v5)...`, run.runId, ['reply', 'seen:review/5']), []],
-			[
-				signed(`👀 Reading [this comment](${pull.html_url}#c4)...`, run.runId, ['reply', 'seen:comment/4', eyesKeyOf(pull.comments[1])]),
-				[],
-			],
+			[signed(replyingTo(pull.reviews[0], '👀 Reading...'), run.runId, ['reply', 'seen:review/5']), []],
+			[signed(replyingTo(pull.comments[1], '👀 Reading...'), run.runId, ['reply', 'seen:comment/4', eyesKeyOf(pull.comments[1])]), []],
 		])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
@@ -245,10 +259,10 @@ describe('github', () => {
 
 		// Assert
 		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
-		expect(seen).toEqual([signed(`👀 Reading [this review](${pull.html_url}#v5)...`, run.runId, ['reply', 'seen:review/5'])])
+		expect(seen).toEqual([signed(replyingTo(pull.reviews[0], '👀 Reading...'), run.runId, ['reply', 'seen:review/5'])])
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
-			signed('Added one.', run.runId, ['reply', 'answered:review/5']),
-			signed('And another.', run.runId, ['reply', 'replied:review/5']),
+			signed(replyingTo(pull.reviews[0], 'Added one.'), run.runId, ['reply', 'answered:review/5']),
+			signed(replyingTo(pull.reviews[0], 'And another.'), run.runId, ['reply', 'replied:review/5']),
 		])
 	})
 
@@ -264,7 +278,7 @@ describe('github', () => {
 			created_at: new Date().toISOString(),
 		})
 		const where = { repository: repositoryName, number: 12 }
-		const items = [{ id: 'comment/1', url: `${pull.html_url}#c1` }]
+		const items = [beingRead('comment', pull.comments[0])]
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
@@ -282,7 +296,10 @@ describe('github', () => {
 		// Assert
 		expect(again.shown).toEqual(['comment/1'])
 		expect(afterAnswer.shown).toEqual([])
-		expect(pull.comments.map((posted) => posted.body)).toEqual(['Typo here.', signed('Fixed.', run.runId, ['reply', 'answered:comment/1'])])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Typo here.',
+			signed(replyingTo(pull.comments[0], 'Fixed.'), run.runId, ['reply', 'answered:comment/1']),
+		])
 		expect(reactionsOf(pull.comments[0])).toEqual([])
 	})
 
@@ -320,8 +337,8 @@ describe('github', () => {
 			created_at: new Date().toISOString(),
 		})
 		const items = [
-			{ id: 'comment/99', url: `${pull.html_url}#c99` },
-			{ id: 'comment/1', url: `${pull.html_url}#c1` },
+			{ id: 'comment/99', url: `${pull.html_url}#c99`, body: 'Gone.', at: new Date().toISOString() },
+			beingRead('comment', pull.comments[0]),
 		]
 
 		// Act
@@ -347,7 +364,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, () =>
-			stubs.showBeingRead({ repository: repositoryName, number: 17, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] }),
+			stubs.showBeingRead({ repository: repositoryName, number: 17, items: [beingRead('comment', pull.comments[0])] }),
 		)
 
 		// Assert
@@ -381,7 +398,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			const answer = reply(where)
 			await Promise.all([answer({ item: 'comment/1', text: 'Because.' }), answer({ item: 'comment/1', text: 'Also, tests.' })])
 		})
@@ -390,8 +407,8 @@ describe('github', () => {
 		// Assert
 		expect(pull.comments.map((posted) => posted.body).toSorted()).toEqual(
 			[
-				signed('Because.', run.runId, ['reply', 'answered:comment/1']),
-				signed('Also, tests.', run.runId, ['reply', 'replied:comment/1']),
+				signed(replyingTo(pull.comments[0], 'Because.'), run.runId, ['reply', 'answered:comment/1']),
+				signed(replyingTo(pull.comments[0], 'Also, tests.'), run.runId, ['reply', 'replied:comment/1']),
 				'Why?',
 			].toSorted(),
 		)
@@ -415,7 +432,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'review-comment/1', url: `${pull.html_url}#r1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('review-comment', pull.reviewComments[0])] })
 			await answer({ item: 'review-comment/1', text: 'I will rename it to `login`.', stage: 'plan' })
 			const whilePlanned = reactionsOf(pull.reviewComments[0])
 			await answer({ item: 'review-comment/1', text: 'Renamed it to `login`.' })
@@ -455,7 +472,81 @@ describe('github', () => {
 		await run.result
 
 		// Assert
-		expect(pull.comments.map((posted) => posted.body)).toEqual(['Why?', signed('Because.', run.runId, ['reply', 'replied:comment/1'])])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Why?',
+			signed(replyingTo(pull.comments[0], 'Because.'), run.runId, ['reply', 'replied:comment/1']),
+		])
+	})
+
+	test('says an answer once after a restart, also when the reviewer edited the item since', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 40)
+		pull.comments.push({
+			id: 1,
+			body: 'Why?',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#c1`,
+			created_at: new Date().toISOString(),
+		})
+		const where = { repository: repositoryName, number: 40 }
+		const answer = reply(where)
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			await answer({ item: 'comment/1', text: 'Because.' })
+			const asked = pull.comments[0]
+			if (asked !== undefined) asked.body = 'Why, though?'
+			await answer({ item: 'comment/1', text: 'Because.' })
+		})
+		await run.result
+
+		// Assert
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Why, though?',
+			signed(
+				withHeader(quoteHeader({ body: 'Why?', at: pull.comments[0]?.created_at ?? '', url: `${pull.html_url}#c1` }), 'Because.'),
+				run.runId,
+				['reply', 'replied:comment/1'],
+			),
+		])
+	})
+
+	test('says what it answers when the comment was deleted since', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 41)
+
+		// Act
+		const run = await runOnGateway(gateway, () => reply({ repository: repositoryName, number: 41 })({ item: 'comment/9', text: 'Done.' }))
+		await run.result
+
+		// Assert
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			signed(withHeader(deletedItemHeader('comment'), 'Done.'), run.runId, ['reply', 'replied:comment/9']),
+		])
+	})
+
+	test('stops promptly when the run stops while GitHub never answers the read of the item a reply quotes', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		api.pullRequest(repositoryName, 42)
+		const { promise: stalled, resolve } = Promise.withResolvers<undefined>()
+		api.hold = (method, requestPath) => {
+			if (method !== 'GET' || !requestPath.includes('/issues/comments/')) return undefined
+			resolve(undefined)
+			return new Promise(() => undefined)
+		}
+
+		// Act
+		const run = await runOnGateway(gateway, () => reply({ repository: repositoryName, number: 42 })({ item: 'comment/1', text: 'Done.' }))
+		await stalled
+		const started = performance.now()
+		run.controller.abort(new Error('The run stopped.'))
+		await run.outcome
+
+		// Assert
+		expect(performance.now() - started).toBeLessThan(promptlyMs)
 	})
 
 	test('posts the answer after a plan once, when it is tried again after failing halfway', async () => {
@@ -482,7 +573,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			const failed = await answer({ item: 'comment/1', text: 'Added one.' }).then(
 				() => false,
@@ -497,8 +588,8 @@ describe('github', () => {
 		expect(failed).toBe(true)
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
-			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+			signed(replyingTo(pull.comments[0], 'I will add one.'), run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Added one.'), run.runId, ['reply', 'replied:comment/1']),
 		])
 	})
 
@@ -523,7 +614,7 @@ describe('github', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			await stubs.showBeingRead({ ...where, items: [{ id: 'comment/1', url: `${pull.html_url}#c1` }] })
+			await stubs.showBeingRead({ ...where, items: [beingRead('comment', pull.comments[0])] })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			await answer({ item: 'comment/1', text: 'I will add one.', stage: 'plan' })
 			const editsAfterSameWords = edits
@@ -536,7 +627,12 @@ describe('github', () => {
 		expect(editsAfterSameWords).toBe(1)
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add two.', run.runId, ['reply', 'seen:comment/1', 'planned:comment/1', eyesKeyOf(pull.comments[0])]),
+			signed(replyingTo(pull.comments[0], 'I will add two.'), run.runId, [
+				'reply',
+				'seen:comment/1',
+				'planned:comment/1',
+				eyesKeyOf(pull.comments[0]),
+			]),
 		])
 		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
 	})
@@ -564,8 +660,8 @@ describe('github', () => {
 		// Assert
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
-			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+			signed(replyingTo(pull.comments[0], 'I will add one.'), run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Added one.'), run.runId, ['reply', 'replied:comment/1']),
 		])
 	})
 
@@ -797,11 +893,12 @@ describe('github', () => {
 			await rm(path.join(first.directory, '.git', 'HEAD'))
 			const again = await checkout({ repository: repositoryName, branch: 'fix/7' })
 			const againFiles = (await git(again.directory, 'ls-files')).split('\n')
-			const refused = await checkout({ repository: 'other/app', branch: 'fix/7' }).then(
+			await git(again.directory, 'remote', 'set-url', 'origin', 'https://github.com/other/app.git')
+			const refused = await checkout({ repository: repositoryName, branch: 'fix/7' }).then(
 				() => undefined,
 				(error: unknown) => (error instanceof Error ? error.message : String(error)),
 			)
-			const notes = workspace.folder('notes').location()
+			const notes = workspace.folder('repositories/team/notes').location()
 			await mkdir(notes, { recursive: true })
 			await writeFile(path.join(notes, 'todo.md'), 'keep me\n')
 			const kept = await checkout({ repository: 'team/notes', branch: 'fix/7' }).then(
@@ -820,7 +917,24 @@ describe('github', () => {
 		expect(result.againFiles).toEqual(['README.md', 'fix.txt'])
 		expect(result.refused).toContain('holds a checkout of another repository')
 		expect(result.kept).toContain("holds something that isn't a checkout")
-		expect(await readFile(path.join(run.workspace, 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
+		expect(await readFile(path.join(run.workspace, 'repositories', 'team', 'notes', 'todo.md'), 'utf8')).toBe('keep me\n')
+	})
+
+	test('puts repositories with the same name under other owners in folders of their own', async () => {
+		// Arrange
+		const { gateway } = await connected()
+
+		// Act
+		const run = await runOnGateway(gateway, async () => {
+			const ours = await checkout({ repository: repositoryName, branch: 'fix/7' })
+			const theirs = await checkout({ repository: 'other/app', branch: 'fix/7' })
+			return { ours, theirs }
+		})
+		const { ours, theirs } = await run.result
+
+		// Assert
+		expect(ours.directory).toBe(path.join(run.workspace, 'repositories', 'team', 'app'))
+		expect(theirs.directory).toBe(path.join(run.workspace, 'repositories', 'other', 'app'))
 	})
 
 	test("hands a comment from the same second as the last look over once, and never the run's own reply", async () => {
@@ -857,9 +971,9 @@ describe('github', () => {
 		])
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Is this covered by a test?',
-			signed('Yes, in fix.spec.mts.', run.runId, ['reply', 'answered:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Yes, in fix.spec.mts.'), run.runId, ['reply', 'answered:comment/1']),
 			'And documented?',
-			signed(`👀 Reading [this comment](${pull.html_url}#c2)...`, run.runId, ['reply', 'seen:comment/2', eyesKeyOf(pull.comments[2])]),
+			signed(replyingTo(pull.comments[2], '👀 Reading...'), run.runId, ['reply', 'seen:comment/2', eyesKeyOf(pull.comments[2])]),
 		])
 		expect(pull.comments.map(reactionsOf)).toEqual([[], [], ['eyes'], []])
 	})

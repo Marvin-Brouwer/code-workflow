@@ -14,7 +14,7 @@ function record(id: string, createdAt: string): RunRecord {
 			name: 'team',
 			version: '0123456789ab',
 			entry: 'main.mjs',
-			sandbox: { image: 'node:22-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } },
+			sandbox: { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } },
 			tools: [],
 		},
 		status: 'running',

@@ -1,15 +1,15 @@
-import { sameText } from '@mesh-flow/code-repository'
+import { defaultReplyStage, sameText } from '@mesh-flow/code-repository'
 import {
 	descriptionOf,
 	footerCloses,
 	later,
-	oneAtATime,
 	replyToItem,
 	sameBody,
 	showItemsBeingRead,
+	signedBy,
 	signedDescription,
 } from '@mesh-flow/code-repository/host'
-import { hostTool, type HostTool } from '@mesh-flow/gateway'
+import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import {
 	findMergeRequest,
@@ -23,9 +23,9 @@ import {
 } from '../tools/merge-request-tools.mts'
 import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 import { keepingDraft, withoutDraftPrefix } from './draft-title.mts'
+import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingWords, reviewItemsOf } from './merge-request-notes.mts'
 import { noCommit } from './no-commit.mts'
-import { GitlabRequestError, refusedToken } from './request-error.mts'
-import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
+import { isConflict, refusedToken } from './request-error.mts'
 
 /** A merge request as GitLab's API has it, in the fields the tools pass on. */
 const ApiMergeRequest = z.object({
@@ -82,8 +82,26 @@ async function openOnBranch(client: GitlabClient, project: string, head: string,
 	return open
 }
 
-/** GitLab's answer to a merge request opened for a branch that has one open already, as when two runs open it at once. */
-const conflict = 409
+/**
+ * The latest merge request of the project's own branch `head` that was merged into `base` and that
+ * run `runId` signed, when there is one. Only the run's own: a branch named after a story may have
+ * been merged before, by an earlier run on the story or by a person, and that is no delivery of
+ * this run's.
+ */
+async function mergedOnBranch(
+	client: GitlabClient,
+	project: string,
+	{ head, base, runId }: { head: string; base: string; runId: string },
+): Promise<ApiMergeRequest | undefined> {
+	const listed = await client.all(`${projectSegment(project)}/merge_requests`, ApiMergeRequest, {
+		state: 'merged',
+		source_branch: head,
+		target_branch: base,
+	})
+	return listed
+		.filter((request) => request.source_project_id === request.target_project_id && signedBy(request.description ?? '', runId))
+		.toSorted((one, other) => other.iid - one.iid)[0]
+}
 
 /** What opening a merge request takes. */
 interface NewMergeRequest {
@@ -93,15 +111,25 @@ interface NewMergeRequest {
 	readonly description: string
 }
 
-/** Opens a merge request, or takes the one another call opened for the branch meanwhile. */
-async function opened(client: GitlabClient, project: string, body: NewMergeRequest): Promise<ApiMergeRequest> {
+/**
+ * Opens a merge request, or finds the one another call opened for the branch meanwhile. Only one
+ * this call opened is `ours`: one found is still described for the other call's commit.
+ */
+async function opened(
+	client: GitlabClient,
+	project: string,
+	body: NewMergeRequest,
+): Promise<{ readonly mergeRequest: ApiMergeRequest; readonly ours: boolean }> {
 	try {
-		return await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body })
+		return {
+			mergeRequest: await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body }),
+			ours: true,
+		}
 	} catch (error) {
-		if (!(error instanceof GitlabRequestError && error.status === conflict)) throw error
-		const meanwhile = await openOnBranch(client, project, body.source_branch, body.target_branch)
-		if (meanwhile === undefined) throw error
-		return meanwhile
+		if (!isConflict(error)) throw error
+		const mergeRequest = await openOnBranch(client, project, body.source_branch, body.target_branch)
+		if (mergeRequest === undefined) throw error
+		return { mergeRequest, ours: false }
 	}
 }
 
@@ -112,11 +140,12 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 		hostTool(openMergeRequest, async ({ repository, head, base, title, body, describedSha, closes }, context) => {
 			const client = await api(context)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			const existing = await openOnBranch(client, repository, head, base)
-			if (existing === undefined) {
-				const created = await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
-				return mergeRequestData(repository, created)
-			}
+			const found = await openOnBranch(client, repository, head, base)
+			const { mergeRequest: existing, ours } =
+				found === undefined
+					? await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
+					: { mergeRequest: found, ours: false }
+			if (ours) return mergeRequestData(repository, existing)
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.description, closes)
 			if (descriptionOf(existing.description).describedSha === describedSha && closesAlready) return mergeRequestData(repository, existing)
@@ -146,8 +175,12 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			return mergeRequestData(repository, updated)
 		}),
 
-		hostTool(findMergeRequest, async ({ repository, head, base }, context) => {
-			const found = await openOnBranch(await api(context), repository, head, base)
+		hostTool(findMergeRequest, async ({ repository, head, base, state }, context) => {
+			const client = await api(context)
+			const found =
+				state === 'opened'
+					? await openOnBranch(client, repository, head, base)
+					: await mergedOnBranch(client, repository, { head, base, runId: context.runId })
 			return found === undefined ? null : mergeRequestData(repository, found)
 		}),
 
@@ -177,7 +210,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 					kind: 'note',
 					commentId: noteIdOf(item),
 					body,
-					stage: stage ?? 'answer',
+					stage: stage ?? defaultReplyStage,
 					runId: context.runId,
 				})
 			}),
@@ -187,7 +220,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			const comments = mergeRequestNotes(await api(context), repository, number)
 			const toShow = items.map((item) => {
 				const commentId = noteIdOf(item)
-				return { item, kind: 'note' as const, commentId, note: readingNote, thread: () => comments.threadOf('note', commentId) }
+				return { item, kind: 'note' as const, commentId, note: readingWords, thread: () => comments.threadOf('note', commentId) }
 			})
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),

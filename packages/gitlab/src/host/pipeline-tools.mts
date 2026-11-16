@@ -33,7 +33,10 @@ const ApiPackage = z.object({
 /** The state of a pipeline that waits for a person to start one of its jobs. */
 const manualState = 'manual'
 
-/** Pipeline states after which nothing more runs on its own. A pipeline waiting on a manual job counts: nothing runs until someone starts it. */
+/**
+ * Pipeline states after which nothing more runs on its own. A pipeline waiting on a manual job counts:
+ * nothing runs until someone starts it.
+ */
 const doneStates = new Set(['success', 'failed', 'canceled', 'skipped', manualState])
 
 /** The status of a package GitLab is done processing. */

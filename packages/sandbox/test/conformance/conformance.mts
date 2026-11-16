@@ -99,9 +99,9 @@ async function stubState(sandbox: Sandbox, pid: number): Promise<string> {
 
 /** What the suite runs in. */
 export interface ConformanceImages {
-	/** Node 22, for the checks of the sandbox itself and npm. */
+	/** Node 26, for the checks of the sandbox itself and npm. */
 	readonly node: string
-	/** Node 22 with curl and the CA certificates, as `node:22-bookworm` has, for the package managers that aren't Node. */
+	/** Node 26 with curl and the CA certificates, as `node:26-bookworm` has, for the package managers that aren't Node. */
 	readonly packageManagers: string
 }
 

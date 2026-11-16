@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { runIdLine, signed, unsigned, withoutRunId } from '../src/host/signature.mts'
+import { runIdLine, signed, signedBy, unsigned, withoutRunId } from '../src/host/signature.mts'
 
 const runId = 'run-1'
 const sha = 'a'.repeat(40)
@@ -85,5 +85,23 @@ describe('withoutRunId', () => {
 		// Assert
 		expect(text.split('\n').at(-1)).toBe(' Fixes #7')
 		expect(text).not.toContain(runId)
+	})
+})
+
+describe('signedBy', () => {
+	test('tells the run that signed a post from another run, whose id may start the same, and from an unsigned post', () => {
+		// Arrange
+		const body = signed('Sets it.', runId, [`described:${sha}`], ['Fixes #7'])
+
+		// Act
+		const answers = [
+			signedBy(body, runId),
+			signedBy(body, `${runId}2`),
+			signedBy(signed('Sets it.', `${runId}2`, []), runId),
+			signedBy('Sets it.', runId),
+		]
+
+		// Assert
+		expect(answers).toEqual([true, false, false, false])
 	})
 })

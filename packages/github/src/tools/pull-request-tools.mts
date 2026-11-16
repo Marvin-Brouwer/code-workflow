@@ -1,7 +1,6 @@
-import { BranchName } from '@mesh-flow/code-repository'
+import { BranchName, GoneReply, ReplyStage, Sha, UpdateSkip } from '@mesh-flow/code-repository'
 import { z } from 'zod'
 import { RepositoryName } from '../repository-name.mts'
-import { Sha } from './git-tools.mts'
 import { PostedComment } from './issue-tools.mts'
 
 /** Names a pull request: its repository and number. */
@@ -80,13 +79,6 @@ export const openPullRequest = {
 	output: PullRequestData,
 }
 
-/**
- * Why `updatePullRequest` wrote nothing. `closed`: a closed pull request keeps its text.
- * `unchanged`: it already said this. `edited`: someone edited it since it was last looked at.
- */
-export const UpdateSkip = z.enum(['closed', 'unchanged', 'edited'])
-export type UpdateSkip = z.infer<typeof UpdateSkip>
-
 /** Gives an open pull request on the host a new title and description; a closed one is left as it is. */
 export const updatePullRequest = {
 	name: 'githubUpdatePullRequest',
@@ -96,18 +88,24 @@ export const updatePullRequest = {
 		body: z.string(),
 		describedSha: Sha.optional(),
 		closes: IssueReference.optional(),
-		/** What the pull request said when it was last looked at: when it says something else now, someone edited it since, and nothing is written. */
+		/**
+		 * What the pull request said when it was last looked at: when it says something else now,
+		 * someone edited it since, and nothing is written.
+		 */
 		seen: z.object({ title: z.string(), description: z.string() }).optional(),
 	}),
 	/** With `skipped` when nothing was written. */
 	output: PullRequestData.extend({ skipped: UpdateSkip.optional() }),
 }
 
-/** Finds on the host the open pull request of a branch onto a base, when it has one. */
+/**
+ * Finds on the host the open pull request of a branch onto a base, when it has one; or, with
+ * `merged`, the latest merged one that this run signed.
+ */
 export const findPullRequest = {
 	name: 'githubFindPullRequest',
-	description: 'Finds the open pull request of a branch on GitHub',
-	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName }),
+	description: 'Finds the open or the merged pull request of a branch on GitHub',
+	input: z.object({ repository: RepositoryName, head: BranchName, base: BranchName, state: z.enum(['open', 'merged']) }),
 	output: PullRequestData.nullable(),
 }
 
@@ -136,27 +134,9 @@ export const reviewActivity = {
 	}),
 }
 
-/**
- * What a reply to a review item is. `plan`: what will be done about it, before it's done. `answer`
- * (the default): the answer to a question, or what was done.
- */
-export const ReplyStage = z.enum(['plan', 'answer'])
-export type ReplyStage = z.infer<typeof ReplyStage>
-
-/** The stage of a reply that names none. */
-export const defaultReplyStage: ReplyStage = 'answer'
-
 /** What came of a reply: the comment posted or edited, or that the item is gone, a line comment deleted since it was read. */
-/** A reply that found its item gone. */
-const GoneReply = z.object({ gone: z.literal(true) })
-
 export const ReplyOutcome = z.union([PostedComment, GoneReply])
 export type ReplyOutcome = z.infer<typeof ReplyOutcome>
-
-/** Whether a reply found its item gone: a line comment deleted since it was read. */
-export function isGoneReply(outcome: ReplyOutcome): outcome is z.infer<typeof GoneReply> {
-	return 'gone' in outcome
-}
 
 /**
  * Replies on the host, with a footer naming the run and a marker in the body so the reply is never
@@ -176,17 +156,17 @@ export const replyToReviewItem = {
  * Shows the reviewer on the host that review items are being read: a 👀 reaction on a comment
  * (GitHub has none for a review), and for every item a "👀 Reading..." reply, in the thread of a
  * comment on a line and on the conversation otherwise, that the first answer to the item replaces.
- * Showing an item twice leaves one reply, and an item that was answered already is left alone. An
- * item GitHub won't take the 👀 on, say a comment deleted since, is left out of `shown`.
+ * On the conversation the reply quotes the item, from its `body`, `at` and `verdict`, with a link
+ * to its `url`. Showing an item twice leaves one reply, and an item that was answered already is
+ * left alone. An item GitHub won't take the 👀 on, say a comment deleted since, is left out of
+ * `shown`.
  */
 export const showBeingRead = {
 	name: 'githubShowBeingRead',
 	description: 'Shows the reviewer that review items on a pull request are being read',
 	input: PullRequestRef.extend({
 		items: z.array(
-			z.object({
-				id: ReviewItemId,
-				url: z.url(),
+			ReviewItem.pick({ id: true, url: true, body: true, at: true, verdict: true }).extend({
 				/** For a comment on a line that replies to another: the thread's first comment, which replies go to. */
 				thread: ReviewItemId.optional(),
 			}),

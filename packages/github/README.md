@@ -8,13 +8,13 @@ It shares its checkouts, `describe`, `review`, `triage` and `reply` with the oth
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token. A fine-grained token with contents, issues and pull requests on the repositories the workflows touch is enough.
 
-```bash
+```sh
 pnpm add @mesh-flow/github
 mesh-flow connector add @mesh-flow/github
 mesh-flow credential set github/token < token.txt
 ```
 
-The sandbox image needs `git` next to `node`: `node:22-bookworm` has both, `node:22-slim` doesn't.
+The sandbox image needs `git` next to `node`: `node:26-bookworm` has both, `node:26-slim` doesn't.
 
 ## Usage
 
@@ -74,7 +74,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 ### Repositories
 
-`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, named after the repository, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its absolute path, so the agent finds it from inside another checkout too. A checkout of the repository that is already there is reused, and switched to the branch when it is on another; one folder holds one repository, so a second repository with the same name in one run is an error.
+`github.checkout({ repository, branch })` puts a checkout of the repository in the workspace, on the branch, made from the default branch when GitHub doesn't have it yet. In a prompt it renders as its absolute path, so the agent finds it from inside another checkout too. A checkout of the repository that is already there is reused, and switched to the branch when it is on another. Its folder is `repositories/<owner>/<repo>` in lower case, so two repositories never share one.
 
 `github.push(repository)` is a tool: it commits every change in the checkout with the message it's given (what changed and why, which is what `describe` later reads) and pushes the branch. Code calls it too, as a function, and `openPullRequest` calls it first.
 
@@ -105,7 +105,7 @@ It resolves to `{ title, description, describedSha, closes, basedOn }`, ready fo
 
 The loop stops with the run, like every loop.
 
-`github.openPullRequest(repository, { title, description, describedSha, closes })` pushes, then opens a pull request from the branch onto the default branch, or gives the open one for the branch the title and description. An open pull request whose description was already written for that commit keeps it, so a run that starts over doesn't replace the text that was reviewed. With `closes`, `Fixes #7` goes in the footer, next to the run id. The description is signed like every post, and marked with the commit it describes (`describedSha`, else the pushed head). Since it pushes, it commits what was left uncommitted after `describe` ran; the next `describe` with `pullRequest` covers that commit. In a prompt it renders as its URL. `github.pullRequest(ref)` reads one as it is now.
+`github.openPullRequest(repository, { title, description, describedSha, closes })` pushes, then opens a pull request from the branch onto the default branch, or gives the open one for the branch the title and description. An open pull request whose description was already written for that commit keeps it, so a run that starts over doesn't replace the text that was reviewed. When another run opens one for the branch at the same moment, it takes that one and gives it its own text for its commit. With `closes`, `Fixes #7` goes in the footer, next to the run id. The description is signed like every post, and marked with the commit it describes (`describedSha`, else the pushed head). Since it pushes, it commits what was left uncommitted after `describe` ran; the next `describe` with `pullRequest` covers that commit. In a prompt it renders as its URL. `github.pullRequest(ref)` reads one as it is now. `github.mergedPullRequest(repository)` finds the one the run opened that merged the checkout's branch, for a run that starts over after it was delivered; a merge by another run or a person doesn't count.
 
 `github.updatePullRequest(pullRequest, { title, description, describedSha, closes })` gives a pull request new text. It writes nothing when the pull request already says this, or when it's closed, since a merged pull request keeps the text it was reviewed with; `skipped` on the result says which.
 
@@ -120,7 +120,7 @@ A bot that adds to descriptions, such as an issue tracker's links, counts as an 
 
 `updatePullRequest` reads the pull request right before it writes, so a pull request merged in between is left as it is. Text a person wrote under the footer is part of the description `describe` starts from, so it ends up above the footer. GitHub doesn't notify on an edit of the description.
 
-`github.review(pullRequest, handlers, { every, toleratedOutage })` watches a pull request until it's merged or closed and resolves to `{ state, pullRequest }`. `comments` gets what reviewers said since the last look, oldest first and in one call per look, each item once; what the run posted itself is left out, found by a marker every comment it posts carries. It's never left out by author, since the token is often the reviewer's own. Before the handler runs, each item gets 👀 on GitHub, so the reviewer sees it is being read: a reaction where GitHub takes one (not on a review), and a "👀 Reading..." reply, in the line comment's thread or on the conversation, that the first answer to the item replaces, taking the reaction off again. GitHub notifies on a new comment, not on an edit, so the reviewer is notified of the "Reading..." reply and finds the answer in its place; a plan takes that place instead when there is one (see `triage`). An item the run answered already, say before it started over, isn't handed over again. When the 👀 can't be shown, say the comment was deleted since, the item is handed to the handler all the same. Everything the connector posts ends in a footer naming `@mesh-flow/*` and the run id. Each item has an `id` such as `review-comment/12` that `github.reply(pullRequest)`, the agent's tool, answers in the right place. `checksFailed` gets the failed checks of a commit, once per commit, once every check on it has completed; a commit whose checks haven't appeared yet is looked at again. It looks every 10 seconds unless `every` says otherwise, waiting on the engine's clock. A look takes about four reads, but the host asks for what it read before with its ETag, and GitHub answers a read that didn't change with a 304, which doesn't count against the token's 5,000 requests an hour. So a pull request that sits idle in review costs next to nothing; only a look that finds something new counts. A look that fails on something that may pass, such as a dropped connection or GitHub answering 5xx after the host's own retries, is tried again on the next one; `review` only gives up with the error once `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes; the time the failing calls take comes on top). A bad token, a missing permission or a pull request that's gone fails at once.
+`github.review(pullRequest, handlers, { every, toleratedOutage })` watches a pull request until it's merged or closed and resolves to `{ state, pullRequest }`. `comments` gets what reviewers said since the last look, oldest first and in one call per look, each item once; what the run posted itself is left out, found by a marker every comment it posts carries. It's never left out by author, since the token is often the reviewer's own. Before the handler runs, each item gets 👀 on GitHub, so the reviewer sees it is being read: a reaction where GitHub takes one (not on a review), and a "👀 Reading..." reply, in the line comment's thread or on the conversation, that the first answer to the item replaces, taking the reaction off again. GitHub notifies on a new comment, not on an edit, so the reviewer is notified of the "Reading..." reply and finds the answer in its place; a plan takes that place instead when there is one (see `triage`). An item the run answered already, say before it started over, isn't handed over again. When the 👀 can't be shown, say the comment was deleted since, the item is handed to the handler all the same. The conversation has no threads, so every reply there starts with "Reply to:", the item quoted, and a link to it that reads the time it was posted. The quote is cut short when it's long, leaves out HTML comments and what the item quoted itself, and escapes HTML and mentions outside code, so nobody is notified twice. An item deleted since gets "Reply to a comment that was deleted since." ("a review" for a review) instead. A reply reads the item it quotes first, which is one more request per reply. Everything the connector posts ends in a footer naming `@mesh-flow/*` and the run id. Each item has an `id` such as `review-comment/12` that `github.reply(pullRequest)`, the agent's tool, answers in the right place. `checksFailed` gets the failed checks of a commit, once per commit, once every check on it has completed; a commit whose checks haven't appeared yet is looked at again. It looks every 10 seconds unless `every` says otherwise, waiting on the engine's clock. A look takes about four reads, but the host asks for what it read before with its ETag, and GitHub answers a read that didn't change with a 304, which doesn't count against the token's 5,000 requests an hour. So a pull request that sits idle in review costs next to nothing; only a look that finds something new counts. A look that fails on something that may pass, such as a dropped connection or GitHub answering 5xx after the host's own retries, is tried again on the next one; `review` only gives up with the error once `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes; the time the failing calls take comes on top). A bad token, a missing permission or a pull request that's gone fails at once.
 
 `github.triage(agent, repository, { pullRequest, comments, limit })` sorts a round of review items, in one loop that changes nothing, so the reviewer sees where each one stands, and resolves to the requested changes, `{ item, plan }` each, for the caller to have them made in a loop of its own:
 
@@ -129,7 +129,7 @@ A bot that adds to descriptions, such as an issue tracker's links, counts as an 
 
 Code posts the replies once the loop is done, not the agent. The agent finishes with every item it was handed, once; one left out or sorted twice goes back to it as an error. `github.reply` takes `stage: 'plan'` for the same plan from an agent. The answer after a plan is a reply of its own under it, since GitHub notifies the reviewer of a new comment and not of an edit; it takes the 👀 off. A reply that says what one of the item's replies already says isn't posted again, and `review` doesn't hand over items the run answered before it started over. A line comment deleted since it was read gets no reply, and isn't among the changes. The connector never resolves a thread; that is left to the reviewer.
 
-`github.checksPass(pullRequest, { every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding. Checks take a while to appear after a push, so a commit without any is looked at again until `appearWithin` (default 10 minutes) has passed; a repository without checks passes after that. Like `review`, it looks again after a failed look, until `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes).
+`github.checksPass(pullRequest, { checkout, every, appearWithin, toleratedOutage })` is a check for `verify`: it waits for the checks on the head commit to complete and reports each failed one as a finding. With `checkout`, the commit is the one last pushed from that checkout rather than the head GitHub shows, which can lag a moment behind a push. Checks take a while to appear after a push, so a commit without any is looked at again until `appearWithin` (default 10 minutes) has passed; a repository without checks passes after that. Like `review`, it looks again after a failed look, until `toleratedOutage / every` looks in a row have failed (`toleratedOutage` defaults to 10 minutes).
 
 ### Webhooks
 
@@ -140,36 +140,38 @@ import { defineMeshFlow, image, userTrigger, webhook } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
 import { fixIssue, triage } from './workflows/issues.mts'
 
+const commented = github.issueCommentCreated.transform((event) => ({
+	issue: { repository: event.repository.full_name, number: event.issue.number },
+}))
+
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:22-bookworm' }),
+	sandbox: image({ name: 'node:26-bookworm' }),
 	workflows: [
 		userTrigger(fixIssue),
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
-		// Any event schema works with webhook; the filter is in the structure, so other deliveries get a 4xx.
-		webhook(
-			triage,
-			github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
-			github.triggerOptions,
-		),
+		// Any event schema works with webhook; the filter is in the structure, so the engine skips other deliveries before it makes a sandbox.
+		webhook(triage, commented, github.triggerOptions),
 	],
 })
 ```
+
+`issueCommentCreated` and `pullRequestReviewCommentCreated` leave out the comments a connector wrote, such as the run's own replies, so a workflow that answers comments isn't started again by its answers.
 
 Set the webhook's secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitHub, with the webhook URL `mesh-flow serve --webhook-port` prints.
 
 ## The host half
 
-`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` on every call, so a new token counts at once, try reads again when the connection drops or GitHub answers 5xx or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per repository in the connector's directory in the engine's home, which runs share one call at a time. For a test, `githubHostTools` points them at servers of your own:
+`@mesh-flow/github/host` is what the engine loads: `connector`, with the host halves of every tool. They take the token from the gateway's credential store under `github/token` (`tokenCredential`) on every call, so a new token counts at once, try reads again when the connection drops or GitHub answers 500, 502, 503, 504 or 429 (never a write, which may have gone through), report what may still pass after that as transient, and keep one bare clone per repository in the connector's directory in the engine's home, which runs share one call at a time. For a test, `githubHostTools` points them at servers of your own:
 
 ```ts
-import { githubHostTools } from '@mesh-flow/github/host'
+import { defaultFetchRetry, githubHostTools } from '@mesh-flow/github/host'
 
 const tools = githubHostTools({
 	directory: '/tmp/github-host',
 	apiUrl: 'http://127.0.0.1:4010',
 	remoteUrl: (repository) => `file:///tmp/remotes/${repository}.git`,
-	retry: { attempts: 1, firstDelayMs: 0, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 },
+	retry: { ...defaultFetchRetry, attempts: 1 },
 })
 ```
 

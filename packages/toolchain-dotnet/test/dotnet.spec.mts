@@ -8,7 +8,7 @@ import { updatePackages } from '../src/packages/update-packages.mts'
 import { runDotnet } from '../src/run-dotnet.mts'
 import { security } from '../src/security/security.mts'
 import { test as testTool } from '../src/test-run/test.mts'
-import { tests } from '../src/test-run/tests-check.mts'
+import { testsPass } from '../src/test-run/tests-pass.mts'
 import { fakeDotnet } from './support/fake-dotnet.mts'
 import {
 	auditProblemList,
@@ -30,20 +30,41 @@ const promptlyMs = 1000
 /** Time for the fake `dotnet` to have started before the call stops. */
 const startedMs = 300
 
+/** How long a busy runner may take to start the fake `dotnet`, or to remove a stopped run's folder. */
+const busyRunnerWithinMs = 10_000
+
+/** The stop test's own limit: `busyRunnerWithinMs` for each of its two starts and for the folders to go, and the rest. */
+const stopTestTimeoutMs = 4 * busyRunnerWithinMs
+
 /** How long a run of the fake holds on, long enough that two runs at once would overlap. */
 const holdMs = 500
 
 /** Longer than `runDotnet` waits after a stop before it kills outright. */
 const afterForceKillMs = 3_000
 
+/** Waits long enough for the fake `dotnet` to have started, on a runner that isn't busy. */
+const untilStartedMsPassed = () => new Promise((resolve) => setTimeout(resolve, startedMs))
+
 /**
- * Starts the work, stops it once the fake `dotnet` had time to start, and resolves to how long the
- * work took to settle after the stop, having checked it rejected with the stop's reason.
+ * Starts the work, stops it once the fake `dotnet` started, and resolves to how long the work took
+ * to settle after the stop, having checked it rejected with the stop's reason. `untilStarted`
+ * waits for the start: by default `startedMs`, and for a test that needs the fake to have run,
+ * until it did.
  */
-async function settleAfterStop(start: (context: { abortSignal: AbortSignal }) => Promise<unknown>): Promise<number> {
+async function settleAfterStop(
+	start: (context: { abortSignal: AbortSignal }) => Promise<unknown>,
+	untilStarted: () => Promise<unknown> = untilStartedMsPassed,
+): Promise<number> {
 	const controller = new AbortController()
 	const working = start({ abortSignal: controller.signal })
-	await new Promise((resolve) => setTimeout(resolve, startedMs))
+	try {
+		await untilStarted()
+	} catch (error) {
+		// Stop the work all the same, so a fake that never started in time doesn't outlive the test.
+		controller.abort(error)
+		await working.catch(() => undefined)
+		throw error
+	}
 	const started = performance.now()
 	controller.abort(new Error('The run stopped.'))
 	await expect(working).rejects.toThrow('The run stopped.')
@@ -113,7 +134,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, trx: [failingTrx] } })
 
 		// Act
-		const failures = await runCheck(tests({ directory }), toolContext())
+		const failures = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(failures).toEqual([
@@ -131,28 +152,38 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, stdout: failingTestOutput, trx: [failingTrx] } })
 
 		// Act
-		const findings = await runCheck(tests({ directory }), toolContext())
+		const findings = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(findings.map((finding) => finding.source)).toEqual(['test: Api.Tests.LoginTests.SetsSameSite'])
 	})
 
-	test('settles promptly when the run stops while the tests never end, and leaves no results behind', async () => {
-		// Arrange
-		const directory = await temporaryDirectory()
-		const cli = await fakeDotnet({ test: { hang: true } })
+	test(
+		'settles promptly when the run stops while the tests never end, and leaves no results behind',
+		async () => {
+			// Arrange
+			const toolDirectory = await temporaryDirectory()
+			// Runs in one directory take turns, and the first run's dotnet may still be stopping when the check starts.
+			const checkDirectory = await temporaryDirectory()
+			const cli = await fakeDotnet({ test: { hang: true } })
+			// A busy Windows runner can take longer than `startedMs` to start the fake, which then never logs its call.
+			const untilCalled = (times: number) => () =>
+				expect.poll(async () => (await cli.calls()).length, { timeout: busyRunnerWithinMs }).toBe(times)
 
-		// Act
-		const toolSettledMs = await settleAfterStop((context) => testTool({ directory }, context))
-		const checkSettledMs = await settleAfterStop((context) => runCheck(tests({ directory }), context))
+			// Act
+			const toolSettledMs = await settleAfterStop((context) => testTool({ directory: toolDirectory }, context), untilCalled(1))
+			const checkSettledMs = await settleAfterStop((context) => runCheck(testsPass({ directory: checkDirectory }), context), untilCalled(2))
 
-		// Assert
-		expect(toolSettledMs).toBeLessThan(promptlyMs)
-		expect(checkSettledMs).toBeLessThan(promptlyMs)
-		const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
-		expect(results).toHaveLength(2)
-		expect(results.filter((folder) => existsSync(folder))).toEqual([])
-	})
+			// Assert
+			expect(toolSettledMs).toBeLessThan(promptlyMs)
+			expect(checkSettledMs).toBeLessThan(promptlyMs)
+			const results = (await cli.calls()).map((call) => call[call.indexOf('--results-directory') + 1] ?? '')
+			expect(results).toHaveLength(2)
+			// The stopped tool's folder goes once its dotnet is gone, which on Windows can be after the tool settled.
+			await expect.poll(() => results.filter((folder) => existsSync(folder)), { timeout: busyRunnerWithinMs }).toEqual([])
+		},
+		stopTestTimeoutMs,
+	)
 
 	test('the check reports the build errors when it does not build', async () => {
 		// Arrange
@@ -160,7 +191,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { exitCode: 1, stdout: brokenBuild } })
 
 		// Act
-		const buildErrors = await runCheck(tests({ directory }), toolContext())
+		const buildErrors = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(buildErrors).toEqual([{ source: 'build', message: '/work/api/src/Login.cs(12,34): CS1002: ; expected' }])
@@ -173,7 +204,7 @@ describe('test and tests', () => {
 		const cli = await fakeDotnet({ test: { trx: [passingTrx] } })
 
 		// Act
-		await runCheck(tests({ directory }, { target: 'tests/Api.Tests.csproj' }), toolContext())
+		await runCheck(testsPass({ directory }, { target: 'tests/Api.Tests.csproj' }), toolContext())
 
 		// Assert
 		const [call] = await cli.calls()
@@ -186,7 +217,7 @@ describe('test and tests', () => {
 		await fakeDotnet({ test: { trx: [passingTrx] } })
 
 		// Act
-		const findings = await runCheck(tests({ directory }), toolContext())
+		const findings = await runCheck(testsPass({ directory }), toolContext())
 
 		// Assert
 		expect(findings).toEqual([])

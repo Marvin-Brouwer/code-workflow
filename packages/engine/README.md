@@ -58,17 +58,17 @@ mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the a
 mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
-`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json` without its scope (`--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json`, with its scope folded in (`@example/big-repo` is `example-big-repo`; `--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
 The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
 
 ```bash
-mesh-flow app list               # example  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
-mesh-flow triggers               # the current version's sandbox, workflows, their parameters and triggers
-mesh-flow app remove example     # its webhooks and schedules stop; its runs stay
+mesh-flow app list                        # example-github-issue  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
+mesh-flow triggers                        # the current version's sandbox, workflows, their parameters and triggers
+mesh-flow app remove example-github-issue  # its webhooks and schedules stop; its runs stay
 ```
 
-The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:22-slim` have all of them.
+The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:26-slim` have all of them.
 
 ### Start a run and answer it
 
@@ -103,8 +103,8 @@ An app's entry file lists what can start its workflows: buttons, webhooks and sc
 `serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<app>/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the gateway's credential store holds, never the app:
 
 ```bash
-mesh-flow webhook secret example fix-issue --generate   # prints a new secret to paste into the sender
-printf '%s' "$SECRET" | mesh-flow webhook secret example fix-issue
+mesh-flow webhook secret example-github-issue fix-issue --generate   # prints a new secret to paste into the sender
+printf '%s' "$SECRET" | mesh-flow webhook secret example-github-issue fix-issue
 ```
 
 Everything is checked on the host, before a sandbox is made:
@@ -115,7 +115,8 @@ Everything is checked on the host, before a sandbox is made:
 | the app is deployed, and its current version has the webhook | 404 |
 | the delivery is signed with the secret (a secret header, or an HMAC-SHA256 of the body) | 401 |
 | the body is JSON, up to 25 MB | 400, 413 |
-| the payload fits the input side of the trigger's schema, as JSON Schema | 422, with the problems |
+
+A signed delivery whose payload doesn't fit the input side of the trigger's schema, as JSON Schema, gets `200` with `skipped` and the problems, and starts no run. The sender was right to send it, and senders such as GitLab disable a webhook that keeps getting a `4xx`, which would stop the deliveries that do fit. The engine logs the first skip per webhook and app version, with the problems, so a schema that never fits shows.
 
 A delivery that passes gets `202` and a new run on the current version. Its delivery header (such as `x-github-delivery`), or a hash of the body without one, is the run's key: a redelivery gets `200` and the run it started before. In the sandbox, the schema's `.refine` and `.transform` turn the payload into the workflow's parameters; a delivery they turn down ends the run as `skipped`, which isn't a failure.
 

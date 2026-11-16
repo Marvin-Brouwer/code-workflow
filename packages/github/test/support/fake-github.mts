@@ -267,6 +267,11 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	/** Every comment on a line of the repository's pull requests. */
 	const reviewCommentsOf = (name: string): FakeReviewComment[] =>
 		[...repository(name).pulls.values()].flatMap((pull) => pull.reviewComments)
+	issues.get('/issues/comments/:id', (context) => {
+		const wanted = Number(context.req.param('id'))
+		const comment = issueCommentsOf(nameOf(context)).find((known) => known.id === wanted)
+		return comment === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(comment)
+	})
 	issues.patch('/issues/comments/:id', async (context) => {
 		const wanted = Number(context.req.param('id'))
 		const comment = issueCommentsOf(nameOf(context)).find((known) => known.id === wanted)
@@ -290,6 +295,11 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	issues.post('/pulls', async (context) => {
 		const name = nameOf(context)
 		const body = PullBody.parse(await context.req.json())
+		const open = [...repository(name).pulls.values()].find(
+			(pull) => pull.state === 'open' && pull.head.ref === body.head && pull.base.ref === body.base,
+		)
+		if (open !== undefined)
+			return context.json({ message: 'Validation Failed', errors: [{ message: `A pull request already exists for ${body.head}.` }] }, 422)
 		const number = repository(name).pulls.size + 1
 		const pull = pullOf(name, number, {
 			title: body.title,
@@ -313,6 +323,11 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	})
 	issues.get('/pulls/:number/comments', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviewComments))
 	issues.get('/pulls/:number/reviews', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviews))
+	issues.get('/pulls/:number/reviews/:id', (context) => {
+		const wanted = Number(context.req.param('id'))
+		const review = pullOf(nameOf(context), numberOf(context)).reviews.find((known) => known.id === wanted)
+		return review === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(review)
+	})
 	issues.post('/pulls/:number/comments/:id/replies', async (context) => {
 		const name = nameOf(context)
 		const pull = pullOf(name, numberOf(context))

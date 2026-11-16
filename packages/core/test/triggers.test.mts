@@ -109,7 +109,7 @@ describe('defineMeshFlow', () => {
 		const bundle = defineWorkflows(userTrigger(fixIssue), webhook(fixIssue, toParameters))
 
 		// Act
-		const app = defineMeshFlow({ sandbox: image({ name: 'node:22-slim' }), workflows: [bundle, schedule(report, 'daily')] })
+		const app = defineMeshFlow({ sandbox: image({ name: 'node:26-slim' }), workflows: [bundle, schedule(report, 'daily')] })
 
 		// Assert
 		expect(app.triggers.map((trigger) => [trigger.kind, trigger.id])).toEqual([
@@ -124,7 +124,7 @@ describe('defineMeshFlow', () => {
 		const workflows = [defineWorkflows(userTrigger(fixIssue)), defineWorkflows(userTrigger(fixIssue))]
 
 		// Act
-		const defining = () => defineMeshFlow({ sandbox: image({ name: 'node:22-slim' }), workflows })
+		const defining = () => defineMeshFlow({ sandbox: image({ name: 'node:26-slim' }), workflows })
 
 		// Assert
 		expect(defining).toThrow('The user trigger fix-issue is listed twice.')
@@ -133,7 +133,7 @@ describe('defineMeshFlow', () => {
 	test('describes its sandbox, and the workflows it is given with their parameters as JSON Schema', () => {
 		// Arrange
 		const app = defineMeshFlow({
-			sandbox: image({ name: 'node:22-slim', egress: ['api.example.com'] }),
+			sandbox: image({ name: 'node:26-slim', egress: ['api.example.com'] }),
 			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
 		})
 
@@ -142,7 +142,7 @@ describe('defineMeshFlow', () => {
 
 		// Assert
 		expect(description).toEqual({
-			sandbox: { image: 'node:22-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['api.example.com'] } },
+			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['api.example.com'] } },
 			workflows: [
 				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
 				{ name: 'report', parameters: { type: 'object', properties: {} } },

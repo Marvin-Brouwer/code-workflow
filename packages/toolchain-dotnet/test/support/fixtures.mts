@@ -107,7 +107,10 @@ export const referencedList = JSON.stringify({
 	],
 })
 
-/** A test results file with a test that timed out, one that failed with a message that reads as a number, and a data-driven test whose second row failed. */
+/**
+ * A test results file with a test that timed out, one that failed with a message that reads as a
+ * number, and a data-driven test whose second row failed.
+ */
 export const unusualTrx = `<?xml version="1.0" encoding="utf-8"?>
 <TestRun id="3" name="run" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
   <Results>

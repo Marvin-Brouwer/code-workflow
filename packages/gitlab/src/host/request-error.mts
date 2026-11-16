@@ -1,4 +1,5 @@
-import { goneStatus, notFound, unauthorized } from '@mesh-flow/code-repository/host'
+import { gone, notFound, unauthorized } from '@mesh-flow/gateway'
+import { conflict } from './gitlab-statuses.mts'
 
 /** GitLab's answer to a request that wasn't served, with its status, so a caller can tell a 404 from the rest. */
 export class GitlabRequestError extends Error {
@@ -13,10 +14,15 @@ export class GitlabRequestError extends Error {
 
 /** Whether GitLab answered that what was asked for is gone, such as a note deleted since. */
 export function isGone(error: unknown): boolean {
-	return error instanceof GitlabRequestError && (error.status === notFound || error.status === goneStatus)
+	return error instanceof GitlabRequestError && (error.status === notFound || error.status === gone)
 }
 
 /** Whether GitLab refused the token: one that's wrong, expired or revoked. */
 export function refusedToken(error: unknown): boolean {
 	return error instanceof GitlabRequestError && error.status === unauthorized
+}
+
+/** Whether GitLab turned down a merge request for a branch that has one open already. */
+export function isConflict(error: unknown): boolean {
+	return error instanceof GitlabRequestError && error.status === conflict
 }

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { workingDirectoryOf } from './directory.mts'
 import { outputTail, quietArguments, runDotnet } from './run-dotnet.mts'
 
+/** A vulnerability `dotnet list package --vulnerable` names for a package: how severe it is, and where it's described. */
 const Vulnerability = z.object({ severity: z.string(), advisoryurl: z.string().optional() })
 
 /** A package as `dotnet list package` lists it, with its vulnerabilities when asked for them. */
@@ -42,9 +43,9 @@ type PackageList = z.infer<typeof PackageList>
 export async function listPackages(target: string, options: readonly string[], abortSignal: AbortSignal): Promise<PackageList> {
 	const cwd = workingDirectoryOf(target)
 	const restored = await runDotnet(['restore', target, ...quietArguments], { cwd, abortSignal })
-	if (!restored.ok) throw new Error(`dotnet restore failed:\n${outputTail(restored)}`)
+	if (!restored.succeeded) throw new Error(`dotnet restore failed:\n${outputTail(restored)}`)
 	const listed = await runDotnet(['list', target, 'package', ...options, '--format', 'json'], { cwd, abortSignal })
-	if (!listed.ok) throw new Error(`dotnet list package failed:\n${outputTail(listed)}`)
+	if (!listed.succeeded) throw new Error(`dotnet list package failed:\n${outputTail(listed)}`)
 	return PackageList.parse(parsedJson(listed.stdout, () => `dotnet list package wrote no JSON:\n${outputTail(listed)}`))
 }
 

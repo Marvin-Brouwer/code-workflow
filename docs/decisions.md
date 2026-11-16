@@ -158,6 +158,36 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **Attaching to a sandbox that still runs after a crash.** The sandbox interface can't attach to
   a running sandbox or pause one it didn't start, and the runtime may have moved on unobserved.
   It's removed, and the run is restartable.
+- **Answering a signed delivery that doesn't fit the trigger's schema with a 422.** Superseded in
+  November 2026, in the GitLab connector's review: GitLab counts a 4xx as a failed delivery and
+  disables a webhook that keeps failing, and a merge request webhook gets mostly deliveries a
+  trigger doesn't take, such as updates. Such a delivery now gets `200` with `skipped` and the
+  problems, and the first one per webhook is logged.
+
+## Connectors
+
+- **gitbeaker (`@gitbeaker/rest`) as the GitLab client.** Checked at 44.0.5 in November 2026,
+  when the repository moved to Node 26 (44 needs Node 24.16 or later). Rejected for two reasons
+  in its request code, both against rules every connector keeps:
+  - **No abort signal per call.** Its only signal is a global `queryTimeout`, made inside each
+    request: a caller can't pass the host call's signal, so a stopped run can't cancel a request.
+    The wait between its retries, up to 10 of them and about four minutes in all, doesn't stop
+    on an abort either. Every host tool has to settle promptly once its signal aborts.
+  - **It retries writes.** A 429 or 502 is sent again for every method, `POST` too. When GitLab
+    made the note or the merge request and only the answer was lost, the retry makes it twice.
+    The connector tries reads again and never a write (see `retryingFetch` in
+    `@mesh-flow/gateway`).
+
+  Working around both takes a requester of our own per host call, which is what the connector's
+  client is already, and leaves gitbeaker's types, which the connector wouldn't use: every answer
+  is parsed with zod. So `@mesh-flow/gitlab` has a small `fetch` client of its own
+  (`src/host/api.mts`). Worth checking again if gitbeaker takes a signal per call and stops
+  retrying writes.
+- **jira.js's own retry for Jira and Confluence.** Superseded in November 2026 by the gateway's
+  `retryingFetch` with `atlassianResends`, as the code host connectors use. jira.js sets its retry
+  per client, so a request sent once (a comment, a transition, a user look-up) took a second
+  client; its options differ from `FetchRetryOptions`, and it has no say per request over which
+  ones are sent again. Worth checking again if jira.js takes a retry predicate per request.
 
 ## Credentials and settings
 

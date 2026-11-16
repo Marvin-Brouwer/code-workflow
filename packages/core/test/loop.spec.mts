@@ -409,6 +409,28 @@ describe('loop', () => {
 		await expect(run.result).resolves.toBeUndefined()
 	})
 
+	test('stops a loop run in a check of a loop that went over its minutes', async () => {
+		// Arrange
+		const model = scriptedModel([callsTool('verify'), neverAnswers])
+		const developer = agent({ model: model.id })
+		const reviewer = agent({ model: model.id })
+		const reviews: Promise<unknown>[] = []
+		const codeReview = check('code review', async () => {
+			const reviewing = reviewer.loop`Review it. ${succeed()}`
+			reviews.push(reviewing)
+			await reviewing
+			return []
+		})
+
+		// Act
+		const run = await runBody(() => developer.loop`Work, then ${verify(codeReview)}. ${limit({ minutes: tinyBudgetMinutes })}`, model)
+
+		// Assert
+		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
+		expect(reviews).toHaveLength(1)
+		await expect(reviews[0]).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
+	})
+
 	test('leaves no timer running when the loop fails before it starts', async () => {
 		// Arrange
 		const helper = agent({ model: 'no-such-model' })

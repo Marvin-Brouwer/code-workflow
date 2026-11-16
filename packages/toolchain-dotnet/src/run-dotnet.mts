@@ -4,7 +4,7 @@ import { oneAtATime } from './one-at-a-time.mts'
 
 /** What a `dotnet` invocation came back with. A failed exit is a result, not an error: a failed build is one. */
 export interface DotnetResult {
-	readonly ok: boolean
+	readonly succeeded: boolean
 	readonly stdout: string
 	readonly stderr: string
 }
@@ -54,7 +54,7 @@ const inTurn = oneAtATime()
 
 /**
  * Runs `dotnet <args>`: the one place that spawns it. A failed exit, or `dotnet` killed from
- * outside, comes back as `ok: false`; `dotnet` missing, too much output, or a stop rejects. Runs in
+ * outside, comes back as `succeeded: false`; `dotnet` missing, too much output, or a stop rejects. Runs in
  * the same directory take turns: they share `obj` and `bin`, which two at once would both write,
  * such as `verify` running the tests and the security check side by side.
  */
@@ -106,9 +106,9 @@ async function spawnDotnet(args: readonly string[], options: RunDotnetOptions): 
 		}
 		// Killed from outside, such as by the system running out of memory: it failed, as a failed exit does.
 		if (result.exitCode === undefined && result.signal !== undefined)
-			return { ok: false, stdout: result.stdout, stderr: `${result.stderr}\ndotnet was killed with ${result.signal}.` }
+			return { succeeded: false, stdout: result.stdout, stderr: `${result.stderr}\ndotnet was killed with ${result.signal}.` }
 		if (result.exitCode === undefined) throw new Error(`dotnet could not run: ${result.message}`, { cause: result })
-		return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr }
+		return { succeeded: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr }
 	} catch (error) {
 		if (abortSignal.aborted) throw stoppedWith(abortSignal)
 		if (error instanceof ExecaError) throw new Error(`dotnet could not run: ${error.message}`, { cause: error })

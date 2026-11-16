@@ -1,23 +1,29 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
 import type { IssueRef } from '../issue/issue.mts'
-
-export { normalizedBody, sameText, textInPrompt, type BasedOn } from '@mesh-flow/code-repository'
+import { githubTerms } from './github-terms.mts'
 
 /** The longest title GitHub takes. */
 const maxTitleCharacters = 256
 
 /** The longest body GitHub takes. */
-const githubBodyCharacters = 65_536
+const maxDescriptionCharacters = 65_536
 
 /**
  * What a pull request says: its title and its description, as the agent of `describe` writes them,
- * within GitHub's limits, less the room for the footer.
+ * within GitHub's limits, less the room for the footer. A zod schema, for an agent of your own that
+ * writes the text with `succeed(github.PullRequestText)`, or to check text code wrote.
+ *
+ * @example
+ * ```ts
+ * const text = await writer.loop`Write the pull request for ${repository} in the team's style, then ${succeed(github.PullRequestText)}.`
+ * const pullRequest = await github.openPullRequest(repository, { ...text, closes: issue })
+ * ```
  */
 export const PullRequestText = changeTextSchema({
 	maxTitleCharacters,
-	maxDescriptionCharacters: githubBodyCharacters,
-	request: 'pull request',
+	maxDescriptionCharacters,
+	terms: githubTerms,
 })
 export type PullRequestText = z.infer<typeof PullRequestText>
 

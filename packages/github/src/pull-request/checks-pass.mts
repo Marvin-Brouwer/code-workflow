@@ -1,5 +1,6 @@
-import { check, wait, type Check, type WaitSpec } from '@mesh-flow/core'
-import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/code-repository'
+import { branchHeadOf, untilCompleted } from '@mesh-flow/code-repository'
+import { check, type Check, type WaitSpec } from '@mesh-flow/core'
+import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
 
@@ -17,6 +18,12 @@ export interface ChecksPassOptions {
 	 * fails with the last error. Counted in looks, as in `review`. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: WaitSpec
+	/**
+	 * The checkout whose branch the pull request is of. With it, the commit looked at is the one last
+	 * pushed from it, rather than the head GitHub shows, which can lag a few seconds behind a push: a
+	 * check right after a push then waits for that commit's checks instead of reporting the last one's.
+	 */
+	readonly checkout?: Repository
 }
 
 /**
@@ -25,31 +32,44 @@ export interface ChecksPassOptions {
  * commit without any is looked at again until `appearWithin` has passed. A look that fails is tried
  * again on the next one, for up to `toleratedOutage`.
  *
+ * The waits are on the engine's clock, where the run can be paused.
+ *
+ * @param on - The pull request: anything with its `repository` and `number`.
+ * @param options - How often to look, how long to wait for checks to appear and for GitHub to
+ * answer again, and the checkout whose last push to look at.
+ * @returns The check, for `verify` in an agent's template, or for `runCheck` in code. No findings
+ * means every check passed, or that no check appeared within `appearWithin`.
+ * @throws From the check: when looks at GitHub kept failing for longer than `toleratedOutage`, or
+ * GitHub turns the token down; and, with the stop's reason, when the run stops.
+ *
+ * @example From code
  * ```ts
- * await developer.loop`Fix the build, push with ${github.push(repository)} and hand in with ${verify(github.checksPass(pullRequest))}.`
+ * const findings = await runCheck(github.checksPass(pullRequest, { checkout: repository }), { abortSignal })
+ * const list = findings.map((finding) => `- ${finding.message}`).join('\n')
+ * if (findings.length > 0) await github.comment(issue, `The checks failed:\n\n${list}`)
+ * ```
+ *
+ * @example For an agent
+ * ```ts
+ * await developer.loop`
+ * 	Fix the build, push with ${github.push(repository)}
+ * 	and hand in with ${verify(github.checksPass(pullRequest, { checkout: repository }))}.
+ * `
  * ```
  */
 export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {
-	const every = options.every ?? defaultLookEvery
-	const looksForChecksToAppear = looksWithin(options.appearWithin ?? defaultAppearWithin, every)
-	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	return check('checks', async (context) => {
 		const where = { repository: on.repository, number: on.number }
-		let looksWithoutChecks = 0
-		for (;;) {
-			const checks = await look(async () => {
-				const { head } = await stubs.getPullRequest(where, context)
-				return stubs.checksOnRef({ repository: on.repository, ref: head.sha }, context)
-			})
-			if (checks.status === 'none') looksWithoutChecks++
-			const done = checks.status === 'completed' || (checks.status === 'none' && looksWithoutChecks > looksForChecksToAppear)
-			if (done) {
-				return checks.failures.map((failure) => ({
-					source: `check: ${failure.name}`,
-					message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,
-				}))
-			}
-			await wait(every)
-		}
+		const failures = await untilCompleted(async () => {
+			const sha =
+				options.checkout === undefined
+					? (await stubs.getPullRequest(where, context)).head.sha
+					: await branchHeadOf(options.checkout, true, context)
+			return stubs.checksOnRef({ repository: on.repository, ref: sha }, context)
+		}, options)
+		return failures.map((failure) => ({
+			source: `check: ${failure.name}`,
+			message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,
+		}))
 	})
 }

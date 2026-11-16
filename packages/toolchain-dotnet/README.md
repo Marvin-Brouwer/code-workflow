@@ -7,20 +7,25 @@ The .NET toolchain for mesh-flow: tools an agent checks its own work with, check
 Everything takes a checkout by where it is on disk, `{ directory }`, which a connector's checkout is, such as `gitlab.checkout`'s:
 
 ```ts
-import { verify, type Agent } from '@mesh-flow/core'
+// workflows/develop.mts
+import { jira, JiraIssueParameters } from '@mesh-flow/atlassian'
+import { verify, workflow, type Agent } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
 
+// The workflow repository's own agent: packages ship none.
 declare const developer: Agent
-declare const story: { readonly key: string }
 
-const repository = await gitlab.checkout('team/backend/api', { branch: `feature/${story.key}` })
-await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
+export const develop = workflow('develop', JiraIssueParameters, async ({ parameters }) => {
+	const story = await jira.collect(parameters.key)
+	const repository = await gitlab.checkout({ repository: 'team/backend/api', branch: `feature/${story.key}` })
+	await dotnet.updatePackages(repository, [{ name: 'Team.Contracts', version: '2.4.0' }])
 
-await developer.loop`
-	Implement ${story} in ${repository}. Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
-	then hand in with ${verify(dotnet.tests(repository), dotnet.security(repository))}.
-`
+	await developer.loop`
+		Implement ${story} in ${repository}. Build with ${dotnet.build} and test with ${dotnet.test} until both pass,
+		then hand in with ${verify(dotnet.testsPass(repository), dotnet.security(repository))}.
+	`
+})
 ```
 
 ### Tools for agents
@@ -30,13 +35,16 @@ await developer.loop`
 
 ### Checks for `verify`
 
-- `dotnet.tests(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
+- `dotnet.testsPass(repository)` runs every test, and each failed test is a finding; when the build fails, each build error is.
 - `dotnet.security(repository)` restores, then lists the packages with a known vulnerability, transitive ones too (`dotnet list package --vulnerable --include-transitive`), and each is a finding with its severity and advisory link. A problem the list reports, such as a source without vulnerability data, and a restore that fails, fail the check: nothing can be told about the packages then, and an agent can't fix the environment.
 
 Both take `{ target }` as a second argument, the solution or project relative to the checkout, for a checkout without one at its root or with more than one there, such as an `.sln` beside its `.slnx`: `dotnet` looks only at the root, and fails on more than one.
 
 ```ts
-await developer.loop`Implement ${story} in ${repository}, then hand in with ${verify(dotnet.tests(repository, { target: 'src/Api.slnx' }))}.`
+await developer.loop`
+	Implement ${story} in ${repository},
+	then hand in with ${verify(dotnet.testsPass(repository, { target: 'src/Api.slnx' }))}.
+`
 ```
 
 ### Packages
@@ -46,6 +54,16 @@ await developer.loop`Implement ${story} in ${repository}, then hand in with ${ve
 ### Notes
 
 - Build servers and MSBuild node reuse are off: a server that outlives the call holds its output open. Stopping the run kills `dotnet` and everything it started, outright after two seconds, and on Linux and macOS also what outlives `dotnet` itself.
-- `dotnet` runs in the same directory take turns, since they share `obj` and `bin`: under `verify(dotnet.tests(repository), dotnet.security(repository))`, the test run and the security check's restore and list never run at once. A stopped run is waited for until `dotnet` is gone.
+- `dotnet` runs in the same directory take turns, since they share `obj` and `bin`: under `verify(dotnet.testsPass(repository), dotnet.security(repository))`, the test run and the security check's restore and list never run at once. A stopped run is waited for until `dotnet` is gone.
 - Test projects on Microsoft.Testing.Platform's own `dotnet test` mode take `--report-trx` rather than `--logger trx`, and aren't read yet.
 - A virus scan is planned (issue #31).
+
+## Development
+
+```sh
+pnpm --filter @mesh-flow/toolchain-dotnet typecheck
+pnpm --filter @mesh-flow/toolchain-dotnet test
+pnpm --filter @mesh-flow/toolchain-dotnet build
+```
+
+Most tests run against a fake `dotnet`, so they need no .NET SDK. `test/real-sdk.spec.mts` builds and tests a real solution, and runs only where `dotnet` is on the `PATH`.

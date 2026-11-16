@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
 import { dotnetEnvironment } from '../src/run-dotnet.mts'
 import { security } from '../src/security/security.mts'
-import { tests } from '../src/test-run/tests-check.mts'
+import { testsPass } from '../src/test-run/tests-pass.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { toolContext } from './support/tool-context.mts'
 
@@ -54,7 +54,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			)
 
 			// Act
-			const findings = await runCheck(tests({ directory }), toolContext())
+			const findings = await runCheck(testsPass({ directory }), toolContext())
 
 			// Assert
 			expect(findings).toMatchObject([{ source: 'test: App.UnitTest1.Adds' }])
@@ -73,7 +73,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			)
 
 			// Act
-			const findings = await runCheck(tests({ directory }), toolContext())
+			const findings = await runCheck(testsPass({ directory }), toolContext())
 
 			// Assert
 			expect(new Set(findings.map((finding) => finding.source))).toEqual(new Set(['build']))
