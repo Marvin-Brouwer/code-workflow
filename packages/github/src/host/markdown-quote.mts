@@ -25,8 +25,8 @@ const htmlComment = /<!--[\s\S]*?(?:-->|$)/gu
 /** A line that opens a fenced code block, with the fence: three or more backticks or tildes. */
 const openingFence = /^\s*(`{3,}|~{3,})/u
 
-/** Two or more blank lines in a row. */
-const blankLines = /\n{3,}/gu
+/** Two or more blank lines in a row, also ones that hold only spaces or tabs. */
+const blankLines = /\n(?:[ \t]*\n){2,}/gu
 
 /** The last whitespace in a text, with the word after it. */
 const lastWhitespace = /\s\S*$/u
@@ -56,7 +56,7 @@ export function markdownQuote(body: string, verdict?: ReviewItem['verdict']): st
 		.join('\n')
 }
 
-/** `body` without HTML comments and runs of blank lines, and without the lines it quoted, outside code. */
+/** `body` without HTML comments and the lines it quoted, outside code, with each run of blank lines kept as one. */
 function ownWords(body: string): string {
 	const lines = body.replaceAll('\r\n', '\n').replaceAll(htmlComment, '').split('\n')
 	const inCode = inCodeBlock(lines)
