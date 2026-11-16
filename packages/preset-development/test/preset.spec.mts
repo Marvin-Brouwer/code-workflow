@@ -12,6 +12,11 @@ const reviewer = agent({ model: modelId })
 
 /** Long enough for a scripted review. */
 const checkTimeoutMs = 10_000
+/**
+ * How long a review may take to ask the reviewer: it reads the checkout's state with git first,
+ * which takes seconds on a Windows runner.
+ */
+const reviewerAskedWithinMs = 10_000
 
 /** The workspace the review's plan is in; the scripted reviewer never reads it. */
 const workspaceDirectory = '/workspace'
@@ -171,7 +176,7 @@ describe('codeReview', () => {
 			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
 			model.models,
 		)
-		await expect.poll(() => model.requests.length).toBe(1)
+		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithinMs }).toBe(1)
 
 		// Act
 		run.controller.abort(new Error('Stopped.'))
@@ -189,7 +194,7 @@ describe('codeReview', () => {
 			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checking.signal }),
 			model.models,
 		)
-		await expect.poll(() => model.requests.length).toBe(1)
+		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithinMs }).toBe(1)
 
 		// Act
 		checking.abort(new Error('Gave up on the review.'))
