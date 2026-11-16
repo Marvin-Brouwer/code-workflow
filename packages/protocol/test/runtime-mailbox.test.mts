@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { answerFile, mailboxLayout } from '../src/mailbox-layout.mts'
+import { answerFile, mailboxLayout, stagedFile } from '../src/mailbox-layout.mts'
 import { RuntimeMailbox } from '../src/runtime-mailbox.mts'
 import { RuntimeMessage } from '../src/runtime-message.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -36,7 +36,8 @@ describe('RuntimeMailbox', () => {
 		const elsewhere = () => mailbox.staged('../outbox.jsonl')
 
 		// Assert
-		expect(staged).toBe(path.join('/mailbox', 'packages', 'call-1.body'))
+		expect(staged).toBe(stagedFile(mailboxLayout('/mailbox'), 'call-1.body'))
+		expect(staged).toMatch(/[/\\]packages[/\\]call-1\.body$/)
 		expect(elsewhere).toThrow("isn't the name of a staged file")
 	})
 
