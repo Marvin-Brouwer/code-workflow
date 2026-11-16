@@ -122,14 +122,17 @@ async function opened(
 	client: GitlabClient,
 	project: string,
 	body: NewMergeRequest,
-): Promise<{ readonly request: ApiMergeRequest; readonly ours: boolean }> {
+): Promise<{ readonly mergeRequest: ApiMergeRequest; readonly ours: boolean }> {
 	try {
-		return { request: await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body }), ours: true }
+		return {
+			mergeRequest: await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body }),
+			ours: true,
+		}
 	} catch (error) {
 		if (!(error instanceof GitlabRequestError && error.status === conflict)) throw error
-		const request = await openOnBranch(client, project, body.source_branch, body.target_branch)
-		if (request === undefined) throw error
-		return { request, ours: false }
+		const mergeRequest = await openOnBranch(client, project, body.source_branch, body.target_branch)
+		if (mergeRequest === undefined) throw error
+		return { mergeRequest, ours: false }
 	}
 }
 
@@ -141,10 +144,10 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
 			const found = await openOnBranch(client, repository, head, base)
-			const { request: existing, ours } =
+			const { mergeRequest: existing, ours } =
 				found === undefined
 					? await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
-					: { request: found, ours: false }
+					: { mergeRequest: found, ours: false }
 			if (ours) return mergeRequestData(repository, existing)
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.description, closes)

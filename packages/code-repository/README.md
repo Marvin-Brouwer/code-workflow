@@ -92,8 +92,6 @@ const pipelinePasses = (sha: string) =>
 
 `@mesh-flow/code-repository/host` has the bare clones that fetch and push with the credential and the host halves of the git tools, the footer every post is signed with, and the replies to review items. A connector sends its API requests through `retryingFetch` from `@mesh-flow/gateway`.
 
-
-
 ```ts
 import type { GitTools } from '@mesh-flow/code-repository'
 import { gitHostTools, gitRemote, signed } from '@mesh-flow/code-repository/host'

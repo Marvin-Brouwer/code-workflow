@@ -51,6 +51,8 @@ export function githubApi(options: GithubApiOptions = {}): ApiClient {
 			request: { signal: context.abortSignal, fetch: send },
 		})
 		octokit.hook.error('request', (error) => {
+			// A stopped run's call failed because it stopped, not because GitHub may pass later.
+			if (context.abortSignal.aborted) throw error
 			throw markedTransient(error)
 		})
 		return octokit

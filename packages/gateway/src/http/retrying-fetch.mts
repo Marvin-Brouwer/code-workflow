@@ -129,11 +129,11 @@ function resendable(body: RequestInit['body']): boolean {
 }
 
 /** The `retry-after` header in milliseconds, from a number of seconds or a date. */
-function retryAfterOf(response: Response, now = Date.now()): number | undefined {
+function retryAfterOf(response: Response): number | undefined {
 	const header = response.headers.get('retry-after')
 	if (header === null || header.trim() === '') return undefined
 	const seconds = Number(header)
 	if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * msPerSecond : undefined
 	const at = Date.parse(header)
-	return Number.isNaN(at) ? undefined : Math.max(0, at - now)
+	return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now())
 }
