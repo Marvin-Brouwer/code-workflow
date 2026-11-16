@@ -62,7 +62,7 @@ export interface GatewayClient {
  * How many times a call goes on after its tool asked for a sign-in, before it fails: once for the
  * session it needed, and once more in case the sign-in it went on after was another call's.
  */
-const maxSignInsPerCall = 2
+const maxSignInRoundsPerCall = 2
 
 /** A sign-in the runtime asked the engine for, and the calls that wait for it. */
 interface SignIn {
@@ -179,7 +179,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			if (outcome.ok) return outcome.result
 			if (outcome.signInTo === undefined) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
 			// A tool that still asks after the user signed in won't stop asking: the run gets why.
-			if (signInRounds >= maxSignInsPerCall) throw new GatewayCallError(outcome.error)
+			if (signInRounds >= maxSignInRoundsPerCall) throw new GatewayCallError(outcome.error)
 			signInRounds++
 			// A sign-in answered while the call was on its way may be the one it needs.
 			if (answeredSignIns === answeredBefore) await waitForSignIn(outcome.signInTo, abortSignal)

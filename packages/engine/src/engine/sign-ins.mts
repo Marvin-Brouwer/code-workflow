@@ -30,7 +30,7 @@ export interface SignInsOptions {
 	readonly log?: (message: string) => void
 	/**
 	 * How long to wait after a failed try before the next one. Each wait after another failed try
-	 * is {@link retryBackoffFactor} times the one before, up to 5 minutes, or `retryMs` itself if
+	 * is twice the one before, up to 5 minutes, or `retryMs` itself if
 	 * that is longer. A try that got as far as a code starts over from `retryMs`, so a code that
 	 * ran out is followed by a new one soon. Default: 10 seconds.
 	 */
