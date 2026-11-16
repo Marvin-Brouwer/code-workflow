@@ -3,7 +3,7 @@ import { abortable } from '@mesh-flow/sandbox'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { messageOf } from '../errors.mts'
 import { EngineError } from './engine-error.mts'
-import type { SignInState } from './sign-in-state.mts'
+import { signInFailedLine, type SignInState } from './sign-in-state.mts'
 
 /**
  * The sign-ins runs and `mesh-flow login` wait for. There is one at a time per connector, whoever
@@ -28,7 +28,12 @@ export interface SignInsOptions {
 	readonly connectors: readonly Pick<LoadedConnector, 'name' | 'login'>[]
 	/** Where to say what happened, such as a failed try. Default: nowhere. */
 	readonly log?: (message: string) => void
-	/** How long to wait after the first failed try before the next one, doubled after each, up to 5 minutes. Default: 10 seconds. */
+	/**
+	 * How long to wait after a failed try before the next one. Each wait after another failed try
+	 * is {@link retryBackoffFactor} times the one before, up to 5 minutes, or `retryMs` itself if
+	 * that is longer. A try that got as far as a code starts over from `retryMs`, so a code that
+	 * ran out is followed by a new one soon. Default: 10 seconds.
+	 */
 	readonly retryMs?: number
 }
 
@@ -42,6 +47,9 @@ const defaultRetryMs = 10_000
 
 /** The longest wait between two tries, so a sign-in nobody approves doesn't ask the service every few seconds for hours. */
 const maxRetryMs = 5 * 60_000
+
+/** How much longer each wait is than the one before, while tries keep failing before they get a code. */
+const retryBackoffFactor = 2
 
 /** What a sign-in under way shows: where to sign in, or why the last try failed. */
 interface Shown {
@@ -74,6 +82,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 				try {
 					await login({
 						show: (prompt) => {
+							waitMs = retryMs
 							delete shown.error
 							shown.prompt = { url: prompt.url, code: prompt.code, expiresAt: prompt.expiresAt.toISOString() }
 							log(`Sign in to ${connector}: open ${prompt.url} and check that it shows ${prompt.code}.`)
@@ -86,11 +95,11 @@ export function openSignIns(options: SignInsOptions): SignIns {
 					abortSignal.throwIfAborted()
 					const message = messageOf(error)
 					// The same failure again says nothing new.
-					if (message !== shown.error) log(`Signing in to ${connector} failed, trying again: ${message}`)
+					if (message !== shown.error) log(signInFailedLine(connector, message))
 					shown.error = message
 					delete shown.prompt
 					await delay(waitMs, undefined, { signal: abortSignal })
-					waitMs = Math.min(waitMs * 2, Math.max(retryMs, maxRetryMs))
+					waitMs = Math.min(waitMs * retryBackoffFactor, Math.max(retryMs, maxRetryMs))
 				}
 			}
 		}

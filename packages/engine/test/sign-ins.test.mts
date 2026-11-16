@@ -50,6 +50,29 @@ describe('sign-ins', () => {
 		expect(failed).toEqual([{ connector: 'cloud', error: 'The code ran out.' }])
 	})
 
+	test('waits longer after each try that fails before a code, and starts over once a try got one', async () => {
+		// Arrange
+		const retryMs = 50
+		const triedAt: number[] = []
+		const login = vi.fn((context: LoginContext) => {
+			triedAt.push(Date.now())
+			// The fourth try gets a code, which runs out; the fifth is approved.
+			if (triedAt.length === 4) context.show(prompt)
+			return triedAt.length === 5 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
+		})
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }], retryMs })
+
+		// Act
+		await signIns.waitFor('cloud', abortSignal)
+
+		// Assert
+		const waited = triedAt.slice(1).map((at, index) => at - (triedAt[index] ?? at))
+		expect(waited[0]).toBeGreaterThanOrEqual(retryMs - 1)
+		expect(waited[1]).toBeGreaterThanOrEqual(2 * retryMs - 1)
+		expect(waited[2]).toBeGreaterThanOrEqual(4 * retryMs - 1)
+		expect(waited[3]).toBeLessThan(4 * retryMs)
+	})
+
 	test('stops the sign-in once nobody waits for it any more', async () => {
 		// Arrange
 		const { login, contexts } = approvableLogin()

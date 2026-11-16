@@ -5,7 +5,7 @@ import type { CredentialStore } from './credential-store.mts'
  * take as its name: model providers' keys (`provider/<name>`) and webhook secrets
  * (`webhook/<app>/<webhook>`).
  */
-export const reservedCredentialNamespaces: readonly string[] = Object.freeze(['provider', 'webhook'])
+const reservedCredentialNamespaces: readonly string[] = ['provider', 'webhook']
 
 /**
  * The part of the credential store that belongs to one connector: the credentials named

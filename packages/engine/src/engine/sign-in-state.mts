@@ -9,3 +9,8 @@ export const SignInState = z.object({
 	error: z.string().optional(),
 })
 export type SignInState = z.infer<typeof SignInState>
+
+/** What the engine logs, and `mesh-flow login` shows, when a try of a sign-in failed. */
+export function signInFailedLine(connector: string, error: string): string {
+	return `Signing in to ${connector} failed, trying again: ${error}`
+}

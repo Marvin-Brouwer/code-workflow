@@ -15,13 +15,13 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
 	connectorCredentials,
+	signInOf,
 	type ConnectorHost,
 	type ConnectorLogin,
 	type ConnectorLoginContext,
 	type CredentialStore,
 	type HostTool,
 	type ResolveRegistryFetch,
-	signInOf,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
@@ -84,8 +84,8 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		await mkdir(directory, { recursive: true, mode: 0o700 })
 		const credentials = connectorCredentials(options.credentials, host.name)
 		const hostOptions = { directory, credentials }
-		const signIns = { finished: 0 }
-		const tools = host.tools(hostOptions).map((tool) => ownSignIns(host.name, tool, signIns))
+		const signInCount = { finished: 0 }
+		const tools = host.tools(hostOptions).map((tool) => withOwnSignIns(host.name, tool, signInCount))
 		for (const tool of tools) {
 			const owner = owners.get(tool.name)
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
@@ -101,7 +101,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 				: {
 						login: async (context: LoginContext) => {
 							await login({ ...context, credentials })
-							signIns.finished++
+							signInCount.finished++
 						},
 					}),
 			...(registries === undefined ? {} : { registries: registries(hostOptions) }),
@@ -122,7 +122,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
  *   before the session was written: it runs once more before it asks for another sign-in. A tool
  *   that asks for one has changed nothing yet, so running it again is safe.
  */
-function ownSignIns(connector: string, tool: HostTool, signIns: { readonly finished: number }): HostTool {
+function withOwnSignIns(connector: string, tool: HostTool, signInCount: { readonly finished: number }): HostTool {
 	const runOnce: HostTool['run'] = async (input, context) => {
 		try {
 			return await tool.run(input, context)
@@ -137,11 +137,11 @@ function ownSignIns(connector: string, tool: HostTool, signIns: { readonly finis
 	return Object.freeze<HostTool>({
 		name: tool.name,
 		run: async (input, context) => {
-			const finishedBefore = signIns.finished
+			const finishedBefore = signInCount.finished
 			try {
 				return await runOnce(input, context)
 			} catch (error) {
-				if (signInOf(error) === undefined || signIns.finished === finishedBefore) throw error
+				if (signInOf(error) === undefined || signInCount.finished === finishedBefore) throw error
 				return runOnce(input, context)
 			}
 		},

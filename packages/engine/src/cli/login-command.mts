@@ -3,6 +3,7 @@ import type { CredentialStore } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { ControlError, type ControlClient } from '../control/control-client.mts'
+import { signInFailedLine } from '../engine/sign-in-state.mts'
 import { formatLoginPrompt } from './format-login-prompt.mts'
 
 /** How long `mesh-flow login` waits for the approval: longer than a device code lasts. */
@@ -108,7 +109,7 @@ async function signInThroughEngine(
 			shownCode = prompt.code
 			log(formatLoginPrompt(name, { url: prompt.url, code: prompt.code, expiresAt: new Date(prompt.expiresAt) }))
 		}
-		if (signIn?.error !== undefined && signIn.error !== shownError) log(`Signing in to ${name} failed, trying again: ${signIn.error}`)
+		if (signIn?.error !== undefined && signIn.error !== shownError) log(signInFailedLine(name, signIn.error))
 		shownError = signIn?.error
 	}
 }
