@@ -1,0 +1,39 @@
+import { input } from '@mesh-flow/core'
+import type { ChangeRequest } from './change-request.mts'
+import { sameText, textInPrompt, type ChangeText } from './change-text.mts'
+
+/** What `decideOnEdit` decided: the pull or merge request to leave as it is, or the text it said when it was last looked at. */
+export type EditDecision<Request extends ChangeRequest> = { readonly kept: Request } | { readonly seen?: ChangeText }
+
+/**
+ * Whether to leave the pull or merge request as it is: someone edited it after the new text was
+ * written from it, and the person said no to overwriting their edit. Nothing is asked when it still
+ * says what the new text was written from, or says the new text already, or is closed. A person may
+ * take long to answer, so after a yes it reads the request again, and asks once more when it was
+ * edited again meanwhile. Otherwise it gives the text the request said when it was last looked at,
+ * for the write to check against.
+ *
+ * The question waits on the run's signal, as every `input` does.
+ */
+export async function decideOnEdit<Request extends ChangeRequest>(
+	read: () => Promise<Request>,
+	content: ChangeText,
+	lastSeen: ChangeText | undefined,
+): Promise<EditDecision<Request>> {
+	let seen = lastSeen
+	while (seen !== undefined) {
+		const current = await read()
+		if (current.state === 'closed' || sameText(current, seen) || sameText(current, content)) return { seen }
+		const { overwrite } = await input(editQuestion(current, content), {
+			overwrite: input.yesNo('Yes writes the new text over the edit; no keeps it as it is now.'),
+		})
+		if (!overwrite) return { kept: current }
+		seen = { title: current.title, description: current.description }
+	}
+	return {}
+}
+
+/** What the person is asked: whether the new text may overwrite the edit on `current`. */
+function editQuestion(current: ChangeRequest, content: ChangeText): string {
+	return `${current.url} was edited while its new title and description were written. Overwrite the edit?\n\nThe new text:\n${textInPrompt(content)}`
+}
