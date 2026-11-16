@@ -117,7 +117,7 @@ describe('openGateway', () => {
 		)
 
 		// Assert
-		expect(answer.outcome).toEqual({ ok: false, error: 'Sign in to aws: `mesh-flow login aws`.', signIn: 'aws' })
+		expect(answer.outcome).toEqual({ ok: false, error: 'Sign in to aws: `mesh-flow login aws`.', signInTo: 'aws' })
 	})
 
 	test('closes every endpoint of the run when a spent token comes again', async () => {
@@ -1005,6 +1005,6 @@ describe('package calls', () => {
 		const { answer } = await fetchPath('/npm/packages/left-pad')
 
 		// Assert
-		expect(answer.outcome).toMatchObject({ ok: false, signIn: 'cloud' })
+		expect(answer.outcome).toMatchObject({ ok: false, signInTo: 'cloud' })
 	})
 })

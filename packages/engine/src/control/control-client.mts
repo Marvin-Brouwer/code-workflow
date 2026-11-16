@@ -1,7 +1,7 @@
 import { request } from 'node:http'
 import { AppManifest, RuntimeEvent, type TriggerRef } from '@mesh-flow/protocol'
 import { z } from 'zod'
-import { SignInState } from '../engine/sign-ins.mts'
+import { SignInState } from '../engine/sign-in-state.mts'
 import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
 
@@ -74,7 +74,7 @@ export function controlClient(socketPath: string): ControlClient {
 		restart: act('restart'),
 		signIns: (abortSignal) => call(socketPath, z.array(SignInState), 'GET', '/logins', undefined, abortSignal),
 		signIn: async (connector, abortSignal) => {
-			await call(socketPath, z.unknown(), 'POST', `/logins/${encodeURIComponent(connector)}`, {}, abortSignal)
+			await call(socketPath, z.object({ signedIn: z.string() }), 'POST', `/logins/${encodeURIComponent(connector)}`, {}, abortSignal)
 		},
 		apps: (abortSignal) => call(socketPath, z.array(DeployedApp), 'GET', '/apps', undefined, abortSignal),
 		deploy: (name, tarball, abortSignal) =>

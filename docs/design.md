@@ -416,8 +416,10 @@ directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
   ended, the last role credentials and CodeArtifact tokens are used until they run out, so a
   restore under way isn't cut off. AWS operations are host-side tools; no credential is handed
   to the sandbox.
-- **Lazy login:** when a run needs AWS and the session is missing or ended, the run raises an
-  input request with a notification. One login resumes every run waiting on it. There is no
+- **Lazy login:** when a run needs AWS and the session is missing or ended, the host tool says
+  so, and the run raises a `login` request that the engine answers once the user signed in, as
+  `mesh-flow list` and `mesh-flow show` show. One sign-in, which `mesh-flow login aws` joins,
+  answers every run waiting on it, and each calls its tool again. There is no
   warning ahead of the end: Identity Center doesn't tell when its session ends, so the host only
   finds out when a renewal is refused.
 - Use a separate AWS account for test runs, a permissions boundary on the role, and CloudTrail

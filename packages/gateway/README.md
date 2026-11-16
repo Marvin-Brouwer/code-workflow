@@ -146,14 +146,17 @@ export const connector = connectorHost('cloud', () => [], {
 A host tool that needs the session and finds none throws a `SignInNeededError` before it changes anything. The run then waits for the sign-in instead of failing, and its stub calls the tool again with the same input:
 
 ```ts
-import { hostTool, SignInNeededError } from '@mesh-flow/gateway'
+import { connectorHost, hostTool, SignInNeededError, type CredentialStore } from '@mesh-flow/gateway'
+import { bucketsOf, listBucketsDefinition } from './tools/buckets.mts'
 
-export const listBuckets = (credentials: CredentialStore) =>
+const listBuckets = (credentials: CredentialStore) =>
 	hostTool(listBucketsDefinition, async (_input, { abortSignal }) => {
 		const session = await credentials.get('cloud/session', abortSignal)
 		if (session === undefined) throw new SignInNeededError('cloud')
 		return bucketsOf(session, abortSignal)
 	})
+
+export const connector = connectorHost('cloud', ({ credentials }) => [listBuckets(credentials)])
 ```
 
 ## Endpoints and tokens

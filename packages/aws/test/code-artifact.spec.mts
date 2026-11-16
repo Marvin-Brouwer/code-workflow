@@ -176,7 +176,7 @@ describe('restoring from CodeArtifact', () => {
 		const { outcome } = await fetchPath('/npm/packages/left-pad')
 
 		// Assert
-		expect(outcome).toMatchObject({ ok: false, signIn: 'aws' })
+		expect(outcome).toMatchObject({ ok: false, signInTo: 'aws' })
 		expect(repository.requests).toEqual([])
 	})
 

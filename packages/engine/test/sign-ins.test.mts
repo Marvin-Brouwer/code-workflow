@@ -1,32 +1,9 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LoginContext } from '../src/connectors/load-connectors.mts'
 import { openSignIns } from '../src/engine/sign-ins.mts'
+import { approvableLogin, prompt } from './support/approvable-login.mts'
 
 const abortSignal = new AbortController().signal
-const prompt = { url: 'https://device.example/?user_code=ABCD', code: 'ABCD', expiresAt: new Date('2026-11-16T09:10:00Z') }
-
-/** A sign-in that shows {@link prompt} and waits until `approve` is called, or its signal aborts. */
-function approvableLogin() {
-	const contexts: LoginContext[] = []
-	const approvals: Array<() => void> = []
-	const login = vi.fn((context: LoginContext) => {
-		contexts.push(context)
-		context.show(prompt)
-		const { promise, resolve, reject } = Promise.withResolvers<undefined>()
-		approvals.push(() => {
-			resolve(undefined)
-		})
-		context.abortSignal.addEventListener('abort', () => {
-			reject(context.abortSignal.reason)
-		})
-		return promise
-	})
-	const approve = () => {
-		approvals.at(-1)?.()
-	}
-	return { login, contexts, approve }
-}
-
 describe('sign-ins', () => {
 	test('shares one sign-in between everyone who waits for it, and shows where to sign in', async () => {
 		// Arrange

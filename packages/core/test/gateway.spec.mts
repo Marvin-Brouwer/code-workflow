@@ -61,8 +61,13 @@ const hostTools: readonly HostTool[] = [
 /** A gateway in a fresh directory, and what the runtime's side needs to reach it. Records the endpoint of every call. */
 async function withGateway({
 	signIn,
+	signInCancelled,
 	...options
-}: { readonly fetch?: typeof fetch; readonly signIn?: (connector: string) => Promise<void> } = {}) {
+}: {
+	readonly fetch?: typeof fetch
+	readonly signIn?: (connector: string) => Promise<void>
+	readonly signInCancelled?: (connector: string) => void
+} = {}) {
 	onTestFinished(() => {
 		neverStarted.mockClear()
 		cloud.signedIn = false
@@ -82,7 +87,15 @@ async function withGateway({
 	}
 	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, abortSignal)
 	const client = (lifetime: AbortSignal) =>
-		gatewayClient(gatewayChannel(gateway, runId, lifetime, signIn === undefined ? {} : { signIn }), grant, 'test', lifetime)
+		gatewayClient(
+			gatewayChannel(gateway, runId, lifetime, {
+				...(signIn === undefined ? {} : { signIn }),
+				...(signInCancelled === undefined ? {} : { signInCancelled }),
+			}),
+			grant,
+			'test',
+			lifetime,
+		)
 	return { gateway, credentials, providers, calls, client }
 }
 
@@ -173,6 +186,41 @@ describe('gateway', () => {
 		expect(await run.result).toEqual([{ session: 'live' }, { session: 'live' }])
 		expect(signIn.mock.calls).toEqual([['cloud']])
 		expect(cloud.calls).toBe(4)
+	})
+
+	test('fails a call whose host tool still asks for a sign-in after the user signed in', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => Promise.resolve())
+		const { client } = await withGateway({ signIn })
+
+		// Act
+		const run = await runBody(() => cloudSession({}), { gateway: client })
+
+		// Assert
+		await expect(run.result).rejects.toThrow(GatewayCallError)
+		expect(signIn).toHaveBeenCalledTimes(2)
+		expect(cloud.calls).toBe(3)
+	})
+
+	test('cancels the sign-in once no call waits for it any more', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => new Promise<void>(() => undefined))
+		const signInCancelled = vi.fn<(connector: string) => void>()
+		const { client } = await withGateway({ signIn, signInCancelled })
+		const gateway = client(abortSignal)
+		const caller = new AbortController()
+		const calling = gateway.call(gateway.run, { type: 'tool', tool: 'cloudSession', input: {} }, caller.signal)
+		calling.catch(() => undefined)
+		await vi.waitFor(() => {
+			expect(signIn).toHaveBeenCalled()
+		})
+
+		// Act
+		caller.abort(new Error('The caller stopped.'))
+
+		// Assert
+		await expect(calling).rejects.toThrow('The caller stopped.')
+		expect(signInCancelled.mock.calls).toEqual([['cloud']])
 	})
 
 	test('settles promptly when the run stops while it waits for a sign-in', async () => {

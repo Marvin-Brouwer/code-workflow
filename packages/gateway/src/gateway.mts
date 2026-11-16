@@ -152,12 +152,12 @@ function setKeyHint(provider: string): string {
 
 /** What a call that failed answers: why, and whether another try, or a sign-in first, may help. */
 function failedOutcome(error: unknown): CallAnswer['outcome'] {
-	const signIn = signInOf(error)
+	const signInTo = signInOf(error)
 	return {
 		ok: false,
 		error: messageOf(error),
 		...(isTransient(error) ? { transient: true } : {}),
-		...(signIn === undefined ? {} : { signIn }),
+		...(signInTo === undefined ? {} : { signInTo }),
 	}
 }
 

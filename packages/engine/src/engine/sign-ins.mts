@@ -1,19 +1,9 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import { abortable } from '@mesh-flow/sandbox'
-import { z } from 'zod'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { messageOf } from '../errors.mts'
 import { EngineError } from './engine-error.mts'
-
-/** A sign-in under way, as `mesh-flow show` and `mesh-flow login` show it. */
-export const SignInState = z.object({
-	connector: z.string(),
-	/** Where to sign in, once the service handed out a code. */
-	prompt: z.object({ url: z.string(), code: z.string(), expiresAt: z.iso.datetime() }).optional(),
-	/** Why the last try failed, when it did. Another one follows. */
-	error: z.string().optional(),
-})
-export type SignInState = z.infer<typeof SignInState>
+import type { SignInState } from './sign-in-state.mts'
 
 /**
  * The sign-ins runs and `mesh-flow login` wait for. There is one at a time per connector, whoever
@@ -38,12 +28,20 @@ export interface SignInsOptions {
 	readonly connectors: readonly Pick<LoadedConnector, 'name' | 'login'>[]
 	/** Where to say what happened, such as a failed try. Default: nowhere. */
 	readonly log?: (message: string) => void
-	/** How long to wait after a failed try before the next one. Default: 10 seconds. */
+	/** How long to wait after the first failed try before the next one, doubled after each, up to 5 minutes. Default: 10 seconds. */
 	readonly retryMs?: number
+}
+
+/** The error for a connector that doesn't sign in, or that the engine didn't load. */
+export function noSignInError(connector: string): EngineError {
+	return new EngineError('not-found', `There is no connector ${connector} that signs in.`)
 }
 
 /** How long to wait after a failed sign-in before the next try, unless told otherwise. */
 const defaultRetryMs = 10_000
+
+/** The longest wait between two tries, so a sign-in nobody approves doesn't ask the service every few seconds for hours. */
+const maxRetryMs = 5 * 60_000
 
 /** What a sign-in under way shows: where to sign in, or why the last try failed. */
 interface Shown {
@@ -71,6 +69,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 		const abortSignal = controller.signal
 		const shown: Shown = {}
 		const tryUntilSignedIn = async () => {
+			let waitMs = retryMs
 			for (;;) {
 				try {
 					await login({
@@ -85,10 +84,13 @@ export function openSignIns(options: SignInsOptions): SignIns {
 					return
 				} catch (error) {
 					abortSignal.throwIfAborted()
-					shown.error = messageOf(error)
+					const message = messageOf(error)
+					// The same failure again says nothing new.
+					if (message !== shown.error) log(`Signing in to ${connector} failed, trying again: ${message}`)
+					shown.error = message
 					delete shown.prompt
-					log(`Signing in to ${connector} failed, trying again: ${shown.error}`)
-					await delay(retryMs, undefined, { signal: abortSignal })
+					await delay(waitMs, undefined, { signal: abortSignal })
+					waitMs = Math.min(waitMs * 2, Math.max(retryMs, maxRetryMs))
 				}
 			}
 		}
@@ -104,9 +106,9 @@ export function openSignIns(options: SignInsOptions): SignIns {
 
 	return Object.freeze<SignIns>({
 		has: (connector) => logins.has(connector),
-		async waitFor(connector, abortSignal) {
+		waitFor: async (connector, abortSignal) => {
 			const login = logins.get(connector)
-			if (login === undefined) throw new EngineError('not-found', `There is no connector ${connector} that signs in.`)
+			if (login === undefined) throw noSignInError(connector)
 			abortSignal.throwIfAborted()
 			const signIn = underWay.get(connector) ?? start(connector, login)
 			signIn.waiters++
@@ -120,18 +122,6 @@ export function openSignIns(options: SignInsOptions): SignIns {
 				}
 			}
 		},
-		list: () =>
-			[...underWay].map(
-				([
-					connector,
-					{
-						shown: { prompt, error },
-					},
-				]) => ({
-					connector,
-					...(prompt === undefined ? {} : { prompt }),
-					...(error === undefined ? {} : { error }),
-				}),
-			),
+		list: () => [...underWay].map(([connector, { shown }]) => ({ connector, ...shown })),
 	})
 }

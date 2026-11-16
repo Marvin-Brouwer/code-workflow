@@ -1,10 +1,19 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { hostTool, keyFile, openCredentialStore, openGateway, openProviderSettings, type HostTool } from '@mesh-flow/gateway'
+import {
+	hostTool,
+	keyFile,
+	openCredentialStore,
+	openGateway,
+	openProviderSettings,
+	SignInNeededError,
+	type HostTool,
+} from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
 import { openAppStore } from '../src/apps/app-store.mts'
 import { Engine, type ConnectorSettingsCheck } from '../src/engine/engine.mts'
+import { openSignIns, type SignIns } from '../src/engine/sign-ins.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
@@ -29,11 +38,13 @@ async function openEngine({
 	tools = [echo, never],
 	fetch,
 	connectorSettings,
+	signIns,
 }: {
 	readonly home?: string
 	readonly tools?: readonly HostTool[]
 	readonly fetch?: typeof globalThis.fetch
 	readonly connectorSettings?: ConnectorSettingsCheck
+	readonly signIns?: SignIns
 } = {}) {
 	onTestFinished(() => {
 		started.mockClear()
@@ -59,6 +70,7 @@ async function openEngine({
 			layout: hostSandboxLayout,
 			log,
 			...(connectorSettings === undefined ? {} : { connectorSettings }),
+			...(signIns === undefined ? {} : { signIns }),
 		},
 		abortSignal,
 	)
@@ -163,6 +175,44 @@ mailbox.send({ type: 'succeeded' })
 		})
 		expect(JSON.stringify(done)).toContain("doesn't restore from nuget")
 		expect(sent).toHaveBeenCalledOnce()
+	})
+
+	test('answers a call that needs a sign-in with the connector, signs in for the login the runtime asks for, and runs the tool again', async () => {
+		// Arrange
+		const cloud = { signedIn: false }
+		const session = hostTool({ name: 'cloudSession', input: z.object({}) }, () => {
+			if (!cloud.signedIn) return Promise.reject(new SignInNeededError('cloud'))
+			return Promise.resolve('live')
+		})
+		const login = vi.fn(() => {
+			cloud.signedIn = true
+			return Promise.resolve()
+		})
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }] })
+		const { engine, apps } = await openEngine({ tools: [session], signIns })
+		await deployTestApp(
+			apps,
+			{
+				calls: callingScript(`
+const first = await call('call-1', { type: 'tool', tool: 'cloudSession', input: {} }, grant.tokens[0])
+mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: first.outcome.signInTo } })
+await mailbox.answer('login-1', signal)
+const second = await call('call-2', { type: 'tool', tool: 'cloudSession', input: {} }, first.next)
+event('done', 'called', { first: first.outcome, second: second.outcome })
+mailbox.send({ type: 'succeeded' })
+`),
+			},
+			{ tools: ['cloudSession'] },
+		)
+
+		// Act
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		const [done] = await engine.events(run.id)
+		expect(done).toMatchObject({ first: { ok: false, signInTo: 'cloud' }, second: { ok: true, result: 'live' } })
+		expect(login).toHaveBeenCalledOnce()
 	})
 
 	test("refuses a tool the app doesn't list", async () => {

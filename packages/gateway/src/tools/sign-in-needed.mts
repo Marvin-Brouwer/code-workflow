@@ -13,20 +13,20 @@ import { ConnectorName } from '@mesh-flow/protocol'
 export class SignInNeededError extends Error {
 	override readonly name: string = 'SignInNeededError'
 	/** The connector to sign in to, as `mesh-flow login` names it. */
-	readonly signIn: ConnectorName
+	readonly signInTo: ConnectorName
 
 	constructor(connector: string, message = `Sign in to ${connector}: \`mesh-flow login ${connector}\`.`) {
 		super(message)
-		this.signIn = ConnectorName.parse(connector)
+		this.signInTo = ConnectorName.parse(connector)
 	}
 }
 
 /**
- * The connector `error` says the user has to sign in to, if it says so. Checked by its `signIn`
+ * The connector `error` says the user has to sign in to, if it says so. Checked by its `signInTo`
  * field, not by class, since a connector package may bring its own copy of this package.
  */
 export function signInOf(error: unknown): ConnectorName | undefined {
-	if (!(error instanceof Error) || !('signIn' in error)) return undefined
-	const parsed = ConnectorName.safeParse(error.signIn)
+	if (!(error instanceof Error) || !('signInTo' in error)) return undefined
+	const parsed = ConnectorName.safeParse(error.signInTo)
 	return parsed.success ? parsed.data : undefined
 }

@@ -89,7 +89,10 @@ export const CallMessage = z.object({
 })
 export type CallMessage = z.infer<typeof CallMessage>
 
-/** The runtime doesn't wait for a call any more: the host stops it. It still answers, with the next token. */
+/**
+ * The runtime doesn't wait for a call, or for a `login` it asked for, any more: the host stops it.
+ * A call still answers, with the next token. A `login` isn't answered.
+ */
 export const CancelMessage = z.object({ type: z.literal('cancel'), id: RequestId })
 export type CancelMessage = z.infer<typeof CancelMessage>
 
@@ -110,7 +113,7 @@ export const CallAnswer = z.object({
 			 * The call needs a session with this connector's service, and there is none: the user has to
 			 * sign in. The tool did nothing, so the runtime asks for a `login` and calls again.
 			 */
-			signIn: ConnectorName.optional(),
+			signInTo: ConnectorName.optional(),
 		}),
 	]),
 })

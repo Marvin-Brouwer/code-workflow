@@ -27,7 +27,8 @@ import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
 import { setUpRuntime } from './set-up-runtime.mts'
 import { settleWithin } from './settle-within.mts'
-import type { SignIns, SignInState } from './sign-ins.mts'
+import type { SignInState } from './sign-in-state.mts'
+import { noSignInError, type SignIns } from './sign-ins.mts'
 import { wakeAt } from './wake-at.mts'
 
 /** What an engine runs on. */
@@ -104,6 +105,8 @@ interface ActiveRun {
 	work: Promise<void>
 	/** The gateway calls running now, by request id, so the runtime can cancel them. */
 	readonly calls: Map<string, AbortController>
+	/** The sign-ins the run waits for now, by request id, so the runtime can cancel them too. */
+	readonly logins: Map<string, AbortController>
 	/** Resumed with interrupted calls answered, which the gateway keeps until the outbox is read past them. */
 	interruptedAnswered?: boolean
 }
@@ -205,12 +208,12 @@ export class Engine {
 
 	/**
 	 * Waits until the user signed in to `connector`, joining the sign-in runs wait for, if one is under
-	 * way, so `mesh-flow login` and the runs share one code. Aborting `signal` stops waiting.
+	 * way, so `mesh-flow login` and the runs share one code. Aborting `abortSignal` stops waiting.
 	 */
-	async signIn(connector: string, signal: AbortSignal): Promise<void> {
+	async signIn(connector: string, abortSignal: AbortSignal): Promise<void> {
 		this.#assertOpen()
-		if (this.#signIns?.has(connector) !== true) throw new EngineError('not-found', `There is no connector ${connector} that signs in.`)
-		await this.#signIns.waitFor(connector, this.#withLifetime(signal))
+		if (this.#signIns === undefined) throw noSignInError(connector)
+		await this.#signIns.waitFor(connector, this.#withLifetime(abortSignal))
 	}
 
 	/** The run's event tree so far, in the order the runtime sent it. */
@@ -539,11 +542,16 @@ export class Engine {
 			}
 			// Taken before the cursor moves past them, so a call that was read is never lost.
 			const accepted = await Promise.all(calls.map(async (call) => ({ call, accepted: await this.#accept(id, call, signal) })))
+			// A request cancelled in the same delivery, or later, isn't kept: nothing waits for it.
+			const waited = requests.filter((request) => !cancels.includes(request.id))
 			await this.#update(
 				id,
 				(record) => ({
 					cursor: delivery.cursor,
-					pending: [...record.pending, ...requests.filter((request) => !record.pending.some((known) => known.id === request.id))],
+					pending: [
+						...record.pending.filter((pending) => !cancels.includes(pending.id)),
+						...waited.filter((request) => !record.pending.some((known) => known.id === request.id)),
+					],
 				}),
 				['running'],
 			)
@@ -553,10 +561,13 @@ export class Engine {
 				active.interruptedAnswered = false
 				await this.#gateway?.forgetInterrupted(id, signal)
 			}
-			for (const request of requests) this.#schedule(id, channel, request, signal)
+			for (const request of waited) this.#schedule(id, channel, request, signal)
 			for (const taken of accepted) this.#answerCall(id, channel, taken.call, taken.accepted, signal)
 			// After the calls of this delivery are running, so a cancel read with its call still stops it.
-			for (const cancelled of cancels) this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
+			for (const cancelled of cancels) {
+				this.#active.get(id)?.calls.get(cancelled)?.abort(new Error('The runtime cancelled the call.'))
+				this.#active.get(id)?.logins.get(cancelled)?.abort(new Error('The runtime cancelled the sign-in.'))
+			}
 		}
 	}
 
@@ -660,7 +671,7 @@ export class Engine {
 	}
 
 	/** Waits for the sign-in a run asked for, then answers it, so the runtime calls its host tool again. */
-	async #login(id: RunId, channel: SandboxChannel, request: LoginRequest, signal: AbortSignal): Promise<void> {
+	async #login(id: RunId, channel: SandboxChannel, request: LoginRequest, abortSignal: AbortSignal): Promise<void> {
 		if (this.#signIns?.has(request.connector) !== true) {
 			// Nothing would ever answer it: the run would wait until it's stopped.
 			this.#log(`Run ${id} needs a sign-in to ${request.connector}, which no connector of this engine does.`)
@@ -677,13 +688,32 @@ export class Engine {
 			}
 			return
 		}
+		const logins = this.#active.get(id)?.logins
+		const cancel = new AbortController()
+		logins?.set(request.id, cancel)
+		const waitSignal = AbortSignal.any([abortSignal, cancel.signal])
 		try {
-			await this.#signIns.waitFor(request.connector, signal)
-			// A sign-in an attempt that ended waited for isn't for the next one.
-			if (this.#active.get(id)?.channel !== channel) return
-			await this.#deliver(id, request.id, {}, signal)
+			await this.#signIns.waitFor(request.connector, waitSignal)
 		} catch (error) {
-			if (!signal.aborted) this.#log(`Answering the sign-in ${request.id} of run ${id} failed: ${messageOf(error)}`)
+			if (!waitSignal.aborted) this.#log(`Waiting for the sign-in ${request.id} of run ${id} failed: ${messageOf(error)}`)
+			return
+		} finally {
+			logins?.delete(request.id)
+		}
+		// A sign-in an attempt that ended waited for isn't for the next one.
+		if (this.#active.get(id)?.channel !== channel) return
+		try {
+			await this.#deliver(id, request.id, {}, abortSignal)
+		} catch (error) {
+			if (abortSignal.aborted) return
+			// The runtime would wait for the answer until the run ends, although the user signed in.
+			this.#log(`Answering the sign-in ${request.id} of run ${id} failed: ${messageOf(error)}`)
+			try {
+				await this.#halt(id, this.#cleanupSignal())
+				await this.#fail(id, new Error(`Answering the sign-in ${request.id} failed: ${messageOf(error)}`))
+			} catch (failing) {
+				this.#log(`Couldn't fail run ${id} after a sign-in's answer failed: ${messageOf(failing)}`)
+			}
 		}
 	}
 
@@ -725,7 +755,7 @@ export class Engine {
 	#drive(id: RunId, work: (active: ActiveRun, signal: AbortSignal) => Promise<void>): void {
 		const controller = new AbortController()
 		const signal = AbortSignal.any([this.#lifetime.signal, controller.signal])
-		const active: ActiveRun = { controller, work: Promise.resolve(), calls: new Map() }
+		const active: ActiveRun = { controller, work: Promise.resolve(), calls: new Map(), logins: new Map() }
 		this.#active.set(id, active)
 		active.work = work(active, signal)
 			.catch((error: unknown) => (signal.aborted ? undefined : this.#fail(id, error)))

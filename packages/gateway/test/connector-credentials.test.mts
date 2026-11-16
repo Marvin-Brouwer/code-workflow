@@ -43,4 +43,15 @@ describe('connectorCredentials', () => {
 		await expect(reading).rejects.toThrow('only has the credentials named aws/')
 		await expect(writing).rejects.toThrow('only has the credentials named aws/')
 	})
+
+	test.each(['provider', 'webhook'])("refuses a connector named %s, whose credentials are the gateway's", async (connector) => {
+		// Arrange
+		const credentials = await store()
+
+		// Act
+		const scoping = () => connectorCredentials(credentials, connector)
+
+		// Assert
+		expect(scoping).toThrow(`A connector can't be named ${connector}`)
+	})
 })

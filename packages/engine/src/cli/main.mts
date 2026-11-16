@@ -294,10 +294,10 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Shows a run, with what it waits for.')
 		.argument('<run>')
 		.action(async (run: string) => {
-			const signal = requestSignal()
-			const record = await client().get(run, signal)
+			const abortSignal = requestSignal()
+			const record = await client().get(run, abortSignal)
 			const waitsForSignIn = record.pending.some((request) => request.kind === 'login')
-			console.log(formatRun(record, waitsForSignIn ? await client().signIns(signal) : []))
+			console.log(formatRun(record, waitsForSignIn ? await client().signIns(abortSignal) : []))
 		})
 
 	program

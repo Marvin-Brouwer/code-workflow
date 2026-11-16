@@ -2,10 +2,10 @@ import path from 'node:path'
 import { keyFile, openCredentialStore, type CredentialStore } from '@mesh-flow/gateway'
 import { Command } from 'commander'
 import { describe, expect, test, vi } from 'vitest'
-import { addLoginCommand } from '../src/cli/login-command.mts'
+import { addLoginCommand, type EngineSignIns } from '../src/cli/login-command.mts'
 import type { LoadedConnector, LoginContext } from '../src/connectors/load-connectors.mts'
-import { ControlError, type ControlClient } from '../src/control/control-client.mts'
-import type { SignInState } from '../src/engine/sign-ins.mts'
+import { ControlError } from '../src/control/control-client.mts'
+import type { SignInState } from '../src/engine/sign-in-state.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
@@ -13,9 +13,13 @@ const abortSignal = new AbortController().signal
 /** How long the command may take to settle once stopped, while the sign-in never does. */
 const promptlyMs = 3_000
 
-const prompt = { url: 'https://device.example/?user_code=ABCD-EFGH', code: 'ABCD-EFGH', expiresAt: new Date('2026-11-16T09:10:00Z') }
+/** How many times the command looks for the engine's code before the test approves: more than once, to show it isn't shown again. */
+const pollsBeforeApproval = 2
 
-type EngineSignIns = Pick<ControlClient, 'signIns' | 'signIn'>
+/** How long a test waits for the command to poll the engine that often. */
+const waitMs = 5_000
+
+const prompt = { url: 'https://device.example/?user_code=ABCD-EFGH', code: 'ABCD-EFGH', expiresAt: new Date('2026-11-16T09:10:00Z') }
 
 /** No engine serves: every call says so, as the control client does. */
 const noEngine: EngineSignIns = {
@@ -87,6 +91,58 @@ describe('mesh-flow login', () => {
 		expect(lines.filter((line) => line.includes(prompt.code))).toHaveLength(1)
 		expect(lines.at(-1)).toBe('Signed in to cloud.')
 		expect(login).not.toHaveBeenCalled()
+	})
+
+	test("shows why the engine's sign-in failed, once for each new reason", async () => {
+		// Arrange
+		const failed: SignInState = { connector: 'cloud', error: 'The AWS settings are missing.' }
+		const { promise: approved, resolve: approve } = Promise.withResolvers<undefined>()
+		const signIns = vi.fn(() => Promise.resolve([failed]))
+		const engine: EngineSignIns = { signIns, signIn: () => approved }
+		const { program, lines } = await loginProgram(() => [], engine)
+
+		// Act
+		const loggingIn = program.parseAsync(['login', 'cloud'], { from: 'user' })
+		await vi.waitFor(
+			() => {
+				expect(signIns.mock.calls.length).toBeGreaterThan(pollsBeforeApproval)
+			},
+			{ timeout: waitMs },
+		)
+		approve(undefined)
+		await loggingIn
+
+		// Assert
+		expect(lines.filter((line) => line.includes(failed.error ?? ''))).toEqual([
+			'Signing in to cloud failed, trying again: The AWS settings are missing.',
+		])
+	})
+
+	test('signs in here when the engine that serves has no such connector', async () => {
+		// Arrange
+		const engine: EngineSignIns = {
+			signIns: () => Promise.resolve([]),
+			signIn: () => Promise.reject(new ControlError('There is no connector cloud that signs in.', 404)),
+		}
+		const { program, lines, credentials } = await loginProgram(
+			(store) => [
+				{
+					package: '@team/cloud',
+					name: 'cloud',
+					tools: [],
+					login: (context: LoginContext) => store.set('cloud/session', 'token', context.abortSignal),
+				},
+			],
+			engine,
+		)
+
+		// Act
+		await program.parseAsync(['login', 'cloud'], { from: 'user' })
+
+		// Assert
+		expect(await credentials.get('cloud/session', abortSignal)).toBe('token')
+		expect(lines.join('\n')).toContain("doesn't sign in to cloud; signing in here")
+		expect(lines.at(-1)).toBe('Signed in to cloud.')
 	})
 
 	test('names the connectors there are when the one asked for is not added', async () => {
