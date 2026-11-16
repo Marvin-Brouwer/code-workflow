@@ -2,20 +2,21 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { PackageRegistry } from '@mesh-flow/protocol'
 import { newCertificateAuthority } from './certificate-authority.mts'
-import { startPackageProxy, type FetchPackage, type PackageProxy } from './package-proxy.mts'
+import type { GatewayFetch } from '../gateway/gateway-packages.mts'
+import { startPackageProxy, type PackageProxy } from './package-proxy.mts'
 
 /** What package managers in the sandbox need to restore through the proxy. */
 export interface PackageAccessOptions {
 	readonly registries: readonly PackageRegistry[]
 	/** Fetches a package, through the gateway. */
-	readonly fetchPackage: FetchPackage
+	readonly fetchThroughGateway: GatewayFetch
 	/** Where the authority's certificate goes. */
 	readonly directory: string
 	readonly abortSignal: AbortSignal
 }
 
 /** The environment that points package managers at the proxy and makes them trust it. */
-export type PackageEnvironment = Readonly<Record<string, string>>
+export type PackageEnvironment = Readonly<ReturnType<typeof packageEnvironment>>
 
 /** The running proxy, and the environment that sends package managers to it. */
 export interface PackageAccess {
@@ -42,18 +43,29 @@ export async function startPackageAccess(options: PackageAccessOptions): Promise
 	await mkdir(options.directory, { recursive: true })
 	const certificate = path.join(options.directory, certificateFile)
 	await writeFile(certificate, authority.certificatePem, { signal: options.abortSignal })
-	const proxy = await startPackageProxy({ ...options, authority })
-	const environment = {
-		HTTPS_PROXY: proxy.url,
-		https_proxy: proxy.url,
-		HTTP_PROXY: proxy.url,
-		http_proxy: proxy.url,
+	const proxy = await startPackageProxy({
+		registries: options.registries,
+		fetchThroughGateway: options.fetchThroughGateway,
+		authority,
+		abortSignal: options.abortSignal,
+	})
+	const environment = packageEnvironment(proxy.url, certificate)
+	return { proxy, environment }
+}
+
+/** The variables that send every process to the proxy at `proxyUrl` and make it trust `certificate`. */
+function packageEnvironment(proxyUrl: string, certificate: string) {
+	return {
+		HTTPS_PROXY: proxyUrl,
+		https_proxy: proxyUrl,
+		HTTP_PROXY: proxyUrl,
+		http_proxy: proxyUrl,
 		NO_PROXY: noProxyHosts,
 		no_proxy: noProxyHosts,
 		NODE_USE_ENV_PROXY: '1',
 		// npm reads its own settings before HTTPS_PROXY, and an image may set them.
-		npm_config_https_proxy: proxy.url,
-		npm_config_proxy: proxy.url,
+		npm_config_https_proxy: proxyUrl,
+		npm_config_proxy: proxyUrl,
 		npm_config_noproxy: noProxyHosts,
 		NODE_EXTRA_CA_CERTS: certificate,
 		SSL_CERT_FILE: certificate,
@@ -61,5 +73,4 @@ export async function startPackageAccess(options: PackageAccessOptions): Promise
 		CURL_CA_BUNDLE: certificate,
 		REQUESTS_CA_BUNDLE: certificate,
 	}
-	return { proxy, environment }
 }

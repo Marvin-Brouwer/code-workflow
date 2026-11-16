@@ -601,11 +601,27 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 
 		// Act
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, sent, abortSignal, maxBytes)
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
 
 		// Assert
 		await expect(fetching).rejects.toThrow('the most a package fetch takes')
 		expect(cancelled).toHaveBeenCalledOnce()
+	})
+
+	test('settles a package fetch promptly when it is stopped, even if the registry never answers', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
+		const stop = new AbortController()
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		await vi.waitFor(() => {
+			expect(sent).toHaveBeenCalled()
+		})
+
+		// Act
+		stop.abort(new Error('The run stopped.'))
+
+		// Assert
+		await expect(fetching).rejects.toThrow('The run stopped.')
 	})
 
 	test('refuses a body larger than a package fetch takes', async () => {

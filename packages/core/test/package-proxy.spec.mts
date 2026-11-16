@@ -5,8 +5,9 @@ import { request } from 'node:http'
 import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
+import type { PackageResponse } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
+import type { GatewayFetch } from '../src/gateway/gateway-packages.mts'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
 import { storedZip } from './support/stored-zip.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -14,7 +15,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const run = promisify(execFile)
 
 /** A package that isn't on the real npm registry: an install that finds it went through the proxy. */
-const fakePackage = { name: 'mesh-flow-proxy-check', version: '1.0.0' }
+const fakeNpmPackage = { name: 'mesh-flow-proxy-check', version: '1.0.0' }
 
 /** A package that isn't on nuget.org: a restore that finds it went through the proxy. */
 const fakeNuGetPackage = { id: 'MeshFlow.ProxyCheck', version: '1.0.0' }
@@ -34,19 +35,17 @@ const restoreTimeoutMs = 120_000
 /** How long a stopped proxy may take to settle while a fetch never does. */
 const promptlyMs = 3_000
 
-type Fetch = (request: PackageRequest, abortSignal: AbortSignal) => Promise<PackageResponse>
-
 function answer(status: number, body: string | Buffer, contentType = 'application/json'): PackageResponse {
 	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body).toString('base64') }
 }
 
 /** Starts the proxy with `fetch` behind it, stopped when the test ends. */
-async function proxyWith(fetch: Fetch): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
+async function proxyWith(fetch: GatewayFetch): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
 	const { proxy, environment } = await startPackageAccess({
 		registries: ['npm', 'nuget'],
-		fetchPackage: fetch,
+		fetchThroughGateway: fetch,
 		directory,
 		abortSignal: stop.signal,
 	})
@@ -62,17 +61,17 @@ function childEnvironment(environment: PackageEnvironment, home: string): NodeJS
 /** A tarball of a package with nothing in it, as `npm pack` makes it, and its packument. */
 async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tarballPath: string }> {
 	const directory = await temporaryDirectory()
-	await writeFile(path.join(directory, 'package.json'), JSON.stringify(fakePackage))
+	await writeFile(path.join(directory, 'package.json'), JSON.stringify(fakeNpmPackage))
 	const { stdout } = await run('npm', ['pack', '--silent'], { cwd: directory })
 	const tarball = await readFile(path.join(directory, stdout.trim()))
-	const tarballPath = `/${fakePackage.name}/-/${fakePackage.name}-${fakePackage.version}.tgz`
+	const tarballPath = `/${fakeNpmPackage.name}/-/${fakeNpmPackage.name}-${fakeNpmPackage.version}.tgz`
 	const integrity = `sha512-${createHash('sha512').update(tarball).digest('base64')}`
 	const packument = JSON.stringify({
-		name: fakePackage.name,
-		'dist-tags': { latest: fakePackage.version },
+		name: fakeNpmPackage.name,
+		'dist-tags': { latest: fakeNpmPackage.version },
 		versions: {
-			[fakePackage.version]: {
-				...fakePackage,
+			[fakeNpmPackage.version]: {
+				...fakeNpmPackage,
 				dist: { tarball: `https://registry.npmjs.org${tarballPath}`, integrity },
 			},
 		},
@@ -185,8 +184,8 @@ describe.skipIf(onWindows)('package proxy', () => {
 	test('npm installs a package through it, from what the gateway fetched', { timeout: 60_000 }, async () => {
 		// Arrange
 		const { packument, tarball, tarballPath } = await fakeRegistry()
-		const fetch = vi.fn<Fetch>((asked) => {
-			if (asked.path === `/${fakePackage.name}`) return Promise.resolve(answer(200, packument))
+		const fetch = vi.fn<GatewayFetch>((asked) => {
+			if (asked.path === `/${fakeNpmPackage.name}`) return Promise.resolve(answer(200, packument))
 			if (asked.path === tarballPath) return Promise.resolve(answer(200, tarball, 'application/octet-stream'))
 			return Promise.resolve(answer(404, '{}'))
 		})
@@ -195,14 +194,14 @@ describe.skipIf(onWindows)('package proxy', () => {
 		await writeFile(path.join(project, 'package.json'), JSON.stringify({ name: 'project', private: true }))
 
 		// Act
-		await run('npm', ['install', '--no-audit', '--no-fund', `${fakePackage.name}@${fakePackage.version}`], {
+		await run('npm', ['install', '--no-audit', '--no-fund', `${fakeNpmPackage.name}@${fakeNpmPackage.version}`], {
 			cwd: project,
 			env: childEnvironment(environment, project),
 		})
 
 		// Assert
-		const installed = JSON.parse(await readFile(path.join(project, 'node_modules', fakePackage.name, 'package.json'), 'utf8')) as unknown
-		expect(installed).toMatchObject(fakePackage)
+		const installed = JSON.parse(await readFile(path.join(project, 'node_modules', fakeNpmPackage.name, 'package.json'), 'utf8')) as unknown
+		expect(installed).toMatchObject(fakeNpmPackage)
 		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'npm', path: tarballPath }), expect.any(AbortSignal))
 	})
 
@@ -213,7 +212,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 		async () => {
 			// Arrange
 			const feed = fakeNuGetFeed()
-			const fetch = vi.fn<Fetch>((asked) => Promise.resolve(feed[asked.path] ?? answer(404, '{}')))
+			const fetch = vi.fn<GatewayFetch>((asked) => Promise.resolve(feed[asked.path] ?? answer(404, '{}')))
 			const { environment } = await proxyWith(fetch)
 			const project = await restoringProject()
 			const packages = path.join(project, 'packages')
@@ -242,7 +241,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('curl, which trusts what OpenSSL trusts, as .NET does, gets the feed through it', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{"version":"3.0.0"}')))
+		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{"version":"3.0.0"}')))
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -258,7 +257,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses hosts that are not the registries', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>()
+		const fetch = vi.fn<GatewayFetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -272,12 +271,12 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses plain HTTP, reads and writes alike', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>()
+		const fetch = vi.fn<GatewayFetch>()
 		const { environment } = await proxyWith(fetch)
 
 		// Act
-		const plain = await plainRequest(environment.HTTPS_PROXY ?? '', 'http://registry.npmjs.org/left-pad')
-		const written = await plainRequest(environment.HTTPS_PROXY ?? '', 'http://registry.npmjs.org/left-pad', 'PUT')
+		const plain = await plainRequest(environment.HTTPS_PROXY, 'http://registry.npmjs.org/left-pad')
+		const written = await plainRequest(environment.HTTPS_PROXY, 'http://registry.npmjs.org/left-pad', 'PUT')
 
 		// Assert
 		expect([plain, written]).toEqual([403, 403])
@@ -286,7 +285,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses a write over HTTPS, and anything but a read', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>()
+		const fetch = vi.fn<GatewayFetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -301,7 +300,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test("answers 400 to a fetch the gateway couldn't take, and sends nothing", async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>()
+		const fetch = vi.fn<GatewayFetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -315,7 +314,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('takes a registry host in any case, and with a trailing dot', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{}')))
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -329,9 +328,9 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('keeps serving when a client resets a refused tunnel', async () => {
 		// Arrange
-		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{}')))
 		const { environment } = await proxyWith(fetch)
-		const proxy = new URL(environment.HTTPS_PROXY ?? '')
+		const proxy = new URL(environment.HTTPS_PROXY)
 		const home = await temporaryDirectory()
 		const socket = connect(Number(proxy.port), proxy.hostname)
 		await new Promise((resolve) => socket.once('connect', resolve))
@@ -349,7 +348,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 	test('stops promptly while a fetch never settles', async () => {
 		// Arrange
 		let fetchSignal: AbortSignal | undefined
-		const fetch = vi.fn<Fetch>((_request, abortSignal) => {
+		const fetch = vi.fn<GatewayFetch>((_request, abortSignal) => {
 			fetchSignal = abortSignal
 			return new Promise<PackageResponse>(() => undefined)
 		})
@@ -381,7 +380,7 @@ describe('package access', () => {
 		// Act
 		const { proxy, environment } = await startPackageAccess({
 			registries: ['npm'],
-			fetchPackage: vi.fn<Fetch>(),
+			fetchThroughGateway: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: stop.signal,
 		})
@@ -389,7 +388,7 @@ describe('package access', () => {
 
 		// Assert
 		expect(environment.NODE_EXTRA_CA_CERTS).toBe(environment.SSL_CERT_FILE)
-		expect(await readFile(environment.SSL_CERT_FILE ?? '', 'utf8')).toContain('BEGIN CERTIFICATE')
+		expect(await readFile(environment.SSL_CERT_FILE, 'utf8')).toContain('BEGIN CERTIFICATE')
 		expect(environment.HTTPS_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
 	})
 
@@ -401,7 +400,7 @@ describe('package access', () => {
 		// Act
 		const starting = startPackageAccess({
 			registries: ['npm'],
-			fetchPackage: vi.fn<Fetch>(),
+			fetchThroughGateway: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: AbortSignal.abort(reason),
 		})

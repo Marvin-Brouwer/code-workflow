@@ -150,7 +150,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'package') {
 			if (!state.registries.includes(call.request.registry))
 				throw new Error(`The app doesn't restore from ${call.request.registry}: add it to the sandbox's registries.`)
-			return fetchPackage(call.request, fetchFromHost, abortSignal)
+			return fetchPackage(call.request, { fetchFromHost }, abortSignal)
 		}
 		return callModel(runId, call.request, abortSignal)
 	}

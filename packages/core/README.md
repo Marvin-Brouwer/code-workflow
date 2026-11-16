@@ -297,12 +297,17 @@ The sandbox has no network. Package managers in it still restore from the regist
 Code can make the same call itself, with `fetchPackage`:
 
 ```ts
-import { fetchPackage } from '@mesh-flow/core'
+import { fetchPackage, workflow } from '@mesh-flow/core'
 import { z } from 'zod'
 
-const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
-const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
+	const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
+	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+	return versions
+})
 ```
+
+It only works inside a run, whose gateway it fetches through.
 
 ### Triggers
 

@@ -39,6 +39,8 @@ The gateway sends the Anthropic Messages, OpenAI Chat Completions and OpenAI Res
 
 A sandbox has no network, so its package fetches come here too: a `package` call names one of the public registries the run's app restores from (`nuget` or `npm`, which `openRun` gets in `registries`) and a path on it. The gateway sends it only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. The registry's answer goes back whole, a 404 too, with the body base64 and only `content-type`, `etag`, `last-modified` and `location` of its headers. A redirect isn't followed: it goes back as it is, so the next fetch is checked too. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
 
+With the gateway of the [sample below](#host-tools), a run whose app restores from npm opens its endpoint with the registry:
+
 ```ts
 const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm'] }, abortSignal)
 ```

@@ -1,5 +1,6 @@
 import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
+import { untilAborted } from '../until-aborted.mts'
 import { publicRegistries } from './public-registries.mts'
 
 /**
@@ -23,6 +24,14 @@ const bytesPerMb = 1024 * 1024
  */
 export const maxPackageBytes = 256 * bytesPerMb
 
+/** How {@link fetchPackage} fetches. */
+export interface PackageFetchOptions {
+	/** The host's `fetch`. */
+	readonly fetchFromHost: typeof fetch
+	/** The largest body it takes. Default: {@link maxPackageBytes}. */
+	readonly maxBytes?: number
+}
+
 /**
  * Fetches a package or its metadata from a public registry, for a package manager in a sandbox that
  * has no network. Only reads: a path the registry doesn't serve packages on, or one that isn't
@@ -30,25 +39,28 @@ export const maxPackageBytes = 256 * bytesPerMb
  * answers is the answer, a 404 too; package managers ask for what may not exist. A redirect isn't
  * followed here: it's handed back, so the next fetch goes through the same checks.
  *
- * @param maxBytes - The largest body it takes. Default: {@link maxPackageBytes}.
  * @throws When the path isn't a package fetch on that registry, and when the body is larger than
  * `maxBytes`.
  */
 export async function fetchPackage(
 	request: PackageRequest,
-	fetchFromHost: typeof fetch,
+	options: PackageFetchOptions,
 	abortSignal: AbortSignal,
-	maxBytes = maxPackageBytes,
 ): Promise<PackageResponse> {
+	const { fetchFromHost, maxBytes = maxPackageBytes } = options
 	const registry = publicRegistries[request.registry]
 	const url = new URL(request.path, registry.origin)
 	if (url.origin !== registry.origin || `${url.pathname}${url.search}` !== request.path || !registry.fetches(url.pathname))
 		throw new Error(`${request.path} isn't a package fetch on ${request.registry}.`)
-	const response = await retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
-		headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
-		redirect: 'manual',
-		signal: abortSignal,
-	})
+	// Settles once the signal aborts, also when the host's fetch doesn't.
+	const response = await untilAborted(
+		retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
+			headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
+			redirect: 'manual',
+			signal: abortSignal,
+		}),
+		abortSignal,
+	)
 	const body = (await cappedBody(response, maxBytes, `${request.registry} ${request.path}`)).toString('base64')
 	const headers = Object.fromEntries(
 		keptHeaders.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),

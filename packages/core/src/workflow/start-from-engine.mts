@@ -107,7 +107,7 @@ async function servePackages(
 		throw new Error(`The app restores from ${registries.join(', ')}, which takes a gateway, and this run has none.`)
 	const { proxy, environment } = await startPackageAccess({
 		registries,
-		fetchPackage: gatewayPackages(gateway),
+		fetchThroughGateway: gatewayPackages(gateway),
 		directory: path.join(homedir(), '.mesh-flow'),
 		abortSignal,
 	})
