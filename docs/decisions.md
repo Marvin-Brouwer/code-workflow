@@ -279,6 +279,17 @@ hypervisor, gVisor locally without one (design section 3).
   with CRIU; it's a whole task platform.
 - **Vercel Sandbox, Cloudflare Sandbox**: filesystem-only snapshots.
 - **Sandcastle, Flue**: agent-in-sandbox runners/harnesses without memory durability.
+- **Egress allowlists per sandbox** (`egress: ['registry.npmjs.org']`): gVisor tunnelling allowed
+  hosts through a host-side proxy, microsandbox's TLS-intercepting hostname rules, E2B's allow
+  lists. Superseded 2026-11-16 (Marvin): no sandbox has any direct egress, not even to public
+  package sources. Package fetches are calls to the gateway, made by a proxy the runtime serves on
+  loopback, so `dotnet restore` and `npm ci` still work and code can make the same calls itself
+  ([plan](plans/aws-codeartifact.md)). Allowlists let anything in the sandbox reach those hosts
+  with any request; the proxy only sends reads of packages, and the gateway checks each path.
+- **Rewriting a repository's package source to a local shim** (`dotnet nuget update source`, an
+  `.npmrc` override in the checkout). Rejected 2026-11-16: push tools commit every change, so it
+  would end up in a commit. The proxy takes the registry's own hostname instead, with a certificate
+  authority made in the sandbox for that run.
 
 ## Tooling
 

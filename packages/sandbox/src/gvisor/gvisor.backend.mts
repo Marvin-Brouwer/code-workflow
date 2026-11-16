@@ -8,15 +8,13 @@ import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import { assertSandboxId, isSandboxId, newSandboxId } from '../sandbox-id.mts'
 import type { Sandbox } from '../sandbox.mts'
-import { allowsEgress, SandboxSpec } from '../sandbox-spec.mts'
+import { SandboxSpec } from '../sandbox-spec.mts'
 import { writeBundle } from './bundle.mts'
 import { hasCheckpoint, isCheckpointName } from './checkpoint.mts'
-import { forwarderEnv, forwarderReadyCheck, forwarderService } from './egress-forwarder.mts'
-import { EgressProxies } from './egress-proxies.mts'
 import type { GvisorContext } from './gvisor.context.mts'
 import { GvisorSandbox } from './gvisor.sandbox.mts'
 import { initCommand } from './init.mts'
-import { egressMountPoint, Layout } from './layout.mts'
+import { Layout } from './layout.mts'
 import { RootfsCache } from './rootfs.mts'
 import { runsc, runscOrThrow, type RunscConfig } from './runsc.mts'
 
@@ -27,8 +25,6 @@ export interface GvisorBackendOptions {
 	readonly runsc?: readonly string[]
 	/** runsc's platform. Default `systrap`, which needs no KVM. */
 	readonly platform?: string
-	/** An HTTP proxy between this machine and the internet, as `http://host:port`. */
-	readonly upstreamProxy?: string
 }
 
 const RunscList = z.array(z.object({ id: z.string(), status: z.string() })).nullable()
@@ -40,10 +36,7 @@ const cleanupTimeoutMs = 10_000
  * The local backend without a hypervisor: gVisor's `runsc`, Linux only, as root. No Docker: images
  * are pulled from Docker Hub and unpacked by this package.
  *
- * Sandboxes have no network (`--network=none`). When the spec allows hosts, a proxy on the host
- * tunnels to those hosts only, over a Unix socket in the sandbox, and the sandbox's init forwards
- * `HTTPS_PROXY` to it. That init needs `node` in the image, and only tools that honour
- * `HTTPS_PROXY` get out.
+ * Sandboxes have no network (`--network=none`), only loopback.
  *
  * Unlike E2B, timers inside the sandbox do count paused time here.
  */
@@ -56,13 +49,11 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 		...(options.platform === undefined ? {} : { platform: options.platform }),
 	}
 	const images = new RootfsCache(layout.images, lifetime)
-	const proxies = new EgressProxies(layout, options.upstreamProxy)
 
 	/** Either runsc call may fail because the container is already gone, which is fine. */
 	async function stopContainer(id: string, signal: AbortSignal): Promise<void> {
 		await runsc(config, ['kill', id, 'KILL'], { signal })
 		await runsc(config, ['delete', '--force', id], { signal })
-		await proxies.stop(id, signal)
 	}
 
 	async function removeFromDisk(id: string, signal: AbortSignal): Promise<void> {
@@ -83,7 +74,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 		return (await hasCheckpoint(layout.sandbox(id).checkpoints)) ? 'paused' : 'running'
 	}
 
-	const context: GvisorContext = { runsc: config, layout, lifetime, proxies, remove: removeFromDisk }
+	const context: GvisorContext = { runsc: config, layout, lifetime, remove: removeFromDisk }
 
 	return {
 		name: 'gvisor',
@@ -93,21 +84,17 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 			const bound = lifetime.bind(signal)
 			const id = newSandboxId()
 			const paths = layout.sandbox(id)
-			const egress = allowsEgress(spec.egress)
 			const rootfs = await images.get(spec.image, bound)
 			try {
-				await mkdir(paths.egress, { recursive: true })
+				await mkdir(paths.directory, { recursive: true })
 				await writeBundle(paths.bundle, {
 					rootfs,
-					init: initCommand(egress ? forwarderService : []),
-					env: { ...spec.env, ...(egress ? forwarderEnv : {}) },
+					init: initCommand(),
+					env: { ...spec.env },
 					cpus: spec.cpus,
 					memoryMb: spec.memoryMb,
-					mounts: egress ? [{ source: paths.egress, destination: egressMountPoint }] : [],
 				})
-				await proxies.start(id, spec.egress, bound)
 				await runscOrThrow(config, ['run', '--detach', `--bundle=${paths.bundle}`, id], { signal: bound, logFile: paths.log })
-				if (egress) await runscOrThrow(config, ['exec', id, ...forwarderReadyCheck], { signal: bound })
 			} catch (error) {
 				await cleanUp((cleanupSignal) => removeFromDisk(id, cleanupSignal))
 				throw error
@@ -130,7 +117,6 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				try {
 					// A pause that couldn't delete its container leaves the record behind.
 					await runsc(config, ['delete', '--force', paused.id], { signal: bound })
-					await proxies.start(paused.id, paused.spec.egress, bound)
 					// The bundle must be the one the sandbox was created from.
 					await runscOrThrow(config, ['restore', '--detach', `--image-path=${imagePath}`, `--bundle=${paths.bundle}`, paused.id], {
 						signal: bound,
@@ -166,12 +152,6 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 			lifetime.untrack(id)
 		},
 
-		async close(signal: AbortSignal): Promise<void> {
-			try {
-				await lifetime.close(signal)
-			} finally {
-				await proxies.stopAll(signal)
-			}
-		},
+		close: (signal: AbortSignal) => lifetime.close(signal),
 	}
 }

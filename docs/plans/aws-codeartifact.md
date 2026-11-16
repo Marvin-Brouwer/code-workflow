@@ -1,6 +1,6 @@
 # Plan: AWS sign-in and CodeArtifact restores
 
-Status: proposed 2026-11-16, not built. Covers the first part of roadmap step 5 of
+Status: agreed 2026-11-16; delivery step 1 (no direct egress) built, the rest not. Covers the first part of roadmap step 5 of
 [`../design.md`](../design.md#roadmap): an AWS session on the host that the user signs in to
 interactively, `checkSession`, and package restores from a private CodeArtifact repository in the
 sandbox. Publishing to CodeArtifact, other AWS operations and the package managers beyond npm and
@@ -116,7 +116,7 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
 
 - **Fetches are tool calls**, so code and a user can make them too, not only a package manager:
   `codeArtifact.fetch({ repository, format, path })` with the CodeArtifact token on the host, and
-  `registry.fetch({ registry, format, path })` for the public registries the app allows (nuget.org,
+  `fetchPackage({ registry, path }, abortSignal)` from `@mesh-flow/core` for the public registries the app allows (nuget.org,
   npmjs), without a credential. Both only accept the read paths of the format: for **NuGet v3** the
   service index, the flat container (version lists and `.nupkg` downloads) and the registration
   resources restore reads; for **npm** package documents and tarballs. There is no write path, so
@@ -144,14 +144,14 @@ The app declares where it restores from, since it's non-secret team config that 
 
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
-import { defineMeshFlow, image, registry, userTrigger } from '@mesh-flow/core'
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 
 export default defineMeshFlow({
 	sandbox: image({
 		name: sandboxImage,
 		memoryMb: 4096,
 		registries: [
-			registry.nuget(),
+			'nuget',
 			codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' }),
 		],
 	}),
@@ -190,9 +190,12 @@ export default defineMeshFlow({
 
 Stacked PRs, each on the previous one's branch:
 
-1. No direct egress: the runtime's proxy with its sandbox CA, `registry.fetch` for nuget.org and
-   npmjs, `registries` in `image` replacing `egress`, no network on every backend. Conformance:
-   NuGet and npm restores through the proxy, and any other host refused, on every backend.
+1. No direct egress (built): the runtime's proxy with its sandbox CA, `fetchPackage` for nuget.org
+   and npmjs, `registries` in `image` replacing `egress`, no network on every backend. Tests: npm
+   and curl (OpenSSL's trust, as .NET's) through the proxy on the host, other hosts and writes
+   refused, a run's commands finding the proxy in their environment; the backends' conformance
+   suite checks there is no network but loopback. A restore through the proxy inside a real
+   backend is checked by hand.
 2. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.

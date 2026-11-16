@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ToolName } from './gateway-call.mts'
+import { PackageRegistry } from './package-registry.mts'
 
 /** A JSON Schema, as a plain object. */
 export const JsonSchema = z.record(z.string(), z.unknown())
@@ -51,14 +52,15 @@ export const TriggerDescription = z.discriminatedUnion('kind', [
 export type TriggerDescription = z.infer<typeof TriggerDescription>
 
 /**
- * The sandbox every run of the app gets: an OCI image, its resources, and the only hosts it may
- * reach over HTTPS. The engine checks it again against what its backends take.
+ * The sandbox every run of the app gets: an OCI image, its resources, and the package registries it
+ * restores from. It has no network: package fetches go through the gateway. The engine checks it
+ * again against what its backends take.
  */
 export const SandboxDescription = z.object({
 	image: z.string().min(1),
 	cpus: z.int().positive(),
 	memoryMb: z.int().positive(),
-	egress: z.object({ allow: z.array(z.string().min(1)).readonly() }),
+	registries: z.array(PackageRegistry).readonly().default([]),
 })
 export type SandboxDescription = z.infer<typeof SandboxDescription>
 

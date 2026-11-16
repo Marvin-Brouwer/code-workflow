@@ -1,10 +1,19 @@
 import path from 'node:path'
-import type { CallAnswer, CallMessage, EndpointGrant, GatewayCall, ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
+import type {
+	CallAnswer,
+	CallMessage,
+	EndpointGrant,
+	GatewayCall,
+	ModelResponse,
+	PackageRegistry,
+	ResolvedModel,
+} from '@mesh-flow/protocol'
 import type { CredentialStore } from './credentials/credential-store.mts'
 import { openRunStates, type EndpointState, type RunState } from './endpoints/run-state.mts'
 import { newLoopEndpointId, newToken, tokenHash } from './endpoints/tokens.mts'
 import { messageOf } from './errors.mts'
 import { ownEntry } from './own-entry.mts'
+import { fetchPackage } from './packages/fetch-package.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
 import { chosenModel, resolveModel } from './providers/resolve-model.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
@@ -20,8 +29,16 @@ export interface GatewayOptions {
 	readonly providers: ProviderSettings
 	/** The host halves of the tools apps may call. A run gets those of them its app lists. */
 	readonly tools?: readonly HostTool[]
-	/** Sends model requests. Default: the global `fetch`. */
+	/** Sends model requests and package fetches. Default: the global `fetch`. */
 	readonly fetch?: typeof fetch
+}
+
+/** What a run may call through the gateway besides models: what its app declares. */
+export interface RunAccess {
+	/** The host tools its app lists. */
+	readonly tools: readonly string[]
+	/** The public package registries its app restores from. Default: none. */
+	readonly registries?: readonly PackageRegistry[]
 }
 
 /** A call the gateway took. Its token is spent, and the answer will carry the next one. */
@@ -52,11 +69,11 @@ export interface InterruptedCall {
  */
 export interface Gateway {
 	/**
-	 * Opens the run's own endpoint, for the host tools its app lists, and returns its tokens: one per
-	 * call that may run at the same time. Opening it again, for a restart, closes the earlier
-	 * attempt's endpoints. The run's usage so far stays.
+	 * Opens the run's own endpoint, for the host tools and package registries its app lists, and
+	 * returns its tokens: one per call that may run at the same time. Opening it again, for a
+	 * restart, closes the earlier attempt's endpoints. The run's usage so far stays.
 	 */
-	readonly openRun: (runId: string, tools: readonly string[], abortSignal: AbortSignal) => Promise<EndpointGrant>
+	readonly openRun: (runId: string, access: RunAccess, abortSignal: AbortSignal) => Promise<EndpointGrant>
 	/**
 	 * Takes a call: checks its endpoint and token, spends the token and keeps the call as in flight,
 	 * on disk, before it resolves. Save that the call was read only after this, and answer it with
@@ -108,9 +125,15 @@ function setKeyHint(provider: string): string {
 export function openGateway(options: GatewayOptions): Gateway {
 	const states = openRunStates(path.join(options.home, 'runs'))
 	const tools = new Map((options.tools ?? []).map((tool) => [tool.name, tool]))
-	const fetchModel = options.fetch ?? fetch
+	const send = options.fetch ?? fetch
 
-	const perform = async (runId: string, endpoint: EndpointState, call: GatewayCall, abortSignal: AbortSignal): Promise<unknown> => {
+	const perform = async (
+		runId: string,
+		state: RunState,
+		endpoint: EndpointState,
+		call: GatewayCall,
+		abortSignal: AbortSignal,
+	): Promise<unknown> => {
 		if (call.type === 'tool') {
 			if (!endpoint.tools.includes(call.tool)) throw new Error(`${call.tool} isn't one of the tools of this endpoint.`)
 			const tool = tools.get(call.tool)
@@ -123,6 +146,11 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'resolve-model') {
 			const { provider, model } = resolveModel(await options.providers.list(abortSignal), call.model)
 			return { provider: provider.name, kind: provider.kind, model: model.id } satisfies ResolvedModel
+		}
+		if (call.type === 'package') {
+			if (!state.registries.includes(call.request.registry))
+				throw new Error(`The app doesn't restore from ${call.request.registry}: add it to the sandbox's registries.`)
+			return fetchPackage(call.request, send, abortSignal)
 		}
 		return callModel(runId, call.request, abortSignal)
 	}
@@ -174,7 +202,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		const choice = chosenModel(await options.providers.list(abortSignal), request.provider, request.model)
 		const key = await options.credentials.get(providerCredential(choice.provider.name), abortSignal)
 		if (key === undefined) throw new Error(`Provider ${choice.provider.name} has no API key. ${setKeyHint(choice.provider.name)}`)
-		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: fetchModel, abortSignal })
+		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: send, abortSignal })
 		const used = usageOf(response.body, choice.model)
 		await states.update(
 			runId,
@@ -188,14 +216,15 @@ export function openGateway(options: GatewayOptions): Gateway {
 
 	return Object.freeze<Gateway>({
 		missingTools,
-		openRun: (runId, appTools, abortSignal) =>
+		openRun: (runId, access, abortSignal) =>
 			states.update(
 				runId,
 				(state) => {
 					const tokens = newTokens()
-					const runTools = [...new Set(appTools)]
+					const runTools = [...new Set(access.tools)]
 					const fresh: RunState = {
 						tools: runTools,
+						registries: [...new Set(access.registries ?? [])],
 						endpoints: { [runEndpoint]: { loop: false, tools: runTools, tokens: tokens.map(tokenHash) } },
 						inFlight: {},
 						usage: state?.usage ?? {},
@@ -239,7 +268,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 							answer: async (callSignal) => {
 								try {
 									// A tool that ignores its signal can't hold up a stop.
-									const result = await untilAborted(perform(runId, rotated, message.call, callSignal), callSignal)
+									const result = await untilAborted(perform(runId, state, rotated, message.call, callSignal), callSignal)
 									return { next, outcome: { ok: true, result: result ?? null } }
 								} catch (error) {
 									return {

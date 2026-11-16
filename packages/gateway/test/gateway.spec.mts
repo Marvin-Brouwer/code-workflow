@@ -46,7 +46,7 @@ describe('openGateway', () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ tools: [secretReader] })
 		await credentials.set('service/token', 'host-only', abortSignal)
-		const grant = await gateway.openRun(runId, ['readSecret'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['readSecret'] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(
@@ -66,7 +66,7 @@ describe('openGateway', () => {
 		const flaky = hostTool({ name: 'flaky', input: z.object({}) }, () => Promise.reject(new HostToolTransientError('write ECONNABORTED')))
 		const broken = hostTool({ name: 'broken', input: z.object({}) }, () => Promise.reject(new Error('Bad credentials')))
 		const { gateway } = await testGateway({ tools: [flaky, broken] })
-		const grant = await gateway.openRun(runId, ['flaky', 'broken'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['flaky', 'broken'] }, abortSignal)
 
 		// Act
 		const transient = await callGateway(
@@ -88,7 +88,7 @@ describe('openGateway', () => {
 	test('closes every endpoint of the run when a spent token comes again', async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 		const echoCall = { type: 'tool', tool: 'echo', input: { text: 'hi' } } as const
 		await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 0), echoCall))
 
@@ -106,7 +106,7 @@ describe('openGateway', () => {
 	test('closes the run when a call that is still running comes again', async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
 		await gateway.accept(runId, message, abortSignal)
 
@@ -123,7 +123,7 @@ describe('openGateway', () => {
 	])('closes the run on a bad token with %s named like an object key', async (_what, id, endpoint) => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo] })
-		await gateway.openRun(runId, ['echo'], abortSignal)
+		await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 
 		// Act
 		const guessed = await gateway.accept(
@@ -139,7 +139,7 @@ describe('openGateway', () => {
 	test('refuses a token that was never handed out', async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 
 		// Act
 		const guessed = await callGateway(
@@ -155,7 +155,7 @@ describe('openGateway', () => {
 	test("opens a loop's endpoint for its tools only, and closes it", async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo, secretReader] })
-		const grant = await gateway.openRun(runId, ['echo', 'readSecret'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo', 'readSecret'] }, abortSignal)
 		const opened = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 0), { type: 'open', tools: ['echo'] }))
 		const loop = EndpointGrant.parse(resultOf(opened.answer))
 
@@ -188,7 +188,7 @@ describe('openGateway', () => {
 	test("refuses a loop endpoint for tools the app doesn't list", async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo, secretReader] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 
 		// Act
 		const opened = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: ['readSecret'] }))
@@ -201,7 +201,7 @@ describe('openGateway', () => {
 	test('checks the input on the host, whatever the stub checked', async () => {
 		// Arrange
 		const { gateway } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(
@@ -217,7 +217,7 @@ describe('openGateway', () => {
 	test('answers a call taken before an engine restart as interrupted, with its next token', async () => {
 		// Arrange
 		const { gateway, home } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
 		await gateway.accept(runId, message, abortSignal)
 		const { gateway: restarted } = await testGateway({ tools: [echo], home })
@@ -244,7 +244,7 @@ describe('openGateway', () => {
 	test('lists an interrupted call again on the next resume until its answer is settled', async () => {
 		// Arrange
 		const { gateway, home } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
 		await gateway.accept(runId, message, abortSignal)
 		const { gateway: restarted } = await testGateway({ tools: [echo], home })
@@ -264,7 +264,7 @@ describe('openGateway', () => {
 	test('answers an interrupted call read again as interrupted, until the outbox was read past it', async () => {
 		// Arrange
 		const { gateway, home } = await testGateway({ tools: [echo] })
-		const grant = await gateway.openRun(runId, ['echo'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['echo'] }, abortSignal)
 		const message = callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'echo', input: { text: 'hi' } })
 		await gateway.accept(runId, message, abortSignal)
 		const { gateway: restarted } = await testGateway({ tools: [echo], home })
@@ -286,7 +286,7 @@ describe('openGateway', () => {
 		// Arrange
 		const never = hostTool({ name: 'never', input: z.object({}) }, () => new Promise<never>(() => undefined))
 		const { gateway } = await testGateway({ tools: [never] })
-		const grant = await gateway.openRun(runId, ['never'], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: ['never'] }, abortSignal)
 		const accepted = await gateway.accept(
 			runId,
 			callOf(grant.endpoint, tokenOf(grant), { type: 'tool', tool: 'never', input: {} }),
@@ -318,7 +318,7 @@ async function withAnthropic(fetchImpl: typeof fetch, baseUrl?: string) {
 	const setup = await testGateway({ fetch: fetchImpl })
 	await setup.providers.put({ name: 'anthropic', kind: 'anthropic', ...(baseUrl === undefined ? {} : { baseUrl }) }, abortSignal)
 	await setup.credentials.set('provider/anthropic', 'sk-real', abortSignal)
-	const grant = await setup.gateway.openRun(runId, [], abortSignal)
+	const grant = await setup.gateway.openRun(runId, { tools: [] }, abortSignal)
 	return { ...setup, grant }
 }
 
@@ -328,7 +328,7 @@ describe('model calls', () => {
 		const { gateway, providers } = await testGateway()
 		await providers.put({ name: 'openai', kind: 'openai' }, abortSignal)
 		await providers.put({ name: 'work', kind: 'anthropic' }, abortSignal)
-		const grant = await gateway.openRun(runId, [], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(
@@ -455,7 +455,7 @@ describe('model calls', () => {
 		// Arrange
 		const { gateway, providers } = await testGateway()
 		await providers.put({ name: 'anthropic', kind: 'anthropic' }, abortSignal)
-		const grant = await gateway.openRun(runId, [], abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(
@@ -483,5 +483,107 @@ describe('model calls', () => {
 			expect.stringContaining('mesh-flow provider key spare'),
 			'None of the providers (work, spare) offers model no-such-model.',
 		])
+	})
+})
+
+/** A run of an app that restores from npm, on a gateway that fetches with `sent`. */
+async function npmRun(sent: typeof fetch) {
+	const { gateway } = await testGateway({ fetch: sent })
+	const grant = await gateway.openRun(runId, { tools: [], registries: ['npm'] }, abortSignal)
+	const fetchPath = (path: string, accept?: string) =>
+		callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), {
+				type: 'package',
+				request: { registry: 'npm', path, ...(accept === undefined ? {} : { accept }) },
+			}),
+		)
+	return { gateway, grant, fetchPath }
+}
+
+describe('package calls', () => {
+	test('fetches a package from the registry and answers with its body, base64', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() =>
+			Promise.resolve(new Response('tarball', { headers: { 'content-type': 'application/octet-stream', 'set-cookie': 'a=b' } })),
+		)
+		const { fetchPath } = await npmRun(sent)
+
+		// Act
+		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
+
+		// Assert
+		expect(resultOf(answer)).toEqual({
+			status: 200,
+			headers: { 'content-type': 'application/octet-stream' },
+			body: Buffer.from('tarball').toString('base64'),
+		})
+		const [url, init] = sent.mock.calls[0] ?? []
+		expect(url).toBe('https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz')
+		expect(init?.headers).toMatchObject({ accept: 'application/octet-stream' })
+	})
+
+	test("passes the registry's 404 on: package managers ask for what may not exist", async () => {
+		// Arrange
+		const { fetchPath } = await npmRun(vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status: 404 }))))
+
+		// Act
+		const { answer } = await fetchPath('/no-such-package')
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 404 })
+	})
+
+	test.each(['/-/npm/v1/security/advisories/bulk', '/left-pad/../-/whoami', '//evil.example/left-pad', '/'])(
+		'refuses %s, which is no package fetch, and sends nothing',
+		async (path) => {
+			// Arrange
+			const sent = vi.fn<typeof fetch>()
+			const { fetchPath } = await npmRun(sent)
+
+			// Act
+			const { answer } = await fetchPath(path)
+
+			// Assert
+			expect(errorOf(answer)).toContain("isn't a package fetch")
+			expect(sent).not.toHaveBeenCalled()
+		},
+	)
+
+	test("refuses a registry the run's app doesn't restore from", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, grant } = await npmRun(sent)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toContain("doesn't restore from nuget")
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test("refuses package calls on a loop's endpoint", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, grant } = await npmRun(sent)
+		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
+		const loop = EndpointGrant.parse(resultOf(opened))
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(loop.endpoint, tokenOf(loop), { type: 'package', request: { registry: 'npm', path: '/left-pad' } }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toContain('only takes its tools')
+		expect(sent).not.toHaveBeenCalled()
 	})
 })

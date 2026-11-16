@@ -3,8 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, test } from 'vitest'
-import { initCommand, jobDirectory, jobFifo, jobScript, submitJobCommand } from '../../src/gvisor/init.mts'
-import { egressMountPoint } from '../../src/gvisor/layout.mts'
+import { initCommand, jobFifo, jobScript, submitJobCommand } from '../../src/gvisor/init.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
 const execFileAsync = promisify(execFile)
@@ -86,19 +85,14 @@ describe('jobScript', () => {
 })
 
 describe('initCommand', () => {
-	test('passes the service to a script the shell accepts', async () => {
+	test('is a script the shell accepts', async () => {
 		// Act
-		const [program, flag, script, ...args] = initCommand(['node', '-e', 'forward()'])
+		const [program, flag, script, ...args] = initCommand()
 
 		// Assert
 		expect([program, flag]).toEqual(['sh', '-c'])
-		expect(args).toEqual(['sh', 'node', '-e', 'forward()'])
+		expect(args).toEqual([])
 		await expect(run('sh', ['-n', '-c', script ?? ''])).resolves.toBeDefined()
-	})
-
-	test('keeps its jobs out of the read-only egress mount', () => {
-		// Assert
-		expect(`${jobDirectory}/`.startsWith(`${egressMountPoint}/`)).toBe(false)
 	})
 })
 

@@ -36,12 +36,12 @@ export interface RunscResult {
 const outputGraceMs = 200
 
 /**
- * Runs `runsc <flags> <args>`. Aborting kills it. Without a network (`--network=none`): the only
- * way out of a sandbox is the egress socket, which `--host-uds=open` allows it to connect to.
+ * Runs `runsc <flags> <args>`. Aborting kills it. Without a network (`--network=none`), and the
+ * sandbox can't connect to the host's Unix sockets either, so it has no way out.
  */
 export function runsc(config: RunscConfig, args: readonly string[], call: RunscCall): Promise<RunscResult> {
 	const [program = 'runsc', ...prefix] = config.command
-	const flags = [`--root=${config.root}`, '--network=none', '--host-uds=open']
+	const flags = [`--root=${config.root}`, '--network=none']
 	if (config.platform !== undefined) flags.push(`--platform=${config.platform}`)
 
 	const log = call.logFile === undefined ? undefined : freshFile(call.logFile)

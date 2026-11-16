@@ -24,7 +24,7 @@ vi.mock('e2b', () => ({
 
 const { e2bBackend } = await import('../../src/e2b/e2b.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 describe('E2B backend, on a fake SDK', () => {
 	beforeEach(() => {

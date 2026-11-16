@@ -1,10 +1,10 @@
-import { ALL_TRAFFIC, Sandbox as E2bSdkSandbox, type SandboxOpts } from 'e2b'
+import { Sandbox as E2bSdkSandbox } from 'e2b'
 import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
 import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import type { Sandbox } from '../sandbox.mts'
-import { allowsEgress, type EgressPolicy, SandboxSpec } from '../sandbox-spec.mts'
+import { SandboxSpec } from '../sandbox-spec.mts'
 import { E2bSandbox } from './e2b.sandbox.mts'
 
 /** Metadata on every sandbox this package creates, so `list` finds only those. */
@@ -56,7 +56,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 				envs: { ...spec.env },
 				timeoutMs,
 				lifecycle: { onTimeout: 'pause' },
-				...networkOptions(spec.egress),
+				allowInternetAccess: false,
 				signal: lifetime.bind(signal),
 			})
 			return new E2bSandbox(sandbox, spec, lifetime)
@@ -90,13 +90,4 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 
 		close: (signal: AbortSignal) => lifetime.close(signal),
 	}
-}
-
-/**
- * Deny everything but the allowed hosts. E2B also lets the sandbox reach its DNS servers whenever
- * a host is allowed, see the README's known gaps.
- */
-function networkOptions(egress: EgressPolicy): Pick<SandboxOpts, 'allowInternetAccess' | 'network'> {
-	if (!allowsEgress(egress)) return { allowInternetAccess: false }
-	return { network: { allowOut: [...egress.allow], denyOut: [ALL_TRAFFIC] } }
 }

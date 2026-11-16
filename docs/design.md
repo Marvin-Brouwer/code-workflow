@@ -51,8 +51,8 @@ sandbox per run (hosted: E2B; local: microsandbox, or gVisor without a hyperviso
 
 - **One sandbox per run**, so runs can't contaminate each other. Workflow code, agent calls and
   checkouts all run inside it.
-- **Sandbox backends** sit behind one engine interface (create, pause to disk, resume, egress
-  policy) and all pass the same checks ([`pocs/pause-harness`](../pocs/pause-harness/README.md)):
+- **Sandbox backends** sit behind one engine interface (create, pause to disk, resume; no network
+  on any of them) and all pass the same checks ([`pocs/pause-harness`](../pocs/pause-harness/README.md)):
   - **hosted: E2B Cloud**;
   - **local: microsandbox** (microVMs from an npm package, no daemon) when a hypervisor is usable:
     `/dev/kvm` on Linux and WSL, Hypervisor.framework on macOS, the Windows Hypervisor Platform on
@@ -253,7 +253,7 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
-		egress: ['api.github.com'],
+		registries: ['npm'],
 	}),
 	workflows: [
 		userTrigger(fixIssue),
@@ -374,7 +374,10 @@ No credential ever enters the sandbox. Full rules in
 |---|---|
 | **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, AWS operations; git clone/fetch/push as functions for workflow code only |
 | **Model calls** over the same channel, native request and response passed through | model providers |
-| **Registry shim** in the sandbox turning package fetches into read-only tool calls | private package registries (CodeArtifact NuGet/npm) |
+| **Package proxy** in the sandbox turning package fetches into read-only calls | every package registry: public ones (nuget.org, npm) now, private ones (CodeArtifact NuGet/npm) next ([plan](plans/aws-codeartifact.md)) |
+
+The sandbox has no network at all (2026-11-16): not even public package sources are reachable
+directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
 
 ### Tool calls
 
@@ -535,14 +538,9 @@ becomes a sandbox per run; `ticketId` and Jira/GitLab-specific artifacts leave t
     Whatever starts Embed also stops it: on the engine's own shutdown it pauses running sandboxes
     and stops Embed cleanly, and it recovers from an unclean stop on the next start, so nothing
     depends on a user stopping Docker first.
-11. **Egress per backend.** The sandbox may reach only the gateway and public package sources. gVisor
-    runs without a network, with the gateway as a bind-mounted Unix socket (proven). microsandbox's
-    hostname rules only allow HTTPS through its TLS-intercepting proxy; the gateway itself should be
-    an IP and port rule instead, which is unverified. E2B has allow/deny lists (proven for one host).
-    Public package sources by hostname mean either interception or a gateway-side package proxy.
-    npm and NuGet installs from their public registries pass the conformance suite on gVisor and on
-    microsandbox (Linux and Windows) without settings in the sandbox: microsandbox puts its
-    interception CA in the guest's trust store and CA variables itself. On E2B they are untested.
+11. ~~**Egress per backend.**~~ Resolved 2026-11-16: no sandbox has a network. Everything from
+    outside comes through the mailbox, package fetches included ([plan](plans/aws-codeartifact.md)).
+    That loopback works without a network is in the conformance suite of every backend.
 12. **microsandbox on native Windows** (Windows Hypervisor Platform, preview) passes the conformance
     suite on GitHub's hosted Windows runners in CI. Not yet tried on a developer machine.
 
@@ -568,8 +566,9 @@ Out of scope for now: token and cost budgets.
    registry shim to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
-5. AWS and CodeArtifact through the gateway; `checkSession`; package managers beyond npm and
-   NuGet, each with a conformance test that installs through egress, one per way of trusting
+5. No direct egress, package fetches through the gateway (built); AWS and CodeArtifact through the
+   gateway; `checkSession` ([plan](plans/aws-codeartifact.md)); package managers beyond npm and
+   NuGet, each with a test that installs through the package proxy, one per way of trusting
    certificates and proxies: pip (its own certifi bundle), Maven and Gradle (the JVM's keystore,
    and proxy settings as system properties instead of `HTTPS_PROXY`), Go and Cargo.
 6. UI, settings wizard, credential store.

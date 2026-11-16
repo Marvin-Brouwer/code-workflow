@@ -6,14 +6,9 @@ export interface SandboxPaths {
 	readonly bundle: string
 	/** One directory per pause, named after it; a pause in progress ends in `.partial`. */
 	readonly checkpoints: string
-	/** Bind-mounted into the sandbox at {@link egressMountPoint}. */
-	readonly egress: string
-	readonly egressSocket: string
 	/** stdout and stderr of the container's init. */
 	readonly log: string
 }
-
-export const egressMountPoint = '/run/mesh-flow'
 
 /**
  * The gVisor backend's directory:
@@ -21,7 +16,7 @@ export const egressMountPoint = '/run/mesh-flow'
  * ```text
  * runsc/                runsc's own state (--root)
  * images/<image>/       unpacked root filesystems, shared by every sandbox of that image
- * sandboxes/<id>/       bundle/, checkpoints/, egress/egress.sock, init.log
+ * sandboxes/<id>/       bundle/, checkpoints/, init.log
  * ```
  */
 export class Layout {
@@ -45,13 +40,10 @@ export class Layout {
 
 	sandbox(id: string): SandboxPaths {
 		const directory = path.join(this.sandboxes, id)
-		const egress = path.join(directory, 'egress')
 		return {
 			directory,
 			bundle: path.join(directory, 'bundle'),
 			checkpoints: path.join(directory, 'checkpoints'),
-			egress,
-			egressSocket: path.join(egress, 'egress.sock'),
 			log: path.join(directory, 'init.log'),
 		}
 	}

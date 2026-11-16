@@ -5,7 +5,7 @@ import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
 
-const sandbox = { image: 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const sandbox = { image: 'host', cpus: 1, memoryMb: 512, registries: [] }
 const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workflow: 'report', cron: '* * * * * *' }
 const everyOtherSecond = { kind: 'schedule' as const, id: 'report */2 * * * * *', workflow: 'report', cron: '*/2 * * * * *' }
 
@@ -33,7 +33,14 @@ function fakeEngine(status: RunStatus = 'running') {
 			id: `run-${String(runs.length).padStart(12, '0')}`,
 			workflow: 'report',
 			trigger: options.trigger,
-			app: { name: options.app, version: 'v1', entry: 'main.mjs', sandbox, tools: [] },
+			app: {
+				name: options.app,
+				version: 'v1',
+				entry: 'main.mjs',
+				sandbox: { image: sandbox.image, cpus: sandbox.cpus, memoryMb: sandbox.memoryMb },
+				tools: [],
+				registries: [],
+			},
 			status,
 			cursor: 0,
 			pending: [],

@@ -6,6 +6,7 @@ import {
 	appManifestFile,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
+	type PackageRegistry,
 	type TriggerDescription,
 	type WorkflowDescription,
 } from '@mesh-flow/protocol'
@@ -62,6 +63,8 @@ export interface TestAppOptions {
 	readonly tools?: readonly string[]
 	/** The models the app's agents use. Default: none. */
 	readonly models?: readonly string[]
+	/** The package registries the app restores from. Default: none. */
+	readonly registries?: readonly PackageRegistry[]
 }
 
 /**
@@ -88,7 +91,7 @@ export async function builtApp(workflows: Record<string, string>, options: TestA
 		entry,
 		platform: { os: 'linux', cpu: 'x64' },
 		description: {
-			sandbox: { image: options.image ?? 'host', cpus: 1, memoryMb: 512, egress: { allow: [] } },
+			sandbox: { image: options.image ?? 'host', cpus: 1, memoryMb: 512, registries: [...(options.registries ?? [])] },
 			workflows: options.workflows ? [...options.workflows] : names.map((name) => ({ name, parameters: { type: 'object' } })),
 			triggers: options.triggers ? [...options.triggers] : names.map((name) => ({ kind: 'user', id: name, workflow: name })),
 			tools: [...(options.tools ?? [])],

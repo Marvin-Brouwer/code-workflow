@@ -51,12 +51,11 @@ const sandbox = await backend.create(
 		image: 'node:26-slim',
 		cpus: 2,
 		memoryMb: 2048,
-		egress: { allow: ['registry.npmjs.org'] },
 	},
 	signal,
 )
 
-const result = await sandbox.exec(['npm', 'ci'], { signal, cwd: '/work' })
+const result = await sandbox.exec(['npm', 'test'], { signal, cwd: '/work' })
 if (result.exitCode !== 0) throw new Error(result.stderr)
 
 await sandbox.writeFile('/srv/runtime.mjs', runtimeSource, signal)
@@ -153,23 +152,22 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 - **A pause keeps memory, processes and the stack.** A pending `await` resolves in the same process after a resume. Open connections don't survive a pause, so nothing may hold one across a wait ([design section 5](../../docs/design.md#5-durability)).
 - **The id stays the same** across a pause and resume. A sandbox runs once: resuming one that already runs, or is being resumed, is refused.
 - **A pause only resumes on the backend that made it.** Anything else is a `BackendMismatchError`.
-- **Egress is deny by default.** `egress.allow` lists lowercase host names, matched exactly; an empty list means no network. Wildcards, ports, IP addresses and CIDR ranges are refused, because the backends can't all enforce them the same way.
-- **Input is checked** with zod: the spec on `create` and the paused sandbox on `resume`, so a bad host name fails there and not inside a backend.
+- **No network.** A sandbox has loopback and nothing else, on every backend: whatever it needs from outside comes from the host, through `exec` and `writeFile`. Package managers in it restore through a proxy the workflow runtime serves on loopback, which fetches through the gateway ([`@mesh-flow/core`](../core/README.md#packages)).
+- **Input is checked** with zod: the spec on `create` and the paused sandbox on `resume`, so a bad spec fails there and not inside a backend.
 - **Commands are argv arrays**, never a shell line. A non-zero exit code is a result, not an error.
 
 ## Where they differ
 
 - **Timers across a pause.** E2B stops the guest's monotonic clock, so a `setTimeout` inside the sandbox doesn't count paused time. gVisor's does. Wall-clock waits belong in the engine. `Date.now()` is right after a resume everywhere.
 - **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeoutMs` (24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
-- **microsandbox** needs TLS interception for hostname egress rules: allowed HTTPS goes through its proxy, with its own CA. microsandbox adds that CA to the guest's trust store and sets the usual CA variables (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`), so npm, curl and dotnet trust it with no settings, as the conformance suite shows. A full snapshot is refused while microsandbox manages a running job, which is why `startInBackground` uses `setsid -f` instead.
+- **microsandbox** refuses a full snapshot while it manages a running job, which is why `startInBackground` uses `setsid -f` instead.
 - **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise). A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one. Processes started with `runsc exec` don't survive a checkpoint, only the container's init and its children, so the init is a small shell that starts each `startInBackground` process as its own child. Its options:
   - `directory`: images, bundles, checkpoints and runsc's state. Keep it across restarts.
   - `platform`: runsc's platform, `systrap` by default; `kvm` is faster where `/dev/kvm` exists.
-  - `upstreamProxy`: an HTTP proxy between the machine and the internet, as `http://host:port`.
 
   It pulls images from Docker Hub itself, no Docker needed: each layer is checked against its digest, and the image's `Env` and `WorkingDir` apply. Other registries aren't supported yet. The unpacked files belong to the user the engine runs as, so with `sudo runsc` setuid bits are lost; root in the sandbox gets Docker's default capabilities and can still write everywhere.
 
-  Its sandboxes have no network. When hosts are allowed, a proxy on the host tunnels to those only, on port 443, and the sandbox gets `HTTPS_PROXY` pointing at a forwarder that runs as its init. So only tools that honour `HTTPS_PROXY` get out, and the image needs Node 22.3 or later: without it, a create that allows hosts fails. `create` returns once the forwarder listens, so the first command can use it.
+  Its sandboxes run with `--network=none` and can't connect to the host's Unix sockets either.
 
 ## Tests
 
@@ -179,7 +177,7 @@ pnpm --filter @mesh-flow/sandbox test
 
 Unit tests (`*.test.mts`) and functional tests (`*.spec.mts`) run anywhere, except the conformance suite below. The gVisor backend runs against a fake `runsc` there, including the checks that `close` finishes while a command or a create never does.
 
-The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; egress reaches allowed hosts only; npm and NuGet install from an allowed registry with no proxy or certificate settings; `list`, `remove` and `close` leave nothing behind. The package checks also need `node:26-bookworm`, and reach `registry.npmjs.org`, `builds.dotnet.microsoft.com` (for the SDK) and `api.nuget.org`. It needs the backend on the machine, so it only runs when asked:
+The conformance suite in [`test/conformance`](test/conformance) runs the checks from the pause POCs against real backends: a pending `await` survives a pause in the same process, memory and stack; no host is reachable, but loopback works, which the package proxy needs; `list`, `remove` and `close` leave nothing behind. It needs the backend on the machine, so it only runs when asked:
 
 ```bash
 MESH_FLOW_SANDBOX_TESTS=gvisor RUNSC="sudo $(command -v runsc)" pnpm --filter @mesh-flow/sandbox test
@@ -194,7 +192,6 @@ CI runs the same suite on every pull request ([`sandbox.yml`](../../.github/work
 ## Known gaps
 
 - **The host to sandbox channel** isn't part of this package. The workflow runtime's mailbox is in [`@mesh-flow/engine`](../engine/README.md#the-mailbox), on top of `exec` and `writeFile`; tool calls come with the gateway ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)).
-- **Egress to the gateway** on microsandbox by IP rule instead of hostname is unverified ([open question 11](../../docs/design.md#open-questions)).
 - **microsandbox on native Windows** passes the conformance suite in CI, but is untried on a developer machine ([open question 12](../../docs/design.md#open-questions)).
 - **macOS** is untested: `chooseBackend` picks microsandbox on Apple Silicon with a warning saying so, and throws on an Intel Mac, where microsandbox has no build and gVisor doesn't run.
 - **Running agent shell commands as a separate, unprivileged user** ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)) needs a `user` on `exec`. The backends can all do it, but what a user is differs per backend (a name on E2B and microsandbox, a uid for runsc), so it waits for the engine that decides it.

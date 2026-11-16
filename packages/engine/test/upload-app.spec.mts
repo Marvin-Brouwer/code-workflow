@@ -13,7 +13,7 @@ describe.skipIf(process.platform !== 'linux')('uploadApp', () => {
 	test('unpacks into a folder whose parent the image does not have, like /mesh-flow/app', async () => {
 		// Arrange
 		const root = await temporaryDirectory()
-		const sandbox = await hostBackend(root).create({ image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }, abortSignal)
+		const sandbox = await hostBackend(root).create({ image: 'host', cpus: 1, memoryMb: 256 }, abortSignal)
 		const folder = await builtApp({ ask: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 
 		// Act

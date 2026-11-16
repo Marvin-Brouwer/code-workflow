@@ -6,6 +6,9 @@ import { z } from 'zod'
 import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
 import { describeApp } from '../app/describe-app.mts'
 import { gatewayClient, type GatewayClient } from '../gateway/gateway-client.mts'
+import { gatewayPackages } from '../gateway/gateway-packages.mts'
+import { startPackageAccess } from '../packages/package-access.mts'
+import type { PackageProxy } from '../packages/package-proxy.mts'
 import { describeError } from '../run/describe-error.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import type { ScheduleTrigger, WebhookTrigger } from '../triggers/trigger.mts'
@@ -23,7 +26,9 @@ type Begun = { readonly workflow: AnyWorkflow; readonly parameters: unknown } | 
  * the exit code from the outcome, and exits right away once stopped or once it has described itself.
  *
  * Host tools and the agents' models go through the gateway, on the endpoint the engine handed over
- * in the mailbox.
+ * in the mailbox. So do packages: when the app's sandbox lists registries, the run serves package
+ * managers a proxy that fetches through the gateway, and every process the workflow starts finds it
+ * in its environment.
  */
 export async function startFromEngine(app: MeshFlowApp, environment: NodeJS.ProcessEnv = process.env): Promise<void> {
 	const channel = RuntimeMailbox.fromEnvironment(environment)
@@ -70,16 +75,44 @@ async function dispatch(
 	}
 	const runId = environment[runIdEnvironmentVariable]
 	const gateway = await gatewayOf(channel, abortSignal)
-	const outcome = await runAnyWorkflow(begun.workflow, {
-		parameters: begun.parameters,
-		channel,
+	const proxy = await packageProxyOf(app, gateway, abortSignal)
+	try {
+		const outcome = await runAnyWorkflow(begun.workflow, {
+			parameters: begun.parameters,
+			channel,
+			abortSignal,
+			...(gateway === undefined ? {} : { gateway }),
+			workspace: path.join(homedir(), 'workspace'),
+			agentStore: path.join(homedir(), '.mesh-flow', 'agents.sqlite'),
+			...(runId === undefined ? {} : { runId }),
+		})
+		return outcome.status === 'succeeded' ? 0 : 1
+	} finally {
+		await proxy?.close()
+	}
+}
+
+/**
+ * Starts the package proxy for the registries the app's sandbox lists, and points this process's
+ * environment at it, so every command the workflow and its agents run inherits it.
+ */
+async function packageProxyOf(
+	app: MeshFlowApp,
+	gateway: GatewayClient | undefined,
+	abortSignal: AbortSignal,
+): Promise<PackageProxy | undefined> {
+	const { registries } = app.sandbox
+	if (registries.length === 0) return undefined
+	if (gateway === undefined)
+		throw new Error(`The app restores from ${registries.join(', ')}, which takes a gateway, and this run has none.`)
+	const { proxy, environment } = await startPackageAccess({
+		registries,
+		fetch: gatewayPackages(gateway),
+		directory: path.join(homedir(), '.mesh-flow'),
 		abortSignal,
-		...(gateway === undefined ? {} : { gateway }),
-		workspace: path.join(homedir(), 'workspace'),
-		agentStore: path.join(homedir(), '.mesh-flow', 'agents.sqlite'),
-		...(runId === undefined ? {} : { runId }),
 	})
-	return outcome.status === 'succeeded' ? 0 : 1
+	Object.assign(process.env, environment)
+	return proxy
 }
 
 /**

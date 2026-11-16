@@ -22,7 +22,7 @@ const startLabel = 'ai-develop'
 const sandboxImage = 'node:26-bookworm'
 
 export default defineMeshFlow({
-	sandbox: image({ name: sandboxImage, memoryMb: 4096, egress: ['api.nuget.org'] }),
+	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: ['nuget'] }),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

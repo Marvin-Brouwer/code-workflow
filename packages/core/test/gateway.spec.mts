@@ -64,7 +64,7 @@ async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
 			return opened.accept(id, message, acceptAbortSignal)
 		},
 	}
-	const grant = await gateway.openRun(runId, definedHostTools(), abortSignal)
+	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, abortSignal)
 	const client = (lifetime: AbortSignal) => gatewayClient(gatewayChannel(gateway, runId, lifetime), grant, 'test', lifetime)
 	return { gateway, credentials, providers, calls, client }
 }

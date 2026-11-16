@@ -71,7 +71,6 @@ export class GvisorSandbox implements Sandbox {
 		// Housekeeping from here on: a failure may not lose the pause that just worked. Resume
 		// deletes a leftover container record itself.
 		await runsc(this.#context.runsc, ['delete', '--force', this.id], { signal: bound }).catch(() => undefined)
-		await this.#context.proxies.stop(this.id, bound).catch(() => undefined)
 		await removeEarlierCheckpoints(checkpoints, name).catch(() => undefined)
 		return { backend: 'gvisor', id: this.id, spec: this.#spec, snapshot: name }
 	}

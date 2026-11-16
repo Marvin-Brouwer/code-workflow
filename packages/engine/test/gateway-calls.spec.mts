@@ -24,7 +24,11 @@ const never = hostTool({ name: 'never', input: z.object({}) }, () => {
 })
 
 /** An engine on the host backend with a gateway that has `tools`, closed when the test ends. */
-async function openEngine({ home, tools = [echo, never] }: { readonly home?: string; readonly tools?: readonly HostTool[] } = {}) {
+async function openEngine({
+	home,
+	tools = [echo, never],
+	fetch,
+}: { readonly home?: string; readonly tools?: readonly HostTool[]; readonly fetch?: typeof globalThis.fetch } = {}) {
 	onTestFinished(() => {
 		started.mockClear()
 	})
@@ -35,6 +39,7 @@ async function openEngine({ home, tools = [echo, never] }: { readonly home?: str
 		credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
 		providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 		tools,
+		...(fetch === undefined ? {} : { fetch }),
 	})
 	const backend = hostBackend(path.join(directory, 'sandboxes'))
 	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
@@ -110,6 +115,37 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		expect(await engine.events(run.id)).toEqual([expect.objectContaining({ results: ['echo: one', 'echo: two'] })])
 		expect(existsSync(path.join(gatewayHome, 'runs', `${run.id}.json`))).toBe(false)
+	})
+
+	test('fetches packages from the registries the app restores from, and no other', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
+		const { engine, apps } = await openEngine({ fetch: sent })
+		await deployTestApp(
+			apps,
+			{
+				calls: callingScript(`
+const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.tokens[0])
+const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next)
+event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome })
+mailbox.send({ type: 'succeeded' })
+`),
+			},
+			{ registries: ['npm'] },
+		)
+
+		// Act
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		const [done] = await engine.events(run.id)
+		expect(done).toMatchObject({
+			npm: { ok: true, result: { status: 200, body: Buffer.from('{"name":"left-pad"}').toString('base64') } },
+			nuget: { ok: false },
+		})
+		expect(JSON.stringify(done)).toContain("doesn't restore from nuget")
+		expect(sent).toHaveBeenCalledOnce()
 	})
 
 	test("refuses a tool the app doesn't list", async () => {

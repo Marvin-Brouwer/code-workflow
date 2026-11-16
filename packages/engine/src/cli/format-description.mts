@@ -3,9 +3,9 @@ import { webhookPath } from '../triggers/webhook-api.mts'
 
 /** What an app declares, for `triggers`: its sandbox, the workflows with their parameters, then the triggers. */
 export function formatDescription(description: WorkflowsDescription, app: string): string {
-	const { image, cpus, memoryMb, egress } = description.sandbox
-	const reaches = egress.allow.length === 0 ? 'no network' : egress.allow.join(', ')
-	const lines = [`sandbox: ${image}, ${String(cpus)} CPUs, ${String(memoryMb)} MB, ${reaches}`, 'workflows:']
+	const { image, cpus, memoryMb, registries } = description.sandbox
+	const restores = registries.length === 0 ? 'no registries' : `restores from ${registries.join(', ')}`
+	const lines = [`sandbox: ${image}, ${String(cpus)} CPUs, ${String(memoryMb)} MB, ${restores}`, 'workflows:']
 	for (const { name, parameters } of description.workflows) lines.push(`  ${name}  ${JSON.stringify(parameters)}`)
 	lines.push('triggers:')
 	if (description.triggers.length === 0) lines.push('  none')

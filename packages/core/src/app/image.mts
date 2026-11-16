@@ -1,4 +1,4 @@
-import type { SandboxDescription } from '@mesh-flow/protocol'
+import type { PackageRegistry, SandboxDescription } from '@mesh-flow/protocol'
 
 /** The sandbox of {@link image}: an OCI image and what it may use. */
 export interface ImageOptions {
@@ -8,8 +8,11 @@ export interface ImageOptions {
 	readonly cpus?: number
 	/** The sandbox's memory, in MB. Default: 2048. */
 	readonly memoryMb?: number
-	/** The only hosts a run may reach over HTTPS, as lowercase host names. Default: none. */
-	readonly egress?: readonly string[]
+	/**
+	 * The public package registries a run restores from: `nuget` (nuget.org) and `npm` (the npm
+	 * registry). Default: none.
+	 */
+	readonly registries?: readonly PackageRegistry[]
 }
 
 const defaultCpus = 2
@@ -17,11 +20,16 @@ const defaultMemoryMb = 2048
 
 /**
  * Runs the app in a sandbox made from an OCI image. The engine adds the built app; the image only
- * needs Node.js:
+ * needs Node.js.
+ *
+ * The sandbox has no network. Package managers in it, such as `npm ci` or `dotnet restore`, still
+ * work for the registries listed here: the run serves them a proxy on `HTTPS_PROXY`, and every
+ * fetch through it is a call to the gateway, which fetches the package on the host. Any other host
+ * is refused.
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, egress: ['api.example.com'] }),
+ * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, registries: ['npm'] }),
  * 	workflows: [userTrigger(develop)],
  * })
  * ```
@@ -31,6 +39,6 @@ export function image(options: ImageOptions): SandboxDescription {
 		image: options.name,
 		cpus: options.cpus ?? defaultCpus,
 		memoryMb: options.memoryMb ?? defaultMemoryMb,
-		egress: Object.freeze({ allow: Object.freeze([...(options.egress ?? [])]) }),
+		registries: Object.freeze([...new Set(options.registries ?? [])]),
 	})
 }
