@@ -2,8 +2,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import path from 'node:path'
 import type { PackageRegistry } from '@mesh-flow/protocol'
-import { newCertificateAuthority } from './certificate-authority.mts'
 import type { GatewayFetch } from '../gateway/gateway-packages.mts'
+import { newCertificateAuthority } from './certificate-authority.mts'
 import { startPackageProxy, type PackageProxy } from './package-proxy.mts'
 
 /** What package managers in the sandbox need to restore through the proxy. */

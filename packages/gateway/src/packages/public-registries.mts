@@ -8,20 +8,21 @@ export interface PublicRegistry {
 	readonly fetches: (pathname: string) => boolean
 }
 
-/** The paths on nuget.org that restore reads. */
-const nugetPaths = ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/', '/v3-index/']
+/** Where on nuget.org the paths that restore reads start. */
+const nugetPathPrefixes = ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/', '/v3-index/']
 
 /**
  * The public registries a run may restore from. nuget.org's v3 feed keeps everything restore reads
  * below `/v3/` (the service index, registrations, the vulnerability index), `/v3-flatcontainer/`
  * (version lists and packages), `/v3-vulnerabilities/` (the vulnerability data NuGet's audit reads)
- * and `/v3-index/` (the repository signatures). On the npm registry, package documents and tarballs are below the
- * package's name; `/-/` is the registry's own API (search, audit, users), which restore doesn't need.
+ * and `/v3-index/` (the repository signatures). On the npm registry, package documents and
+ * tarballs are below the package's name; `/-/` is the registry's own API (search, audit, users),
+ * which restore doesn't need.
  */
 export const publicRegistries: Readonly<Record<PackageRegistry, PublicRegistry>> = Object.freeze({
 	nuget: {
 		origin: `https://${packageRegistryHosts.nuget}`,
-		fetches: (pathname) => nugetPaths.some((prefix) => pathname.startsWith(prefix)),
+		fetches: (pathname) => nugetPathPrefixes.some((prefix) => pathname.startsWith(prefix)),
 	},
 	npm: {
 		origin: `https://${packageRegistryHosts.npm}`,

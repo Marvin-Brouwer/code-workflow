@@ -1,5 +1,7 @@
 import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
+import { messageOf } from '../errors.mts'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
+import { HostToolTransientError } from '../tools/host-tool.mts'
 import { untilAborted } from '../until-aborted.mts'
 import { publicRegistries } from './public-registries.mts'
 
@@ -53,35 +55,53 @@ export async function fetchPackage(
 	if (url.origin !== registry.origin || `${url.pathname}${url.search}` !== request.path || !registry.fetches(url.pathname))
 		throw new Error(`${request.path} isn't a package fetch on ${request.registry}.`)
 	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
-	return untilAborted(fetchedFrom(url, request, fetchFromHost, maxBytes, abortSignal), abortSignal)
+	return untilAborted(fetchedFrom(url, request, { fetchFromHost, maxBytes }, abortSignal), abortSignal)
 }
 
 /** Fetches `url` and reads the answer, capped at `maxBytes`. A body that comes after an abort is cancelled. */
 async function fetchedFrom(
 	url: URL,
 	request: PackageRequest,
-	fetchFromHost: typeof fetch,
-	maxBytes: number,
+	{ fetchFromHost, maxBytes }: Required<PackageFetchOptions>,
 	abortSignal: AbortSignal,
 ): Promise<PackageResponse> {
-	const response = await retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
-		headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
-		redirect: 'manual',
-		signal: abortSignal,
-	})
+	const fetched = `${request.registry} ${request.path}`
+	const response = await mayPass(
+		retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
+			headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
+			redirect: 'manual',
+			signal: abortSignal,
+		}),
+		fetched,
+		abortSignal,
+	)
 	if (abortSignal.aborted) {
 		await response.body?.cancel()
 		abortSignal.throwIfAborted()
 	}
-	const body = (await cappedBody(response, maxBytes, `${request.registry} ${request.path}`)).toString('base64')
+	const body = (await cappedBody(response, maxBytes, fetched, abortSignal)).toString('base64')
 	const headers = Object.fromEntries(
 		keptHeaders.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),
 	)
 	return { status: response.status, headers, body }
 }
 
+/**
+ * `reading`, with a failure of the network, such as a refused connection or one reset partway,
+ * marked as one that may pass on another try: the proxy then answers 502, which package managers
+ * try again, instead of the 403 of a refusal. An abort stays an abort.
+ */
+async function mayPass<T>(reading: Promise<T>, fetched: string, abortSignal: AbortSignal): Promise<T> {
+	try {
+		return await reading
+	} catch (error) {
+		abortSignal.throwIfAborted()
+		throw new HostToolTransientError(`${fetched} couldn't be fetched: ${messageOf(error)}`, { cause: error })
+	}
+}
+
 /** The response's body, read until it's over `maxBytes`. `fetched` says what it is, for the error. */
-async function cappedBody(response: Response, maxBytes: number, fetched: string): Promise<Buffer> {
+async function cappedBody(response: Response, maxBytes: number, fetched: string, abortSignal: AbortSignal): Promise<Buffer> {
 	const tooLarge = () => new Error(`${fetched} is larger than ${megabytes(maxBytes)}, the most a package fetch takes.`)
 	if (Number(response.headers.get('content-length') ?? 0) > maxBytes) {
 		await response.body?.cancel()
@@ -93,7 +113,7 @@ async function cappedBody(response: Response, maxBytes: number, fetched: string)
 	const chunks: Buffer[] = []
 	let size = 0
 	for (;;) {
-		const { done, value } = await reader.read()
+		const { done, value } = await mayPass(reader.read(), fetched, abortSignal)
 		if (done) break
 		size += value.byteLength
 		if (size > maxBytes) {

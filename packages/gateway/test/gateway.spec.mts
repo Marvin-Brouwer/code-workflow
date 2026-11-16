@@ -614,7 +614,7 @@ describe('package calls', () => {
 		expect(cancelled).toHaveBeenCalledOnce()
 	})
 
-	test('settles a package fetch promptly when it is stopped, even if the registry never answers', async () => {
+	test('settles a package fetch when it is stopped, even if the registry never answers', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
 		const stop = new AbortController()
@@ -630,7 +630,7 @@ describe('package calls', () => {
 		await expect(fetching).rejects.toThrow('The run stopped.')
 	})
 
-	test('settles a package fetch promptly when it is stopped while the body never comes', async () => {
+	test('settles a package fetch when it is stopped while the body never comes', async () => {
 		// Arrange
 		const body = new ReadableStream<Uint8Array>()
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
@@ -645,6 +645,44 @@ describe('package calls', () => {
 
 		// Assert
 		await expect(fetching).rejects.toThrow('The run stopped.')
+	})
+
+	test.each([
+		['the host cannot reach the registry', () => Promise.reject(new TypeError('fetch failed'))],
+		[
+			'the connection drops while the body comes',
+			() =>
+				Promise.resolve(
+					new Response(
+						new ReadableStream<Uint8Array>({
+							pull(controller) {
+								controller.error(new Error('socket hang up'))
+							},
+						}),
+					),
+				),
+		],
+	])('answers a fetch that failed because %s as one that may pass', async (_what, failing) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(failing)
+		const { fetchPath } = await packageRun(sent)
+
+		// Act
+		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(answer.outcome).toMatchObject({ ok: false, transient: true })
+	})
+
+	test("answers a path that isn't a package fetch as a refusal, which another try won't change", async () => {
+		// Arrange
+		const { fetchPath } = await packageRun(vi.fn<typeof fetch>())
+
+		// Act
+		const { answer } = await fetchPath('/-/whoami')
+
+		// Assert
+		expect(answer.outcome).toEqual({ ok: false, error: expect.stringContaining("isn't a package fetch") as unknown })
 	})
 
 	test('refuses a body larger than a package fetch takes', async () => {

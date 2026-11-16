@@ -46,7 +46,7 @@ function answer(status: number, body: string | Buffer, contentType = 'applicatio
  * A real gateway, in this process, for a run that restores from `registries`, fetching from the
  * host with `fetchFromHost`: what the proxy calls for each fetch, with the gateway's own checks.
  */
-async function throughGateway(registries: PackageRegistry[], fetchFromHost: typeof fetch): Promise<GatewayFetch> {
+async function throughGateway(registries: readonly PackageRegistry[], fetchFromHost: typeof fetch): Promise<GatewayFetch> {
 	const home = await temporaryDirectory()
 	const gateway = openGateway({
 		home,
@@ -357,6 +357,20 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 		// Assert
 		expect(answered).toBe(status)
+	})
+
+	test('answers 403 to a path the gateway refuses, and 502 when the host cannot reach the registry', async () => {
+		// Arrange
+		const unreachable = vi.fn<typeof globalThis.fetch>(() => Promise.reject(new TypeError('fetch failed')))
+		const { environment } = await proxyWith(await throughGateway(['npm'], unreachable))
+		const home = await temporaryDirectory()
+
+		// Act
+		const refused = await curlStatus(environment, home, ['https://registry.npmjs.org/-/whoami'])
+		const failed = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect([refused, failed]).toEqual(['403', '502'])
 	})
 
 	test("answers 400 to a fetch the gateway couldn't take, and sends nothing", async () => {
