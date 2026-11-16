@@ -28,8 +28,14 @@ const htmlComment = /<!--[\s\S]*?-->/gu
 /** A zero-width space, which breaks an HTML comment's opening in code, where `<` can't be escaped. */
 const zeroWidthSpace = '\u200B'
 
+/** What a comment's opening is turned into, so it can't open one. */
+const brokenCommentOpening = `<!-${zeroWidthSpace}-`
+
 /** A line that opens a fenced code block, with the fence: three or more backticks or tildes. */
 const openingFence = /^\s*(`{3,}|~{3,})/u
+
+/** A line that starts a block of its own, a heading, list item, rule or HTML, which ends a quote above it. */
+const blockStart = /^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|(?:[-*_]\s*){3,}$|<)/u
 
 /** Two or more blank lines in a row, also ones that hold only spaces or tabs. */
 const blankLines = /\n(?:[ \t]*\n){2,}/gu
@@ -58,9 +64,9 @@ export function markdownQuote(body: string, verdict?: ReviewItem['verdict']): st
 	const text = ownWords(uncommented)
 	if (text === '') return `> ${(verdict === undefined ? undefined : reviewWithoutBody[verdict]) ?? withoutWords}`
 	const short = cutAtWord(text.split('\n').slice(0, quoteMaxLines).join('\n'), quoteMaxCharacters)
-	const cut = commentCut || short.length < text.length ? cutMark : ''
-	return escapedOutsideCode(`${short}${cut}`)
-		.map((line) => `> ${line.replaceAll(commentOpening, `<!-${zeroWidthSpace}-`)}`.trimEnd())
+	const ending = commentCut || short.length < text.length ? cutMark : ''
+	return escapedOutsideCode(`${short}${ending}`)
+		.map((line) => `> ${line.replaceAll(commentOpening, brokenCommentOpening)}`.trimEnd())
 		.join('\n')
 }
 
@@ -77,7 +83,8 @@ function withoutHtmlComments(text: string): { readonly text: string; readonly cu
 
 /**
  * `body` without the lines it quoted, outside code, with each run of blank lines kept as one. A
- * line right under a quoted one belongs to the quote, as Markdown reads it, up to a blank line.
+ * line right under a quoted one belongs to the quote, as Markdown reads it, up to a blank line or
+ * a line that starts a block of its own.
  */
 function ownWords(body: string): string {
 	const lines = body.split('\n')
@@ -86,7 +93,7 @@ function ownWords(body: string): string {
 		({ inQuote, kept: before }, line, index) => {
 			if (inCode[index] === true) return { inQuote: false, kept: [...before, line] }
 			if (line.trimStart().startsWith('>')) return { inQuote: true, kept: before }
-			if (inQuote && line.trim() !== '') return { inQuote: true, kept: before }
+			if (inQuote && line.trim() !== '' && !blockStart.test(line)) return { inQuote: true, kept: before }
 			return { inQuote: false, kept: [...before, line] }
 		},
 		{ inQuote: false, kept: [] },

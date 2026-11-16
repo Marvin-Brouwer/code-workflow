@@ -116,7 +116,7 @@ describe('markdownQuote', () => {
 		for (const quote of quotes) expect(quote).not.toContain('<!--')
 	})
 
-	test('marks a quote cut where an HTML comment opens that never closes', () => {
+	test('cuts at an HTML comment that opens in a code span and never closes, so nothing after it is quoted', () => {
 		// Arrange
 		const body = 'See `<!--` here and @alice there'
 
@@ -147,5 +147,16 @@ describe('markdownQuote', () => {
 
 		// Assert
 		expect(quote).toBe('> Ask &amp;#64;alice')
+	})
+
+	test('keeps a line right under a quoted one that starts a block of its own', () => {
+		// Arrange
+		const body = '> quoted\n# heading mine\n- list mine'
+
+		// Act
+		const quote = markdownQuote(body)
+
+		// Assert
+		expect(quote).toBe('> # heading mine\n> - list mine')
 	})
 })
