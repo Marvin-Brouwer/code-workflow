@@ -2,6 +2,8 @@
 
 The GitHub connector for mesh-flow. A connector gives workflows one outside system; this one gives them GitHub: functions for code, tools for agents, a check for `verify`, and GitHub's webhooks for triggers. Whatever needs the token, API calls and git fetches and pushes, runs on the host through the gateway; the sandbox never has the token, and needs no network for git at all.
 
+It shares its checkouts, `describe`, `review`, `triage` and `reply` with the other code host connectors through `@mesh-flow/code-repository`, so a workflow reads the same on each.
+
 ## Setup
 
 Install the package where `mesh-flow serve` runs, add it as a connector and set the token. A fine-grained token with contents, issues and pull requests on the repositories the workflows touch is enough.
@@ -145,7 +147,11 @@ export default defineMeshFlow({
 		// Labelling an issue ai-fix starts fixIssue with { issue }. Only compiles for a workflow that takes IssueParameters.
 		github.onIssueLabeled(fixIssue, 'ai-fix'),
 		// Any event schema works with webhook; the filter is in the structure, so other deliveries get a 4xx.
-		webhook(triage, github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })), github.triggerOptions),
+		webhook(
+			triage,
+			github.issueCommentCreated.transform((event) => ({ issue: { repository: event.repository.full_name, number: event.issue.number } })),
+			github.triggerOptions,
+		),
 	],
 })
 ```
