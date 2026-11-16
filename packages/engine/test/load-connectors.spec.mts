@@ -190,6 +190,31 @@ export const connector = {
 		expect(signInOf(await searching?.catch((rejected: unknown) => rejected))).toBeUndefined()
 	})
 
+	test("turns a registry's ask for another connector's sign-in into a plain failure", async () => {
+		// Arrange
+		const foreign = `export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: () => async () => { throw Object.assign(new Error('Sign in.'), { signInTo: 'aws' }) },
+}
+`
+		const from = await installed({ cloud: foreign })
+		const [cloud] = await loadConnectors({
+			connectors: [{ package: 'cloud' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const resolving = cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+
+		// Assert
+		await expect(resolving).rejects.toThrow('cloud packages asked for a sign-in to aws, not to its own connector cloud')
+		expect(signInOf(await resolving?.catch((rejected: unknown) => rejected))).toBeUndefined()
+	})
+
 	test('names the package that is not installed or has no host entry point', async () => {
 		// Arrange
 		const from = await installed({ 'no-host': undefined })

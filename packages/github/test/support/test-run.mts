@@ -44,7 +44,7 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 		const stop = new AbortController()
 		running.set(message.id, stop)
 		const accepted = await gateway.accept(runId, message, lifetime)
-		const value = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
+		const { answer: value } = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
 		await gateway.settle(runId, message.id, lifetime)
 		running.delete(message.id)
 		slot(message.id).resolve({ value })

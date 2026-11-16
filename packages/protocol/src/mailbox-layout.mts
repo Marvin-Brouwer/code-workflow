@@ -54,13 +54,19 @@ export function answerFile(layout: MailboxLayout, requestId: string): string {
 }
 
 /**
- * The name of a staged file: the call's id and `.body`. A pattern, not a schema, since the runtime's
- * mailbox runs in the sandbox without dependencies.
+ * What the name of a staged file looks like: the call's id and `.body`. A pattern, not a schema,
+ * since the runtime's mailbox runs in the sandbox without dependencies.
  */
-export const stagedFileName = /^[\w-]{1,64}\.body$/
+export const stagedFileNamePattern = /^[\w-]{1,64}\.body$/
 
-/** The file a staged body is in, by the name a `PackageResponse` gives it. */
+/** The name of the file the body a call fetched is staged in. */
+export function stagedFileName(callId: string): string {
+	return `${callId}.body`
+}
+
+/** The file a staged body is in, by the name a `PackageResponse` gives it. Refuses any other name. */
 export function stagedFile(layout: MailboxLayout, name: string): string {
+	if (!stagedFileNamePattern.test(name)) throw new Error(`${name} isn't the name of a staged file.`)
 	return path.posix.join(layout.packages, name)
 }
 

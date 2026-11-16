@@ -1,9 +1,8 @@
-import { registryName, type ConnectorRegistry, type PackageRequest } from '@mesh-flow/protocol'
+import { registryName, type PackageRequest } from '@mesh-flow/protocol'
 import { messageOf } from '../errors.mts'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { HostToolTransientError } from '../tools/host-tool.mts'
 import { untilAborted } from '../until-aborted.mts'
-import type { RegistryFetch } from './connector-registry.mts'
 import { publicRegistries } from './public-registries.mts'
 
 /**
@@ -15,10 +14,10 @@ import { publicRegistries } from './public-registries.mts'
 const keptHeaders = ['content-type', 'etag', 'last-modified', 'location']
 
 /** What a fetch accepts when the package manager didn't say. */
-const anyMediaType = '*/*'
+export const anyMediaType = '*/*'
 
 /** How the gateway names itself to the registries. */
-const userAgent = 'mesh-flow'
+export const userAgent = 'mesh-flow'
 
 const bytesPerMb = 1024 * 1024
 
@@ -28,10 +27,7 @@ const bytesPerMb = 1024 * 1024
  */
 export const maxPackageBytes = 256 * bytesPerMb
 
-/** How many redirects a fetch on a connector's registry follows, as to a signed download URL. */
-const maxRedirects = 3
-
-/** How {@link fetchPackage} and {@link fetchFromConnectorRegistry} fetch. */
+/** How {@link fetchPackage} and `fetchFromConnectorRegistry` fetch. */
 export interface PackageFetchOptions {
 	/** The host's `fetch`. */
 	readonly fetchFromHost: typeof fetch
@@ -80,71 +76,8 @@ export async function fetchPackage(
 	)
 }
 
-/**
- * Whether `request` is a fetch on one of its connector registry's paths, already normalized (no
- * `..`, `//` or fragment), so a connector only has to say where it goes.
- */
-export function isConnectorRegistryFetch(request: PackageRequest & { readonly registry: ConnectorRegistry }): boolean {
-	const url = new URL(request.path, `https://${request.registry.host}`)
-	return (
-		url.host === request.registry.host &&
-		`${url.pathname}${url.search}` === request.path &&
-		!url.pathname.includes('//') &&
-		request.registry.paths.some((prefix) => url.pathname.startsWith(prefix))
-	)
-}
-
-/**
- * Fetches from a connector's registry, where the connector said the fetch goes. A redirect is
- * followed here, as to the signed URL a private registry hands out for a download, since the
- * proxy only takes the registry's own host; the connector's headers go to that host only.
- *
- * @throws When the body is larger than `maxBytes`, and after too many redirects.
- */
-export function fetchFromConnectorRegistry(
-	request: PackageRequest,
-	where: RegistryFetch,
-	options: PackageFetchOptions,
-	abortSignal: AbortSignal,
-): Promise<FetchedPackage> {
-	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
-	return untilAborted(followedFetch(request, where, options, abortSignal), abortSignal)
-}
-
-/** Fetches where the connector said, following its redirects. */
-async function followedFetch(
-	request: PackageRequest,
-	where: RegistryFetch,
-	{ fetchFromHost, maxBytes = maxPackageBytes }: PackageFetchOptions,
-	abortSignal: AbortSignal,
-): Promise<FetchedPackage> {
-	const fetched = `${registryName(request.registry)} ${request.path}`
-	const send = retryingFetch(fetchFromHost, defaultFetchRetry)
-	const origin = new URL(where.url).origin
-	let url = where.url
-	for (let redirects = 0; ; redirects++) {
-		const headers = {
-			accept: request.accept ?? anyMediaType,
-			'user-agent': userAgent,
-			...(new URL(url).origin === origin ? where.headers : {}),
-		}
-		const response = await sent(send(url, { headers, redirect: 'manual', signal: abortSignal }), fetched, abortSignal)
-		const location = response.headers.get('location')
-		if (response.status < 300 || response.status >= 400 || location === null) {
-			return fetchedOf(response, maxBytes, fetched, abortSignal, ['location'])
-		}
-		await response.body?.cancel()
-		const next = new URL(location, url)
-		if (next.protocol !== 'https:')
-			throw new Error(`${registryName(request.registry)} redirected ${request.path} to ${next.protocol} instead of HTTPS.`)
-		if (redirects === maxRedirects)
-			throw new Error(`${registryName(request.registry)} redirected ${request.path} more than ${String(maxRedirects)} times.`)
-		url = next.href
-	}
-}
-
 /** The host's answer to a fetch, once it came: a body that comes after an abort is cancelled. */
-async function sent(sending: Promise<Response>, fetched: string, abortSignal: AbortSignal): Promise<Response> {
+export async function sent(sending: Promise<Response>, fetched: string, abortSignal: AbortSignal): Promise<Response> {
 	const response = await asTransientOnNetworkFailure(sending, fetched, abortSignal)
 	if (abortSignal.aborted) {
 		await response.body?.cancel()
@@ -154,7 +87,7 @@ async function sent(sending: Promise<Response>, fetched: string, abortSignal: Ab
 }
 
 /** The answer as the sandbox gets it: the status, the headers it needs, and the body, capped. */
-async function fetchedOf(
+export async function fetchedOf(
 	response: Response,
 	maxBytes: number,
 	fetched: string,

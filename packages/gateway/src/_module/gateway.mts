@@ -11,9 +11,10 @@ export { siteUrl } from '../credentials/site-url.mts'
 export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, type StoreKey } from '../credentials/store-key.mts'
 export {
 	openGateway,
-	packageTokens,
+	tokensPerPackageEndpoint,
 	tokensPerEndpoint,
 	type AcceptedCall,
+	type GatewayAnswer,
 	type Gateway,
 	type GatewayOptions,
 	type InterruptedCall,

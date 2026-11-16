@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ConnectorName } from './connector-name.mts'
-import { stagedFileName } from './mailbox-layout.mts'
+import { stagedFileNamePattern } from './mailbox-layout.mts'
 
 /**
  * A public package registry a run may restore packages from, through the gateway: `nuget` is
@@ -18,10 +18,19 @@ export const packageRegistryHosts: Readonly<Record<PublicRegistry, string>> = Ob
 	npm: 'registry.npmjs.org',
 })
 
+/** The longest DNS name there is. */
+const maxHostnameLength = 253
+
+/** The longest name a connector's registry may have, for the user to see. */
+const maxRegistryNameLength = 200
+
+/** The paths of a public registry that are its: every one on its host. */
+const wholeHost: readonly string[] = ['/']
+
 /** A DNS name, in lower case, as package managers ask for it over HTTPS. */
 const Hostname = z
 	.string()
-	.max(253)
+	.max(maxHostnameLength)
 	.regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/, 'Use a host name in lower case, such as example.com.')
 
 /** Where a connector's registry serves packages on its host: a path that starts and ends with `/`. */
@@ -36,7 +45,7 @@ export const ConnectorRegistry = z.object({
 	/** The connector that fetches from it, such as `aws`. */
 	connector: ConnectorName,
 	/** What the user sees it as, such as `codeartifact example/packages`. */
-	name: z.string().min(1).max(200),
+	name: z.string().min(1).max(maxRegistryNameLength),
 	/** The host package managers ask for, as the repository's config names it. */
 	host: Hostname,
 	/** The paths on `host` that are this registry's, each ending in `/`. */
@@ -62,6 +71,11 @@ export function registryKey(registry: PackageRegistry): string {
 	return JSON.stringify([registry.connector, registry.host, registry.paths.toSorted(), settings])
 }
 
+/** `registries` with each registry once, by {@link registryKey}, in the order they first come. */
+export function uniqueRegistries<Registry extends PackageRegistry>(registries: readonly Registry[]): Registry[] {
+	return [...new Map(registries.map((registry) => [registryKey(registry), registry])).values()]
+}
+
 /** The host a registry's packages are asked for on. */
 export function registryHost(registry: PackageRegistry): string {
 	return typeof registry === 'string' ? packageRegistryHosts[registry] : registry.host
@@ -69,7 +83,7 @@ export function registryHost(registry: PackageRegistry): string {
 
 /** The paths on its host that are a registry's: all of them for a public one. */
 export function registryPaths(registry: PackageRegistry): readonly string[] {
-	return typeof registry === 'string' ? ['/'] : registry.paths
+	return typeof registry === 'string' ? wholeHost : registry.paths
 }
 
 /** The longest path and query a fetch may have: package managers' URLs are far shorter. */
@@ -93,7 +107,7 @@ export const PackageRequest = z.object({
 export type PackageRequest = z.infer<typeof PackageRequest>
 
 /** Names a file the engine staged in the mailbox's `packages` folder: see `stagedFile`. */
-export const StagedFileName = z.string().regex(stagedFileName)
+export const StagedFileName = z.string().regex(stagedFileNamePattern)
 
 /**
  * What the registry answered a package fetch with. A 404 is an answer too: package managers ask

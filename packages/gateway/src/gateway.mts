@@ -1,24 +1,28 @@
 import path from 'node:path'
-import type {
-	CallAnswer,
-	CallMessage,
-	EndpointGrant,
-	RunGrant,
-	GatewayCall,
-	ModelResponse,
-	PackageRegistry,
-	PackageRequest,
-	PackageResponse,
-	ResolvedModel,
+import {
+	registryKey,
+	registryName,
+	stagedFileName,
+	uniqueRegistries,
+	type CallAnswer,
+	type CallMessage,
+	type EndpointGrant,
+	type GatewayCall,
+	type ModelResponse,
+	type PackageRegistry,
+	type PackageRequest,
+	type PackageResponse,
+	type ResolvedModel,
+	type RunGrant,
 } from '@mesh-flow/protocol'
-import { registryKey, registryName } from '@mesh-flow/protocol'
 import type { CredentialStore } from './credentials/credential-store.mts'
 import { openRunStates, type EndpointState, type RunState } from './endpoints/run-state.mts'
 import { newLoopEndpointId, newToken, tokenHash } from './endpoints/tokens.mts'
 import { messageOf } from './errors.mts'
 import { ownEntry } from './own-entry.mts'
 import type { ResolveRegistryFetch } from './packages/connector-registry.mts'
-import { fetchFromConnectorRegistry, fetchPackage, isConnectorRegistryFetch, type FetchedPackage } from './packages/fetch-package.mts'
+import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/fetch-from-connector-registry.mts'
+import { fetchPackage, type FetchedPackage } from './packages/fetch-package.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
 import { chosenModel, resolveModel } from './providers/resolve-model.mts'
@@ -60,12 +64,23 @@ export interface AcceptedCall {
 	 */
 	readonly compromised?: string
 	/** Runs the call. Never rejects: a failure is the answer's outcome. */
-	readonly answer: (abortSignal: AbortSignal) => Promise<CallAnswer>
+	readonly answer: (abortSignal: AbortSignal) => Promise<GatewayAnswer>
+}
+
+/** What a call the gateway ran answers with. */
+export interface GatewayAnswer {
+	readonly answer: CallAnswer
 	/**
-	 * The body the answer names, once {@link answer} resolved, for a call that fetched one, such as
-	 * a package: write it into the sandbox where the answer says, before the answer.
+	 * The body the answer names, for a call that fetched one, such as a package: write it into the
+	 * sandbox where the answer says, before the answer.
 	 */
-	readonly body: () => Buffer | undefined
+	readonly staged?: Buffer
+}
+
+/** What a call did: its result, and the body its answer names, if it fetched one. */
+interface Performed {
+	readonly result: unknown
+	readonly staged?: Buffer
 }
 
 /** A call that was taken but not answered when the engine stopped, with the answer it gets now. */
@@ -87,7 +102,7 @@ export interface Gateway {
 	/**
 	 * Opens the run's own endpoint, for the host tools its app lists, and returns its tokens: one per
 	 * call that may run at the same time. When the app restores packages, it also opens the run's
-	 * package endpoint, which only takes package fetches, with {@link packageTokens} tokens of its
+	 * package endpoint, which only takes package fetches, with {@link tokensPerPackageEndpoint} tokens of its
 	 * own. Opening them again, for a restart, closes the earlier attempt's endpoints. The run's usage
 	 * so far stays.
 	 */
@@ -131,7 +146,7 @@ export const tokensPerEndpoint = 4
  * How many package fetches may run at the same time, on the run's package endpoint. A restore
  * fetches many small files; npm and NuGet each fetch several at once.
  */
-export const packageTokens = 8
+export const tokensPerPackageEndpoint = 8
 
 /** The id of a run's own endpoint. */
 const runEndpoint = 'run'
@@ -171,19 +186,19 @@ export function openGateway(options: GatewayOptions): Gateway {
 
 	/** Fetches a package from the cache, or from its registry, and keeps it in the cache when it's one that never changes. */
 	const fetchedPackage = async (request: PackageRequest, abortSignal: AbortSignal): Promise<FetchedPackage> => {
+		const { registry } = request
+		const onConnector = typeof registry === 'string' ? undefined : connectorRegistryFetch({ ...request, registry }, connectorRegistries)
 		const cached = await cache.get(request, abortSignal)
 		if (cached !== undefined) return cached
-		let fetched: FetchedPackage
-		if (typeof request.registry === 'string') fetched = await fetchPackage(request, { fetchFromHost }, abortSignal)
-		else {
-			const resolve = ownEntry(connectorRegistries, request.registry.connector)
-			if (resolve === undefined)
-				throw new Error(`${registryName(request.registry)} needs connector ${request.registry.connector}, which isn't loaded.`)
-			const { registry, path: asked, accept } = request
-			if (!isConnectorRegistryFetch({ ...request, registry })) throw new Error(`${asked} isn't a package fetch on ${registry.name}.`)
-			const where = await resolve({ registry, path: asked, ...(accept === undefined ? {} : { accept }) }, abortSignal)
-			fetched = await fetchFromConnectorRegistry(request, where, { fetchFromHost }, abortSignal)
-		}
+		const fetched =
+			onConnector === undefined
+				? await fetchPackage(request, { fetchFromHost }, abortSignal)
+				: await fetchFromConnectorRegistry(
+						request,
+						await onConnector.resolve(onConnector.request, abortSignal),
+						{ fetchFromHost },
+						abortSignal,
+					)
 		await cache.put(request, fetched, abortSignal)
 		return fetched
 	}
@@ -193,41 +208,40 @@ export function openGateway(options: GatewayOptions): Gateway {
 		state: RunState,
 		endpoint: EndpointState,
 		message: CallMessage,
-		staged: { body?: Buffer },
 		abortSignal: AbortSignal,
-	): Promise<unknown> => {
+	): Promise<Performed> => {
 		const { call } = message
 		if (call.type === 'tool') {
 			if (!endpoint.tools.includes(call.tool)) throw new Error(`${call.tool} isn't one of the tools of this endpoint.`)
 			const tool = tools.get(call.tool)
 			if (tool === undefined) throw new Error(`This gateway has no host tool ${call.tool}.`)
-			return tool.run(call.input, { abortSignal, credentials: options.credentials, runId })
+			return { result: await tool.run(call.input, { abortSignal, credentials: options.credentials, runId }) }
 		}
 		if (endpoint.packages !== (call.type === 'package'))
 			throw new Error(
 				endpoint.packages ? 'The package endpoint only takes package fetches.' : 'Package fetches go on the package endpoint.',
 			)
 		if (endpoint.loop) throw new Error(`A loop's endpoint only takes its tools, not a ${call.type} call.`)
-		if (call.type === 'open') return openLoop(runId, call.tools, abortSignal)
-		if (call.type === 'close') return closeLoop(runId, call.endpoint, abortSignal)
+		if (call.type === 'open') return { result: await openLoop(runId, call.tools, abortSignal) }
+		if (call.type === 'close') return { result: await closeLoop(runId, call.endpoint, abortSignal) }
 		if (call.type === 'resolve-model') {
 			const { provider, model } = resolveModel(await options.providers.list(abortSignal), call.model)
-			return { provider: provider.name, kind: provider.kind, model: model.id } satisfies ResolvedModel
+			return { result: { provider: provider.name, kind: provider.kind, model: model.id } satisfies ResolvedModel }
 		}
 		if (call.type === 'package') {
 			const asked = registryKey(call.request.registry)
 			if (!state.registries.some((registry) => registryKey(registry) === asked))
 				throw new Error(`The app doesn't restore from ${registryName(call.request.registry)}: add it to the sandbox's registries.`)
 			const fetched = await fetchedPackage(call.request, abortSignal)
-			staged.body = fetched.body
-			return {
+			const result: PackageResponse = {
 				status: fetched.status,
 				headers: fetched.headers,
-				body: `${message.id}.body`,
+				body: stagedFileName(message.id),
 				size: fetched.body.length,
-			} satisfies PackageResponse
+			}
+			return { result, staged: fetched.body }
 		}
-		return callModel(runId, call.request, abortSignal)
+		return { result: await callModel(runId, call.request, abortSignal) }
 	}
 
 	const openLoop = (runId: string, loopTools: readonly string[], abortSignal: AbortSignal) =>
@@ -304,16 +318,16 @@ export function openGateway(options: GatewayOptions): Gateway {
 				(state) => {
 					const tokens = newTokens()
 					const runTools = [...new Set(access.tools)]
-					const registries = [...new Map((access.registries ?? []).map((registry) => [registryKey(registry), registry])).values()]
-					const fetchTokens = registries.length === 0 ? [] : newTokens(packageTokens)
+					const registries = uniqueRegistries(access.registries ?? [])
+					const packageEndpointTokens = registries.length === 0 ? [] : newTokens(tokensPerPackageEndpoint)
 					const fresh: RunState = {
 						tools: runTools,
 						registries,
 						endpoints: {
 							[runEndpoint]: { loop: false, packages: false, tools: runTools, tokens: tokens.map(tokenHash) },
-							...(fetchTokens.length === 0
+							...(packageEndpointTokens.length === 0
 								? {}
-								: { [packageEndpoint]: { loop: false, packages: true, tools: [], tokens: fetchTokens.map(tokenHash) } }),
+								: { [packageEndpoint]: { loop: false, packages: true, tools: [], tokens: packageEndpointTokens.map(tokenHash) } }),
 						},
 						inFlight: {},
 						usage: state?.usage ?? {},
@@ -323,7 +337,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 						value: {
 							endpoint: runEndpoint,
 							tokens,
-							...(fetchTokens.length === 0 ? {} : { packages: { endpoint: packageEndpoint, tokens: fetchTokens } }),
+							...(packageEndpointTokens.length === 0 ? {} : { packages: { endpoint: packageEndpoint, tokens: packageEndpointTokens } }),
 						},
 					}
 				},
@@ -350,8 +364,6 @@ export function openGateway(options: GatewayOptions): Gateway {
 						return { state: closed, value: { compromised: reason, ...acceptedWith({ outcome: { ok: false, error: reason } }) } }
 					}
 					const next = newToken()
-					/** What the call fetched for the sandbox, kept here until the engine stages it. */
-					const staged: { body?: Buffer } = {}
 					const rotated: EndpointState = { ...endpoint, tokens: [...endpoint.tokens.filter((hash) => hash !== spent), tokenHash(next)] }
 					return {
 						state: {
@@ -366,18 +378,20 @@ export function openGateway(options: GatewayOptions): Gateway {
 							answer: async (callSignal) => {
 								try {
 									// A tool that ignores its signal can't hold up a stop.
-									const result = await untilAborted(perform(runId, state, rotated, message, staged, callSignal), callSignal)
-									return { next, outcome: { ok: true, result: result ?? null } }
+									const { result, staged } = await untilAborted(perform(runId, state, rotated, message, callSignal), callSignal)
+									const answer: CallAnswer = { next, outcome: { ok: true, result: result ?? null } }
+									return staged === undefined ? { answer } : { answer, staged }
 								} catch (error) {
 									return {
-										next,
-										outcome: callSignal.aborted
-											? { ok: false, error: `The call was stopped: ${messageOf(callSignal.reason)}` }
-											: failedOutcome(error),
+										answer: {
+											next,
+											outcome: callSignal.aborted
+												? { ok: false, error: `The call was stopped: ${messageOf(callSignal.reason)}` }
+												: failedOutcome(error),
+										},
 									}
 								}
 							},
-							body: () => staged.body,
 						},
 					}
 				},
@@ -435,5 +449,5 @@ function newTokens(count = tokensPerEndpoint): string[] {
 }
 
 function acceptedWith(answer: CallAnswer): AcceptedCall {
-	return { answer: () => Promise.resolve(answer), body: () => undefined }
+	return { answer: () => Promise.resolve({ answer }) }
 }

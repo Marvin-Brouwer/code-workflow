@@ -29,6 +29,7 @@ export {
 	mailboxLayout,
 	runIdEnvironmentVariable,
 	stagedFile,
+	stagedFileName,
 	type MailboxLayout,
 } from '../mailbox-layout.mts'
 export {
@@ -43,6 +44,7 @@ export {
 	registryName,
 	registryPaths,
 	StagedFileName,
+	uniqueRegistries,
 } from '../package-registry.mts'
 export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'

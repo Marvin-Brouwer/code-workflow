@@ -140,7 +140,9 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
   opens a connection to anything, not even to the host.
 - **Packages are cached on the host**, shared by every run, by registry, package and version.
   Published versions don't change, so a cached one is always right; version lists and metadata
-  are fetched again. A warm restore then only waits on the mailbox, not on the registry.
+  are fetched again. A warm restore then only waits on the mailbox, not on the registry. A cached
+  CodeArtifact package is served while the AWS connector is loaded, without a session, so a
+  restore works offline; the cache only grows, and removing the folder clears it.
 - Whether a package comes from CodeArtifact or its upstreams (nuget.org, npmjs) stays
   CodeArtifact's setup, as the repository's config names it.
 

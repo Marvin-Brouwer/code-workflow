@@ -28,6 +28,9 @@ export default defineMeshFlow({
 Code fetches from it with `fetchPackage` from `@mesh-flow/core`, as from any registry the app restores from:
 
 ```ts
+import { codeArtifact } from '@mesh-flow/aws'
+import { fetchPackage } from '@mesh-flow/core'
+
 const packages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
 const index = await fetchPackage({ registry: packages, path: '/nuget/packages/v3/index.json' }, abortSignal)
 ```
@@ -61,10 +64,6 @@ None of the four settings is a secret. They are in the credential store because 
 Signing in up front is optional: a run that needs AWS and finds no session waits for a sign-in, `mesh-flow list` shows it as `needs login: aws`, and `mesh-flow show <run>` or `mesh-flow login aws` shows where to approve it.
 
 `mesh-flow login aws` uses Identity Center's device flow. It registers the engine with Identity Center (the registration lasts about 90 days, longer than any session), prints the URL to open and the code to check, and waits until you approve. The session's access token and refresh token, and the registration they belong to, go into the sealed credential store under `aws/session`.
-
-## Usage
-
-Workflows don't import this package yet: the registry shim, which restores packages from CodeArtifact, and `checkSession` come in the next steps of the [plan](../../docs/plans/aws-codeartifact.md). Until then, what is here is the host half.
 
 ## The host half
 

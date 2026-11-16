@@ -51,11 +51,21 @@ function stubBackend(parts: {
 }
 
 /**
+ * The backend deadline of {@link shortDeadlines}. A Windows runner that runs every package's tests
+ * at once took longer than a second to get through the pauses and the flush, which made `close`
+ * reject on a deadline that had passed before it closed the backend.
+ */
+const shortBackendMs = 1_500
+
+/** How long a close on {@link shortDeadlines} may take: its backend deadline, and the time to see that it passed. */
+const promptlyMs = shortBackendMs + 1_000
+
+/**
  * Deadlines short enough that a hang shows as a slow test. Both start together, so a pause that
  * never settles leaves flushing and closing the backend only the gap between them: that gap has
  * to hold up on a busy CI runner.
  */
-const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(1_000) })
+const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(shortBackendMs) })
 
 /** Deadlines for a test about what a shutdown leads to, not how long it takes: a busy runner can't run out of them. */
 const ampleDeadlines = () => ({ pause: AbortSignal.timeout(10_000), backend: AbortSignal.timeout(20_000) })
@@ -89,7 +99,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(2_000)
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
 		expect(close).toHaveBeenCalledOnce()
 	})
@@ -104,7 +114,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(2_000)
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
 		expect(close).toHaveBeenCalledOnce()
 	})
@@ -138,7 +148,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(2_000)
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 		expect(engine.get(id).status).toBe('restartable')
 		expect(engine.get(id).error).toContain('Pausing on shutdown failed')
 		expect(close).toHaveBeenCalledOnce()

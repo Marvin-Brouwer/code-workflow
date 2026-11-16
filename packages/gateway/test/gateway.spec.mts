@@ -9,7 +9,7 @@ import {
 } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
-import { packageTokens, type GatewayOptions } from '../src/gateway.mts'
+import { tokensPerPackageEndpoint, type GatewayOptions } from '../src/gateway.mts'
 import type { ResolveRegistryFetch } from '../src/packages/connector-registry.mts'
 import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
@@ -313,7 +313,7 @@ describe('openGateway', () => {
 
 		// Assert
 		expect(readAgain.compromised).toBeUndefined()
-		expect(errorOf(await readAgain.answer(abortSignal))).toContain('engine stopped')
+		expect(errorOf((await readAgain.answer(abortSignal)).answer)).toContain('engine stopped')
 		expect(readAfterForgetting.compromised).toBeDefined()
 	})
 
@@ -334,7 +334,7 @@ describe('openGateway', () => {
 		controller.abort(new Error('cancelled'))
 
 		// Assert
-		const answer = await answering
+		const { answer } = await answering
 		expect(errorOf(answer)).toBe('The call was stopped: cancelled')
 		expect(answer.next).toBeDefined()
 	})
@@ -571,7 +571,7 @@ describe('package calls', () => {
 		const { fetchPath } = await packageRun(sent)
 
 		// Act
-		const { answer, body } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
+		const { answer, staged } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
 
 		// Assert
 		expect(resultOf(answer)).toEqual({
@@ -580,7 +580,7 @@ describe('package calls', () => {
 			body: expect.stringMatching(/^call-\d+\.body$/) as unknown,
 			size: 'tarball'.length,
 		})
-		expect(body()?.toString('utf8')).toBe('tarball')
+		expect(staged?.toString('utf8')).toBe('tarball')
 		const [url, init] = sent.mock.calls[0] ?? []
 		expect(url).toBe('https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz')
 		expect(init?.headers).toMatchObject({ accept: 'application/octet-stream' })
@@ -808,7 +808,7 @@ describe('package calls', () => {
 		const opening = await callGateway(gateway, runId, callOf(packages.endpoint, tokenOf(packages), { type: 'open', tools: [] }))
 
 		// Assert
-		expect(packages.tokens).toHaveLength(packageTokens)
+		expect(packages.tokens).toHaveLength(tokensPerPackageEndpoint)
 		expect(packages.tokens.some((token) => grant.tokens.includes(token))).toBe(false)
 		expect(errorOf(opening.answer)).toBe('The package endpoint only takes package fetches.')
 	})
@@ -832,11 +832,11 @@ describe('package calls', () => {
 		const later = await packageRun(sent, 'npm', { home })
 
 		// Act
-		const { answer, body } = await later.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+		const { answer, staged } = await later.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
 
 		// Assert
 		expect(resultOf(answer)).toMatchObject({ status: 200, headers: { etag: '"1"' } })
-		expect(body()?.toString('utf8')).toBe('tarball')
+		expect(staged?.toString('utf8')).toBe('tarball')
 		expect(sent).toHaveBeenCalledOnce()
 	})
 
@@ -854,6 +854,22 @@ describe('package calls', () => {
 
 		// Assert
 		expect(sent).toHaveBeenCalledTimes(2)
+	})
+
+	test("serves a cached package of a connector's registry only while the connector is loaded", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball')))
+		const { home } = await testGateway()
+		const first = await packageRun(sent, cloudRegistry, { home, registries: { cloud: cloudResolve } })
+		await first.fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+		const withoutConnector = await packageRun(sent, cloudRegistry, { home })
+
+		// Act
+		const { answer } = await withoutConnector.fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(errorOf(answer)).toContain("needs connector cloud, which isn't loaded")
+		expect(sent).toHaveBeenCalledOnce()
 	})
 
 	test("fetches from a connector's registry where its connector says, with its credential", async () => {
@@ -925,11 +941,11 @@ describe('package calls', () => {
 		const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: cloudResolve } })
 
 		// Act
-		const { answer, body } = await fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+		const { answer, staged } = await fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
 
 		// Assert
 		expect(resultOf(answer)).toMatchObject({ status: 200, headers: {} })
-		expect(body()?.toString('utf8')).toBe('tarball')
+		expect(staged?.toString('utf8')).toBe('tarball')
 		expect(sent.mock.calls.map(([url]) => url)).toEqual([
 			'https://packages.cloud.example/npm/packages/left-pad/-/left-pad-1.3.0.tgz',
 			signed,
@@ -992,8 +1008,9 @@ describe('package calls', () => {
 		controller.abort(new Error('cancelled'))
 
 		// Assert
-		expect((await answering).outcome.ok).toBe(false)
-		expect(accepted.body()).toBeUndefined()
+		const { answer, staged } = await answering
+		expect(answer.outcome.ok).toBe(false)
+		expect(staged).toBeUndefined()
 	})
 
 	test('passes on the sign-in a connector needs to fetch from its registry', async () => {

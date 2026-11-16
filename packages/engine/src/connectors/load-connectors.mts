@@ -104,7 +104,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 							signInCount.finished++
 						},
 					}),
-			...(registries === undefined ? {} : { registries: registries(hostOptions) }),
+			...(registries === undefined ? {} : { registries: withOwnRegistrySignIns(host.name, registries(hostOptions)) }),
 			...(missingSettings === undefined
 				? {}
 				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(credentials, abortSignal) }),
@@ -123,17 +123,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
  *   that asks for one has changed nothing yet, so running it again is safe.
  */
 function withOwnSignIns(connector: string, tool: HostTool, signInCount: { readonly finished: number }): HostTool {
-	const runOnce: HostTool['run'] = async (input, context) => {
-		try {
-			return await tool.run(input, context)
-		} catch (error) {
-			const signInTo = signInOf(error)
-			if (signInTo === undefined || signInTo === connector) throw error
-			throw new Error(`${tool.name} asked for a sign-in to ${signInTo}, not to its own connector ${connector}: ${messageOf(error)}`, {
-				cause: error,
-			})
-		}
-	}
+	const runOnce: HostTool['run'] = (input, context) => ownSignInsOnly(connector, tool.name, () => tool.run(input, context))
 	return Object.freeze<HostTool>({
 		name: tool.name,
 		run: async (input, context) => {
@@ -146,6 +136,27 @@ function withOwnSignIns(connector: string, tool: HostTool, signInCount: { readon
 			}
 		},
 	})
+}
+
+/** A connector's registries, which may only ask for a sign-in to its own service, as its tools. */
+function withOwnRegistrySignIns(connector: string, resolveFetch: ResolveRegistryFetch): ResolveRegistryFetch {
+	return (request, abortSignal) => ownSignInsOnly(connector, request.registry.name, () => resolveFetch(request, abortSignal))
+}
+
+/**
+ * Runs `work` of `connector`, named `what` for the error, and turns its ask for a sign-in to
+ * another connector's service into a plain failure.
+ */
+async function ownSignInsOnly<T>(connector: string, what: string, work: () => Promise<T>): Promise<T> {
+	try {
+		return await work()
+	} catch (error) {
+		const signInTo = signInOf(error)
+		if (signInTo === undefined || signInTo === connector) throw error
+		throw new Error(`${what} asked for a sign-in to ${signInTo}, not to its own connector ${connector}: ${messageOf(error)}`, {
+			cause: error,
+		})
+	}
 }
 
 async function importHost(name: string, from: string): Promise<ConnectorHost> {

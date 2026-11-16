@@ -1,5 +1,5 @@
 import { connectorHost, type ConnectorHost, type CredentialStore } from '@mesh-flow/gateway'
-import { awsConnector as name } from '../registries/code-artifact-repository.mts'
+import { awsConnector } from '../connector-name.mts'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import { awsHostTools } from './aws-host-tools.mts'
 import { openAwsSession, type AwsSession } from './aws-session.mts'
@@ -27,7 +27,7 @@ export function awsConnectorHost(options: AwsConnectorOptions = {}): ConnectorHo
 		sessions.set(credentials, opened)
 		return opened
 	}
-	return connectorHost(name, ({ credentials }) => awsHostTools(sessionOf(credentials)), {
+	return connectorHost(awsConnector, ({ credentials }) => awsHostTools(sessionOf(credentials)), {
 		login: (context) => signIn(context, options),
 		registries: ({ credentials }) => codeArtifactFetch(sessionOf(credentials)),
 		async missingSettings(credentials, abortSignal) {

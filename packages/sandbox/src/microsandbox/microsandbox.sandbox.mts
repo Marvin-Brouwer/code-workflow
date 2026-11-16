@@ -63,8 +63,8 @@ export class MicrosandboxSandbox implements Sandbox {
 		return abortable(this.#sandbox.fs().readToString(path), this.#lifetime.bind(signal))
 	}
 
-	async writeFile(path: string, content: string | Uint8Array, signal: AbortSignal): Promise<void> {
-		const bound = this.#lifetime.bind(signal)
+	async writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		const bound = this.#lifetime.bind(abortSignal)
 		await abortable(this.#sandbox.fs().write(`${path}.tmp`, content), bound)
 		await abortable(this.#sandbox.fs().rename(`${path}.tmp`, path), bound)
 	}

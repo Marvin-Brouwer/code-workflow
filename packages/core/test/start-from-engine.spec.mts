@@ -2,17 +2,18 @@ import { spawn } from 'node:child_process'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { tokensPerEndpoint } from '@mesh-flow/gateway'
+import { tokensPerEndpoint, tokensPerPackageEndpoint } from '@mesh-flow/gateway'
 import {
 	answerFile,
-	type CallAnswer,
-	type RunGrant,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	minTokenLength,
 	runIdEnvironmentVariable,
 	RuntimeMessage,
 	stagedFile,
+	stagedFileName,
+	type CallAnswer,
+	type RunGrant,
 } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -303,11 +304,13 @@ describe('an entry file started by the engine', () => {
 	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
 		// Arrange
 		const tokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(index))
-		const packageTokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(tokensPerEndpoint + 1 + index))
+		// After the run's tokens and the next one its answer hands out.
+		const firstPackageTokenIndex = tokensPerEndpoint + 1
+		const fetchTokens = Array.from({ length: tokensPerPackageEndpoint }, (_, index) => testToken(firstPackageTokenIndex + index))
 		const run = await startLikeTheEngine(
 			proxiedEntry,
 			{ mode: 'run', workflow: 'fetch' },
-			{ endpoint: 'run', tokens, packages: { endpoint: 'packages', tokens: packageTokens } },
+			{ endpoint: 'run', tokens, packages: { endpoint: 'packages', tokens: fetchTokens } },
 		)
 		await expect
 			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
@@ -321,17 +324,17 @@ describe('an entry file started by the engine', () => {
 			next: testToken(tokensPerEndpoint),
 			outcome: {
 				ok: true,
-				result: { status: 200, headers: { 'content-type': 'application/json' }, body: `${callId}.body`, size: body.length },
+				result: { status: 200, headers: { 'content-type': 'application/json' }, body: stagedFileName(callId), size: body.length },
 			},
 		}
 		await mkdir(run.layout.packages, { recursive: true })
-		await writeFile(stagedFile(run.layout, `${callId}.body`), body)
+		await writeFile(stagedFile(run.layout, stagedFileName(callId)), body)
 		await writeFile(answerFile(run.layout, callId), JSON.stringify({ value: answer }))
 
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(0)
 		expect(await readdir(run.layout.packages)).toEqual([])
-		expect(packageTokens).toContain(call?.type === 'call' ? call.token : undefined)
+		expect(fetchTokens).toContain(call?.type === 'call' ? call.token : undefined)
 		expect(call).toMatchObject({
 			type: 'call',
 			endpoint: 'packages',

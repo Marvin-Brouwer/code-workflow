@@ -3,9 +3,9 @@ import { rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { Gateway } from '@mesh-flow/gateway'
-import type { Answer, CallMessage } from '@mesh-flow/protocol'
-import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
+import { stagedFileName, type Answer, type CallMessage } from '@mesh-flow/protocol'
 import { onTestFinished } from 'vitest'
+import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
 
 /** What else the channel answers besides calls. */
@@ -45,9 +45,8 @@ export function gatewayChannel(
 		const stop = new AbortController()
 		running.set(message.id, stop)
 		const accepted = await gateway.accept(runId, message, lifetime)
-		const value = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
-		const body = accepted.body()
-		if (body !== undefined) await writeFile(stagedFile(`${message.id}.body`), body)
+		const { answer: value, staged } = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
+		if (staged !== undefined) await writeFile(stagedFile(stagedFileName(message.id)), staged)
 		await gateway.settle(runId, message.id, lifetime)
 		running.delete(message.id)
 		slot(message.id).resolve({ value })

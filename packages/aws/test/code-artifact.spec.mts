@@ -1,14 +1,6 @@
 import path from 'node:path'
-import {
-	connectorCredentials,
-	keyFile,
-	openCredentialStore,
-	openGateway,
-	openProviderSettings,
-	type CredentialStore,
-	type Gateway,
-} from '@mesh-flow/gateway'
-import type { CallAnswer, ConnectorRegistry, RunGrant } from '@mesh-flow/protocol'
+import { connectorCredentials, keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway } from '@mesh-flow/gateway'
+import type { ConnectorRegistry, RunGrant } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { codeArtifact } from '../src/code-artifact.mts'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
@@ -63,7 +55,7 @@ async function setUp({
 		repository,
 		aws,
 		host,
-		credentials: credentials satisfies CredentialStore,
+		credentials,
 	}
 }
 
@@ -81,17 +73,20 @@ function fetcher(gateway: Gateway, grant: RunGrant, registry: ConnectorRegistry)
 			{ type: 'call', id, endpoint, token, call: { type: 'package', request: { registry, path: fetchPath } } },
 			abortSignal,
 		)
-		const answer: CallAnswer = await accepted.answer(abortSignal)
+		const { answer, staged } = await accepted.answer(abortSignal)
 		await gateway.settle(runId, id, abortSignal)
 		if (answer.next !== undefined) tokens.push(answer.next)
-		return { outcome: answer.outcome, body: accepted.body()?.toString('utf8') }
+		return { outcome: answer.outcome, body: staged?.toString('utf8') }
 	}
 }
 
 describe('codeArtifact', () => {
 	test("is the repository's registry: on its domain's host, below its npm and NuGet paths", () => {
+		// Act
+		const registry = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
+
 		// Assert
-		expect(packages).toEqual({
+		expect(registry).toEqual({
 			connector: 'aws',
 			name: 'codeartifact example/packages',
 			host: repositoryHost,

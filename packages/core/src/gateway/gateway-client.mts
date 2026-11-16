@@ -1,4 +1,13 @@
-import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RunGrant, type RuntimeMessage } from '@mesh-flow/protocol'
+import { rm } from 'node:fs/promises'
+import {
+	CallAnswer,
+	EndpointGrant,
+	GatewayCall,
+	PackageResponse,
+	type Answer,
+	type RunGrant,
+	type RuntimeMessage,
+} from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { waitingOnHuman } from '../loop/loop-clock.mts'
 import { untilAborted } from '../run/until-aborted.mts'
@@ -98,7 +107,8 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 	const pools = new Map<string, TokenPool>([[grant.endpoint, new TokenPool(grant.tokens)]])
 	if (grant.packages !== undefined) pools.set(grant.packages.endpoint, new TokenPool(grant.packages.tokens))
 	const run: Endpoint = Object.freeze({ id: grant.endpoint, tools: undefined })
-	const packages: Endpoint | undefined = grant.packages && Object.freeze({ id: grant.packages.endpoint, tools: new Set<string>() })
+	const packages: Endpoint | undefined =
+		grant.packages === undefined ? undefined : Object.freeze({ id: grant.packages.endpoint, tools: new Set<string>() })
 	const poolOf = (endpoint: Endpoint) => {
 		const pool = pools.get(endpoint.id)
 		if (pool === undefined) throw new GatewayCallError(`Endpoint ${endpoint.id} is closed.`)
@@ -124,9 +134,13 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 			if (progress.taken || !abortSignal.aborted || runAbortSignal.aborted) throw error
 			channel.send({ type: 'cancel', id })
 			// The answer still comes, with the next token: the rest of the run needs it.
-			const recovered = channel.take(id, runAbortSignal).then((answer) => {
+			const recovered = channel.take(id, runAbortSignal).then(async (answer) => {
 				const next = CallAnswer.safeParse(answer.value)
-				if (next.success && next.data.next !== undefined) pool.give(next.data.next)
+				if (!next.success) return
+				if (next.data.next !== undefined) pool.give(next.data.next)
+				// Nothing reads the body a package fetch staged any more.
+				const fetched = checked.type === 'package' && next.data.outcome.ok ? PackageResponse.safeParse(next.data.outcome.result) : undefined
+				if (fetched?.success === true) await rm(channel.staged(fetched.data.body), { force: true })
 			})
 			recovered.catch(() => undefined)
 			throw error

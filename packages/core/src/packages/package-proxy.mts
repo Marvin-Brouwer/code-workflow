@@ -85,8 +85,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 
 	const serve = async (request: IncomingMessage, response: ServerResponse) => {
 		const registries = registriesOfSocket.get(request.socket) ?? []
-		const registry = request.url === undefined ? undefined : registryOfPath(registries, request.url)
-		if (registry === undefined || request.url === undefined) {
+		const { url } = request
+		const registry = url === undefined ? undefined : registryOfPath(registries, url)
+		if (url === undefined || registry === undefined) {
 			answerPlainly(response, forbidden, 'Not a registry this run restores from.')
 			return
 		}
@@ -95,9 +96,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			return
 		}
 		const accept = request.headers.accept
-		const asked = PackageRequest.safeParse({ registry, path: request.url, ...(accept === undefined ? {} : { accept }) })
+		const asked = PackageRequest.safeParse({ registry, path: url, ...(accept === undefined ? {} : { accept }) })
 		if (!asked.success) {
-			answerPlainly(response, badRequest, `Not a package fetch: ${request.url.slice(0, maxEchoedLength)}`)
+			answerPlainly(response, badRequest, `Not a package fetch: ${url.slice(0, maxEchoedLength)}`)
 			return
 		}
 		const stopped = new AbortController()
@@ -105,11 +106,11 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			stopped.abort(new Error('The package manager went away.'))
 		})
 		try {
-			const stopping = AbortSignal.any([stopped.signal, options.abortSignal])
-			const answer = await options.fetchThroughGateway(asked.data, stopping)
+			const fetchAbortSignal = AbortSignal.any([stopped.signal, options.abortSignal])
+			const answer = await options.fetchThroughGateway(asked.data, fetchAbortSignal)
 			try {
 				response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
-				await pipeline(createReadStream(answer.file), response, { signal: stopping })
+				await pipeline(createReadStream(answer.file), response, { signal: fetchAbortSignal })
 			} finally {
 				await rm(answer.file, { force: true })
 			}

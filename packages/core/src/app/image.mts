@@ -1,4 +1,4 @@
-import { registryKey, type PackageRegistry, type SandboxDescription } from '@mesh-flow/protocol'
+import { uniqueRegistries, type PackageRegistry, type SandboxDescription } from '@mesh-flow/protocol'
 
 /** The sandbox of {@link image}: an OCI image and what it may use. */
 export interface ImageOptions {
@@ -40,6 +40,6 @@ export function image(options: ImageOptions): SandboxDescription {
 		image: options.name,
 		cpus: options.cpus ?? defaultCpus,
 		memoryMb: options.memoryMb ?? defaultMemoryMb,
-		registries: Object.freeze([...new Map((options.registries ?? []).map((registry) => [registryKey(registry), registry])).values()]),
+		registries: Object.freeze(uniqueRegistries(options.registries ?? [])),
 	})
 }

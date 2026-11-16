@@ -8,7 +8,8 @@ import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
-import { Engine, type CloseDeadlines, type ConnectorSettingsCheck } from '../engine/engine.mts'
+import { connectorSettingsOf } from '../engine/connector-settings-check.mts'
+import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { settleWithin } from '../engine/settle-within.mts'
 import { openSignIns } from '../engine/sign-ins.mts'
@@ -206,20 +207,4 @@ function closeServer(server: Server): Promise<void> {
 		})
 		server.closeAllConnections()
 	})
-}
-
-/**
- * The settings check of the loaded connectors: for an app, each connector it uses, by a host tool
- * or a registry, says what it still needs.
- */
-function connectorSettingsOf(connectors: readonly LoadedConnector[]): ConnectorSettingsCheck {
-	return async ({ tools, registries }, abortSignal) => {
-		const used = connectors.filter(
-			(connector) =>
-				connector.tools.some((tool) => tools.includes(tool.name)) ||
-				registries.some((registry) => typeof registry !== 'string' && registry.connector === connector.name),
-		)
-		const missing = await Promise.all(used.map(async (connector) => (await connector.missingSettings?.(abortSignal)) ?? []))
-		return missing.flat()
-	}
 }

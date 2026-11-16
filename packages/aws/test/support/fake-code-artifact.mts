@@ -16,10 +16,13 @@ export const signedDownload = 'https://downloads.example/left-pad-1.3.0.tgz?sign
 /** A token the fake AWS hands out for domain `example`. */
 const exampleToken = /^codeartifact-example-\d+$/
 
+/** How npm's `authorization` starts. */
+const bearer = 'Bearer '
+
 /** Whether `authorization` carries a token for domain `example`, the way `format` takes it. */
 function authorized(format: 'npm' | 'nuget', authorization: string | null): boolean {
 	if (authorization === null) return false
-	if (format === 'npm') return exampleToken.test(authorization.replace(/^Bearer /, '')) && authorization.startsWith('Bearer ')
+	if (format === 'npm') return authorization.startsWith(bearer) && exampleToken.test(authorization.slice(bearer.length))
 	const [scheme, encoded = ''] = authorization.split(' ')
 	const [user, token = ''] = Buffer.from(encoded, 'base64').toString('utf8').split(':')
 	return scheme === 'Basic' && user === 'aws' && exampleToken.test(token)

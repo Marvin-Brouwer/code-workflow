@@ -1,8 +1,4 @@
-import type { ConnectorRegistry } from '@mesh-flow/protocol'
 import { z } from 'zod'
-
-/** The name the AWS connector goes by, which its registries name. */
-export const awsConnector = 'aws'
 
 /** A CodeArtifact repository: its domain, the account that owns the domain, the domain's region, and the repository's name. */
 export const CodeArtifactRepository = z.object({
@@ -21,19 +17,15 @@ export function codeArtifactHost({ domain, owner, region }: Omit<CodeArtifactRep
 	return `${domain}-${owner}.d.codeartifact.${region}.amazonaws.com`
 }
 
-/** The repository's paths on its host: one for each format, such as `/nuget/packages/`. */
-export function codeArtifactPaths({ repository }: Pick<CodeArtifactRepository, 'repository'>): string[] {
-	return codeArtifactFormats.map((format) => `/${format}/${repository}/`)
+/** A package format a repository serves. */
+export type CodeArtifactFormat = (typeof codeArtifactFormats)[number]
+
+/** The repository's path on its host for one format, such as `/nuget/packages/`. */
+export function codeArtifactPath(format: CodeArtifactFormat, repository: string): string {
+	return `/${format}/${repository}/`
 }
 
-/** The repository as the registry an app restores from. */
-export function codeArtifactRegistry(repository: CodeArtifactRepository): ConnectorRegistry {
-	const { domain, owner, region, repository: name } = CodeArtifactRepository.parse(repository)
-	return {
-		connector: awsConnector,
-		name: `codeartifact ${domain}/${name}`,
-		host: codeArtifactHost({ domain, owner, region }),
-		paths: codeArtifactPaths({ repository: name }),
-		settings: { domain, owner, region, repository: name },
-	}
+/** The repository's paths on its host: one for each format. */
+export function codeArtifactPaths({ repository }: Pick<CodeArtifactRepository, 'repository'>): string[] {
+	return codeArtifactFormats.map((format) => codeArtifactPath(format, repository))
 }

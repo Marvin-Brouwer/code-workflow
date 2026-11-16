@@ -40,16 +40,27 @@ The gateway sends the Anthropic Messages, OpenAI Chat Completions and OpenAI Res
 A sandbox has no network, so its package fetches come here too: a `package` call names one of the registries the run's app restores from (which `openRun` gets in `registries`) and a path on it.
 
 - **Public registries**, `nuget` (nuget.org) and `npm`: the gateway sends the fetch only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. A redirect isn't followed: it goes back as it is, so the next fetch is checked too.
-- **A connector's registry**, such as a CodeArtifact repository from `@mesh-flow/aws`: the path has to be below one of the registry's paths, already normalized, and the connector's `ResolveRegistryFetch` says where it goes and with which credential. The gateway follows up to three HTTPS redirects, as to a signed download, and sends the connector's headers to the registry's own host only.
+- **A connector's registry**, such as a CodeArtifact repository from `@mesh-flow/aws`: the path has to be below one of the registry's paths, already normalized, and the connector's `ResolveRegistryFetch` says where it goes and with which credential. The gateway follows up to three HTTPS redirects, as to a signed download, and sends the connector's headers to the registry's own host only. A redirect to plain HTTP, or a fourth one, is refused like a fetch that isn't a package fetch: the proxy answers 403.
 
-The registry's answer goes back whole, a 404 too, with only `content-type`, `etag`, `last-modified` and `location` of its headers. The body isn't in the answer: `AcceptedCall.body()` hands it to the engine, which writes it into the sandbox as a file the answer names (see [`@mesh-flow/protocol`](../protocol/README.md)), so the mailbox only carries small JSON. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
+The registry's answer goes back whole, a 404 too, with only `content-type`, `etag`, `last-modified` and `location` of its headers. The body isn't in the answer: the call's `answer` resolves to it as `staged`, next to the answer, for the engine, which writes it into the sandbox as a file the answer names (see [`@mesh-flow/protocol`](../protocol/README.md)), so the mailbox only carries small JSON. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
 
-A published package never changes, so a `.nupkg` or `.tgz` fetched whole is kept in the gateway's `packages` folder, shared by every run, and the next fetch of it doesn't go to the registry. Version lists and other metadata are fetched each time.
+A published package never changes, so a `.nupkg` or `.tgz` fetched whole is kept in the gateway's `packages` folder, shared by every run, and the next fetch of it doesn't go to the registry. Version lists and other metadata are fetched each time. A package of a connector's registry is served from the folder only while its connector is loaded, without asking the connector again: one that the configured account can't reach any more is still served. The folder only grows; remove it to clear it. A package that can't be kept, such as on a full disk, is still handed to the run, and an entry that can't be read is fetched again.
 
-With the gateway of the [sample below](#host-tools), a run whose app restores from npm opens its endpoint with the registry:
+A run whose app restores from npm and from a connector's registry opens its endpoint with both:
 
 ```ts
-const gateway = openGateway({ home, credentials, providers, registries: { aws: codeArtifactFetch(session) } })
+import { openGateway, openGatewayHome, type ResolveRegistryFetch } from '@mesh-flow/gateway'
+import type { ConnectorRegistry } from '@mesh-flow/protocol'
+
+const abortSignal = AbortSignal.timeout(10_000)
+const { directory, credentials, providers } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
+const packages: ConnectorRegistry = { connector: 'cloud', name: 'cloud packages', host: 'packages.example.com', paths: ['/npm/packages/'], settings: {} }
+const cloud: ResolveRegistryFetch = async ({ registry, path }, fetchAbortSignal) => ({
+	url: `https://${registry.host}${path}`,
+	headers: { authorization: `Bearer ${await credentials.get('cloud/token', fetchAbortSignal)}` },
+})
+
+const gateway = openGateway({ home: directory, credentials, providers, registries: { cloud } })
 const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm', packages] }, abortSignal)
 ```
 
@@ -195,7 +206,7 @@ async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer)
 `accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way. After a resume, call `forgetInterrupted` once the outbox was read past where it was.
 
 - **A run's endpoint** takes calls from workflow code, the model calls, and opening and closing loop endpoints.
-- **A run's package endpoint** takes package fetches only, with `packageTokens` (eight) tokens of its own, so a restore doesn't hold up the run's other calls. `openRun` opens it, in the grant's `packages`, when the app restores from a registry.
+- **A run's package endpoint** takes package fetches only, with `tokensPerPackageEndpoint` (eight) tokens of its own, so a restore doesn't hold up the run's other calls. `openRun` opens it, in the grant's `packages`, when the app restores from a registry.
 - **A loop's endpoint** takes only the tools in that loop's template. The runtime opens it when the loop starts and closes it when the loop settles.
 - **Every token is good for one call**, and the answer carries the next. An endpoint hands out four at a time, so calls can run at the same time. A token that comes again, or one never handed out, closes every endpoint of the run and `accept` says so in `compromised`: the engine fails the run.
 - **Only hashes of tokens are kept on disk**, in `runs/<run>.json`, so a run paused across an engine restart can go on calling. A call that was taken but not answered when the engine stopped is answered as interrupted after the restart, with its next token: whether it took effect is unknown, so it isn't run again.

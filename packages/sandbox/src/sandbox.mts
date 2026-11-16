@@ -44,7 +44,7 @@ export interface Sandbox {
 	 * Writes text, as UTF-8, or bytes, such as a package the engine fetched for the run, to a
 	 * temporary file and renames it, so a reader never sees half a file.
 	 */
-	writeFile(path: string, content: string | Uint8Array, signal: AbortSignal): Promise<void>
+	writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void>
 	/**
 	 * Saves memory, processes and disk, then stops the sandbox so it holds no CPU or RAM.
 	 * Open connections into or out of the sandbox don't survive this.

@@ -1,5 +1,6 @@
 import type { ConnectorRegistry } from '@mesh-flow/protocol'
-import { codeArtifactRegistry, type CodeArtifactRepository } from './registries/code-artifact-repository.mts'
+import { awsConnector } from './connector-name.mts'
+import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './registries/code-artifact-repository.mts'
 
 /**
  * A CodeArtifact repository for the sandbox's `registries`. Package managers in the sandbox, such
@@ -29,5 +30,12 @@ import { codeArtifactRegistry, type CodeArtifactRepository } from './registries/
  * @throws When a field isn't a CodeArtifact name, account or region.
  */
 export function codeArtifact(repository: CodeArtifactRepository): ConnectorRegistry {
-	return codeArtifactRegistry(repository)
+	const { domain, owner, region, repository: name } = CodeArtifactRepository.parse(repository)
+	return {
+		connector: awsConnector,
+		name: `codeartifact ${domain}/${name}`,
+		host: codeArtifactHost({ domain, owner, region }),
+		paths: codeArtifactPaths({ repository: name }),
+		settings: { domain, owner, region, repository: name },
+	}
 }

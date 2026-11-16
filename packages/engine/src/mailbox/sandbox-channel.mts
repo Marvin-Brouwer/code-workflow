@@ -1,12 +1,12 @@
 import {
 	answerFile,
-	stagedFile,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	RuntimeMessage,
+	stagedFile,
 	type Answer,
-	type RunGrant,
 	type MailboxLayout,
+	type RunGrant,
 	type RunStart,
 } from '@mesh-flow/protocol'
 import type { Command, Sandbox } from '@mesh-flow/sandbox'
@@ -45,9 +45,9 @@ export class SandboxChannel {
 	}
 
 	/** Makes the mailbox, readable for the runtime's user only. */
-	async prepare(signal: AbortSignal): Promise<void> {
-		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.packages], signal)
-		await this.#run(['chmod', '700', this.#layout.directory], signal)
+	async prepare(abortSignal: AbortSignal): Promise<void> {
+		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.packages], abortSignal)
+		await this.#run(['chmod', '700', this.#layout.directory], abortSignal)
 	}
 
 	/** Tells the runtime what to do. Written before it starts, and never again. */
@@ -96,8 +96,18 @@ export class SandboxChannel {
 	}
 
 	/** Stages a body a call fetched, such as a package, where its answer tells the runtime to look. */
-	async stage(name: string, body: Uint8Array, signal: AbortSignal): Promise<void> {
-		await this.#sandbox.writeFile(stagedFile(this.#layout, name), body, signal)
+	async stage(name: string, body: Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(stagedFile(this.#layout, name), body, abortSignal)
+	}
+
+	/**
+	 * Removes what was staged under `names`, also a write of it that was cut short, for calls whose
+	 * answer will never name it: nothing in the sandbox would read it.
+	 */
+	async unstage(names: readonly string[], abortSignal: AbortSignal): Promise<void> {
+		if (names.length === 0) return
+		const files = names.map((name) => stagedFile(this.#layout, name))
+		await this.#run(['rm', '-f', '--', ...files.flatMap((file) => [file, `${file}.tmp`])], abortSignal)
 	}
 
 	/** Writes the answer to a request where the runtime looks for it. */

@@ -1,11 +1,11 @@
 import { mergeUsage, type AcceptedCall, type Gateway, type RunUsage } from '@mesh-flow/gateway'
 import {
 	runIdEnvironmentVariable,
+	stagedFileName,
 	type Answer,
 	type CallAnswer,
 	type CallMessage,
 	type LoginRequest,
-	type PackageRegistry,
 	type RunStart,
 	type RuntimeEvent,
 	type RuntimeMessage,
@@ -22,6 +22,7 @@ import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunApp, type RunRecord, type RunStatus } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
+import type { ConnectorSettingsCheck } from './connector-settings-check.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
@@ -61,15 +62,6 @@ export interface EngineOptions {
 	 */
 	readonly connectorSettings?: ConnectorSettingsCheck
 }
-
-/** What an app uses connectors for: the host tools it calls and the registries it restores from. */
-export interface ConnectorUse {
-	readonly tools: readonly string[]
-	readonly registries: readonly PackageRegistry[]
-}
-
-/** The settings the connectors behind `use` still need, each as a line that says how to set it. */
-export type ConnectorSettingsCheck = (use: ConnectorUse, abortSignal: AbortSignal) => Promise<string[]>
 
 /** Which trigger of which app starts a run, and with what. */
 export interface StartRunOptions {
@@ -144,7 +136,7 @@ export class Engine {
 	readonly #now: () => Date
 	readonly #gateway: Gateway | undefined
 	readonly #signIns: SignIns | undefined
-	readonly #connectorSettings: EngineOptions['connectorSettings']
+	readonly #connectorSettings: ConnectorSettingsCheck | undefined
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
@@ -576,7 +568,7 @@ export class Engine {
 	async #accept(id: RunId, call: CallMessage, abortSignal: AbortSignal): Promise<AcceptedCall> {
 		if (this.#gateway === undefined) {
 			const answer: CallAnswer = { outcome: { ok: false, error: 'This engine has no gateway.' } }
-			return { answer: () => Promise.resolve(answer), body: () => undefined }
+			return { answer: () => Promise.resolve({ answer }) }
 		}
 		return this.#gateway.accept(id, call, abortSignal)
 	}
@@ -602,11 +594,10 @@ export class Engine {
 		calls?.set(call.id, cancel)
 		void accepted
 			.answer(AbortSignal.any([abortSignal, cancel.signal]))
-			.then(async (answer) => {
+			.then(async ({ answer, staged }) => {
 				abortSignal.throwIfAborted()
 				// What the answer names, such as a package, is in the sandbox before the answer.
-				const body = accepted.body()
-				if (body !== undefined) await channel.stage(`${call.id}.body`, body, abortSignal)
+				if (staged !== undefined) await channel.stage(stagedFileName(call.id), staged, abortSignal)
 				await this.#answerFromGateway(id, channel, call.id, answer, abortSignal)
 			})
 			.catch(async (error: unknown) => {
@@ -645,7 +636,13 @@ export class Engine {
 	 * saved gets the same answer, and lists those not answered yet again on the next resume.
 	 */
 	async #answerInterrupted(id: RunId, channel: SandboxChannel, abortSignal: AbortSignal): Promise<void> {
-		for (const call of (await this.#gateway?.interrupted(id, abortSignal)) ?? []) {
+		const interrupted = (await this.#gateway?.interrupted(id, abortSignal)) ?? []
+		// A body staged for a call that was cut short is never named by an answer.
+		await channel.unstage(
+			interrupted.map((call) => stagedFileName(call.id)),
+			abortSignal,
+		)
+		for (const call of interrupted) {
 			await this.#answerFromGateway(id, channel, call.id, call.answer, abortSignal)
 		}
 	}

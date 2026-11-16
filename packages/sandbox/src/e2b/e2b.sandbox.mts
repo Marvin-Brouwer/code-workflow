@@ -51,8 +51,8 @@ export class E2bSandbox implements Sandbox {
 		return this.#sandbox.files.read(path, { signal: this.#lifetime.bind(signal) })
 	}
 
-	async writeFile(path: string, content: string | Uint8Array, signal: AbortSignal): Promise<void> {
-		const bound = this.#lifetime.bind(signal)
+	async writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		const bound = this.#lifetime.bind(abortSignal)
 		await this.#sandbox.files.write(`${path}.tmp`, content, { signal: bound })
 		await this.#sandbox.files.rename(`${path}.tmp`, path, { signal: bound })
 	}
