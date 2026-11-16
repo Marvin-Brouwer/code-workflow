@@ -10,7 +10,7 @@ import { isGone } from './transient-error.mts'
 const beingReadReaction = 'eyes'
 
 /** What the reply that says an item is being read says, under its header. */
-export const readingWords = '👀 Reading...'
+const readingWords = '👀 Reading...'
 
 /** The reply that says an item is being read, under the header that quotes it on the conversation. */
 export function readingNote(header: string | undefined): string {

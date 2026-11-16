@@ -7,7 +7,7 @@ import { stubs } from '../src/stubs.mts'
 import { ReviewItemId, type ReviewItem } from '../src/tools/pull-request-tools.mts'
 import { branch, connectedGithub, promptlyMs, repositoryName } from './support/connected-github.mts'
 import { reactionsOf } from './support/fake-github.mts'
-import { replyingTo } from './support/replying-to.mts'
+import { replyingTo } from './support/review-items.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
 import { runOnGateway } from './support/test-run.mts'
 

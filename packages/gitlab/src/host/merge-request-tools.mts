@@ -23,7 +23,7 @@ import {
 } from '../tools/merge-request-tools.mts'
 import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 import { keepingDraft, withoutDraftPrefix } from './draft-title.mts'
-import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingNote, reviewItemsOf } from './merge-request-notes.mts'
+import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingWords, reviewItemsOf } from './merge-request-notes.mts'
 import { noCommit } from './no-commit.mts'
 import { GitlabRequestError, refusedToken } from './request-error.mts'
 
@@ -212,7 +212,7 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 			const comments = mergeRequestNotes(await api(context), repository, number)
 			const toShow = items.map((item) => {
 				const commentId = noteIdOf(item)
-				return { item, kind: 'note' as const, commentId, note: readingNote, thread: () => comments.threadOf('note', commentId) }
+				return { item, kind: 'note' as const, commentId, note: readingWords, thread: () => comments.threadOf('note', commentId) }
 			})
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),

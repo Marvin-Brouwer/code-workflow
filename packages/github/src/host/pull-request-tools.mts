@@ -226,7 +226,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 				// On the conversation, every reply says what it answers: the reading reply, the plan and the answer.
 				const header = await replyHeader(client, repository, number, { kind, commentId })
 				const reply = { item, kind, commentId, body, stage: stage ?? defaultReplyStage, runId: context.runId }
-				return replyToItem(comments, header === undefined ? reply : { ...reply, header })
+				return replyToItem(comments, { ...reply, ...(header === undefined ? {} : { header }) })
 			}),
 		),
 
@@ -235,8 +235,9 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const toShow = items.map(({ id: item, thread, url, body, at, verdict }) => {
 				const { kind, id: commentId } = parseItemId(item)
 				// A reply to a comment on a line goes in its thread; everything else is answered on the conversation, under a quote.
-				const threadId = kind === 'review-comment' ? parseItemId(thread ?? item).id : undefined
-				const header = kind === 'review-comment' ? undefined : quoteHeader({ body, at, url, ...(verdict === undefined ? {} : { verdict }) })
+				const onLine = kind === 'review-comment'
+				const threadId = onLine ? parseItemId(thread ?? item).id : undefined
+				const header = onLine ? undefined : quoteHeader({ body, at, url, ...(verdict === undefined ? {} : { verdict }) })
 				return { item, kind, commentId, note: readingNote(header), thread: () => Promise.resolve(threadId) }
 			})
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })

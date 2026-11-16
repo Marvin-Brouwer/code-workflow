@@ -15,7 +15,7 @@ import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import { fakeGithub, reactionsOf, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
-import { beingRead, replyingTo } from './support/replying-to.mts'
+import { beingRead, replyingTo } from './support/review-items.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
 

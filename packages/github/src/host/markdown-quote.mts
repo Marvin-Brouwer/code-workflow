@@ -19,8 +19,14 @@ const reviewWithoutBody: Partial<Record<NonNullable<ReviewItem['verdict']>, stri
 	dismissed: '_A review, dismissed since._',
 }
 
-/** An HTML comment; an unclosed one runs to the end of the text. */
-const htmlComment = /<!--[\s\S]*?(?:-->|$)/gu
+/** What opens an HTML comment. */
+const commentOpening = '<!--'
+
+/** A closed HTML comment. */
+const htmlComment = /<!--[\s\S]*?-->/gu
+
+/** A zero-width space, which breaks an HTML comment's opening in code, where `<` can't be escaped. */
+const zeroWidthSpace = '\u200B'
 
 /** A line that opens a fenced code block, with the fence: three or more backticks or tildes. */
 const openingFence = /^\s*(`{3,}|~{3,})/u
@@ -42,36 +48,57 @@ const mention = /(^|[^\w\\])@(?=[\w-])/gu
 
 /**
  * `body` as a Markdown quote, cut short at a word when it's long. It leaves out HTML comments and
- * what the item quoted itself, and escapes HTML and mentions outside code: a quote that mentions
- * someone would notify them again, and one cut inside an HTML comment would hide what follows it.
- * A review without a body is quoted by what its `verdict` says.
+ * what the item quoted itself, and escapes HTML, entities and mentions outside code: a quote that
+ * mentions someone would notify them again, and one cut inside an HTML comment would hide what
+ * follows it. No HTML comment can open in it, in code either, so a quote never holds a connector's
+ * marker. A review without a body is quoted by what its `verdict` says.
  */
 export function markdownQuote(body: string, verdict?: ReviewItem['verdict']): string {
-	const text = ownWords(body)
+	const { text: uncommented, cut: commentCut } = withoutHtmlComments(body.replaceAll('\r\n', '\n'))
+	const text = ownWords(uncommented)
 	if (text === '') return `> ${(verdict === undefined ? undefined : reviewWithoutBody[verdict]) ?? withoutWords}`
 	const short = cutAtWord(text.split('\n').slice(0, quoteMaxLines).join('\n'), quoteMaxCharacters)
-	const cut = short.length < text.length ? cutMark : ''
+	const cut = commentCut || short.length < text.length ? cutMark : ''
 	return escapedOutsideCode(`${short}${cut}`)
-		.map((line) => `> ${line}`.trimEnd())
+		.map((line) => `> ${line.replaceAll(commentOpening, `<!-${zeroWidthSpace}-`)}`.trimEnd())
 		.join('\n')
 }
 
-/** `body` without HTML comments and the lines it quoted, outside code, with each run of blank lines kept as one. */
+/**
+ * `text` without HTML comments, also ones that only form once another is taken out, and cut where
+ * one opens that never closes. `cut` says whether it was cut.
+ */
+function withoutHtmlComments(text: string): { readonly text: string; readonly cut: boolean } {
+	const stripped = text.replaceAll(htmlComment, '')
+	if (stripped !== text) return withoutHtmlComments(stripped)
+	const unclosed = text.indexOf(commentOpening)
+	return unclosed === -1 ? { text, cut: false } : { text: text.slice(0, unclosed), cut: true }
+}
+
+/**
+ * `body` without the lines it quoted, outside code, with each run of blank lines kept as one. A
+ * line right under a quoted one belongs to the quote, as Markdown reads it, up to a blank line.
+ */
 function ownWords(body: string): string {
-	const lines = body.replaceAll('\r\n', '\n').replaceAll(htmlComment, '').split('\n')
+	const lines = body.split('\n')
 	const inCode = inCodeBlock(lines)
-	return lines
-		.filter((line, index) => inCode[index] === true || !line.trimStart().startsWith('>'))
-		.join('\n')
-		.replaceAll(blankLines, '\n\n')
-		.trim()
+	const { kept } = lines.reduce<{ readonly inQuote: boolean; readonly kept: readonly string[] }>(
+		({ inQuote, kept: before }, line, index) => {
+			if (inCode[index] === true) return { inQuote: false, kept: [...before, line] }
+			if (line.trimStart().startsWith('>')) return { inQuote: true, kept: before }
+			if (inQuote && line.trim() !== '') return { inQuote: true, kept: before }
+			return { inQuote: false, kept: [...before, line] }
+		},
+		{ inQuote: false, kept: [] },
+	)
+	return kept.join('\n').replaceAll(blankLines, '\n\n').trim()
 }
 
 /**
  * Whether each of `lines` is part of a fenced code block, its fences included. A block closes on a
  * fence of the same character, at least as long as the one that opened it.
  */
-function inCodeBlock(lines: readonly string[]): boolean[] {
+function inCodeBlock(lines: readonly string[]): readonly boolean[] {
 	const { marks } = lines.reduce<{ readonly open: string | undefined; readonly marks: readonly boolean[] }>(
 		({ open, marks: before }, line) => {
 			const fence = openingFence.exec(line)?.[1]
@@ -81,7 +108,7 @@ function inCodeBlock(lines: readonly string[]): boolean[] {
 		},
 		{ open: undefined, marks: [] },
 	)
-	return [...marks]
+	return marks
 }
 
 /** `text` cut at the last whitespace that leaves at most `maxCharacters`, or at `maxCharacters` without one. */
@@ -102,11 +129,11 @@ function escapedOutsideCode(text: string): string[] {
 		const parts = line.split('`')
 		// A backtick without its pair is just a backtick: what follows it is plain text.
 		const unpaired = parts.length % 2 === 0 ? parts.length - 1 : -1
-		return parts.map((part, at) => (at % 2 === 0 || at === unpaired ? escaped(part) : part)).join('`')
+		return parts.map((part, partIndex) => (partIndex % 2 === 0 || partIndex === unpaired ? escaped(part) : part)).join('`')
 	})
 }
 
-/** Plain Markdown text with its HTML and mentions escaped. */
+/** Plain Markdown text with its HTML, entities and mentions escaped. */
 function escaped(text: string): string {
-	return text.replaceAll('<', '&lt;').replaceAll(mention, '$1\\@')
+	return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll(mention, '$1\\@')
 }

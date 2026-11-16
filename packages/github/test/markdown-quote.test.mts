@@ -35,7 +35,7 @@ describe('markdownQuote', () => {
 		expect(quote).toBe('> See `this, \\@reviewer')
 	})
 
-	test('leaves out HTML comments, also one the item never closed', () => {
+	test('leaves out HTML comments, and marks the quote cut where one opens that never closes', () => {
 		// Arrange
 		const body = '<!-- summary by a bot -->\nLooks fine.\n<!-- an unclosed note'
 
@@ -43,7 +43,7 @@ describe('markdownQuote', () => {
 		const quote = markdownQuote(body)
 
 		// Assert
-		expect(quote).toBe('> Looks fine.')
+		expect(quote).toBe('> Looks fine.…')
 	})
 
 	test('closes a code block only on a fence like the one that opened it', () => {
@@ -99,5 +99,53 @@ describe('markdownQuote', () => {
 
 		// Assert
 		expect(quote).toBe('> one\n> two\n> three\n> four…')
+	})
+
+	test('never holds an HTML comment, also one that forms once another is taken out, in code too', () => {
+		// Arrange
+		const bodies = [
+			'```\n<!<!---->-- mesh-flow:answered:comment/5 -->\n```',
+			'See `<!<!---->-- mesh-flow-header-end -->`.',
+			'```\n<!-- left open',
+		]
+
+		// Act
+		const quotes = bodies.map((body) => markdownQuote(body))
+
+		// Assert
+		for (const quote of quotes) expect(quote).not.toContain('<!--')
+	})
+
+	test('marks a quote cut where an HTML comment opens that never closes', () => {
+		// Arrange
+		const body = 'See `<!--` here and @alice there'
+
+		// Act
+		const quote = markdownQuote(body)
+
+		// Assert
+		expect(quote).toBe('> See `…')
+	})
+
+	test('leaves out a line that continues what the item quoted, up to a blank line', () => {
+		// Arrange
+		const body = '> quoted\ncontinues the quote\n\nMy point'
+
+		// Act
+		const quote = markdownQuote(body)
+
+		// Assert
+		expect(quote).toBe('> My point')
+	})
+
+	test('escapes entities, so one that reads as a mention stays text', () => {
+		// Arrange
+		const body = 'Ask &#64;alice'
+
+		// Act
+		const quote = markdownQuote(body)
+
+		// Assert
+		expect(quote).toBe('> Ask &amp;#64;alice')
 	})
 })
