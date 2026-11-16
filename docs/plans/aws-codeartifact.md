@@ -39,9 +39,20 @@ IAM Identity Center with the OIDC device flow, as [design section 7](../design.m
 **One sign-in per Identity Center session, not per run.** The session belongs to the engine home,
 so every run, every loop and `mesh-flow login aws` share it. Within its lifetime the host renews the
 access token with the refresh token and the role credentials and CodeArtifact token from that, all
-without asking. The user is only asked again when the Identity Center session itself ends, which
-is its admin's setting (8 hours by default; set it to 12 hours to sign in about twice a day at
-most). An engine restart keeps the session, since it's in the credential store.
+without asking. An engine restart keeps the session, since it's in the credential store.
+
+**A sliding 12 hours, renewed by starting a run.** The engine keeps its own idle timeout on top of
+the Identity Center session: 12 hours by default (`aws/idle-timeout` to change it), counted from the
+last time a run started. Every run start resets it; activity inside a run doesn't, so a session
+nobody starts runs with is dropped after 12 hours. In practice: sign in at the start of the workday,
+and it stays as long as runs keep starting. When the timeout passes, the engine deletes the tokens
+from the store, so the next run asks for a sign-in.
+
+The engine can only shorten what Identity Center allows, never lengthen it: the Identity Center
+session length is a hard limit its admin sets (8 hours by default), and a refresh token doesn't
+outlive it. For the sliding 12 hours to work, that setting has to be longer than 12 hours, such
+as a few days; the engine's idle timeout then decides when to ask again. When Identity Center's
+own session ends first, the run asks anyway.
 
 Settings, until the settings UI (roadmap 6) takes them over: the start URL, the SSO region, the
 account and the role are user settings in the credential store, like `jira/url`:
