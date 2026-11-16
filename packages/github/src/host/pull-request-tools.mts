@@ -31,6 +31,7 @@ import {
 import { pageSize, type ApiClient } from './api.mts'
 import { pullRequestComments, readingNote } from './pull-request-comments.mts'
 import { quoteHeader, replyHeader } from './reply-header.mts'
+import { verdictField } from './review-verdict.mts'
 import { refusedToken } from './transient-error.mts'
 
 /** What the API returns for a pull request, in the fields the tools pass on. */
@@ -58,14 +59,6 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 		base: data.base.ref,
 		...descriptionOf(data.body),
 	}
-}
-
-/** A review's verdict as GitHub states it, in the words {@link ReviewItem} uses. */
-const verdicts: Record<string, ReviewItem['verdict']> = {
-	APPROVED: 'approved',
-	CHANGES_REQUESTED: 'changes_requested',
-	COMMENTED: 'commented',
-	DISMISSED: 'dismissed',
 }
 
 /** Check conclusions and status states that count as failed. */
@@ -206,7 +199,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						body: review.body,
 						url: review.html_url,
 						at: review.submitted_at ?? new Date().toISOString(),
-						...(verdicts[review.state] === undefined ? {} : { verdict: verdicts[review.state] }),
+						...verdictField(review.state),
 					})),
 				...comments
 					.filter((comment) => isNew(comment.created_at) && !isMarked(comment.body))

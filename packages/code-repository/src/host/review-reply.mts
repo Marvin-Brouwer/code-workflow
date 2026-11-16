@@ -24,8 +24,7 @@ export interface ReviewReply<Kind extends string> {
  * took that place already: then it's a reply of its own under the plan, since code hosts notify the
  * reviewer of a new comment and not of an edit. A reply that says what one of the item's replies
  * says already is that reply, so a run that starts over doesn't say it twice, whatever its header
- * says. A line comment deleted
- * since it was read takes no new reply in its thread: the item is gone.
+ * says. A line comment deleted since it was read takes no new reply in its thread: the item is gone.
  */
 export async function replyToItem<Kind extends string, Thread>(
 	comments: ReviewComments<Kind, Thread>,

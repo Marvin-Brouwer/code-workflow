@@ -65,6 +65,28 @@ describe('quoteHeader', () => {
 		expect(quote).toBe('> Looks fine.')
 	})
 
+	test('closes a code block only on a fence like the one that opened it', () => {
+		// Arrange
+		const body = '~~~\n```\n@inCode\n~~~\nAsk @reviewer'
+
+		// Act
+		const quote = quoteOf(body)
+
+		// Assert
+		expect(quote).toBe('> ~~~\n> ```\n> @inCode\n> ~~~…')
+	})
+
+	test('counts a run of blank lines as one', () => {
+		// Arrange
+		const body = 'one\n\n\n\ntwo'
+
+		// Act
+		const quote = quoteOf(body)
+
+		// Assert
+		expect(quote).toBe('> one\n>\n> two')
+	})
+
 	test('cuts a long item short at a word', () => {
 		// Arrange
 		const body = `${'word '.repeat(80)}end`
@@ -111,10 +133,10 @@ describe('quoteHeader', () => {
 
 	test('links an item GitHub gave no time for as a link', () => {
 		// Arrange
-		const review = { body: 'Pending.', at: '', url }
+		const item = { body: 'Pending.', at: '', url }
 
 		// Act
-		const header = quoteHeader(review)
+		const header = quoteHeader(item)
 
 		// Assert
 		expect(header).toContain(`[link](${url})`)

@@ -1,17 +1,13 @@
 import { withHeader } from '@mesh-flow/code-repository/host'
 import { quoteHeader } from '../../src/host/reply-header.mts'
-import { ReviewItem } from '../../src/tools/pull-request-tools.mts'
+import { verdictField } from '../../src/host/review-verdict.mts'
 import type { FakeComment, FakeReview } from './fake-github.mts'
 
 /** `text` under the header that quotes `item`, as a reply on the conversation reads. */
 export function replyingTo(item: FakeComment | FakeReview | undefined, text: string): string {
 	if (item === undefined) throw new Error('There is no item to reply to.')
 	if (!('state' in item)) return withHeader(quoteHeader({ body: item.body, at: item.created_at, url: item.html_url }), text)
-	const verdict = ReviewItem.shape.verdict.parse(item.state.toLowerCase())
-	return withHeader(
-		quoteHeader({ body: item.body, at: item.submitted_at, url: item.html_url, ...(verdict === undefined ? {} : { verdict }) }),
-		text,
-	)
+	return withHeader(quoteHeader({ body: item.body, at: item.submitted_at, url: item.html_url, ...verdictField(item.state) }), text)
 }
 
 /** Comment `comment` of `kind` as `showBeingRead` takes it. */
