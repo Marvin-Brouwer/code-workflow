@@ -23,6 +23,7 @@ import { addConnectorCommands, connectorSettingsFile } from './connector-command
 import { addCredentialCommands } from './credential-commands.mts'
 import { formatDescription } from './format-description.mts'
 import { formatRun, formatRunLine } from './format-run.mts'
+import { addLoginCommand } from './login-command.mts'
 import { openBackend } from './open-backend.mts'
 import { addProviderCommands } from './provider-commands.mts'
 import { withPackedApp } from './with-packed-app.mts'
@@ -272,6 +273,15 @@ export async function main(argv: readonly string[]): Promise<void> {
 	addProviderCommands(program, gatewayHome)
 	addCredentialCommands(program, gatewayHome)
 	addConnectorCommands(program, home)
+	addLoginCommand(program, {
+		gatewayHome,
+		connectors: async (abortSignal) =>
+			loadConnectors({
+				connectors: await openConnectorSettings(connectorSettingsFile(home())).list(abortSignal),
+				from: process.cwd(),
+				directory: connectorsDirectory(home()),
+			}),
+	})
 
 	program
 		.command('list')

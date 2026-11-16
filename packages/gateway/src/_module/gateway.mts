@@ -40,6 +40,7 @@ export {
 } from '../providers/provider-settings.mts'
 export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
+export type { ConnectorLogin, ConnectorLoginContext, LoginPrompt } from '../tools/connector-login.mts'
 export {
 	connectorHost,
 	ConnectorName,
@@ -48,6 +49,7 @@ export {
 	HostToolTransientError,
 	isTransient,
 	type ConnectorHost,
+	type ConnectorHostExtras,
 	type ConnectorHostOptions,
 	type HostTool,
 	type HostToolContext,

@@ -116,6 +116,21 @@ import { commentTool } from './tools/comment.mts'
 export const connector = connectorHost('github', ({ directory }) => [commentTool(directory)])
 ```
 
+A connector whose service has sessions brings a `login` too, which `mesh-flow login <name>` runs. It gets the credential store to write to, unlike a host tool, and `show`, to tell the user where to approve the sign-in once the service hands out a code:
+
+```ts
+import { connectorHost } from '@mesh-flow/gateway'
+import { deviceSignIn } from './sign-in.mts'
+
+export const connector = connectorHost('cloud', () => [], {
+	login: async ({ credentials, show, abortSignal }) => {
+		const { url, code, expiresAt, approved } = await deviceSignIn(abortSignal)
+		show({ url, code, expiresAt })
+		await credentials.set('cloud/session', await approved, abortSignal)
+	},
+})
+```
+
 ## Endpoints and tokens
 
 ```ts

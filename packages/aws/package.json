@@ -1,0 +1,60 @@
+{
+	"name": "@mesh-flow/aws",
+	"version": "0.0.0",
+	"description": "AWS connector for mesh-flow: an IAM Identity Center session on the host, its role credentials and CodeArtifact tokens, never in the sandbox",
+	"keywords": [
+		"agents",
+		"aws",
+		"codeartifact",
+		"mesh-flow",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/aws#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/aws"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		"./host": {
+			"source": "./src/_module/host.mts",
+			"types": "./dist/host.d.mts",
+			"import": "./dist/host.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@aws-sdk/client-codeartifact": "^3.1169.0",
+		"@aws-sdk/client-sso": "^3.1169.0",
+		"@aws-sdk/client-sso-oidc": "^3.1169.0",
+		"@mesh-flow/gateway": "workspace:*",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.6",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=26"
+	}
+}

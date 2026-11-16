@@ -46,6 +46,13 @@ mesh-flow credential set github/token < token.txt
 mesh-flow connector list
 ```
 
+A connector whose service has sessions, such as `@mesh-flow/aws`, signs you in with `mesh-flow login <name>`: it prints where to approve the sign-in, waits until you do, and keeps the session in the credential store, so runs don't have to ask. Ctrl+C stops waiting.
+
+```bash
+mesh-flow connector add @mesh-flow/aws
+mesh-flow login aws
+```
+
 The settings an app needs follow from what it declares: a provider with a key for each of its models, a loaded connector for each of its host tools. `mesh-flow deploy` and `mesh-flow dev` print what is still missing, and a trigger refuses a run before it makes a sandbox until it's in.
 
 ### Build and deploy an app

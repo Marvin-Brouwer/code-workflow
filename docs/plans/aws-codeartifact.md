@@ -1,8 +1,8 @@
 # Plan: AWS sign-in and CodeArtifact restores
 
-Status: agreed 2026-11-16; delivery step 1 (no direct egress) built, the rest not. Covers the first
-part of roadmap step 5 of [`../design.md`](../design.md#roadmap): an AWS session on the host that
-the user signs in to interactively, `checkSession`, and package restores from a private CodeArtifact
+Status: agreed 2026-11-16; delivery steps 1 (no direct egress) and 2 (the AWS host half) built,
+the rest not. Covers the first part of roadmap step 5 of [`../design.md`](../design.md#roadmap):
+an AWS session on the host that the user signs in to interactively, `checkSession`, and package restores from a private CodeArtifact
 repository in the sandbox. Publishing to CodeArtifact, other AWS operations and the package managers
 beyond npm and NuGet come later.
 
@@ -202,7 +202,7 @@ Stacked PRs, each on the previous one's branch:
    `npm install` through the proxy in a gVisor and a microsandbox sandbox. `dotnet restore` runs
    through the proxy on the Linux CI host, which has the SDK; inside a real backend it waits for an
    image with Node and the .NET SDK (inline Dockerfiles, issue #36).
-2. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
+2. `@mesh-flow/aws` host half (built): device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.
 3. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.

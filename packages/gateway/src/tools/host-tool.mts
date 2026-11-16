@@ -1,6 +1,7 @@
 import { ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { CredentialReader } from '../credentials/credential-store.mts'
+import type { ConnectorLogin } from './connector-login.mts'
 
 /** What a host tool's action gets besides its input. */
 export interface HostToolContext {
@@ -104,12 +105,19 @@ export interface ConnectorHost {
 	/** Names the connector, as a directory name: lowercase letters, digits and dashes. */
 	readonly name: string
 	readonly tools: (options: ConnectorHostOptions) => readonly HostTool[]
+	/** Signs the user in to the connector's service, for `mesh-flow login <name>`. Only for a service with sessions to sign in to. */
+	readonly login?: ConnectorLogin
+}
+
+/** What else a connector's host half brings besides its tools. */
+export interface ConnectorHostExtras {
+	readonly login?: ConnectorLogin
 }
 
 /** Connector names: they go into directory names. */
 export const ConnectorName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'Use lowercase letters, digits and dashes.')
 
 /** Defines the host half of a connector, checked. */
-export function connectorHost(name: string, tools: ConnectorHost['tools']): ConnectorHost {
-	return Object.freeze<ConnectorHost>({ name: ConnectorName.parse(name), tools })
+export function connectorHost(name: string, tools: ConnectorHost['tools'], extras: ConnectorHostExtras = {}): ConnectorHost {
+	return Object.freeze<ConnectorHost>({ name: ConnectorName.parse(name), tools, ...extras })
 }
