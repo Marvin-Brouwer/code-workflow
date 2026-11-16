@@ -1,6 +1,6 @@
 # `@mesh-flow/code-repository`
 
-What the mesh-flow connectors of code hosts share, so `@mesh-flow/github` and `@mesh-flow/gitlab` work the same way: checkouts and pushes over git bundles, describing a branch, watching a review and sorting its comments, and on the host the clones, retries and signed posts.
+What the mesh-flow connectors of code hosts share, so `@mesh-flow/github` and `@mesh-flow/gitlab` work the same way: checkouts and pushes over git bundles, describing a branch, watching a review and sorting its comments, and on the host the clones, the replies to review items and signed posts.
 
 Workflows don't use this package: they use a connector. It is for writing one.
 

@@ -183,6 +183,11 @@ Came out of building `@mesh-flow/engine` in November 2026; its
   is parsed with zod. So `@mesh-flow/gitlab` has a small `fetch` client of its own
   (`src/host/api.mts`). Worth checking again if gitbeaker takes a signal per call and stops
   retrying writes.
+- **jira.js's own retry for Jira and Confluence.** Superseded in November 2026 by the gateway's
+  `retryingFetch` with `atlassianResends`, as the code host connectors use. jira.js sets its retry
+  per client, so a request sent once (a comment, a transition, a user look-up) took a second
+  client; its options differ from `FetchRetryOptions`, and it has no say per request over which
+  ones are sent again. Worth checking again if jira.js takes a retry predicate per request.
 
 ## Credentials and settings
 

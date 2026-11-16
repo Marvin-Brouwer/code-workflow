@@ -79,7 +79,7 @@ describe('openMergeRequest', () => {
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 
-	test('takes the merge request another run opened for the branch meanwhile, and describes it for its own commit', async () => {
+	test('takes the merge request another call opened for the branch meanwhile, and describes it for its own commit', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.hold = (method, requestPath) => {

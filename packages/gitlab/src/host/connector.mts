@@ -24,13 +24,13 @@ export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
  *
  * @example A test against a fake GitLab
  * ```ts
- * import { gitlabHostTools } from '@mesh-flow/gitlab/host'
+ * import { defaultFetchRetry, gitlabHostTools } from '@mesh-flow/gitlab/host'
  *
  * const tools = gitlabHostTools({
  * 	directory: '/tmp/gitlab-host',
  * 	fetch: (input, init) => fetch(String(input).replace('https://gitlab.com', 'http://127.0.0.1:4010'), init),
  * 	remoteUrl: (project) => `file:///tmp/remotes/${project}.git`,
- * 	retry: { attempts: 1, firstDelayMs: 0, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 },
+ * 	retry: { ...defaultFetchRetry, attempts: 1 },
  * })
  * ```
  */

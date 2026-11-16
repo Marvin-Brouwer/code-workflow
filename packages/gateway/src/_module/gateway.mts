@@ -1,6 +1,7 @@
 /**
  * The mesh-flow gateway: the host side of every call that needs a credential. It holds the
- * credentials, runs host tools and sends model requests for runs in sandboxes that hold none.
+ * credentials, runs host tools and sends model requests for runs in sandboxes that hold none, and
+ * has the `fetch` that host tools send their API requests through.
  *
  * @module
  */

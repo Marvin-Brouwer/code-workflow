@@ -1,7 +1,6 @@
 /**
  * What the connectors of code hosts share on the host's side: clones that fetch and push with the
- * credential, requests tried again when the connection drops, replies to review items, and the
- * footer every post is signed with.
+ * credential, replies to review items, and the footer every post is signed with.
  *
  * @module
  */

@@ -25,7 +25,7 @@ import { projectSegment, type ApiClient, type GitlabClient } from './api.mts'
 import { keepingDraft, withoutDraftPrefix } from './draft-title.mts'
 import { discussionsOf, mergeRequestNotes, mergeRequestPath, noteIdOf, readingWords, reviewItemsOf } from './merge-request-notes.mts'
 import { noCommit } from './no-commit.mts'
-import { GitlabRequestError, refusedToken } from './request-error.mts'
+import { isConflict, refusedToken } from './request-error.mts'
 
 /** A merge request as GitLab's API has it, in the fields the tools pass on. */
 const ApiMergeRequest = z.object({
@@ -103,9 +103,6 @@ async function mergedOnBranch(
 		.toSorted((one, other) => other.iid - one.iid)[0]
 }
 
-/** GitLab's answer to a merge request opened for a branch that has one open already, as when two runs open it at once. */
-const conflict = 409
-
 /** What opening a merge request takes. */
 interface NewMergeRequest {
 	readonly source_branch: string
@@ -129,7 +126,7 @@ async function opened(
 			ours: true,
 		}
 	} catch (error) {
-		if (!(error instanceof GitlabRequestError && error.status === conflict)) throw error
+		if (!isConflict(error)) throw error
 		const mergeRequest = await openOnBranch(client, project, body.source_branch, body.target_branch)
 		if (mergeRequest === undefined) throw error
 		return { mergeRequest, ours: false }
