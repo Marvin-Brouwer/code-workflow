@@ -80,10 +80,12 @@ work:
 
 - **Up front:** `mesh-flow login aws` prints the URL and code, waits for the approval, and stores
   the session.
-- **From a run:** `aws.checkSession()` (below) finds no valid session, and the run waits for a
-  sign-in. `mesh-flow list` shows `needs login: aws`, `mesh-flow show <run>` shows the URL and
-  code. The engine polls `CreateToken` itself, so there's nothing to answer: the run goes on once
-  the approval is in. Every run waiting on the AWS session waits on the same device authorization.
+- **From a run, when it's needed:** any host tool that needs AWS, such as `codeArtifact.fetch`,
+  finds no valid session and the run waits for a sign-in right there, in front of the call. Nothing
+  has to call `checkSession` first. `mesh-flow list` shows `needs login: aws`, `mesh-flow show <run>`
+  shows the URL and code. The engine polls `CreateToken` itself, so there's nothing to answer: the
+  call goes on once the approval is in. Every run waiting on the AWS session waits on the same
+  device authorization.
 
 A run waiting for a sign-in is waiting on a human, like `input`: it doesn't count towards a loop's
 `limit`, and it survives an engine restart (a new device authorization is started if the old one
@@ -92,18 +94,18 @@ engine answers instead of a human. The UI later turns it into a notification wit
 
 ### 3. `checkSession`
 
-`aws.checkSession()` is a function for workflow code and a tool for agents (design section 8):
+Signing in is reactive (Marvin, 2026-11-16): the AWS host tools answer "needs a session" instead
+of failing, and their stub in the sandbox raises the `login` request, waits, and calls again. So a
+`dotnet restore` that hits CodeArtifact without a session just takes longer, and the same holds for
+a token that expires during a long run. A host call itself is never held open while the user signs
+in, so an engine restart in the middle is a plain resumed wait.
 
-- the session is valid for longer than the renew threshold: returns at once;
-- it can be refreshed without the user (refresh token): refreshes and returns;
-- otherwise: waits for a sign-in as above.
+`aws.checkSession()` stays as a function and a tool (design section 8) for code that wants to ask
+up front, such as before a long unattended stretch, but nothing needs it.
 
 The trigger doesn't refuse a run without a session (unlike a missing model provider), because
 signing in is something the run can wait for. `deploy` and `trigger` do say when the AWS settings
 themselves are missing, the same way they report missing host tools.
-
-The registry shim calls it before the first fetch of a run, and again when a fetch is refused for
-an expired token, so a long run whose session runs out asks once and goes on.
 
 ### 4. The registry shim (sandbox)
 
@@ -127,7 +129,14 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
   put in its trust store (and `NODE_EXTRA_CA_CERTS` for npm); the CA's key unlocks nothing outside
   the sandbox. It answers each request it recognizes with the matching tool call and refuses
   everything else, so there's no way out but the tools.
-- **Answers are cached** in the sandbox for the run, so a second restore doesn't cross again.
+- **Package bytes are staged, not sent back.** The engine writes each fetched package as a file
+  into the sandbox (`mailbox/packages/`) and the tool's answer only names it, so the mailbox carries
+  small JSON and a 100 MB nupkg is never base64 in memory. The engine already reaches the sandbox
+  only by writing files and running commands in it, so this is ingress only: the sandbox never
+  opens a connection to anything, not even to the host.
+- **Packages are cached on the host**, shared by every run, by registry, package and version.
+  Published versions don't change, so a cached one is always right; version lists and metadata
+  are fetched again. A warm restore then only waits on the mailbox, not on the registry.
 - Whether a package comes from CodeArtifact or its upstreams (nuget.org, npmjs) stays
   CodeArtifact's setup, as the repository's config names it.
 
@@ -150,20 +159,24 @@ export default defineMeshFlow({
 })
 ```
 
-## Open questions
+## Settled (Marvin, 2026-11-16)
 
-1. **No network means every backend changes.** gVisor already runs without one. microsandbox and
-   E2B get no egress rules at all, and the `egress` option goes away, as do the package egress
-   conformance tests of PR #26, replaced by restores through the proxy on every backend. The
-   runtime's proxy replaces gVisor's forwarder. This is the bigger part of the work and worth its
-   own PR before the AWS one.
-2. **Large packages over the mailbox.** Answers are whole JSON messages, base64 for bytes, like the
-   git bundles. Fine for most packages; a package of hundreds of MB would sit in memory twice.
-   Proposed: answers above a size go into a file the engine writes next to the inbox instead. Measure
-   on the real repository first.
-3. **Role credentials only work from the gateway** (`aws:SourceIp` in the design). Needs a role
-   policy on your side; the shim works without it. Leave it to the account setup docs?
-4. **Several AWS accounts** stay open question 9 of the design: one session per engine for now.
+1. **No network on any backend.** gVisor already runs without one. microsandbox and E2B get no
+   egress rules at all, the `egress` option goes away, and the package egress conformance tests of
+   PR #26 become restores through the proxy on every backend. The runtime's proxy replaces gVisor's
+   forwarder. The bigger part of the work, so it's the first PR.
+2. **The mailbox stays the channel.** It is the one channel that works the same on all three
+   backends without a network, and it's ingress only. A socket from the sandbox to the host would
+   need a network rule on microsandbox (unverified, design open question 11) and E2B. Its delay is
+   the runtime looking for answers every 250 ms (`answerPollMs` in `@mesh-flow/protocol`); that
+   can go down, or watch the inbox, if restores are slow. Measure on the real repository.
+3. **No `aws:SourceIp` condition.** Credentials never leave the host, so it would add little and
+   break on a changing home IP.
+4. **Signing in is reactive**, from the tool that needs AWS (section 3).
+5. **AWS settings in the credential store** until the settings UI.
+6. **One AWS account per engine.** Several: issue #39.
+7. **Token lifetimes:** the CodeArtifact token is refreshed with the role credentials it was
+   fetched with, so one refresh covers both.
 
 ## Out of scope here
 
@@ -186,5 +199,5 @@ Stacked PRs, each on the previous one's branch:
 3. The `login` request: protocol, engine, `checkSession` as function and tool, `list`/`show`.
    Functional tests: a run that waits for a sign-in, across an engine restart, and shutdown while it
    waits.
-4. `codeArtifact.fetch` behind the proxy. Conformance test against a fake CodeArtifact; then the
-   real one by hand.
+4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files. Conformance test
+   against a fake CodeArtifact; then the real one by hand.
