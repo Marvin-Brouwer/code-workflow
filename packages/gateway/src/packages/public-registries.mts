@@ -8,7 +8,7 @@ export interface PublicRegistry {
 	readonly fetches: (pathname: string) => boolean
 }
 
-/** Where on nuget.org the paths that restore reads start. */
+/** The path prefixes on nuget.org that restore reads from. */
 const nugetPathPrefixes = ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/', '/v3-index/']
 
 /**

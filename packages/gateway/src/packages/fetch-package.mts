@@ -66,7 +66,7 @@ async function fetchedFrom(
 	abortSignal: AbortSignal,
 ): Promise<PackageResponse> {
 	const fetched = `${request.registry} ${request.path}`
-	const response = await mayPass(
+	const response = await asTransientOnNetworkFailure(
 		retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
 			headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
 			redirect: 'manual',
@@ -87,11 +87,11 @@ async function fetchedFrom(
 }
 
 /**
- * `reading`, with a failure of the network, such as a refused connection or one reset partway,
- * marked as one that may pass on another try: the proxy then answers 502, which package managers
+ * Awaits `reading`, and marks a failure of the network, such as a refused connection or one reset
+ * partway, as one that may pass on another try: the proxy then answers 502, which package managers
  * try again, instead of the 403 of a refusal. An abort stays an abort.
  */
-async function mayPass<T>(reading: Promise<T>, fetched: string, abortSignal: AbortSignal): Promise<T> {
+async function asTransientOnNetworkFailure<T>(reading: Promise<T>, fetched: string, abortSignal: AbortSignal): Promise<T> {
 	try {
 		return await reading
 	} catch (error) {
@@ -113,7 +113,7 @@ async function cappedBody(response: Response, maxBytes: number, fetched: string,
 	const chunks: Buffer[] = []
 	let size = 0
 	for (;;) {
-		const { done, value } = await mayPass(reader.read(), fetched, abortSignal)
+		const { done, value } = await asTransientOnNetworkFailure(reader.read(), fetched, abortSignal)
 		if (done) break
 		size += value.byteLength
 		if (size > maxBytes) {
