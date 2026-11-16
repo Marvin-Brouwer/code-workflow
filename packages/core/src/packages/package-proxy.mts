@@ -3,6 +3,7 @@ import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { TLSSocket } from 'node:tls'
 import { packageRegistryHosts, PackageRequest, type PackageRegistry } from '@mesh-flow/protocol'
+import { GatewayCallError } from '../gateway/gateway-client.mts'
 import type { GatewayFetch } from '../gateway/gateway-packages.mts'
 import { describeError } from '../run/describe-error.mts'
 import type { CertificateAuthority } from './certificate-authority.mts'
@@ -91,7 +92,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			response.writeHead(answer.status, { ...answer.headers, 'content-length': String(body.length) })
 			response.end(body)
 		} catch (error) {
-			answerPlainly(response, badGateway, describeError(error))
+			// A refusal won't pass on another try, and package managers try a 5xx again.
+			const refused = error instanceof GatewayCallError && !error.transient
+			answerPlainly(response, refused ? forbidden : badGateway, describeError(error))
 		}
 	}
 
@@ -131,7 +134,10 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		})
 	})
 	const address = outer.address()
-	if (typeof address !== 'object' || address === null) throw new Error('The package proxy has no port to listen on.')
+	if (typeof address !== 'object' || address === null) {
+		outer.close()
+		throw new Error('The package proxy has no port to listen on.')
+	}
 	const { port } = address
 
 	const closed = new AbortController()

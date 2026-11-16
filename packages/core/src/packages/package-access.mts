@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { hostname } from 'node:os'
 import path from 'node:path'
 import type { PackageRegistry } from '@mesh-flow/protocol'
 import { newCertificateAuthority } from './certificate-authority.mts'
@@ -24,8 +25,8 @@ export interface PackageAccess {
 	readonly environment: PackageEnvironment
 }
 
-/** Loopback, which never goes through the proxy. */
-const noProxyHosts = 'localhost,127.0.0.1'
+/** Loopback and the sandbox itself, which never go through the proxy: a dev server a test starts is on one of them. */
+const noProxyHosts = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', hostname()].join(',')
 
 /** The certificate's file in {@link PackageAccessOptions.directory}. */
 const certificateFile = 'package-proxy-ca.pem'

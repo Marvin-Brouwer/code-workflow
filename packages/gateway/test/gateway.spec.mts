@@ -560,7 +560,13 @@ describe('package calls', () => {
 		expect(sent).not.toHaveBeenCalled()
 	})
 
-	test.each(['/v3/index.json', '/v3-flatcontainer/newtonsoft.json/index.json'])('fetches %s from nuget.org', async (path) => {
+	test.each([
+		'/v3/index.json',
+		'/v3-flatcontainer/newtonsoft.json/index.json',
+		'/v3/vulnerabilities/index.json',
+		'/v3-vulnerabilities/2026.11.16.05.40.00/vulnerability.base.json',
+		'/v3-index/repository-signatures/5.0.0/index.json',
+	])('fetches %s from nuget.org', async (path) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
 		const { fetchPath } = await packageRun(sent, 'nuget')
@@ -611,6 +617,23 @@ describe('package calls', () => {
 	test('settles a package fetch promptly when it is stopped, even if the registry never answers', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
+		const stop = new AbortController()
+		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		await vi.waitFor(() => {
+			expect(sent).toHaveBeenCalled()
+		})
+
+		// Act
+		stop.abort(new Error('The run stopped.'))
+
+		// Assert
+		await expect(fetching).rejects.toThrow('The run stopped.')
+	})
+
+	test('settles a package fetch promptly when it is stopped while the body never comes', async () => {
+		// Arrange
+		const body = new ReadableStream<Uint8Array>()
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 		const stop = new AbortController()
 		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {

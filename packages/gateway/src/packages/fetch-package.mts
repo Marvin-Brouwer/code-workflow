@@ -52,15 +52,27 @@ export async function fetchPackage(
 	const url = new URL(request.path, registry.origin)
 	if (url.origin !== registry.origin || `${url.pathname}${url.search}` !== request.path || !registry.fetches(url.pathname))
 		throw new Error(`${request.path} isn't a package fetch on ${request.registry}.`)
-	// Settles once the signal aborts, also when the host's fetch doesn't.
-	const response = await untilAborted(
-		retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
-			headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
-			redirect: 'manual',
-			signal: abortSignal,
-		}),
-		abortSignal,
-	)
+	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
+	return untilAborted(fetchedFrom(url, request, fetchFromHost, maxBytes, abortSignal), abortSignal)
+}
+
+/** Fetches `url` and reads the answer, capped at `maxBytes`. A body that comes after an abort is cancelled. */
+async function fetchedFrom(
+	url: URL,
+	request: PackageRequest,
+	fetchFromHost: typeof fetch,
+	maxBytes: number,
+	abortSignal: AbortSignal,
+): Promise<PackageResponse> {
+	const response = await retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
+		headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
+		redirect: 'manual',
+		signal: abortSignal,
+	})
+	if (abortSignal.aborted) {
+		await response.body?.cancel()
+		abortSignal.throwIfAborted()
+	}
 	const body = (await cappedBody(response, maxBytes, `${request.registry} ${request.path}`)).toString('base64')
 	const headers = Object.fromEntries(
 		keptHeaders.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),

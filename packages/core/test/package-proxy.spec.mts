@@ -5,10 +5,13 @@ import { request } from 'node:http'
 import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import type { PackageResponse } from '@mesh-flow/protocol'
+import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
+import type { PackageRegistry, PackageResponse } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import type { GatewayFetch } from '../src/gateway/gateway-packages.mts'
+import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
+import { gatewayPackages, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
+import { gatewayChannel } from './support/gateway-channel.mts'
 import { storedZip } from './support/stored-zip.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -37,6 +40,26 @@ const promptlyMs = 3_000
 
 function answer(status: number, body: string | Buffer, contentType = 'application/json'): PackageResponse {
 	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body).toString('base64') }
+}
+
+/**
+ * A real gateway, in this process, for a run that restores from `registries`, fetching from the
+ * host with `fetchFromHost`: what the proxy calls for each fetch, with the gateway's own checks.
+ */
+async function throughGateway(registries: PackageRegistry[], fetchFromHost: typeof fetch): Promise<GatewayFetch> {
+	const home = await temporaryDirectory()
+	const gateway = openGateway({
+		home,
+		credentials: openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key'))),
+		providers: openProviderSettings(path.join(home, 'providers.json')),
+		fetch: fetchFromHost,
+	})
+	const lifetime = new AbortController()
+	onTestFinished(() => {
+		lifetime.abort()
+	})
+	const grant = await gateway.openRun('run-1', { tools: [], registries }, lifetime.signal)
+	return gatewayPackages(gatewayClient(gatewayChannel(gateway, 'run-1', lifetime.signal), grant, 'test', lifetime.signal))
 }
 
 /** Starts the proxy with `fetch` behind it, stopped when the test ends. */
@@ -98,6 +121,9 @@ const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
  * What nuget.org's v3 feed would serve for {@link fakeNuGetPackage}: the service index, the flat
  * container's version list, the package and its nuspec, by path.
  */
+/** Where the fake feed's vulnerability data is: below `/v3-vulnerabilities/`, as on nuget.org. */
+const vulnerabilityData = 'https://api.nuget.org/v3-vulnerabilities/2026.11.16.00.00.00/vulnerability.base.json'
+
 function fakeNuGetFeed(): Record<string, PackageResponse> {
 	const { id, version } = fakeNuGetPackage
 	const lowerId = id.toLowerCase()
@@ -117,9 +143,17 @@ function fakeNuGetFeed(): Record<string, PackageResponse> {
 			200,
 			JSON.stringify({
 				version: '3.0.0',
-				resources: [{ '@id': 'https://api.nuget.org/v3-flatcontainer/', '@type': 'PackageBaseAddress/3.0.0' }],
+				resources: [
+					{ '@id': 'https://api.nuget.org/v3-flatcontainer/', '@type': 'PackageBaseAddress/3.0.0' },
+					{ '@id': 'https://api.nuget.org/v3/vulnerabilities/index.json', '@type': 'VulnerabilityInfo/6.7.0' },
+				],
 			}),
 		),
+		'/v3/vulnerabilities/index.json': answer(
+			200,
+			JSON.stringify([{ '@name': 'base', '@id': vulnerabilityData, '@updated': '2026-11-16T00:00:00Z', comment: 'None known.' }]),
+		),
+		[new URL(vulnerabilityData).pathname]: answer(200, '{}'),
 		[`${flatContainer}/index.json`]: answer(200, JSON.stringify({ versions: [version] })),
 		[`${flatContainer}/${version}/${lowerId}.nuspec`]: answer(200, nuspec, 'application/xml'),
 		[`${flatContainer}/${version}/${lowerId}.${version}.nupkg`]: answer(
@@ -139,7 +173,6 @@ async function restoringProject(): Promise<string> {
 		`<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFramework>net${dotnetMajor ?? ''}.0</TargetFramework>
-		<NuGetAudit>false</NuGetAudit>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="${id}" Version="${version}" />
@@ -212,8 +245,15 @@ describe.skipIf(onWindows)('package proxy', () => {
 		async () => {
 			// Arrange
 			const feed = fakeNuGetFeed()
-			const fetch = vi.fn<GatewayFetch>((asked) => Promise.resolve(feed[asked.path] ?? answer(404, '{}')))
-			const { environment } = await proxyWith(fetch)
+			const fromNuGet = vi.fn<typeof globalThis.fetch>((input) => {
+				const asked = feed[new URL(input instanceof Request ? input.url : input.toString()).pathname]
+				return Promise.resolve(
+					asked === undefined
+						? new Response('{}', { status: 404 })
+						: new Response(Buffer.from(asked.body, 'base64'), { status: asked.status, headers: asked.headers }),
+				)
+			})
+			const { environment } = await proxyWith(await throughGateway(['nuget'], fromNuGet))
 			const project = await restoringProject()
 			const packages = path.join(project, 'packages')
 
@@ -234,8 +274,13 @@ describe.skipIf(onWindows)('package proxy', () => {
 			const { id, version } = fakeNuGetPackage
 			const restored = await readFile(path.join(packages, id.toLowerCase(), version, `${id.toLowerCase()}.nuspec`), 'utf8')
 			expect(restored).toContain(`<id>${id}</id>`)
-			const fetched = fetch.mock.calls.map(([asked]) => `${asked.registry} ${asked.path}`)
-			expect(fetched).toContain(`nuget /v3-flatcontainer/${id.toLowerCase()}/${version}/${id.toLowerCase()}.${version}.nupkg`)
+			const fetched = fromNuGet.mock.calls.map(([input]) => (input instanceof Request ? input.url : input.toString()))
+			expect(fetched).toEqual(
+				expect.arrayContaining([
+					`https://api.nuget.org/v3-flatcontainer/${id.toLowerCase()}/${version}/${id.toLowerCase()}.${version}.nupkg`,
+					vulnerabilityData,
+				]),
+			)
 		},
 	)
 
@@ -296,6 +341,22 @@ describe.skipIf(onWindows)('package proxy', () => {
 		// Assert
 		expect([written, head]).toEqual(['405', '405'])
 		expect(fetch).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["403 to a fetch the gateway refused, which another try won't change", new GatewayCallError('Not a package fetch.'), '403'],
+		['502 to a fetch that failed for now', new GatewayCallError('npm is down.', { transient: true }), '502'],
+	])('answers %s', async (_what, error, status) => {
+		// Arrange
+		const fetch = vi.fn<GatewayFetch>(() => Promise.reject(error))
+		const { environment } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+
+		// Act
+		const answered = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect(answered).toBe(status)
 	})
 
 	test("answers 400 to a fetch the gateway couldn't take, and sends nothing", async () => {
