@@ -10,6 +10,7 @@ import {
 import type { AwsSettings } from './aws-settings.mts'
 import { deviceCodeGrant, expiresIn, sessionOf, type RegisteredClient } from './oidc.mts'
 import type { StoredSession } from './stored-session.mts'
+import { msPerSecond } from './time.mts'
 
 /** A device authorization the user has yet to approve. */
 export interface DeviceAuthorization {
@@ -20,8 +21,6 @@ export interface DeviceAuthorization {
 	/** How long to wait between looks, as Identity Center asks. */
 	readonly intervalMs: number
 }
-
-const msPerSecond = 1000
 
 /** When Identity Center doesn't say how often to look: RFC 8628's default. */
 const defaultIntervalSeconds = 5

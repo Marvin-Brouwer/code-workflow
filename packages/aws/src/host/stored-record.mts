@@ -22,6 +22,11 @@ export async function readStored<T>(
 	return parseStored(await credentials.get(name, abortSignal), schema)
 }
 
+/** A record as the credential store keeps it: JSON, checked against its schema first. */
+export function serializeStored<T>(schema: z.ZodType<T>, value: T): string {
+	return JSON.stringify(schema.parse(value))
+}
+
 /** Keeps a JSON record in the credential store under `name`, checked against its schema first. */
 export function writeStored<T>(
 	credentials: CredentialStore,
@@ -30,5 +35,5 @@ export function writeStored<T>(
 	value: T,
 	abortSignal: AbortSignal,
 ): Promise<void> {
-	return credentials.set(name, JSON.stringify(schema.parse(value)), abortSignal)
+	return credentials.set(name, serializeStored(schema, value), abortSignal)
 }

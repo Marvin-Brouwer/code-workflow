@@ -3,8 +3,7 @@ import { text } from 'node:stream/consumers'
 import { onTestFinished } from 'vitest'
 import type { AwsEndpoints } from '../../src/host/aws-endpoints.mts'
 import { refreshTokenGrant } from '../../src/host/oidc.mts'
-
-const msPerSecond = 1000
+import { msPerSecond } from '../../src/host/time.mts'
 
 /** How long a client registration lasts: Identity Center's 90 days. */
 const registrationSeconds = 90 * 24 * 3600
@@ -13,7 +12,13 @@ const registrationSeconds = 90 * 24 * 3600
 const deviceCodeSeconds = 600
 
 /** How often the device flow may look for the approval. */
-const lookIntervalSeconds = 1
+export const lookIntervalSeconds = 1
+
+/** How long an access token lasts unless a test says otherwise. */
+const defaultAccessTokenSeconds = 3600
+
+/** How long role credentials last unless a test says otherwise. */
+const defaultRoleCredentialsMs = 3600 * msPerSecond
 
 /** How the fake Identity Center, access portal and CodeArtifact behave, changed as a test goes. */
 export interface FakeAwsState {
@@ -35,7 +40,7 @@ export interface FakeAwsState {
 	portalRejects: number
 	/** How many token fetches CodeArtifact turns down next, as if the role credentials ended. */
 	codeArtifactRejects: number
-	/** Awaited before a request to `path` is answered, such as to hold it, or never answer. */
+	/** Awaited before a request is answered, with its path and, for `/token`, its grant type, such as to hold it, or never answer. */
 	hold: ((path: string, grantType: unknown) => Promise<void>) | undefined
 }
 
@@ -75,9 +80,9 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 		slowDowns: 0,
 		denied: false,
 		deviceCodeExpired: false,
-		accessTokenSeconds: 3600,
+		accessTokenSeconds: defaultAccessTokenSeconds,
 		refreshWorks: true,
-		roleCredentialsMs: 3_600_000,
+		roleCredentialsMs: defaultRoleCredentialsMs,
 		portalRejects: 0,
 		codeArtifactRejects: 0,
 		hold: undefined,

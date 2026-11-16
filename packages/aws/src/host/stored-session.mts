@@ -1,7 +1,7 @@
 import type { CredentialReader, CredentialStore } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { awsCredentialNames, type AwsSettings } from './aws-settings.mts'
-import { parseStored, readStored, writeStored } from './stored-record.mts'
+import { parseStored, readStored, serializeStored, writeStored } from './stored-record.mts'
 
 /**
  * The Identity Center session the user signed in to: the access token the access portal takes, the
@@ -56,7 +56,7 @@ export function renewSession(
 		(current) => {
 			const stored = parseStored(current, StoredSession)
 			if (stored === undefined || !isFor(stored, renewing) || stored.refreshToken !== renewing.refreshToken) return undefined
-			return JSON.stringify(StoredSession.parse(renewed))
+			return serializeStored(StoredSession, renewed)
 		},
 		abortSignal,
 	)

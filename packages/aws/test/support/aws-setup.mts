@@ -3,6 +3,7 @@ import { keyFile, openCredentialStore, type CredentialStore, type LoginPrompt } 
 import { openAwsSession } from '../../src/host/aws-session.mts'
 import { awsCredentialNames } from '../../src/host/aws-settings.mts'
 import { signIn } from '../../src/host/sign-in.mts'
+import { msPerMinute } from '../../src/host/time.mts'
 import { fakeAws, type FakeAwsState } from './fake-aws.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 
@@ -10,8 +11,6 @@ export const abortSignal = new AbortController().signal
 
 /** How long a call may take to settle once stopped, while AWS never answers. */
 export const promptlyMs = 3_000
-
-const msPerMinute = 60_000
 
 export const settings = {
 	[awsCredentialNames.startUrl]: 'https://example.awsapps.com/start',
@@ -33,7 +32,7 @@ function testClock() {
 	}
 }
 
-/** What {@link setUp} makes. */
+/** What {@link setUp} takes. */
 export interface SetUpOptions {
 	/** How the fake AWS behaves from the start. */
 	readonly fake?: Partial<FakeAwsState>

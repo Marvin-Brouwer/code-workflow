@@ -1,19 +1,11 @@
 import { CodeartifactClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-codeartifact'
 import { GetRoleCredentialsCommand, SSOClient, UnauthorizedException } from '@aws-sdk/client-sso'
-import {
-	CreateTokenCommand,
-	ExpiredTokenException,
-	InvalidClientException,
-	InvalidGrantException,
-	UnauthorizedClientException,
-} from '@aws-sdk/client-sso-oidc'
-import { oneAtATime, untilAborted, type CredentialStore } from '@mesh-flow/gateway'
+import { oneAtATime, type CredentialStore } from '@mesh-flow/gateway'
+import { sessionAccessTokens } from './access-token.mts'
 import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
 import { readAwsSettings, settingsKey, type AwsSettings } from './aws-settings.mts'
-import { oidcClient, refreshTokenGrant, sessionOf } from './oidc.mts'
 import { lastsBeyondRenewal } from './renewal.mts'
 import { AwsSignInNeededError, sessionEnded } from './sign-in-needed.mts'
-import { readSession, renewSession, type StoredSession } from './stored-session.mts'
 
 /** Temporary credentials for the role in the settings. Kept in memory only. */
 export interface RoleCredentials {
@@ -75,13 +67,6 @@ export interface AwsSessionOptions {
 	readonly now?: () => Date
 }
 
-/**
- * How long a renewal of the session may take. It runs on its own signal, not a caller's: once
- * Identity Center hands out a new refresh token the old one no longer works, so a renewal that one
- * caller stops halfway would lose the session for every run.
- */
-const renewalTimeoutMs = 60_000
-
 /** The turn every fetch of role credentials takes, so one renewal serves every caller. */
 const roleCredentialsTurn = 'role-credentials'
 
@@ -91,23 +76,19 @@ const lastsAsLongAsCredentials = 0
 /** CodeArtifact's errors for role credentials it no longer takes, such as when the clocks differ. */
 const rejectedCredentials = new Set(['ExpiredTokenException', 'UnrecognizedClientException'])
 
-/** Identity Center's answers that mean its session is over: a new sign-in is the only way on. */
-function endsSession(error: unknown): boolean {
-	return (
-		error instanceof InvalidGrantException ||
-		error instanceof ExpiredTokenException ||
-		error instanceof UnauthorizedClientException ||
-		error instanceof InvalidClientException
-	)
-}
-
+/** Whether CodeArtifact turned the role credentials down, rather than failed otherwise. */
 function rejectsCredentials(error: unknown): boolean {
 	return error instanceof Error && rejectedCredentials.has(error.name)
 }
 
+/** One key per domain, for its kept token and its turn. */
+function domainKey(domain: CodeArtifactDomain): string {
+	return `${domain.region}/${domain.owner}/${domain.domain}`
+}
+
 /** The key of the turn for a domain's tokens. */
-function codeArtifactTurn(domainKey: string): string {
-	return `codeartifact/${domainKey}`
+function codeArtifactTurn(key: string): string {
+	return `codeartifact/${key}`
 }
 
 /** Role credentials, and the settings they were fetched for. */
@@ -122,12 +103,6 @@ interface KeptToken {
 	readonly token: CodeArtifactToken
 }
 
-/** A renewal of the session under way, and the refresh token it renews with. */
-interface Renewal {
-	readonly refreshToken: string | undefined
-	readonly accessToken: Promise<string>
-}
-
 /** Opens the engine home's AWS session. One per gateway: every run shares it. */
 export function openAwsSession(options: AwsSessionOptions): AwsSession {
 	const { credentials } = options
@@ -136,57 +111,7 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 	const turns = oneAtATime()
 	let held: HeldCredentials | undefined
 	const tokens = new Map<string, KeptToken>()
-	let renewal: Renewal | undefined
-
-	/** Renews the session with its refresh token, and keeps the renewed one unless a sign-in came between. */
-	const renewed = async (settings: AwsSettings, session: StoredSession): Promise<string> => {
-		if (session.refreshToken === undefined) throw sessionEnded()
-		const renewalSignal = AbortSignal.timeout(renewalTimeoutMs)
-		const oidc = oidcClient(settings, endpoints)
-		try {
-			const token = await oidc.send(
-				new CreateTokenCommand({
-					clientId: session.clientId,
-					clientSecret: session.clientSecret,
-					grantType: refreshTokenGrant,
-					refreshToken: session.refreshToken,
-				}),
-				{ abortSignal: renewalSignal },
-			)
-			// Identity Center may hand out a new refresh token, and then the old one no longer works.
-			const next = sessionOf({ ...token, refreshToken: token.refreshToken ?? session.refreshToken }, settings, session, now())
-			if (await renewSession(credentials, session, next, renewalSignal)) return next.accessToken
-			// The user signed in again meanwhile: that session counts.
-			const current = await readSession(credentials, settings, renewalSignal)
-			if (current === undefined) throw new AwsSignInNeededError()
-			return current.accessToken
-		} catch (error) {
-			if (endsSession(error)) throw sessionEnded()
-			throw error
-		} finally {
-			oidc.destroy()
-		}
-	}
-
-	const startRenewal = (settings: AwsSettings, session: StoredSession): Renewal => {
-		const started: Renewal = { refreshToken: session.refreshToken, accessToken: renewed(settings, session) }
-		const forget = () => {
-			if (renewal === started) renewal = undefined
-		}
-		started.accessToken.then(forget, forget)
-		renewal = started
-		return started
-	}
-
-	/** The session's access token, renewed when it nears its end, or when the portal turned `refused` down. */
-	const accessToken = async (settings: AwsSettings, abortSignal: AbortSignal, refused?: string): Promise<string> => {
-		const session = await readSession(credentials, settings, abortSignal)
-		if (session === undefined) throw new AwsSignInNeededError()
-		if (session.accessToken !== refused && lastsBeyondRenewal(new Date(session.expiresAt), now())) return session.accessToken
-		// A renewal a stopped caller left runs on: the next caller waits for it, rather than renew with the same refresh token.
-		const underWay = renewal?.refreshToken === session.refreshToken ? renewal : undefined
-		return untilAborted((underWay ?? startRenewal(settings, session)).accessToken, abortSignal)
-	}
+	const accessToken = sessionAccessTokens({ credentials, endpoints, now })
 
 	/** Role credentials from the access portal for `token`. */
 	const portalCredentials = async (settings: AwsSettings, token: string, abortSignal: AbortSignal): Promise<RoleCredentials> => {
@@ -194,9 +119,7 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 		try {
 			const answer = await sso.send(
 				new GetRoleCredentialsCommand({ accessToken: token, accountId: settings.account, roleName: settings.role }),
-				{
-					abortSignal,
-				},
+				{ abortSignal },
 			)
 			const fetched = answer.roleCredentials
 			if (
@@ -276,7 +199,7 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 	}
 
 	const codeArtifactToken = (domain: CodeArtifactDomain, abortSignal: AbortSignal): Promise<CodeArtifactToken> => {
-		const key = `${domain.region}/${domain.owner}/${domain.domain}`
+		const key = domainKey(domain)
 		return turns(codeArtifactTurn(key), abortSignal, async () => {
 			const role = await currentRoleCredentials(abortSignal)
 			const kept = tokens.get(key)

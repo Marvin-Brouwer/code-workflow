@@ -2,10 +2,12 @@ import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
 import { slowDownStepMs } from '../src/host/device-authorization.mts'
 import { signIn } from '../src/host/sign-in.mts'
+import { msPerSecond } from '../src/host/time.mts'
 import { abortSignal, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
+import { lookIntervalSeconds } from './support/fake-aws.mts'
 
 /** The fake's interval between looks for the approval. */
-const lookIntervalMs = 1000
+const lookIntervalMs = lookIntervalSeconds * msPerSecond
 
 describe('signing in', () => {
 	test('shows where to approve, waits for the approval, and keeps the session', async () => {

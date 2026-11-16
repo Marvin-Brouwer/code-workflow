@@ -43,6 +43,11 @@ export interface CredentialStore extends CredentialReader {
 
 const Secrets = z.record(z.string(), z.string())
 
+/** Throws when `secret` is empty, naming the credential. */
+function checkSecret(name: string, secret: string): void {
+	if (secret.length === 0) throw new Error(`The secret for ${name} is empty.`)
+}
+
 /**
  * Opens the credential store in `file`, sealed with `key` (AES-256-GCM). The file is made on the
  * first write, readable by its owner only. Writes from several processes, such as the engine and
@@ -71,7 +76,7 @@ export function openCredentialStore(file: string, key: StoreKey): CredentialStor
 		get: async (name, abortSignal) => (await read(abortSignal))[CredentialName.parse(name)],
 		async set(name, secret, abortSignal) {
 			const checked = CredentialName.parse(name)
-			if (secret.length === 0) throw new Error(`The secret for ${checked} is empty.`)
+			checkSecret(checked, secret)
 			await change(abortSignal, (secrets) => {
 				secrets[checked] = secret
 				return true
@@ -82,7 +87,7 @@ export function openCredentialStore(file: string, key: StoreKey): CredentialStor
 			return change(abortSignal, (secrets) => {
 				const secret = next(ownEntry(secrets, checked))
 				if (secret === undefined) return false
-				if (secret.length === 0) throw new Error(`The secret for ${checked} is empty.`)
+				checkSecret(checked, secret)
 				secrets[checked] = secret
 				return true
 			})

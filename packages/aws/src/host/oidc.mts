@@ -2,6 +2,7 @@ import { RegisterClientCommand, SSOOIDCClient } from '@aws-sdk/client-sso-oidc'
 import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
 import type { AwsSettings } from './aws-settings.mts'
 import type { StoredSession } from './stored-session.mts'
+import { msPerSecond } from './time.mts'
 
 /** The OAuth grant a device authorization ends in. */
 export const deviceCodeGrant = 'urn:ietf:params:oauth:grant-type:device_code'
@@ -14,8 +15,6 @@ const accountAccessScope = 'sso:account:access'
 
 /** How the engine names itself to Identity Center. */
 const clientName = 'mesh-flow'
-
-const msPerSecond = 1000
 
 /** A client registration with Identity Center: what a sign-in and the refreshes after it are made as. */
 export interface RegisteredClient {
