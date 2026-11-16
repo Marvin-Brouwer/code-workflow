@@ -9,9 +9,9 @@ import { isGone } from './transient-error.mts'
 /** The reaction that says a comment is being read. */
 const beingReadReaction = 'eyes'
 
-/** What the reply that says an item is being read says: a link on the conversation, where it isn't next to the item. */
-export function readingNote(kind: ReviewItemKind, url: string): string {
-	return kind === 'review-comment' ? '👀 Reading...' : `👀 Reading [this ${kind}](${url})...`
+/** What the reply that says an item is being read says, under the header that quotes the item on the conversation. */
+export function readingNote(header: string): string {
+	return `${header}👀 Reading...`
 }
 
 /**

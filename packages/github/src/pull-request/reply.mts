@@ -6,7 +6,8 @@ import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/p
 /**
  * The tool that replies to a review item on a pull request: in the thread of a comment on a line,
  * or on the conversation for a review or a comment there. The agent names the item by the id it
- * saw, such as `review-comment/12`.
+ * saw, such as `review-comment/12`. The conversation has no threads, so a reply there starts by
+ * quoting the item, cut short when it's long, with a link to it under the time it was posted.
  *
  * With `stage: 'plan'` the reply says what will be done, in place of the "👀 Reading..." reply. The
  * answer that follows, what was done, is then a reply of its own, so the reviewer is notified of it.

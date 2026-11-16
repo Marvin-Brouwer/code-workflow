@@ -267,6 +267,10 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	/** Every comment on a line of the repository's pull requests. */
 	const reviewCommentsOf = (name: string): FakeReviewComment[] =>
 		[...repository(name).pulls.values()].flatMap((pull) => pull.reviewComments)
+	issues.get('/issues/comments/:id', (context) => {
+		const comment = issueCommentsOf(nameOf(context)).find((known) => known.id === Number(context.req.param('id')))
+		return comment === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(comment)
+	})
 	issues.patch('/issues/comments/:id', async (context) => {
 		const wanted = Number(context.req.param('id'))
 		const comment = issueCommentsOf(nameOf(context)).find((known) => known.id === wanted)
@@ -313,6 +317,10 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	})
 	issues.get('/pulls/:number/comments', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviewComments))
 	issues.get('/pulls/:number/reviews', (context) => context.json(pullOf(nameOf(context), numberOf(context)).reviews))
+	issues.get('/pulls/:number/reviews/:id', (context) => {
+		const review = pullOf(nameOf(context), numberOf(context)).reviews.find((known) => known.id === Number(context.req.param('id')))
+		return review === undefined ? context.json({ message: 'Not Found' }, 404) : context.json(review)
+	})
 	issues.post('/pulls/:number/comments/:id/replies', async (context) => {
 		const name = nameOf(context)
 		const pull = pullOf(name, numberOf(context))

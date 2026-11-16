@@ -14,6 +14,7 @@ import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import { fakeGithub, reactionsOf, shaOf, type FakeCheckRun, type FakeComment } from './support/fake-github.mts'
 import { git, localRemote } from './support/local-remote.mts'
+import { replyingTo } from './support/replying-to.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { runOnGateway, testGateway, testToken } from './support/test-run.mts'
 
@@ -216,11 +217,8 @@ describe('github', () => {
 		expect(pull.comments.map((posted) => [posted.body, reactionsOf(posted)])).toEqual([
 			['Working on it.\n\n<!-- mesh-flow:key:status -->', []],
 			['Also the README.', ['eyes']],
-			[signed(`👀 Reading [this review](${pull.html_url}#v5)...`, run.runId, ['reply', 'seen:review/5']), []],
-			[
-				signed(`👀 Reading [this comment](${pull.html_url}#c4)...`, run.runId, ['reply', 'seen:comment/4', eyesKeyOf(pull.comments[1])]),
-				[],
-			],
+			[signed(replyingTo(pull.reviews[0], '👀 Reading...'), run.runId, ['reply', 'seen:review/5']), []],
+			[signed(replyingTo(pull.comments[1], '👀 Reading...'), run.runId, ['reply', 'seen:comment/4', eyesKeyOf(pull.comments[1])]), []],
 		])
 		expect(pull.reviewComments.map((posted) => [posted.body, posted.in_reply_to_id])).toEqual([
 			['Rename this.', undefined],
@@ -259,10 +257,10 @@ describe('github', () => {
 
 		// Assert
 		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
-		expect(seen).toEqual([signed(`👀 Reading [this review](${pull.html_url}#v5)...`, run.runId, ['reply', 'seen:review/5'])])
+		expect(seen).toEqual([signed(replyingTo(pull.reviews[0], '👀 Reading...'), run.runId, ['reply', 'seen:review/5'])])
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
-			signed('Added one.', run.runId, ['reply', 'answered:review/5']),
-			signed('And another.', run.runId, ['reply', 'replied:review/5']),
+			signed(replyingTo(pull.reviews[0], 'Added one.'), run.runId, ['reply', 'answered:review/5']),
+			signed(replyingTo(pull.reviews[0], 'And another.'), run.runId, ['reply', 'replied:review/5']),
 		])
 	})
 
@@ -296,7 +294,10 @@ describe('github', () => {
 		// Assert
 		expect(again.shown).toEqual(['comment/1'])
 		expect(afterAnswer.shown).toEqual([])
-		expect(pull.comments.map((posted) => posted.body)).toEqual(['Typo here.', signed('Fixed.', run.runId, ['reply', 'answered:comment/1'])])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Typo here.',
+			signed(replyingTo(pull.comments[0], 'Fixed.'), run.runId, ['reply', 'answered:comment/1']),
+		])
 		expect(reactionsOf(pull.comments[0])).toEqual([])
 	})
 
@@ -404,8 +405,8 @@ describe('github', () => {
 		// Assert
 		expect(pull.comments.map((posted) => posted.body).toSorted()).toEqual(
 			[
-				signed('Because.', run.runId, ['reply', 'answered:comment/1']),
-				signed('Also, tests.', run.runId, ['reply', 'replied:comment/1']),
+				signed(replyingTo(pull.comments[0], 'Because.'), run.runId, ['reply', 'answered:comment/1']),
+				signed(replyingTo(pull.comments[0], 'Also, tests.'), run.runId, ['reply', 'replied:comment/1']),
 				'Why?',
 			].toSorted(),
 		)
@@ -469,7 +470,10 @@ describe('github', () => {
 		await run.result
 
 		// Assert
-		expect(pull.comments.map((posted) => posted.body)).toEqual(['Why?', signed('Because.', run.runId, ['reply', 'replied:comment/1'])])
+		expect(pull.comments.map((posted) => posted.body)).toEqual([
+			'Why?',
+			signed(replyingTo(pull.comments[0], 'Because.'), run.runId, ['reply', 'replied:comment/1']),
+		])
 	})
 
 	test('posts the answer after a plan once, when it is tried again after failing halfway', async () => {
@@ -511,8 +515,8 @@ describe('github', () => {
 		expect(failed).toBe(true)
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
-			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+			signed(replyingTo(pull.comments[0], 'I will add one.'), run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Added one.'), run.runId, ['reply', 'replied:comment/1']),
 		])
 	})
 
@@ -550,7 +554,12 @@ describe('github', () => {
 		expect(editsAfterSameWords).toBe(1)
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add two.', run.runId, ['reply', 'seen:comment/1', 'planned:comment/1', eyesKeyOf(pull.comments[0])]),
+			signed(replyingTo(pull.comments[0], 'I will add two.'), run.runId, [
+				'reply',
+				'seen:comment/1',
+				'planned:comment/1',
+				eyesKeyOf(pull.comments[0]),
+			]),
 		])
 		expect(reactionsOf(pull.comments[0])).toEqual(['eyes'])
 	})
@@ -578,8 +587,8 @@ describe('github', () => {
 		// Assert
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Add a test.',
-			signed('I will add one.', run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
-			signed('Added one.', run.runId, ['reply', 'replied:comment/1']),
+			signed(replyingTo(pull.comments[0], 'I will add one.'), run.runId, ['reply', 'answered:comment/1', 'planned:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Added one.'), run.runId, ['reply', 'replied:comment/1']),
 		])
 	})
 
@@ -889,9 +898,9 @@ describe('github', () => {
 		])
 		expect(pull.comments.map((posted) => posted.body)).toEqual([
 			'Is this covered by a test?',
-			signed('Yes, in fix.spec.mts.', run.runId, ['reply', 'answered:comment/1']),
+			signed(replyingTo(pull.comments[0], 'Yes, in fix.spec.mts.'), run.runId, ['reply', 'answered:comment/1']),
 			'And documented?',
-			signed(`👀 Reading [this comment](${pull.html_url}#c2)...`, run.runId, ['reply', 'seen:comment/2', eyesKeyOf(pull.comments[2])]),
+			signed(replyingTo(pull.comments[2], '👀 Reading...'), run.runId, ['reply', 'seen:comment/2', eyesKeyOf(pull.comments[2])]),
 		])
 		expect(pull.comments.map(reactionsOf)).toEqual([[], [], ['eyes'], []])
 	})
