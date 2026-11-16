@@ -32,10 +32,11 @@ export const defaultFetchRetry: FetchRetryOptions = {
  */
 const readMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-/** A request as {@link FetchResends} judges it. */
-export interface ResentRequest {
+/** A request as {@link FetchResends} judges it, before it's sent. */
+export interface OutgoingRequest {
 	/** The method, in capitals. */
 	readonly method: string
+	/** Where the request goes, parsed, so a predicate can match on `pathname`. */
 	readonly url: URL
 }
 
@@ -43,7 +44,7 @@ export interface ResentRequest {
  * Whether a request may be sent again, for a service where more than reads can: an update that
  * sets a value, say, or a search sent as a POST. Default: reads only.
  */
-export type FetchResends = (request: ResentRequest) => boolean
+export type FetchResends = (request: OutgoingRequest) => boolean
 
 /** Whether `request` is a read, the requests every service may get twice. */
 export const readsOnly: FetchResends = ({ method }) => readMethods.has(method)
@@ -52,16 +53,17 @@ export const readsOnly: FetchResends = ({ method }) => readMethods.has(method)
 const msPerSecond = 1000
 
 /**
- * Wraps `send` so that reads are sent again, with a doubling wait in between, when the connection
- * fails or goes quiet, or the service answers 5xx or 429. A `retry-after` header sets the wait when there
- * is one. The last answer or error is what the caller gets. Aborting the request's signal stops the
- * waiting at once. A `Request` object is sent as it is, once: its body can't be read twice.
- * `resends` says which requests may be sent again; by default only reads.
+ * Wraps `send` so that the requests `resends` allows (reads by default) are sent again, with a
+ * doubling wait in between, when the connection fails or goes quiet, or the service is unavailable
+ * (500, 502, 503, 504 or 429). A `retry-after` header, in seconds or as a date, sets the wait when
+ * there is one. An attempt that goes quiet fails as `fetch` does when undici's wait for the headers
+ * runs out. The last answer or error is what the caller gets. Aborting the request's signal stops
+ * the waiting at once. A `Request` object is sent as it is, once: its body can't be read twice.
  */
 export function retryingFetch(send: typeof fetch, options: FetchRetryOptions, resends: FetchResends = readsOnly): typeof fetch {
 	return async (input, init) => {
 		if (input instanceof Request || !resendable(init?.body)) return send(input, init)
-		const request = { method: (init?.method ?? 'GET').toUpperCase(), url: new URL(input instanceof URL ? input.href : input) }
+		const request = { method: (init?.method ?? 'GET').toUpperCase(), url: new URL(input) }
 		if (!resends(request)) return send(input, init)
 		const abortSignal = init?.signal ?? undefined
 
@@ -99,7 +101,7 @@ async function answeredWithin(
 ): Promise<Response> {
 	const noAnswer = new AbortController()
 	const timer = setTimeout(() => {
-		noAnswer.abort(new DOMException(`The service didn't answer within ${String(timeoutMs)} ms.`, 'TimeoutError'))
+		noAnswer.abort(noAnswerError(timeoutMs))
 	}, timeoutMs)
 	try {
 		return await sendWith(abortSignal === undefined ? noAnswer.signal : AbortSignal.any([abortSignal, noAnswer.signal]))
@@ -108,15 +110,30 @@ async function answeredWithin(
 	}
 }
 
+/** Undici's code for an answer whose headers didn't come in time. */
+const headersTimeoutCode = 'UND_ERR_HEADERS_TIMEOUT'
+
+/**
+ * The error a send rejects with when no answer came in time: the one `fetch` throws when undici's
+ * own wait for the headers runs out, so a client that tells network failures apart by their code,
+ * such as jira.js, counts it as one that may pass.
+ */
+function noAnswerError(timeoutMs: number): TypeError {
+	const cause = Object.assign(new Error(`The service didn't answer within ${String(timeoutMs)} ms.`), { code: headersTimeoutCode })
+	return new TypeError('fetch failed', { cause })
+}
+
 /** A stream or form body is used up by the first send; no body or a string can be sent again. */
 function resendable(body: RequestInit['body']): boolean {
 	return body === undefined || body === null || typeof body === 'string'
 }
 
-/** The `retry-after` header in milliseconds, when it holds a number of seconds. */
-function retryAfterOf(response: Response): number | undefined {
+/** The `retry-after` header in milliseconds, from a number of seconds or a date. */
+function retryAfterOf(response: Response, now = Date.now()): number | undefined {
 	const header = response.headers.get('retry-after')
-	if (header === null) return undefined
+	if (header === null || header.trim() === '') return undefined
 	const seconds = Number(header)
-	return Number.isFinite(seconds) && seconds >= 0 ? seconds * msPerSecond : undefined
+	if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * msPerSecond : undefined
+	const at = Date.parse(header)
+	return Number.isNaN(at) ? undefined : Math.max(0, at - now)
 }

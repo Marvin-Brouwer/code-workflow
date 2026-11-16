@@ -121,7 +121,7 @@ const answersItself: typeof fetch = async () => new Response('{}', { headers: { 
 const tools = atlassianHostTools({ fetch: answersItself, retry: { ...defaultFetchRetry, attempts: 2, firstDelayMs: 1 } })
 ```
 
-Reads, searches and updates that Jira or Confluence didn't answer within half a minute, or answered with a 5xx or 429, are sent again, as by the code host connectors: up to five times over about fifteen seconds (`defaultFetchRetry`), or after the wait a `retry-after` asks for (`atlassianResends` says which requests). A failure that may still pass after that reaches the sandbox marked transient. A look-up of who a mention names is tried once: without an answer, the mention keeps what its link holds. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.
+Reads, searches and updates that Jira or Confluence didn't answer within half a minute, or answered 500, 502, 503, 504 or 429, are sent again, as by the code host connectors: up to five times over about fifteen seconds (`defaultFetchRetry`), or after the wait a `retry-after` asks for (`atlassianResends` says which requests). A failure that may still pass after that reaches the sandbox marked transient. A look-up of who a mention names is tried once: without an answer, the mention keeps what its link holds. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.
 
 ## Development
 

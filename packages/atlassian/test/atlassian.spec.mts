@@ -52,6 +52,22 @@ const [, dataCenter] = deployments
 /** Whether a request read an attachment's bytes. */
 const isAttachmentRequest = (request: FakeRequest) => request.path.startsWith('/secure/attachment/')
 
+/**
+ * A fetch that answers `status` to the requests `fails` picks, and passes the rest to `fake`, with
+ * the requests it failed.
+ */
+function failing(fake: FakeAtlassian, status: number, fails: (method: string, pathname: string) => boolean) {
+	const failed: string[] = []
+	const send: typeof fetch = async (input, init) => {
+		const { pathname } = new URL(input instanceof Request ? input.url : input)
+		const method = init?.method ?? 'GET'
+		if (!fails(method, pathname)) return fake.fetch(input, init)
+		failed.push(`${method} ${pathname}`)
+		return new Response('{}', { status })
+	}
+	return { send, failed }
+}
+
 /** Collects an issue and reads back its Markdown. */
 async function collectMarkdown(key: string) {
 	const story = await jira.collect(key)
@@ -702,6 +718,53 @@ describe('trouble', () => {
 		// Assert
 		expect(result.key).toBe('PROJ-7')
 		expect(fake.requests).toHaveLength(2)
+	})
+
+	test('a new comment the site answered 503 to is not sent again', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7' }))
+		const { send, failed } = failing(fake, 503, (method, pathname) => method === 'POST' && pathname.endsWith('/comment'))
+		const gateway = await testGateway(atlassianHostTools({ fetch: send, retry: quickRetry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => jira.comment('PROJ-7', 'Picked up'))
+
+		// Assert
+		await expect(started.result).rejects.toThrow()
+		expect(failed).toHaveLength(1)
+	})
+
+	test('a look-up of who a mention names is tried once, and the mention keeps what its link holds', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.issues.set('PROJ-7', fakeIssue({ key: 'PROJ-7', descriptionHtml: `<p>Ask ${dataCenter.mention('Rita Reporter')}.</p>` }))
+		fake.users.set('rita', { displayName: 'Rita Reporter', email: 'rita@example.com' })
+		const { send, failed } = failing(fake, 503, (_method, pathname) => pathname.endsWith('/user'))
+		const gateway = await testGateway(atlassianHostTools({ fetch: send, retry: quickRetry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => collectMarkdown('PROJ-7'))
+		const { markdown } = await started.result
+
+		// Assert
+		expect(markdown).toContain('Ask `@mention({ name: "Rita Reporter", id: "rita" })`.')
+		expect(failed).toHaveLength(1)
+	})
+
+	test('a read the site never answers fails as one that may pass', async () => {
+		// Arrange
+		const fake = fakeAtlassian()
+		fake.hanging.add('/rest/api/2/issue/PROJ-7')
+		const retry = { ...quickRetry, attemptTimeoutMs: 1 }
+		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry }), dataCenter.settings)
+
+		// Act
+		const started = await runOnGateway(gateway, () => jira.collect('PROJ-7'))
+
+		// Assert
+		await expect(started.result).rejects.toMatchObject({ transient: true })
+		expect(fake.requests).toHaveLength(retry.attempts)
 	})
 
 	test('a rate limit is sent again before the call fails', async () => {

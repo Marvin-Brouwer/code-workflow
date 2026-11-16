@@ -78,21 +78,22 @@ async function openOnBranch(
 }
 
 /**
- * Opens a pull request from `head` onto `base`, or takes the one another call opened for the branch
- * meanwhile, as when two runs open it at once: GitHub turns the second one down with a 422.
+ * Opens a pull request from `head` onto `base`, or finds the one another call opened for the branch
+ * meanwhile, as when two runs open it at once: GitHub turns the second one down with a 422. Only
+ * one this call opened is `ours`: one found is still described for the other call's commit.
  */
 async function opened(
 	client: Octokit,
 	where: { owner: string; repo: string },
 	request: { readonly head: string; readonly base: string; readonly title: string; readonly body: string },
-): Promise<ApiPullRequest> {
+): Promise<{ readonly pull: ApiPullRequest; readonly ours: boolean }> {
 	try {
-		return (await client.rest.pulls.create({ ...where, ...request })).data
+		return { pull: (await client.rest.pulls.create({ ...where, ...request })).data, ours: true }
 	} catch (error) {
 		if (!isUnprocessable(error)) throw error
-		const meanwhile = await openOnBranch(client, where, request.head, request.base)
-		if (meanwhile === undefined) throw error
-		return meanwhile
+		const pull = await openOnBranch(client, where, request.head, request.base)
+		if (pull === undefined) throw error
+		return { pull, ours: false }
 	}
 }
 
@@ -126,10 +127,10 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			const existing = await openOnBranch(client, where, head, base)
-			if (existing === undefined) {
-				return pullRequestData(repository, await opened(client, where, { head, base, title, body: signedBody }))
-			}
+			const found = await openOnBranch(client, where, head, base)
+			const { pull: existing, ours } =
+				found === undefined ? await opened(client, where, { head, base, title, body: signedBody }) : { pull: found, ours: false }
+			if (ours) return pullRequestData(repository, existing)
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.body, closes)
 			if (descriptionOf(existing.body).describedSha === describedSha && closesAlready) return pullRequestData(repository, existing)

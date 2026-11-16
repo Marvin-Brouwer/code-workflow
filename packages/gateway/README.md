@@ -88,7 +88,7 @@ export const comment = hostTool(commentDefinition, ({ issue, body }, { abortSign
 )
 ```
 
-A connector's host half sends its requests through `retryingFetch(fetch, defaultFetchRetry)`: a request the service didn't answer in time, or answered with a 5xx or 429, is sent again with a doubling wait, or the wait its `retry-after` asks for. Only reads are, by default, since a write whose answer was lost may have been made; a service whose updates can be sent twice says which with `resends`. `unavailable(status)` and the statuses `unauthorized`, `notFound` and `gone` tell its answers apart.
+A connector's host half sends its requests through `retryingFetch(fetch, defaultFetchRetry)`: a request the service didn't answer in time, or answered 500, 502, 503, 504 or 429, is sent again with a doubling wait, or the wait its `retry-after` asks for. Only reads are, by default, since a write whose answer was lost may have been made; a service whose updates can be sent twice says which with `resends`. `unavailable(status)` and the statuses `unauthorized`, `notFound` and `gone` tell its answers apart.
 
 ```ts
 import { defaultFetchRetry, readsOnly, retryingFetch } from '@mesh-flow/gateway'

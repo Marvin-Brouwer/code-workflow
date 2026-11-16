@@ -114,15 +114,22 @@ interface NewMergeRequest {
 	readonly description: string
 }
 
-/** Opens a merge request, or takes the one another call opened for the branch meanwhile. */
-async function opened(client: GitlabClient, project: string, body: NewMergeRequest): Promise<ApiMergeRequest> {
+/**
+ * Opens a merge request, or finds the one another call opened for the branch meanwhile. Only one
+ * this call opened is `ours`: one found is still described for the other call's commit.
+ */
+async function opened(
+	client: GitlabClient,
+	project: string,
+	body: NewMergeRequest,
+): Promise<{ readonly request: ApiMergeRequest; readonly ours: boolean }> {
 	try {
-		return await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body })
+		return { request: await client.request('POST', `${projectSegment(project)}/merge_requests`, ApiMergeRequest, { body }), ours: true }
 	} catch (error) {
 		if (!(error instanceof GitlabRequestError && error.status === conflict)) throw error
-		const meanwhile = await openOnBranch(client, project, body.source_branch, body.target_branch)
-		if (meanwhile === undefined) throw error
-		return meanwhile
+		const request = await openOnBranch(client, project, body.source_branch, body.target_branch)
+		if (request === undefined) throw error
+		return { request, ours: false }
 	}
 }
 
@@ -133,11 +140,12 @@ export function mergeRequestHostTools(api: ApiClient): HostTool[] {
 		hostTool(openMergeRequest, async ({ repository, head, base, title, body, describedSha, closes }, context) => {
 			const client = await api(context)
 			const signedBody = signedDescription(body, context.runId, { describedSha, closes })
-			const existing = await openOnBranch(client, repository, head, base)
-			if (existing === undefined) {
-				const created = await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
-				return mergeRequestData(repository, created)
-			}
+			const found = await openOnBranch(client, repository, head, base)
+			const { request: existing, ours } =
+				found === undefined
+					? await opened(client, repository, { source_branch: head, target_branch: base, title, description: signedBody })
+					: { request: found, ours: false }
+			if (ours) return mergeRequestData(repository, existing)
 			// Already described for this commit, as on a rerun: the text stays as it was reviewed.
 			const closesAlready = closes === undefined || footerCloses(existing.description, closes)
 			if (descriptionOf(existing.description).describedSha === describedSha && closesAlready) return mergeRequestData(repository, existing)

@@ -1,4 +1,5 @@
 import { gone, HostToolTransientError, notFound, unauthorized, unavailable } from '@mesh-flow/gateway'
+import { unprocessable } from './github-statuses.mts'
 
 /** GitHub's answer to a missing permission, and to a rate limit, told apart by the headers. */
 const forbidden = 403
@@ -44,9 +45,6 @@ const goneStatuses = new Set([notFound, gone])
 export function isGone(error: unknown): boolean {
 	return isRequestFailure(error) && goneStatuses.has(error.status)
 }
-
-/** GitHub's answer to a request it understood but won't do, such as a pull request for a branch that has one open. */
-const unprocessable = 422
 
 /** Whether GitHub turned a request down as one it won't do, such as opening a second pull request for a branch. */
 export function isUnprocessable(error: unknown): boolean {

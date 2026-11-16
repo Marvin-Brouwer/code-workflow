@@ -79,7 +79,7 @@ describe('openMergeRequest', () => {
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 
-	test('takes the merge request another run opened for the branch meanwhile', async () => {
+	test('takes the merge request another run opened for the branch meanwhile, and describes it for its own commit', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGitlab()
 		api.hold = (method, requestPath) => {
@@ -97,7 +97,7 @@ describe('openMergeRequest', () => {
 		const opened = await run.result
 
 		// Assert
-		expect(opened).toMatchObject({ number: firstMergeRequest, title: 'Opened meanwhile' })
+		expect(opened).toMatchObject({ number: firstMergeRequest, ...sameSite })
 		expect(api.project(projectPath).mergeRequests.size).toBe(1)
 	})
 

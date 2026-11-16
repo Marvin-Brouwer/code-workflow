@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { atlassianResends } from '../src/host/host-options.mts'
+import { atlassianResends } from '../src/host/atlassian-resends.mts'
 
 const site = 'https://jira.example.com'
 

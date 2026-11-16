@@ -1,21 +1,21 @@
 import { createServer } from 'node:http'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { retryingFetch, type FetchRetryOptions } from '../src/http/retrying-fetch.mts'
+import { retryingFetch, type FetchResends, type FetchRetryOptions } from '../src/http/retrying-fetch.mts'
 
-const url = 'https://api.github.example/repos/team/app'
+const url = 'https://api.example.com/items/1'
 /** Host retries that are over in a moment. */
 const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000, attemptTimeoutMs: 1000 }
 
-/** A GitHub response with `status`. */
+/** A response with `status`. */
 const answer = (status: number, headers: Record<string, string> = {}) => new Response(status === 204 ? null : '{}', { status, headers })
 /** A service whose updates may be sent twice. */
-const putsToo = (request: { readonly method: string }) => request.method === 'PUT'
+const putsToo: FetchResends = ({ method }) => method === 'PUT'
 
 /** The error `fetch` throws when the connection drops. */
 const dropped = () => new TypeError('fetch failed', { cause: new Error('write ECONNABORTED') })
 
 describe('retryingFetch', () => {
-	test('sends a read again after a dropped connection and an unavailable GitHub, and returns the answer that came through', async () => {
+	test('sends a read again after a dropped connection and an unavailable service, and returns the answer that came through', async () => {
 		// Arrange
 		const send = vi
 			.fn<typeof fetch>()
@@ -50,7 +50,7 @@ describe('retryingFetch', () => {
 	})
 
 	test.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
-		'sends a %s once, since a dropped write may have reached GitHub all the same',
+		'sends a %s once, since a dropped write may have reached the service all the same',
 		async (method) => {
 			// Arrange
 			const send = vi.fn<typeof fetch>(async () => {
@@ -110,6 +110,26 @@ describe('retryingFetch', () => {
 		// Assert
 		expect(response.status).toBe(200)
 		expect(send).toHaveBeenCalledTimes(2)
+	})
+
+	test('fails a read that never got an answer as fetch does when its wait for the headers runs out', async () => {
+		// Arrange
+		const send = vi.fn<typeof fetch>(
+			(_input, init) =>
+				new Promise((_resolve, reject) => {
+					init?.signal?.addEventListener('abort', () => {
+						reject(init.signal?.reason)
+					})
+				}),
+		)
+
+		// Act
+		const failed = retryingFetch(send, { ...quickRetry, attemptTimeoutMs: 1 })(url)
+
+		// Assert
+		await expect(failed).rejects.toThrow(TypeError)
+		await expect(failed).rejects.toMatchObject({ cause: { code: 'UND_ERR_HEADERS_TIMEOUT' } })
+		expect(send).toHaveBeenCalledTimes(quickRetry.attempts)
 	})
 
 	test('times only the wait for the answer, so a slow body is read to the end', async () => {
@@ -185,6 +205,27 @@ describe('retryingFetch', () => {
 		expect(waited.status).toBe(200)
 		expect(short).toHaveBeenCalledTimes(2)
 		expect(handedBack.status).toBe(429)
+		expect(long).toHaveBeenCalledTimes(1)
+	})
+
+	test('reads a retry-after that is a date, and hands a far one back to the caller', async () => {
+		// Arrange
+		const past = new Date(0).toUTCString()
+		const anHourMs = 3_600_000
+		const later = new Date(Date.now() + anHourMs).toUTCString()
+		const short = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(answer(503, { 'retry-after': past }))
+			.mockResolvedValueOnce(answer(200))
+		const long = vi.fn<typeof fetch>(async () => answer(503, { 'retry-after': later }))
+
+		// Act
+		const waited = await retryingFetch(short, quickRetry)(url)
+		const handedBack = await retryingFetch(long, quickRetry)(url)
+
+		// Assert
+		expect(waited.status).toBe(200)
+		expect(handedBack.status).toBe(503)
 		expect(long).toHaveBeenCalledTimes(1)
 	})
 

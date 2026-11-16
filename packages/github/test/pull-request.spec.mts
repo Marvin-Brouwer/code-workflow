@@ -55,12 +55,14 @@ describe('openPullRequest', () => {
 		)
 	})
 
-	test('takes the pull request another call opened for the branch while it opened one', async () => {
+	test('takes the pull request another call opened for the branch while it opened one, and describes it for its own commit', async () => {
 		// Arrange
 		const { api, gateway } = await connectedGithub()
+		/** What the other call pushed before it opened its pull request. */
+		const otherCallSha = '1'.repeat(40)
 		api.hold = (method, requestPath) => {
 			if (method === 'POST' && requestPath.endsWith('/pulls') && !api.repository(repositoryName).pulls.has(firstPullRequest))
-				api.pullRequest(repositoryName, firstPullRequest, { head: { ref: branch, sha: '1'.repeat(40) }, body: 'Opened meanwhile.' })
+				api.pullRequest(repositoryName, firstPullRequest, { head: { ref: branch, sha: otherCallSha }, body: 'Opened meanwhile.' })
 			return undefined
 		}
 
@@ -74,6 +76,7 @@ describe('openPullRequest', () => {
 
 		// Assert
 		expect(opened.number).toBe(firstPullRequest)
+		expect(opened).toMatchObject(sameSite)
 		expect([...api.repository(repositoryName).pulls.keys()]).toEqual([firstPullRequest])
 	})
 

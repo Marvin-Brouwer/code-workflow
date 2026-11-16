@@ -16,7 +16,7 @@ export {
 	retryingFetch,
 	type FetchResends,
 	type FetchRetryOptions,
-	type ResentRequest,
+	type OutgoingRequest,
 } from '../http/retrying-fetch.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'

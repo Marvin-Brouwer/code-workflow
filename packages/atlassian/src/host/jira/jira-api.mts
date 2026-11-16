@@ -1,5 +1,6 @@
 import { defaultFetchRetry, retryingFetch, type HostToolContext } from '@mesh-flow/gateway'
-import { atlassianResends, type AtlassianHostOptions } from '../host-options.mts'
+import { atlassianResends } from '../atlassian-resends.mts'
+import type { AtlassianHostOptions } from '../host-options.mts'
 import { readSite } from '../site.mts'
 import type { Download } from './attachments.mts'
 import { jiraCloud } from './jira-cloud.mts'
@@ -17,25 +18,24 @@ export type JiraApi = (context: HostToolContext) => Promise<JiraSite>
 export function jiraApi(options: AtlassianHostOptions = {}): JiraApi {
 	return async (context) => {
 		const site = await readSite('jira', context)
-		const send = options.fetch ?? fetch
-		// The client sends each request once; what may be sent again is sent again here, as by the code host connectors.
-		const retrying = retryingFetch(send, options.retry ?? defaultFetchRetry, atlassianResends)
+		// An attachment is read past the client, which has no call for its bytes, signed in the way the client is, and
+		// tried once: the issue is still worth reading without it.
+		const sendOnce = options.fetch ?? fetch
 		const common = {
 			host: site.url,
 			// A site's custom configuration often differs from Atlassian's schema; the connector reads what it needs itself.
 			onSchemaMismatch: 'silent' as const,
-			fetch: retrying,
+			// The client sends each request once; what may be sent again is sent again here, as by the code host connectors.
+			fetch: retryingFetch(sendOnce, options.retry ?? defaultFetchRetry, atlassianResends),
 		}
-		// An attachment is read past the client, which has no call for its bytes, signed in the way the client is, and
-		// tried once: the issue is still worth reading without it.
 		if (site.deployment === 'cloud') {
 			const basic = Buffer.from(`${site.email}:${site.token}`).toString('base64')
 			return jiraCloud(
 				{ ...common, auth: { type: 'basic', email: site.email, apiToken: site.token } },
-				downloadWith(send, `Basic ${basic}`),
+				downloadWith(sendOnce, `Basic ${basic}`),
 			)
 		}
-		return jiraDataCenter({ ...common, auth: { type: 'bearer', token: site.token } }, downloadWith(send, `Bearer ${site.token}`))
+		return jiraDataCenter({ ...common, auth: { type: 'bearer', token: site.token } }, downloadWith(sendOnce, `Bearer ${site.token}`))
 	}
 }
 
