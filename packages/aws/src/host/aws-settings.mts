@@ -3,7 +3,7 @@ import type { CredentialReader } from '@mesh-flow/gateway'
 /**
  * The names the AWS connector uses in the gateway's credential store. The first four are settings,
  * which the user sets with `mesh-flow credential set` until the settings UI takes them over; the
- * last two are what signing in keeps.
+ * last is what signing in keeps.
  */
 export const awsCredentialNames = Object.freeze({
 	/** The AWS access portal of the Identity Center instance, such as `https://example.awsapps.com/start`. */
@@ -14,9 +14,7 @@ export const awsCredentialNames = Object.freeze({
 	account: 'aws/account',
 	/** The permission set's role to work with, such as `Developer`. */
 	role: 'aws/role',
-	/** This engine's client registration with Identity Center. */
-	client: 'aws/client',
-	/** The Identity Center session: its access token and refresh token. */
+	/** The Identity Center session: its client registration, access token and refresh token. */
 	session: 'aws/session',
 })
 
@@ -28,7 +26,7 @@ export interface AwsSettings {
 	readonly role: string
 }
 
-/** The settings, by the credential name they're under, with an example for the error that asks for them. */
+/** An example value for each setting, for the error that asks for it. */
 const settingExamples: Readonly<Record<keyof AwsSettings, string>> = {
 	startUrl: 'https://example.awsapps.com/start',
 	ssoRegion: 'eu-west-1',
@@ -45,13 +43,19 @@ const settingKeys = ['startUrl', 'ssoRegion', 'account', 'role'] as const satisf
  * @throws When any is missing, naming each with the command that sets it.
  */
 export async function readAwsSettings(credentials: CredentialReader, abortSignal: AbortSignal): Promise<AwsSettings> {
-	const keys = settingKeys
-	const values = await Promise.all(keys.map((key) => credentials.get(awsCredentialNames[key], abortSignal)))
-	const missing = keys.filter((_, index) => values[index] === undefined)
-	if (missing.length > 0) {
-		const commands = missing.map((key) => `  echo '${settingExamples[key]}' | mesh-flow credential set ${awsCredentialNames[key]}`)
-		throw new Error(`AWS isn't set up. Set:\n${commands.join('\n')}`)
-	}
-	const [startUrl = '', ssoRegion = '', account = '', role = ''] = values
-	return { startUrl, ssoRegion, account, role }
+	const [startUrl, ssoRegion, account, role] = await Promise.all(
+		settingKeys.map((key) => credentials.get(awsCredentialNames[key], abortSignal)),
+	)
+	if (startUrl !== undefined && ssoRegion !== undefined && account !== undefined && role !== undefined)
+		return { startUrl, ssoRegion, account, role }
+	const found: Readonly<Record<keyof AwsSettings, string | undefined>> = { startUrl, ssoRegion, account, role }
+	const commands = settingKeys
+		.filter((key) => found[key] === undefined)
+		.map((key) => `  echo '${settingExamples[key]}' | mesh-flow credential set ${awsCredentialNames[key]}`)
+	throw new Error(`AWS isn't set up. Set:\n${commands.join('\n')}`)
+}
+
+/** The settings as one string, to tell which settings something was fetched for. */
+export function settingsKey(settings: AwsSettings): string {
+	return JSON.stringify(settingKeys.map((key) => settings[key]))
 }

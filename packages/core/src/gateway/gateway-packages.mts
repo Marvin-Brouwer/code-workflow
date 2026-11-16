@@ -11,8 +11,11 @@ export interface StagedPackage {
 	readonly size: number
 }
 
+/** How a package is fetched through the gateway: what the proxy and `fetchPackage` call. */
+export type GatewayFetch = (request: PackageRequest, abortSignal: AbortSignal) => Promise<StagedPackage>
+
 /** Fetches a package from one of the app's registries, on the run's package endpoint. */
-export function gatewayPackages(gateway: GatewayClient): (request: PackageRequest, abortSignal: AbortSignal) => Promise<StagedPackage> {
+export function gatewayPackages(gateway: GatewayClient): GatewayFetch {
 	return async (request, abortSignal) => {
 		if (gateway.packages === undefined) throw new Error('The run has no package endpoint: its app restores from no registry.')
 		const answer = PackageResponse.parse(await gateway.call(gateway.packages, { type: 'package', request }, abortSignal))

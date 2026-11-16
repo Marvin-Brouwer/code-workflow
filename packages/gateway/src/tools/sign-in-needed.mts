@@ -7,11 +7,11 @@ import { ConnectorName } from '@mesh-flow/protocol'
  *
  * ```ts
  * const session = await readSession(credentials, abortSignal)
- * if (session === undefined) throw new SignInNeeded('aws', 'Sign in to AWS: `mesh-flow login aws`.')
+ * if (session === undefined) throw new SignInNeededError('aws', 'Sign in to AWS: `mesh-flow login aws`.')
  * ```
  */
-export class SignInNeeded extends Error {
-	override readonly name: string = 'SignInNeeded'
+export class SignInNeededError extends Error {
+	override readonly name: string = 'SignInNeededError'
 	/** The connector to sign in to, as `mesh-flow login` names it. */
 	readonly signIn: ConnectorName
 

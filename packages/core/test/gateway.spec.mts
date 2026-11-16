@@ -5,7 +5,7 @@ import {
 	openCredentialStore,
 	openGateway,
 	openProviderSettings,
-	SignInNeeded,
+	SignInNeededError,
 	tokensPerEndpoint,
 	type Gateway,
 	type HostTool,
@@ -49,7 +49,7 @@ const hostTools: readonly HostTool[] = [
 	hostTool(echoDefinition, ({ text }) => Promise.resolve({ echoed: text })),
 	hostTool(sessionDefinition, () => {
 		cloud.calls++
-		if (!cloud.signedIn) return Promise.reject(new SignInNeeded('cloud'))
+		if (!cloud.signedIn) return Promise.reject(new SignInNeededError('cloud'))
 		return Promise.resolve({ session: 'live' })
 	}),
 	hostTool(neverDefinition, (_input, context) => {

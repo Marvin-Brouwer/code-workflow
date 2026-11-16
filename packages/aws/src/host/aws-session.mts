@@ -1,18 +1,11 @@
 import { CodeartifactClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-codeartifact'
-import {
-	ExpiredTokenException,
-	InvalidClientException,
-	InvalidGrantException,
-	UnauthorizedClientException,
-	CreateTokenCommand,
-} from '@aws-sdk/client-sso-oidc'
 import { GetRoleCredentialsCommand, SSOClient, UnauthorizedException } from '@aws-sdk/client-sso'
 import { oneAtATime, type CredentialStore } from '@mesh-flow/gateway'
-import type { AwsEndpoints } from './aws-endpoints.mts'
-import { awsCredentialNames, readAwsSettings, type AwsSettings } from './aws-settings.mts'
-import { oidcClient, refreshTokenGrant, registeredClient, renewAheadMs, sessionOf } from './oidc.mts'
-import { AwsSignInNeeded } from './sign-in-needed.mts'
-import { readSession, writeStored } from './stored-session.mts'
+import { sessionAccessTokens } from './access-token.mts'
+import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
+import { readAwsSettings, settingsKey, type AwsSettings } from './aws-settings.mts'
+import { lastsBeyondRenewal } from './renewal.mts'
+import { AwsSignInNeededError, sessionEnded } from './sign-in-needed.mts'
 
 /** Temporary credentials for the role in the settings. Kept in memory only. */
 export interface RoleCredentials {
@@ -47,14 +40,17 @@ export type AwsSessionStatus = 'signed-in' | 'sign-in-needed'
  */
 export interface AwsSession {
 	/**
-	 * @throws An {@link AwsSignInNeeded} when there is no session and nothing derived from one is left.
+	 * Credentials for the account and role in the settings, kept in memory and fetched again when
+	 * they near their end, or when the settings change.
+	 *
+	 * @throws An {@link AwsSignInNeededError} when there is no session and nothing derived from one is left.
 	 */
 	readonly roleCredentials: (abortSignal: AbortSignal) => Promise<RoleCredentials>
 	/**
 	 * A token for the domain, fetched with the role credentials and lasting as long as they do, so
 	 * the two are renewed together.
 	 *
-	 * @throws An {@link AwsSignInNeeded} as {@link AwsSession.roleCredentials} does.
+	 * @throws An {@link AwsSignInNeededError} as {@link AwsSession.roleCredentials} does.
 	 */
 	readonly codeArtifactToken: (domain: CodeArtifactDomain, abortSignal: AbortSignal) => Promise<CodeArtifactToken>
 	/** Whether role credentials can be had without signing in, fetching them if needed. */
@@ -71,20 +67,40 @@ export interface AwsSessionOptions {
 	readonly now?: () => Date
 }
 
-/** Identity Center's answers that mean its session is over: a new sign-in is the only way on. */
-function endsSession(error: unknown): boolean {
-	return (
-		error instanceof InvalidGrantException ||
-		error instanceof ExpiredTokenException ||
-		error instanceof UnauthorizedClientException ||
-		error instanceof InvalidClientException ||
-		error instanceof UnauthorizedException
-	)
+/** The turn every fetch of role credentials takes, so one renewal serves every caller. */
+const roleCredentialsTurn = 'role-credentials'
+
+/** CodeArtifact's duration for "as long as the credentials it is fetched with". */
+const lastsAsLongAsCredentials = 0
+
+/** CodeArtifact's errors for role credentials it no longer takes, such as when the clocks differ. */
+const rejectedCredentials = new Set(['ExpiredTokenException', 'UnrecognizedClientException'])
+
+/** Whether CodeArtifact turned the role credentials down, rather than failed otherwise. */
+function rejectsCredentials(error: unknown): boolean {
+	return error instanceof Error && rejectedCredentials.has(error.name)
 }
 
-/** Whether something that ends at `expiresAt` still holds for a while at `now`. */
-function lastsBeyondRenewal(expiresAt: Date, now: Date): boolean {
-	return expiresAt.getTime() - renewAheadMs > now.getTime()
+/** One key per domain, for its kept token and its turn. */
+function domainKey(domain: CodeArtifactDomain): string {
+	return `${domain.region}/${domain.owner}/${domain.domain}`
+}
+
+/** The key of the turn for a domain's tokens. */
+function codeArtifactTurn(key: string): string {
+	return `codeartifact/${key}`
+}
+
+/** Role credentials, and the settings they were fetched for. */
+interface HeldCredentials {
+	readonly settingsKey: string
+	readonly credentials: RoleCredentials
+}
+
+/** A token, and the role credentials it was fetched with. */
+interface KeptToken {
+	readonly credentials: RoleCredentials
+	readonly token: CodeArtifactToken
 }
 
 /** Opens the engine home's AWS session. One per gateway: every run shares it. */
@@ -93,49 +109,16 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 	const endpoints = options.endpoints ?? {}
 	const now = options.now ?? (() => new Date())
 	const turns = oneAtATime()
-	let roleCredentials: RoleCredentials | undefined
-	const tokens = new Map<string, { readonly credentials: RoleCredentials; readonly token: CodeArtifactToken }>()
+	let held: HeldCredentials | undefined
+	const tokens = new Map<string, KeptToken>()
+	const accessToken = sessionAccessTokens({ credentials, endpoints, now })
 
-	/** The session's access token, renewed with its refresh token when it nears its end. */
-	const accessToken = async (settings: AwsSettings, abortSignal: AbortSignal): Promise<string> => {
-		const session = await readSession(credentials, settings, abortSignal)
-		if (session === undefined) throw new AwsSignInNeeded()
-		if (lastsBeyondRenewal(new Date(session.expiresAt), now())) return session.accessToken
-		if (session.refreshToken === undefined) throw new AwsSignInNeeded('The AWS session ended. Sign in again: `mesh-flow login aws`.')
-		const oidc = oidcClient(settings, endpoints)
-		try {
-			const client = await registeredClient(credentials, settings, oidc, now, abortSignal)
-			const token = await oidc.send(
-				new CreateTokenCommand({
-					clientId: client.clientId,
-					clientSecret: client.clientSecret,
-					grantType: refreshTokenGrant,
-					refreshToken: session.refreshToken,
-				}),
-				{ abortSignal },
-			)
-			// Identity Center may hand out a new refresh token, and then the old one no longer works.
-			const renewed = sessionOf({ ...token, refreshToken: token.refreshToken ?? session.refreshToken }, settings, now())
-			await writeStored(credentials, awsCredentialNames.session, renewed, abortSignal)
-			return renewed.accessToken
-		} catch (error) {
-			if (endsSession(error)) throw new AwsSignInNeeded('The AWS session ended. Sign in again: `mesh-flow login aws`.')
-			throw error
-		} finally {
-			oidc.destroy()
-		}
-	}
-
-	const fetchRoleCredentials = async (abortSignal: AbortSignal): Promise<RoleCredentials> => {
-		const settings = await readAwsSettings(credentials, abortSignal)
-		const sso = new SSOClient({ region: settings.ssoRegion, ...(endpoints.sso === undefined ? {} : { endpoint: endpoints.sso }) })
+	/** Role credentials from the access portal for `token`. */
+	const portalCredentials = async (settings: AwsSettings, token: string, abortSignal: AbortSignal): Promise<RoleCredentials> => {
+		const sso = new SSOClient({ region: settings.ssoRegion, ...endpointOption(endpoints.sso) })
 		try {
 			const answer = await sso.send(
-				new GetRoleCredentialsCommand({
-					accessToken: await accessToken(settings, abortSignal),
-					accountId: settings.account,
-					roleName: settings.role,
-				}),
+				new GetRoleCredentialsCommand({ accessToken: token, accountId: settings.account, roleName: settings.role }),
 				{ abortSignal },
 			)
 			const fetched = answer.roleCredentials
@@ -152,66 +135,95 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 				sessionToken: fetched.sessionToken,
 				expiresAt: new Date(fetched.expiration),
 			}
-		} catch (error) {
-			if (endsSession(error)) throw new AwsSignInNeeded('The AWS session ended. Sign in again: `mesh-flow login aws`.')
-			throw error
 		} finally {
 			sso.destroy()
 		}
 	}
 
+	const fetchRoleCredentials = async (settings: AwsSettings, abortSignal: AbortSignal): Promise<RoleCredentials> => {
+		const token = await accessToken(settings, abortSignal)
+		try {
+			return await portalCredentials(settings, token, abortSignal)
+		} catch (error) {
+			if (!(error instanceof UnauthorizedException)) throw error
+		}
+		// The portal turned the access token down before its time, such as when the clocks differ: renew it once.
+		try {
+			return await portalCredentials(settings, await accessToken(settings, abortSignal, token), abortSignal)
+		} catch (error) {
+			if (error instanceof UnauthorizedException) throw sessionEnded()
+			throw error
+		}
+	}
+
 	const currentRoleCredentials = (abortSignal: AbortSignal): Promise<RoleCredentials> =>
-		turns('role-credentials', abortSignal, async () => {
-			const kept = roleCredentials
+		turns(roleCredentialsTurn, abortSignal, async () => {
+			const settings = await readAwsSettings(credentials, abortSignal)
+			const key = settingsKey(settings)
+			const kept = held?.settingsKey === key ? held.credentials : undefined
 			if (kept !== undefined && lastsBeyondRenewal(kept.expiresAt, now())) return kept
 			try {
-				roleCredentials = await fetchRoleCredentials(abortSignal)
-				return roleCredentials
+				const fetched = await fetchRoleCredentials(settings, abortSignal)
+				held = { settingsKey: key, credentials: fetched }
+				return fetched
 			} catch (error) {
-				// The session is over: what was derived from it holds until it runs out.
-				if (error instanceof AwsSignInNeeded && kept !== undefined && kept.expiresAt > now()) return kept
+				// Whether the session is over or the portal fails for now, what was fetched holds until it runs out.
+				if (!abortSignal.aborted && kept !== undefined && kept.expiresAt > now()) return kept
 				throw error
 			}
 		})
 
+	const fetchToken = async (
+		domain: CodeArtifactDomain,
+		key: string,
+		role: RoleCredentials,
+		abortSignal: AbortSignal,
+	): Promise<CodeArtifactToken> => {
+		const client = new CodeartifactClient({
+			region: domain.region,
+			credentials: { accessKeyId: role.accessKeyId, secretAccessKey: role.secretAccessKey, sessionToken: role.sessionToken },
+			...endpointOption(endpoints.codeArtifact),
+		})
+		try {
+			const answer = await client.send(
+				new GetAuthorizationTokenCommand({ domain: domain.domain, domainOwner: domain.owner, durationSeconds: lastsAsLongAsCredentials }),
+				{ abortSignal },
+			)
+			if (answer.authorizationToken === undefined) throw new Error(`CodeArtifact sent no token for ${domain.domain}.`)
+			const token = { token: answer.authorizationToken, expiresAt: answer.expiration ?? role.expiresAt }
+			tokens.set(key, { credentials: role, token })
+			return token
+		} finally {
+			client.destroy()
+		}
+	}
+
 	const codeArtifactToken = (domain: CodeArtifactDomain, abortSignal: AbortSignal): Promise<CodeArtifactToken> => {
-		const key = `${domain.region}/${domain.owner}/${domain.domain}`
-		return turns(`codeartifact/${key}`, abortSignal, async () => {
+		const key = domainKey(domain)
+		return turns(codeArtifactTurn(key), abortSignal, async () => {
 			const role = await currentRoleCredentials(abortSignal)
 			const kept = tokens.get(key)
 			if (kept?.credentials === role && kept.token.expiresAt > now()) return kept.token
-			const client = new CodeartifactClient({
-				region: domain.region,
-				credentials: { accessKeyId: role.accessKeyId, secretAccessKey: role.secretAccessKey, sessionToken: role.sessionToken },
-				...(endpoints.codeArtifact === undefined ? {} : { endpoint: endpoints.codeArtifact }),
-			})
 			try {
-				// Duration 0: the token lasts as long as the credentials it is fetched with.
-				const answer = await client.send(
-					new GetAuthorizationTokenCommand({ domain: domain.domain, domainOwner: domain.owner, durationSeconds: 0 }),
-					{ abortSignal },
-				)
-				if (answer.authorizationToken === undefined) throw new Error(`CodeArtifact sent no token for ${domain.domain}.`)
-				const token = { token: answer.authorizationToken, expiresAt: answer.expiration ?? role.expiresAt }
-				tokens.set(key, { credentials: role, token })
-				return token
-			} finally {
-				client.destroy()
+				return await fetchToken(domain, key, role, abortSignal)
+			} catch (error) {
+				if (!rejectsCredentials(error)) throw error
 			}
+			// CodeArtifact turned the role credentials down before their time: fetch new ones once.
+			if (held?.credentials === role) held = undefined
+			return fetchToken(domain, key, await currentRoleCredentials(abortSignal), abortSignal)
 		})
 	}
 
-	return Object.freeze<AwsSession>({
-		roleCredentials: currentRoleCredentials,
-		codeArtifactToken,
-		async status(abortSignal) {
-			try {
-				await currentRoleCredentials(abortSignal)
-				return 'signed-in'
-			} catch (error) {
-				if (error instanceof AwsSignInNeeded) return 'sign-in-needed'
-				throw error
-			}
-		},
-	})
+	const status = async (abortSignal: AbortSignal): Promise<AwsSessionStatus> => {
+		try {
+			await currentRoleCredentials(abortSignal)
+			return 'signed-in'
+		} catch (error) {
+			if (error instanceof AwsSignInNeededError) return 'sign-in-needed'
+			throw error
+		}
+	}
+
+	return Object.freeze<AwsSession>({ roleCredentials: currentRoleCredentials, codeArtifactToken, status })
 }

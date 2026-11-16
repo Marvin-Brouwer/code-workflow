@@ -6,7 +6,8 @@ import type { Duplex } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { TLSSocket } from 'node:tls'
 import { PackageRequest, registryHost, registryPaths, type PackageRegistry } from '@mesh-flow/protocol'
-import type { StagedPackage } from '../gateway/gateway-packages.mts'
+import { GatewayCallError } from '../gateway/gateway-client.mts'
+import type { GatewayFetch } from '../gateway/gateway-packages.mts'
 import { describeError } from '../run/describe-error.mts'
 import type { CertificateAuthority } from './certificate-authority.mts'
 
@@ -17,13 +18,10 @@ export interface PackageProxyOptions {
 	/** Signs the certificates the proxy shows for the registries' hosts. */
 	readonly authority: CertificateAuthority
 	/** Fetches a package, through the gateway. */
-	readonly fetchPackage: FetchPackage
+	readonly fetchThroughGateway: GatewayFetch
 	/** Stops the proxy, as {@link PackageProxy.close} does: every request it still serves is aborted. */
 	readonly abortSignal: AbortSignal
 }
-
-/** How the proxy fetches a package: through the gateway, in the runtime. The proxy removes the staged body once it sent it. */
-export type FetchPackage = (request: PackageRequest, abortSignal: AbortSignal) => Promise<StagedPackage>
 
 /** A running package proxy. */
 export interface PackageProxy {
@@ -89,17 +87,17 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		const registries = registriesOfSocket.get(request.socket) ?? []
 		const registry = request.url === undefined ? undefined : registryOfPath(registries, request.url)
 		if (registry === undefined || request.url === undefined) {
-			refuse(response, forbidden, 'Not a registry this run restores from.')
+			answerPlainly(response, forbidden, 'Not a registry this run restores from.')
 			return
 		}
 		if (request.method !== 'GET') {
-			refuse(response, methodNotAllowed, 'Package registries are only read from here.')
+			answerPlainly(response, methodNotAllowed, 'Package registries are only read from here.')
 			return
 		}
 		const accept = request.headers.accept
 		const asked = PackageRequest.safeParse({ registry, path: request.url, ...(accept === undefined ? {} : { accept }) })
 		if (!asked.success) {
-			refuse(response, badRequest, `Not a package fetch: ${request.url.slice(0, maxEchoedLength)}`)
+			answerPlainly(response, badRequest, `Not a package fetch: ${request.url.slice(0, maxEchoedLength)}`)
 			return
 		}
 		const stopped = new AbortController()
@@ -108,7 +106,7 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		})
 		try {
 			const stopping = AbortSignal.any([stopped.signal, options.abortSignal])
-			const answer = await options.fetchPackage(asked.data, stopping)
+			const answer = await options.fetchThroughGateway(asked.data, stopping)
 			try {
 				response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
 				await pipeline(createReadStream(answer.file), response, { signal: stopping })
@@ -116,7 +114,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 				await rm(answer.file, { force: true })
 			}
 		} catch (error) {
-			refuse(response, badGateway, describeError(error))
+			// A refusal won't pass on another try, and package managers try a 5xx again.
+			const refused = error instanceof GatewayCallError && !error.transient
+			answerPlainly(response, refused ? forbidden : badGateway, describeError(error))
 		}
 	}
 
@@ -124,7 +124,7 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		void serve(request, response)
 	})
 	const outer = createServer((_request, response) => {
-		refuse(response, forbidden, 'Only HTTPS to the package registries goes through here.')
+		answerPlainly(response, forbidden, 'Only HTTPS to the package registries goes through here.')
 	})
 	outer.on('connection', (socket) => {
 		track(connections, socket)
@@ -156,7 +156,11 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		})
 	})
 	const address = outer.address()
-	const port = typeof address === 'object' && address !== null ? address.port : 0
+	if (typeof address !== 'object' || address === null) {
+		outer.close()
+		throw new Error('The package proxy has no port to listen on.')
+	}
+	const { port } = address
 
 	const closed = new AbortController()
 	const close = async () => {
@@ -184,7 +188,8 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 	return Object.freeze({ url: `http://${loopback}:${String(port)}`, close })
 }
 
-function refuse(response: ServerResponse, status: number, message: string): void {
+/** Answers with `status` and `message` as plain text, or drops the response when its headers went out already. */
+function answerPlainly(response: ServerResponse, status: number, message: string): void {
 	if (response.headersSent) {
 		response.destroy()
 		return
@@ -193,6 +198,7 @@ function refuse(response: ServerResponse, status: number, message: string): void
 	response.end(`${message}\n`)
 }
 
+/** Keeps `connection` in `connections` until it closes, so closing the proxy can drop it. */
 function track(connections: Set<Duplex>, connection: Duplex): void {
 	connections.add(connection)
 	connection.once('close', () => connections.delete(connection))

@@ -2,6 +2,7 @@ import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { withFileLock } from '../files/with-file-lock.mts'
+import { ownEntry } from '../own-entry.mts'
 import { seal, unseal } from './sealed-file.mts'
 import type { StoreKey } from './store-key.mts'
 
@@ -28,6 +29,12 @@ export interface CredentialReader {
  */
 export interface CredentialStore extends CredentialReader {
 	readonly set: (name: string, secret: string, abortSignal: AbortSignal) => Promise<void>
+	/**
+	 * Sets the credential to what `next` makes of its current secret, while holding the store's lock,
+	 * so no write from another process comes between the read and the write. `next` returns
+	 * `undefined` to leave it as it is. Resolves whether it was set.
+	 */
+	readonly update: (name: string, next: (current: string | undefined) => string | undefined, abortSignal: AbortSignal) => Promise<boolean>
 	/** Removes a credential. Resolves `false` when there was none. */
 	readonly remove: (name: string, abortSignal: AbortSignal) => Promise<boolean>
 	/** The names of every credential, sorted. Never the secrets. */
@@ -35,6 +42,11 @@ export interface CredentialStore extends CredentialReader {
 }
 
 const Secrets = z.record(z.string(), z.string())
+
+/** Throws when `secret` is empty, naming the credential. */
+function checkSecret(name: string, secret: string): void {
+	if (secret.length === 0) throw new Error(`The secret for ${name} is empty.`)
+}
 
 /**
  * Opens the credential store in `file`, sealed with `key` (AES-256-GCM). The file is made on the
@@ -64,8 +76,18 @@ export function openCredentialStore(file: string, key: StoreKey): CredentialStor
 		get: async (name, abortSignal) => (await read(abortSignal))[CredentialName.parse(name)],
 		async set(name, secret, abortSignal) {
 			const checked = CredentialName.parse(name)
-			if (secret.length === 0) throw new Error(`The secret for ${checked} is empty.`)
+			checkSecret(checked, secret)
 			await change(abortSignal, (secrets) => {
+				secrets[checked] = secret
+				return true
+			})
+		},
+		update: (name, next, abortSignal) => {
+			const checked = CredentialName.parse(name)
+			return change(abortSignal, (secrets) => {
+				const secret = next(ownEntry(secrets, checked))
+				if (secret === undefined) return false
+				checkSecret(checked, secret)
 				secrets[checked] = secret
 				return true
 			})

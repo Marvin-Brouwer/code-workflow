@@ -20,7 +20,7 @@ export interface RegistryFetch {
 /**
  * How a connector reaches its registries: it checks that the fetch is a read on a registry it
  * serves and says where it goes, with the credential. The gateway sends it, caps the body, caches
- * packages and stages the body for the sandbox. Throw a `SignInNeeded` when the user has to sign
+ * packages and stages the body for the sandbox. Throw a `SignInNeededError` when the user has to sign
  * in first, and an error when the fetch isn't a read on the registry.
  *
  * ```ts

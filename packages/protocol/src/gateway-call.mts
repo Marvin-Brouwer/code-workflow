@@ -7,7 +7,7 @@ import { RequestId } from './request-id.mts'
 export const EndpointId = z.string().regex(/^[\w-]{1,64}$/)
 export type EndpointId = z.infer<typeof EndpointId>
 
-/** The shortest token an endpoint takes. */
+/** The shortest token an endpoint takes, for code that makes tokens of its own, such as a test of the runtime. */
 export const minTokenLength = 16
 
 /** The longest token an endpoint takes. */

@@ -46,6 +46,8 @@ The registry's answer goes back whole, a 404 too, with only `content-type`, `eta
 
 A published package never changes, so a `.nupkg` or `.tgz` fetched whole is kept in the gateway's `packages` folder, shared by every run, and the next fetch of it doesn't go to the registry. Version lists and other metadata are fetched each time.
 
+With the gateway of the [sample below](#host-tools), a run whose app restores from npm opens its endpoint with the registry:
+
 ```ts
 const gateway = openGateway({ home, credentials, providers, registries: { aws: codeArtifactFetch(session) } })
 const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm', packages] }, abortSignal)
@@ -141,15 +143,15 @@ export const connector = connectorHost('cloud', () => [], {
 })
 ```
 
-A host tool that needs the session and finds none throws a `SignInNeeded` before it changes anything. The run then waits for the sign-in instead of failing, and its stub calls the tool again with the same input:
+A host tool that needs the session and finds none throws a `SignInNeededError` before it changes anything. The run then waits for the sign-in instead of failing, and its stub calls the tool again with the same input:
 
 ```ts
-import { hostTool, SignInNeeded } from '@mesh-flow/gateway'
+import { hostTool, SignInNeededError } from '@mesh-flow/gateway'
 
 export const listBuckets = (credentials: CredentialStore) =>
 	hostTool(listBucketsDefinition, async (_input, { abortSignal }) => {
 		const session = await credentials.get('cloud/session', abortSignal)
-		if (session === undefined) throw new SignInNeeded('cloud')
+		if (session === undefined) throw new SignInNeededError('cloud')
 		return bucketsOf(session, abortSignal)
 	})
 ```

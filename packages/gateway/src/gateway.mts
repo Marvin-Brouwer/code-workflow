@@ -174,7 +174,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		const cached = await cache.get(request, abortSignal)
 		if (cached !== undefined) return cached
 		let fetched: FetchedPackage
-		if (typeof request.registry === 'string') fetched = await fetchPackage(request, fetchFromHost, abortSignal)
+		if (typeof request.registry === 'string') fetched = await fetchPackage(request, { fetchFromHost }, abortSignal)
 		else {
 			const resolve = ownEntry(connectorRegistries, request.registry.connector)
 			if (resolve === undefined)
@@ -182,7 +182,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 			const { registry, path: asked, accept } = request
 			if (!isConnectorRegistryFetch({ ...request, registry })) throw new Error(`${asked} isn't a package fetch on ${registry.name}.`)
 			const where = await resolve({ registry, path: asked, ...(accept === undefined ? {} : { accept }) }, abortSignal)
-			fetched = await fetchFromConnectorRegistry(request, where, fetchFromHost, abortSignal)
+			fetched = await fetchFromConnectorRegistry(request, where, { fetchFromHost }, abortSignal)
 		}
 		await cache.put(request, fetched, abortSignal)
 		return fetched

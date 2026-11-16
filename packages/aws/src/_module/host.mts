@@ -20,4 +20,4 @@ export { awsCredentialNames, readAwsSettings, type AwsSettings } from '../host/a
 export { codeArtifactFetch } from '../host/code-artifact-fetch.mts'
 export { awsConnectorHost, connector, type AwsConnectorOptions } from '../host/connector.mts'
 export { signIn, type SignInOptions } from '../host/sign-in.mts'
-export { AwsSignInNeeded } from '../host/sign-in-needed.mts'
+export { AwsSignInNeededError } from '../host/sign-in-needed.mts'

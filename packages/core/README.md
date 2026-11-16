@@ -290,20 +290,25 @@ A trigger listed twice, in the app or across its bundles, is an error.
 The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org), `npm` (the npm registry) and a connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md), with their own config and no changes to a repository:
 
 - Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
-- For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime.
-- Each `GET` it gets is a call to the gateway, which fetches the package on the host, with the connector's credential for a connector's registry. A host with several registries, such as two CodeArtifact repositories in one domain, sends each fetch to the registry whose path it's below. Other hosts and paths, plain HTTP and writes are refused. A fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB).
+- For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime. Those variables replace the system's trust store for the processes, so HTTPS in the sandbox with any other certificate, such as a local dev server's, doesn't verify; loopback and the sandbox's own host name aren't sent to the proxy.
+- Each `GET` it gets is a call to the gateway, which fetches the package on the host, with the connector's credential for a connector's registry. A host with several registries, such as two CodeArtifact repositories in one domain, sends each fetch to the registry whose path it's below. Other hosts and paths, plain HTTP and writes are refused. A fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB). A fetch the gateway refuses is a 403, so a package manager doesn't try it again; one that failed for now, such as a registry that's down, is a 502. A redirect from a public registry is handed back to the package manager, not followed; one from a connector's registry, such as to a signed download URL, is followed on the host.
 - The engine writes each fetched body into the sandbox as a file, and the proxy streams it from there and removes it, so a package isn't held in the runtime's memory. The gateway keeps the packages it fetched on the host, so a warm restore doesn't go to the registry.
 - Package fetches go on the run's package endpoint, with `packageTokens` (eight) tokens of their own, so at most that many go at once and a restore doesn't hold up the workflow's tool and model calls.
 
 Code can make the same call itself, with `fetchPackage`:
 
 ```ts
-import { fetchPackage } from '@mesh-flow/core'
+import { fetchPackage, workflow } from '@mesh-flow/core'
 import { z } from 'zod'
 
-const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
-const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
+	const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
+	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+	return versions
+})
 ```
+
+It only works inside a run, whose gateway it fetches through.
 
 ### Triggers
 

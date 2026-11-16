@@ -33,7 +33,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/code-repository --filter @mesh-flow/github --filter @mesh-flow/gitlab --filter @mesh-flow/atlassian --filter @mesh-flow/aws --filter @mesh-flow/toolchain-dotnet --filter @mesh-flow/preset-development --filter @example/github-issue --filter @example/big-repo typecheck
-      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... --filter @mesh-flow/gitlab... --filter @mesh-flow/atlassian... --filter @mesh-flow/toolchain-dotnet... --filter @mesh-flow/preset-development... build
+      - run: pnpm --filter @mesh-flow/engine... --filter @mesh-flow/github... --filter @mesh-flow/gitlab... --filter @mesh-flow/atlassian... --filter @mesh-flow/aws... --filter @mesh-flow/toolchain-dotnet... --filter @mesh-flow/preset-development... build
       - run: pnpm --filter @mesh-flow/protocol --filter @mesh-flow/build --filter @mesh-flow/gateway --filter @mesh-flow/engine --filter @mesh-flow/core --filter @mesh-flow/git --filter @mesh-flow/code-repository --filter @mesh-flow/github --filter @mesh-flow/gitlab --filter @mesh-flow/atlassian --filter @mesh-flow/aws --filter @mesh-flow/toolchain-dotnet --filter @mesh-flow/preset-development test
       # The example apps build and describe themselves with the packages just built.
       - run: pnpm --filter @example/github-issue --filter @example/big-repo build

@@ -19,6 +19,7 @@ export function connectorCredentials(store: CredentialStore, connector: string):
 	return Object.freeze<CredentialStore>({
 		get: async (name, abortSignal) => store.get(own(name), abortSignal),
 		set: async (name, secret, abortSignal) => store.set(own(name), secret, abortSignal),
+		update: async (name, next, abortSignal) => store.update(own(name), next, abortSignal),
 		remove: async (name, abortSignal) => store.remove(own(name), abortSignal),
 		names: async (abortSignal) => (await store.names(abortSignal)).filter((name) => name.startsWith(prefix)),
 	})

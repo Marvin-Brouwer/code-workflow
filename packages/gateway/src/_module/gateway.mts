@@ -58,4 +58,5 @@ export {
 	type HostToolContext,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
-export { SignInNeeded, signInOf } from '../tools/sign-in-needed.mts'
+export { SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
+export { untilAborted } from '../until-aborted.mts'

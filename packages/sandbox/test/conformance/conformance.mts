@@ -142,8 +142,8 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const result = await sandbox.exec(['node', '/var/tmp/probe.mjs', 'registry.npmjs.org', 'example.com'], { signal: timeout() })
 
 			// Assert
-			const statuses = z.record(z.string(), z.string()).parse(JSON.parse(result.stdout))
-			expect(statuses).toEqual({ 'registry.npmjs.org': '000', 'example.com': '000', loopback: 'ok' })
+			const probed = z.object({ hosts: z.record(z.string(), z.string()), loopback: z.string() }).parse(JSON.parse(result.stdout))
+			expect(probed).toEqual({ hosts: { 'registry.npmjs.org': '000', 'example.com': '000' }, loopback: 'ok' })
 		})
 
 		test('list shows a paused sandbox until it is removed', async () => {

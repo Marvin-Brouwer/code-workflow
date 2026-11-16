@@ -7,7 +7,7 @@ import type { AwsSession } from './aws-session.mts'
  * How the gateway fetches from CodeArtifact repositories: on the host of the repository's own
  * domain only, below one of the repository's paths, with a CodeArtifact token from `session`.
  * npm takes the token as a bearer token, NuGet as the password of the user `aws`, as
- * `aws codeartifact login` sets them up. Without a session it throws an `AwsSignInNeeded`, so
+ * `aws codeartifact login` sets them up. Without a session it throws an `AwsSignInNeededError`, so
  * the run waits for a sign-in and fetches again.
  */
 export function codeArtifactFetch(session: AwsSession): ResolveRegistryFetch {

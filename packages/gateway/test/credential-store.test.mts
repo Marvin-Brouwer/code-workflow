@@ -42,6 +42,20 @@ describe('openCredentialStore', () => {
 		expect(await credentials.remove('webhook/team/b', abortSignal)).toBe(false)
 	})
 
+	test('updates a secret from its current one, and leaves it when the update says so', async () => {
+		// Arrange
+		const { credentials } = await openTestStore()
+		await credentials.set('aws/session', 'first', abortSignal)
+
+		// Act
+		const updated = await credentials.update('aws/session', (current) => (current === 'first' ? 'second' : undefined), abortSignal)
+		const left = await credentials.update('aws/session', (current) => (current === 'first' ? 'third' : undefined), abortSignal)
+
+		// Assert
+		expect([updated, left]).toEqual([true, false])
+		expect(await credentials.get('aws/session', abortSignal)).toBe('second')
+	})
+
 	test('sees what another opening of the store wrote, as the CLI and the engine do', async () => {
 		// Arrange
 		const { credentials: engine, directory } = await openTestStore()
