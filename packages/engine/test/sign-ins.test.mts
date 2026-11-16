@@ -53,12 +53,15 @@ describe('sign-ins', () => {
 	test('waits longer after each try that fails before a code, and starts over once a try got one', async () => {
 		// Arrange
 		const retryMs = 50
+		/** Timers may fire up to a millisecond early. */
+		const timerSlackMs = 1
+		const triesBeforeCode = 3
 		const triedAt: number[] = []
 		const login = vi.fn((context: LoginContext) => {
 			triedAt.push(Date.now())
-			// The fourth try gets a code, which runs out; the fifth is approved.
-			if (triedAt.length === 4) context.show(prompt)
-			return triedAt.length === 5 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
+			// The try after those gets a code, which runs out; the one after it is approved.
+			if (triedAt.length === triesBeforeCode + 1) context.show(prompt)
+			return triedAt.length === triesBeforeCode + 2 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
 		})
 		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }], retryMs })
 
@@ -67,9 +70,9 @@ describe('sign-ins', () => {
 
 		// Assert
 		const waited = triedAt.slice(1).map((at, index) => at - (triedAt[index] ?? at))
-		expect(waited[0]).toBeGreaterThanOrEqual(retryMs - 1)
-		expect(waited[1]).toBeGreaterThanOrEqual(2 * retryMs - 1)
-		expect(waited[2]).toBeGreaterThanOrEqual(4 * retryMs - 1)
+		expect(waited[0]).toBeGreaterThanOrEqual(retryMs - timerSlackMs)
+		expect(waited[1]).toBeGreaterThanOrEqual(2 * retryMs - timerSlackMs)
+		expect(waited[2]).toBeGreaterThanOrEqual(4 * retryMs - timerSlackMs)
 		expect(waited[3]).toBeLessThan(4 * retryMs)
 	})
 
