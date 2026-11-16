@@ -19,6 +19,11 @@ Decided designs:
 - [gateway-tool-calls.md](gateway-tool-calls.md): credentialed tools run on the host, called from
   the sandbox over one channel with an endpoint and token per loop.
 
+Proposed:
+
+- [aws-codeartifact.md](aws-codeartifact.md): AWS sign-in on the host with the user in the loop,
+  `checkSession`, and CodeArtifact restores in the sandbox through a read-only registry shim.
+
 ## POC pattern
 
 The POCs follow the earlier prototype's pattern: a pnpm workspace, one `@pocs/<name>` project
