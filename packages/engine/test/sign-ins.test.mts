@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import type { LoginContext } from '../src/connectors/load-connectors.mts'
+import type { SignInContext } from '../src/connectors/load-connectors.mts'
 import { openSignIns } from '../src/engine/sign-ins.mts'
 import { approvableLogin, prompt } from './support/approvable-login.mts'
 
@@ -8,7 +8,7 @@ describe('sign-ins', () => {
 	test('shares one sign-in between everyone who waits for it, and shows where to sign in', async () => {
 		// Arrange
 		const { login, approve } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }] })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
 
 		// Act
 		const waits = [signIns.waitFor('cloud', abortSignal), signIns.waitFor('cloud', abortSignal)]
@@ -28,10 +28,10 @@ describe('sign-ins', () => {
 		// Arrange
 		const { login: approvable, approve } = approvableLogin()
 		const login = vi
-			.fn<(context: LoginContext) => Promise<void>>()
+			.fn<(context: SignInContext) => Promise<void>>()
 			.mockRejectedValueOnce(new Error('The code ran out.'))
 			.mockImplementation(approvable)
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }], retryMs: 100 })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], retryMs: 100 })
 
 		// Act
 		const waiting = signIns.waitFor('cloud', abortSignal)
@@ -57,13 +57,13 @@ describe('sign-ins', () => {
 		const timerSlackMs = 1
 		const triesBeforeCode = 3
 		const triedAt: number[] = []
-		const login = vi.fn((context: LoginContext) => {
+		const login = vi.fn((context: SignInContext) => {
 			triedAt.push(Date.now())
 			// The try after those gets a code, which runs out; the one after it is approved.
 			if (triedAt.length === triesBeforeCode + 1) context.show(prompt)
 			return triedAt.length === triesBeforeCode + 2 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
 		})
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }], retryMs })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], retryMs })
 
 		// Act
 		await signIns.waitFor('cloud', abortSignal)
@@ -79,7 +79,7 @@ describe('sign-ins', () => {
 	test('stops the sign-in once nobody waits for it any more', async () => {
 		// Arrange
 		const { login, contexts } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }] })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
 		const first = new AbortController()
 		const second = new AbortController()
 

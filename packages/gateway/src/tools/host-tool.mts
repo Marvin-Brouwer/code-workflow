@@ -2,7 +2,7 @@ import { ConnectorName, ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import type { ResolveRegistryFetch } from '../packages/connector-registry.mts'
-import type { ConnectorLogin } from './connector-login.mts'
+import type { ConnectorSignIn } from './connector-sign-in.mts'
 
 /** What a host tool's action gets besides its input. */
 export interface HostToolContext {
@@ -101,7 +101,7 @@ export interface ConnectorHostOptions {
 
 /**
  * The host half of a connector package, as its `host` entry point exports it: a name, the host
- * tools it brings, and, for a service with sessions, a `login`. The engine loads the connectors
+ * tools it brings, and, for a service with sessions, a `signIn`. The engine loads the connectors
  * the user added and gives every run the tools of them its app lists.
  *
  * ```ts
@@ -113,7 +113,7 @@ export interface ConnectorHost {
 	readonly name: string
 	readonly tools: (options: ConnectorHostOptions) => readonly HostTool[]
 	/** Signs the user in to the connector's service, for `mesh-flow login <name>`. Only for a service with sessions to sign in to. */
-	readonly login?: ConnectorLogin
+	readonly signIn?: ConnectorSignIn
 	/**
 	 * How the gateway reaches the connector's package registries, such as CodeArtifact
 	 * repositories, made with the same options as its tools. Only for a connector with registries.
@@ -127,7 +127,7 @@ export interface ConnectorHost {
 }
 
 /** What else a connector's host half brings besides its tools. */
-export type ConnectorHostExtras = Pick<ConnectorHost, 'login' | 'registries' | 'missingSettings'>
+export type ConnectorHostExtras = Pick<ConnectorHost, 'signIn' | 'registries' | 'missingSettings'>
 
 /** Defines the host half of a connector, checked. */
 export function connectorHost(name: string, tools: ConnectorHost['tools'], extras: ConnectorHostExtras = {}): ConnectorHost {

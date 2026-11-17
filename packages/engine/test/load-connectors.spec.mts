@@ -69,7 +69,7 @@ describe('loadConnectors', () => {
 		const withLogin = `export const connector = {
 	name: 'cloud',
 	tools: () => [],
-	login: async ({ credentials, abortSignal }) => {
+	signIn: async ({ credentials, abortSignal }) => {
 		await credentials.set('cloud/session', 'token', abortSignal)
 		await credentials.get('provider/work', abortSignal)
 	},
@@ -82,10 +82,10 @@ describe('loadConnectors', () => {
 
 		// Act
 		const loaded = await loadConnectors({ connectors: [{ package: 'cloud' }, { package: 'tracker' }], from, directory, credentials })
-		const signingIn = loaded[0]?.login?.({ show: () => undefined, abortSignal })
+		const signingIn = loaded[0]?.signIn?.({ show: () => undefined, abortSignal })
 
 		// Assert
-		expect(loaded.map((connector) => [connector.name, typeof connector.login])).toEqual([
+		expect(loaded.map((connector) => [connector.name, typeof connector.signIn])).toEqual([
 			['cloud', 'function'],
 			['tracker', 'undefined'],
 		])
@@ -138,7 +138,7 @@ export const connector = {
 			return signedIn ? runs : 'no session'
 		},
 	}],
-	login: async () => {
+	signIn: async () => {
 		signedIn = true
 	},
 }
@@ -159,7 +159,7 @@ export const connector = {
 
 		// Act
 		const fetching = cloud?.tools[0]?.run({}, context)
-		await cloud?.login?.({ show: () => undefined, abortSignal })
+		await cloud?.signIn?.({ show: () => undefined, abortSignal })
 		finishLogin(undefined)
 
 		// Assert

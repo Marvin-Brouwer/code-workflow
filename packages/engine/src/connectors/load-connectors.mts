@@ -17,8 +17,8 @@ import {
 	connectorCredentials,
 	signInOf,
 	type ConnectorHost,
-	type ConnectorLogin,
-	type ConnectorLoginContext,
+	type ConnectorSignIn,
+	type ConnectorSignInContext,
 	type CredentialStore,
 	type HostTool,
 	type ResolveRegistryFetch,
@@ -37,14 +37,14 @@ const HostModule = z.object({
 	connector: z.object({
 		name: ConnectorName,
 		tools: z.custom<ConnectorHost['tools']>((value) => typeof value === 'function'),
-		login: z.custom<ConnectorLogin>((value) => typeof value === 'function').optional(),
+		signIn: z.custom<ConnectorSignIn>((value) => typeof value === 'function').optional(),
 		registries: z.custom<NonNullable<ConnectorHost['registries']>>((value) => typeof value === 'function').optional(),
 		missingSettings: z.custom<NonNullable<ConnectorHost['missingSettings']>>((value) => typeof value === 'function').optional(),
 	}),
 })
 
 /** What a loaded connector's sign-in takes: it has the connector's own credentials already. */
-export type LoginContext = Omit<ConnectorLoginContext, 'credentials'>
+export type SignInContext = Omit<ConnectorSignInContext, 'credentials'>
 
 /** A connector the engine loaded: where it came from, the host tools it brought, and how to sign in to its service. */
 export interface LoadedConnector {
@@ -52,7 +52,7 @@ export interface LoadedConnector {
 	readonly name: string
 	readonly tools: readonly HostTool[]
 	/** Signs the user in, for `mesh-flow login <name>` and runs that wait for it, when the connector's service has sessions. */
-	readonly login?: (context: LoginContext) => Promise<void>
+	readonly signIn?: (context: SignInContext) => Promise<void>
 	/** How the gateway reaches the connector's package registries, when it has any. */
 	readonly registries?: ResolveRegistryFetch
 	/** The settings the connector still needs, each as a line that says how to set it. */
@@ -91,16 +91,16 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
 			owners.set(tool.name, name)
 		}
-		const { login, registries, missingSettings } = host
+		const { signIn, registries, missingSettings } = host
 		loaded.push({
 			package: name,
 			name: host.name,
 			tools,
-			...(login === undefined
+			...(signIn === undefined
 				? {}
 				: {
-						login: async (context: LoginContext) => {
-							await login({ ...context, credentials })
+						signIn: async (context: SignInContext) => {
+							await signIn({ ...context, credentials })
 							signInCount.finished++
 						},
 					}),
@@ -171,11 +171,11 @@ async function importHost(name: string, from: string): Promise<ConnectorHost> {
 	}
 	const parsed = HostModule.safeParse(await import(url))
 	if (!parsed.success) throw new Error(`${specifier} doesn't export a connector host: export \`connector\` made with connectorHost.`)
-	const { name: connectorName, tools, login, registries, missingSettings } = parsed.data.connector
+	const { name: connectorName, tools, signIn, registries, missingSettings } = parsed.data.connector
 	return {
 		name: connectorName,
 		tools,
-		...(login === undefined ? {} : { login }),
+		...(signIn === undefined ? {} : { signIn }),
 		...(registries === undefined ? {} : { registries }),
 		...(missingSettings === undefined ? {} : { missingSettings }),
 	}

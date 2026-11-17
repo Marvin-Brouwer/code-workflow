@@ -37,7 +37,7 @@ async function setUp({
 	const credentials = connectorCredentials(store, 'aws')
 	const aws = await fakeAws(now, {})
 	const host = awsConnectorHost({ endpoints: aws.endpoints, now, wait: () => Promise.resolve() })
-	if (signedIn) await host.login?.({ credentials, show: () => undefined, abortSignal })
+	if (signedIn) await host.signIn?.({ credentials, show: () => undefined, abortSignal })
 	const resolve = host.registries?.({ directory: home, credentials })
 	if (resolve === undefined) throw new Error('The AWS connector has no registries.')
 	const repository = fakeCodeArtifact()

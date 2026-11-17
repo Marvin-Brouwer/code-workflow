@@ -202,7 +202,7 @@ export class Engine {
 	 * Waits until the user signed in to `connector`, joining the sign-in runs wait for, if one is under
 	 * way, so `mesh-flow login` and the runs share one code. Aborting `abortSignal` stops waiting.
 	 */
-	async signIn(connector: string, abortSignal: AbortSignal): Promise<void> {
+	async waitForSignIn(connector: string, abortSignal: AbortSignal): Promise<void> {
 		this.#assertOpen()
 		if (this.#signIns === undefined) throw noSignInError(connector)
 		await this.#signIns.waitFor(connector, this.#withLifetime(abortSignal))

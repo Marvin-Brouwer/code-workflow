@@ -3,7 +3,8 @@ import { abortable } from '@mesh-flow/sandbox'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { messageOf } from '../errors.mts'
 import { EngineError } from './engine-error.mts'
-import { signInFailedLine, type SignInState } from './sign-in-state.mts'
+import { signInFailedLine, signInPromptMessage } from './sign-in-lines.mts'
+import { shownSignInPrompt, type SignInState } from './sign-in-state.mts'
 
 /**
  * The sign-ins runs and `mesh-flow login` wait for. There is one at a time per connector, whoever
@@ -24,8 +25,8 @@ export interface SignIns {
 
 /** What {@link openSignIns} works on. */
 export interface SignInsOptions {
-	/** The connectors the engine loaded. Those with a `login` can be signed in to. */
-	readonly connectors: readonly Pick<LoadedConnector, 'name' | 'login'>[]
+	/** The connectors the engine loaded. Those with a `signIn` can be signed in to. */
+	readonly connectors: readonly Pick<LoadedConnector, 'name' | 'signIn'>[]
 	/** Where to say what happened, such as a failed try. Default: nowhere. */
 	readonly log?: (message: string) => void
 	/**
@@ -69,10 +70,10 @@ interface SignIn {
 export function openSignIns(options: SignInsOptions): SignIns {
 	const log = options.log ?? (() => undefined)
 	const retryMs = options.retryMs ?? defaultRetryMs
-	const logins = new Map(options.connectors.flatMap(({ name, login }) => (login === undefined ? [] : [[name, login] as const])))
+	const signInTo = new Map(options.connectors.flatMap(({ name, signIn }) => (signIn === undefined ? [] : [[name, signIn] as const])))
 	const underWay = new Map<string, SignIn>()
 
-	const start = (connector: string, login: NonNullable<LoadedConnector['login']>): SignIn => {
+	const start = (connector: string, signInOnce: NonNullable<LoadedConnector['signIn']>): SignIn => {
 		const controller = new AbortController()
 		const abortSignal = controller.signal
 		const shown: Shown = {}
@@ -80,12 +81,12 @@ export function openSignIns(options: SignInsOptions): SignIns {
 			let waitMs = retryMs
 			for (;;) {
 				try {
-					await login({
+					await signInOnce({
 						show: (prompt) => {
 							waitMs = retryMs
 							delete shown.error
-							shown.prompt = { url: prompt.url, code: prompt.code, expiresAt: prompt.expiresAt.toISOString() }
-							log(`Sign in to ${connector}: open ${prompt.url} and check that it shows ${prompt.code}.`)
+							shown.prompt = shownSignInPrompt(prompt)
+							log(signInPromptMessage(connector, shown.prompt))
 						},
 						abortSignal,
 					})
@@ -114,12 +115,12 @@ export function openSignIns(options: SignInsOptions): SignIns {
 	}
 
 	return Object.freeze<SignIns>({
-		has: (connector) => logins.has(connector),
+		has: (connector) => signInTo.has(connector),
 		waitFor: async (connector, abortSignal) => {
-			const login = logins.get(connector)
-			if (login === undefined) throw noSignInError(connector)
+			const signInOnce = signInTo.get(connector)
+			if (signInOnce === undefined) throw noSignInError(connector)
 			abortSignal.throwIfAborted()
-			const signIn = underWay.get(connector) ?? start(connector, login)
+			const signIn = underWay.get(connector) ?? start(connector, signInOnce)
 			signIn.waiters++
 			try {
 				await abortable(signIn.done, abortSignal)

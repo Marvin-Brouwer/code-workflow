@@ -28,7 +28,7 @@ export function awsConnectorHost(options: AwsConnectorOptions = {}): ConnectorHo
 		return opened
 	}
 	return connectorHost(awsConnector, ({ credentials }) => awsHostTools(sessionOf(credentials)), {
-		login: (context) => signIn(context, options),
+		signIn: (context) => signIn(context, options),
 		registries: ({ credentials }) => codeArtifactFetch(sessionOf(credentials)),
 		async missingSettings(credentials, abortSignal) {
 			try {

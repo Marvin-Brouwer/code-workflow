@@ -45,7 +45,7 @@ export {
 } from '../providers/provider-settings.mts'
 export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
-export type { ConnectorLogin, ConnectorLoginContext, LoginPrompt } from '../tools/connector-login.mts'
+export type { ConnectorSignIn, ConnectorSignInContext, SignInPrompt } from '../tools/connector-sign-in.mts'
 export {
 	connectorHost,
 	hostTool,
@@ -59,5 +59,5 @@ export {
 	type HostToolContext,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
-export { SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
+export { loginCommand, SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
 export { untilAborted } from '../until-aborted.mts'

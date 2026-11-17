@@ -239,7 +239,7 @@ await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left
 			cloud.signedIn = true
 			return Promise.resolve()
 		})
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }] })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
 		const { engine, apps } = await openEngine({ tools: [session], signIns })
 		await deployTestApp(
 			apps,

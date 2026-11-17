@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
-import type { LoginContext } from '../src/connectors/load-connectors.mts'
+import type { SignInContext } from '../src/connectors/load-connectors.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns } from '../src/engine/sign-ins.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
@@ -17,7 +17,7 @@ const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSign
 const promptlyMs = 5_000
 
 /** An engine on the host backend whose connectors are `cloud`, signing in with `login`, closed when the test ends. */
-async function openEngine(login: (context: LoginContext) => Promise<void>, home?: string) {
+async function openEngine(login: (context: SignInContext) => Promise<void>, home?: string) {
 	const directory = home ?? (await temporaryDirectory())
 	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
 	const engine = await Engine.open(
@@ -26,7 +26,7 @@ async function openEngine(login: (context: LoginContext) => Promise<void>, home?
 			store: openRunStore(path.join(directory, 'runs')),
 			apps,
 			layout: hostSandboxLayout,
-			signIns: openSignIns({ connectors: [{ name: 'cloud', login }, { name: 'tracker' }] }),
+			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn: login }, { name: 'tracker' }] }),
 		},
 		abortSignal,
 	)
@@ -104,7 +104,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		await untilCalled(login)
 
 		// Act
-		const fromCli = engine.signIn('cloud', abortSignal)
+		const fromCli = engine.waitForSignIn('cloud', abortSignal)
 		approve()
 		await fromCli
 		await untilStatus(engine, id, 'succeeded')
