@@ -5,6 +5,7 @@ import {
 	type Answer,
 	type CallAnswer,
 	type CallMessage,
+	type LoginAnswer,
 	type LoginRequest,
 	type RunStart,
 	type RuntimeEvent,
@@ -387,7 +388,7 @@ export class Engine {
 				for (const request of resumed.pending) {
 					// The user may have signed in while the run was paused: the runtime calls its host tool
 					// again, which asks for a new sign-in if it still needs one.
-					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, runSignal)
+					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, { resumed: true }, runSignal)
 					else this.#schedule(record.id, channel, request, runSignal)
 				}
 				await this.#pump(record.id, channel, runSignal)
@@ -706,15 +707,21 @@ export class Engine {
 		} finally {
 			logins?.delete(request.id)
 		}
-		await this.#answerLogin(id, channel, request, abortSignal)
+		await this.#answerLogin(id, channel, request, {}, abortSignal)
 	}
 
 	/** Answers a run's `login`, so the runtime calls its host tool again. A failure fails the run. */
-	async #answerLogin(id: RunId, channel: SandboxChannel, request: LoginRequest, abortSignal: AbortSignal): Promise<void> {
+	async #answerLogin(
+		id: RunId,
+		channel: SandboxChannel,
+		request: LoginRequest,
+		answer: LoginAnswer,
+		abortSignal: AbortSignal,
+	): Promise<void> {
 		// A sign-in an attempt that ended waited for isn't for the next one.
 		if (this.#active.get(id)?.channel !== channel) return
 		try {
-			await this.#deliver(id, request.id, {}, abortSignal)
+			await this.#deliver(id, request.id, { value: answer }, abortSignal)
 		} catch (error) {
 			if (abortSignal.aborted) return
 			// The runtime would wait for the answer until the run ends, although the user signed in.

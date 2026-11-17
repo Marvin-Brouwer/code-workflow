@@ -89,9 +89,14 @@ export function openSignIns(options: SignInsOptions): SignIns {
 	const signInTo = new Map(options.connectors.flatMap(({ name, signIn }) => (signIn === undefined ? [] : [[name, signIn] as const])))
 	const underWay = new Map<string, SignIn>()
 
-	const stop = (connector: string, signIn: SignIn, reason: string) => {
+	/** Drops `signIn` from those under way, with its idle timer. */
+	const forget = (connector: string, signIn: SignIn) => {
 		clearTimeout(signIn.idle)
 		if (underWay.get(connector) === signIn) underWay.delete(connector)
+	}
+
+	const stop = (connector: string, signIn: SignIn, reason: string) => {
+		forget(connector, signIn)
 		signIn.controller.abort(new Error(reason))
 	}
 
@@ -128,11 +133,10 @@ export function openSignIns(options: SignInsOptions): SignIns {
 		}
 		const signIn: SignIn = { controller, settled: tryUntilSignedIn(), shown, waiters: 0 }
 		signIn.settled.catch(() => undefined)
-		const forget = () => {
-			clearTimeout(signIn.idle)
-			if (underWay.get(connector) === signIn) underWay.delete(connector)
+		const forgetIt = () => {
+			forget(connector, signIn)
 		}
-		void signIn.settled.then(forget, forget)
+		void signIn.settled.then(forgetIt, forgetIt)
 		underWay.set(connector, signIn)
 		return signIn
 	}

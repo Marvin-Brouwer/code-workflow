@@ -3,7 +3,10 @@ import { rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { Gateway } from '@mesh-flow/gateway'
-import { stagedFileName, type Answer, type CallMessage } from '@mesh-flow/protocol'
+import { stagedFileName, type Answer, type CallMessage, type LoginAnswer } from '@mesh-flow/protocol'
+
+/** What the engine answers a resumed run's `login` with. */
+const resumedAnswer: LoginAnswer = { resumed: true }
 import { onTestFinished } from 'vitest'
 import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
@@ -15,6 +18,8 @@ const settleTimeoutMs = 5_000
 export interface GatewayChannelOptions {
 	/** Answers a `login` request once it resolves, as the engine does once the user signed in. Without it, a login is never answered. */
 	readonly signIn?: (connector: string) => Promise<void>
+	/** How many `login` requests to answer first as a resume does, before `signIn` gets any. Default: none. */
+	readonly resumes?: number
 	/** Told when the runtime cancels a `login` it asked for. */
 	readonly signInCancelled?: (connector: string) => void
 }
@@ -42,6 +47,7 @@ export function gatewayChannel(
 	const answers = new Map<string, PromiseWithResolvers<Answer>>()
 	const running = new Map<string, AbortController>()
 	const logins = new Map<string, string>()
+	let resumesLeft = options.resumes ?? 0
 	const slot = (id: string) => {
 		const known = answers.get(id)
 		if (known !== undefined) return known
@@ -70,6 +76,11 @@ export function gatewayChannel(
 			if (message.type === 'request' && message.request.kind === 'login') {
 				const { id, connector } = message.request
 				logins.set(id, connector)
+				if (resumesLeft > 0) {
+					resumesLeft--
+					slot(id).resolve({ value: resumedAnswer })
+					return
+				}
 				options.signIn?.(connector).then(
 					() => {
 						slot(id).resolve({})

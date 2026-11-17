@@ -48,8 +48,8 @@ describe('the AWS session', () => {
 
 	test('fetches role credentials once, and again when they near their end', async () => {
 		// Arrange
-		const { aws, clock, login, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
-		await login()
+		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
+		await signInUser()
 		const opened = session()
 		const first = await opened.roleCredentials(abortSignal)
 		const again = await opened.roleCredentials(abortSignal)
@@ -66,8 +66,8 @@ describe('the AWS session', () => {
 
 	test('fetches new role credentials at once when the role in the settings changes', async () => {
 		// Arrange
-		const { credentials, login, session } = await setUp()
-		await login()
+		const { credentials, signInUser, session } = await setUp()
+		await signInUser()
 		const opened = session()
 		const before = await opened.roleCredentials(abortSignal)
 
@@ -81,8 +81,10 @@ describe('the AWS session', () => {
 
 	test('renews the access token with the refresh token, and keeps the new one', async () => {
 		// Arrange
-		const { credentials, clock, login, session } = await setUp({ fake: { roleCredentialsMs: shortRoleCredentialsMinutes * msPerMinute } })
-		await login()
+		const { credentials, clock, signInUser, session } = await setUp({
+			fake: { roleCredentialsMs: shortRoleCredentialsMinutes * msPerMinute },
+		})
+		await signInUser()
 		const opened = session()
 		await opened.roleCredentials(abortSignal)
 
@@ -96,8 +98,8 @@ describe('the AWS session', () => {
 
 	test('keeps the renewed session when the caller that started the renewal stops halfway', async () => {
 		// Arrange
-		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
-		await login()
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		await signInUser()
 		clock.advance(accessTokenNearEndMinutes)
 		const refreshes = holdRefreshes(aws)
 		const stop = new AbortController()
@@ -120,8 +122,8 @@ describe('the AWS session', () => {
 
 	test("lets a caller that comes during a stopped caller's renewal wait for it, rather than renew again", async () => {
 		// Arrange
-		const { aws, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
-		await login()
+		const { aws, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		await signInUser()
 		clock.advance(accessTokenNearEndMinutes)
 		const refreshes = holdRefreshes(aws)
 		const opened = session()
@@ -149,8 +151,8 @@ describe('the AWS session', () => {
 
 	test('keeps the session of a sign-in that came between a renewal and its write', async () => {
 		// Arrange
-		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
-		await login()
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		await signInUser()
 		clock.advance(accessTokenNearEndMinutes)
 		const refreshes = holdRefreshes(aws)
 		const fetching = session().roleCredentials(abortSignal)
@@ -159,7 +161,7 @@ describe('the AWS session', () => {
 		})
 
 		// Act
-		await login()
+		await signInUser()
 		refreshes.release()
 		await fetching
 
@@ -169,8 +171,8 @@ describe('the AWS session', () => {
 
 	test('uses the session of a sign-in that came between, when Identity Center refuses the renewal it replaced', async () => {
 		// Arrange
-		const { aws, credentials, clock, login, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
-		await login()
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		await signInUser()
 		clock.advance(accessTokenNearEndMinutes)
 		const refreshes = holdRefreshes(aws)
 		const fetching = session().roleCredentials(abortSignal)
@@ -179,7 +181,7 @@ describe('the AWS session', () => {
 		})
 
 		// Act
-		await login()
+		await signInUser()
 		aws.state.refreshWorks = false
 		refreshes.release()
 		const fetched = await fetching
@@ -191,8 +193,8 @@ describe('the AWS session', () => {
 
 	test('renews the access token once when the portal turns it down before its time', async () => {
 		// Arrange
-		const { aws, credentials, login, session } = await setUp()
-		await login()
+		const { aws, credentials, signInUser, session } = await setUp()
+		await signInUser()
 		aws.state.portalRejects = 1
 
 		// Act
@@ -205,8 +207,8 @@ describe('the AWS session', () => {
 
 	test('needs a sign-in when the access portal keeps turning the token down', async () => {
 		// Arrange
-		const { aws, login, session } = await setUp()
-		await login()
+		const { aws, signInUser, session } = await setUp()
+		await signInUser()
 		aws.state.portalRejects = Infinity
 
 		// Act
@@ -218,10 +220,10 @@ describe('the AWS session', () => {
 
 	test('keeps using the last credentials once the session ended, until they run out', async () => {
 		// Arrange
-		const { aws, clock, login, session } = await setUp({
+		const { aws, clock, signInUser, session } = await setUp({
 			fake: { accessTokenSeconds: shortAccessTokenSeconds, roleCredentialsMs: roleCredentialsMinutes * msPerMinute },
 		})
-		await login()
+		await signInUser()
 		const opened = session()
 		const last = await opened.roleCredentials(abortSignal)
 		aws.state.refreshWorks = false
@@ -240,10 +242,10 @@ describe('the AWS session', () => {
 
 	test('needs a sign-in once the last credentials are too close to their end for a call', async () => {
 		// Arrange
-		const { aws, clock, login, session } = await setUp({
+		const { aws, clock, signInUser, session } = await setUp({
 			fake: { accessTokenSeconds: shortAccessTokenSeconds, roleCredentialsMs: roleCredentialsMinutes * msPerMinute },
 		})
-		await login()
+		await signInUser()
 		const opened = session()
 		await opened.roleCredentials(abortSignal)
 		aws.state.refreshWorks = false
@@ -258,8 +260,8 @@ describe('the AWS session', () => {
 
 	test('hands out a CodeArtifact token per domain, renewed together with the role credentials', async () => {
 		// Arrange
-		const { aws, clock, login, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
-		await login()
+		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
+		await signInUser()
 		const opened = session()
 		const first = await opened.codeArtifactToken(domain, abortSignal)
 		const again = await opened.codeArtifactToken(domain, abortSignal)
@@ -278,8 +280,8 @@ describe('the AWS session', () => {
 
 	test('fetches new role credentials once when CodeArtifact turns the kept ones down', async () => {
 		// Arrange
-		const { aws, login, session } = await setUp()
-		await login()
+		const { aws, signInUser, session } = await setUp()
+		await signInUser()
 		const opened = session()
 		await opened.roleCredentials(abortSignal)
 		aws.state.codeArtifactRejects = 1
@@ -298,8 +300,8 @@ describe('the AWS session', () => {
 		['a status', '/federation/credentials', 'status'],
 	] as const)('settles %s when stopped while AWS never answers', async (_what, path, call) => {
 		// Arrange
-		const { aws, login, session } = await setUp()
-		await login()
+		const { aws, signInUser, session } = await setUp()
+		await signInUser()
 		aws.state.hold = (requested) => (requested === path ? never() : Promise.resolve())
 		const opened = session()
 		const stop = new AbortController()
@@ -325,8 +327,8 @@ describe('the AWS session', () => {
 
 	test('settles a call waiting its turn behind one AWS never answers, when stopped', async () => {
 		// Arrange
-		const { aws, login, session } = await setUp()
-		await login()
+		const { aws, signInUser, session } = await setUp()
+		await signInUser()
 		aws.state.hold = (requested) => (requested === '/federation/credentials' ? never() : Promise.resolve())
 		const opened = session()
 		const first = opened.roleCredentials(abortSignal)

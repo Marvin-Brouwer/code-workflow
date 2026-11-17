@@ -37,6 +37,14 @@ export const LoginRequest = z.object({
 })
 export type LoginRequest = z.infer<typeof LoginRequest>
 
+/**
+ * The engine's answer to a `LoginRequest`, as the answer's value. `resumed` says it answered because
+ * the run was resumed, not because the user signed in: the runtime calls the tool again, and that
+ * doesn't count as one of the call's sign-ins.
+ */
+export const LoginAnswer = z.object({ resumed: z.boolean().optional() })
+export type LoginAnswer = z.infer<typeof LoginAnswer>
+
 /** Something the runtime waits on that only the engine can answer. */
 export const RuntimeRequest = z.discriminatedUnion('kind', [InputRequest, WakeRequest, LoginRequest])
 export type RuntimeRequest = z.infer<typeof RuntimeRequest>

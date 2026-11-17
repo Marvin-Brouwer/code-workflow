@@ -50,7 +50,7 @@ export async function setUp(options: SetUpOptions = {}) {
 	const aws = await fakeAws(clock.now, options.fake)
 	const shown: SignInPrompt[] = []
 	const waited: number[] = []
-	const login = () =>
+	const signInUser = () =>
 		signIn(
 			{ credentials, show: (prompt) => shown.push(prompt), abortSignal },
 			{
@@ -63,7 +63,7 @@ export async function setUp(options: SetUpOptions = {}) {
 			},
 		)
 	const session = () => openAwsSession({ credentials, endpoints: aws.endpoints, now: clock.now })
-	return { credentials, clock, aws, shown, waited, login, session }
+	return { credentials, clock, aws, shown, waited, signInUser, session }
 }
 
 /** The session as the credential store keeps it. */

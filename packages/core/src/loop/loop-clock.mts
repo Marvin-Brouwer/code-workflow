@@ -80,14 +80,16 @@ export function waitingOnHuman<T>(body: () => Promise<T>): Promise<T> {
 
 /**
  * Runs `body`, a wait for the user to sign in, with the clocks of the loops it runs in stopped, as
- * {@link waitingOnHuman}. Out of every loop's scope, such as a package manager's fetch through the
- * package proxy, it stops the clock of every loop that runs: the package manager runs in a loop's
- * shell, and the sign-in holds that loop up.
+ * {@link waitingOnHuman}. Out of the run's scope altogether, such as a package manager's fetch
+ * through the package proxy, it stops the clock of every loop that runs when the wait starts: the
+ * package manager runs in a loop's shell, and the sign-in holds that loop up.
  */
 export function waitingOnSignIn<T>(body: () => Promise<T>): Promise<T> {
-	return whileClocksWait(findScope()?.loop?.clocks ?? [...runningClocks], body)
+	const scope = findScope()
+	return whileClocksWait(scope === undefined ? [...runningClocks] : (scope.loop?.clocks ?? []), body)
 }
 
+/** Runs `body` with each of `clocks` stopped while it runs, by nesting their `whileWaiting`. */
 function whileClocksWait<T>(clocks: readonly LoopClock[], body: () => Promise<T>): Promise<T> {
 	return clocks.reduce<() => Promise<T>>((inner, clock) => () => clock.whileWaiting(inner), body)()
 }

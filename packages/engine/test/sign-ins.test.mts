@@ -1,18 +1,27 @@
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import type { SignInContext } from '../src/connectors/load-connectors.mts'
-import { openSignIns } from '../src/engine/sign-ins.mts'
-import { approvableLogin, prompt } from './support/approvable-login.mts'
+import { openSignIns, type SignIns, type SignInsOptions } from '../src/engine/sign-ins.mts'
+import { approvableSignIn, prompt } from './support/approvable-sign-in.mts'
 
 const abortSignal = new AbortController().signal
 
 /** How long a sign-in nobody waits for goes on in these tests. */
 const shortIdleMs = 50
 
+/** Sign-ins over `options`, closed when the test ends, so a sign-in a test left idle doesn't go on. */
+function testSignIns(options: SignInsOptions): SignIns {
+	const signIns = openSignIns(options)
+	onTestFinished(() => {
+		signIns.close()
+	})
+	return signIns
+}
+
 describe('sign-ins', () => {
 	test('shares one sign-in between everyone who waits for it, and shows where to sign in', async () => {
 		// Arrange
-		const { login, approve } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const { signIn, approve } = approvableSignIn()
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }] })
 
 		// Act
 		const waits = [signIns.waitFor('cloud', abortSignal), signIns.waitFor('cloud', abortSignal)]
@@ -21,7 +30,7 @@ describe('sign-ins', () => {
 		await Promise.all(waits)
 
 		// Assert
-		expect(login).toHaveBeenCalledTimes(1)
+		expect(signIn).toHaveBeenCalledTimes(1)
 		expect(shown).toEqual([
 			{ connector: 'cloud', prompt: { url: prompt.url, code: prompt.code, expiresAt: prompt.expiresAt.toISOString() } },
 		])
@@ -30,12 +39,12 @@ describe('sign-ins', () => {
 
 	test('tries again after a failed try, and says why it failed meanwhile', async () => {
 		// Arrange
-		const { login: approvable, approve } = approvableLogin()
-		const login = vi
+		const { signIn: approvable, approve } = approvableSignIn()
+		const signIn = vi
 			.fn<(context: SignInContext) => Promise<void>>()
 			.mockRejectedValueOnce(new Error('The code ran out.'))
 			.mockImplementation(approvable)
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], retryMs: 100 })
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryMs: 100 })
 
 		// Act
 		const waiting = signIns.waitFor('cloud', abortSignal)
@@ -45,7 +54,7 @@ describe('sign-ins', () => {
 			return listed
 		})
 		await vi.waitFor(() => {
-			expect(login).toHaveBeenCalledTimes(2)
+			expect(signIn).toHaveBeenCalledTimes(2)
 		})
 		approve()
 		await waiting
@@ -61,13 +70,13 @@ describe('sign-ins', () => {
 		const timerSlackMs = 1
 		const triesBeforeCode = 3
 		const triedAt: number[] = []
-		const login = vi.fn((context: SignInContext) => {
+		const signIn = vi.fn((context: SignInContext) => {
 			triedAt.push(Date.now())
 			// The try after those gets a code, which runs out; the one after it is approved.
 			if (triedAt.length === triesBeforeCode + 1) context.show(prompt)
 			return triedAt.length === triesBeforeCode + 2 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
 		})
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], retryMs })
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryMs })
 
 		// Act
 		await signIns.waitFor('cloud', abortSignal)
@@ -82,8 +91,8 @@ describe('sign-ins', () => {
 
 	test('stops the sign-in a while after nobody waits for it any more', async () => {
 		// Arrange
-		const { login, contexts } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], idleMs: shortIdleMs })
+		const { signIn, contexts } = approvableSignIn()
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], idleMs: shortIdleMs })
 		const first = new AbortController()
 		const second = new AbortController()
 
@@ -105,8 +114,8 @@ describe('sign-ins', () => {
 
 	test('keeps the code of a sign-in nobody waited for a moment, for a package manager that tries again', async () => {
 		// Arrange
-		const { login, approve } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const { signIn, approve } = approvableSignIn()
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }] })
 		const timedOut = new AbortController()
 
 		// Act
@@ -118,13 +127,13 @@ describe('sign-ins', () => {
 		await again
 
 		// Assert
-		expect(login).toHaveBeenCalledTimes(1)
+		expect(signIn).toHaveBeenCalledTimes(1)
 	})
 
 	test('stops a sign-in nobody waits for at once when it closes', async () => {
 		// Arrange
-		const { login, contexts } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const { signIn, contexts } = approvableSignIn()
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }] })
 		const stopped = new AbortController()
 		const waiting = signIns.waitFor('cloud', stopped.signal)
 		stopped.abort(new Error('The run stopped.'))
@@ -140,7 +149,7 @@ describe('sign-ins', () => {
 
 	test('refuses a connector that does not sign in', async () => {
 		// Arrange
-		const signIns = openSignIns({ connectors: [{ name: 'tracker' }] })
+		const signIns = testSignIns({ connectors: [{ name: 'tracker' }] })
 
 		// Act
 		const waiting = signIns.waitFor('tracker', abortSignal)

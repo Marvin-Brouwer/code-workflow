@@ -27,9 +27,9 @@ async function setUp() {
 	const aws = await fakeAws(now, {})
 	const tools = new Map(awsHostTools(openAwsSession({ credentials, endpoints: aws.endpoints, now })).map((tool) => [tool.name, tool]))
 	const context: HostToolContext = { abortSignal, credentials, runId: 'run-1' }
-	const login = () =>
+	const signInUser = () =>
 		signIn({ credentials, show: () => undefined, abortSignal }, { endpoints: aws.endpoints, now, wait: () => Promise.resolve() })
-	return { tools, context, login }
+	return { tools, context, signInUser }
 }
 
 describe('AWS host tools', () => {
@@ -47,8 +47,8 @@ describe('AWS host tools', () => {
 
 	test('checkSession answers once there is a session', async () => {
 		// Arrange
-		const { tools, context, login } = await setUp()
-		await login()
+		const { tools, context, signInUser } = await setUp()
+		await signInUser()
 
 		// Act
 		const checked = await tools.get(checkSession.name)?.run({}, context)

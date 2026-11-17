@@ -3,6 +3,7 @@ import {
 	CallAnswer,
 	EndpointGrant,
 	GatewayCall,
+	LoginAnswer,
 	PackageResponse,
 	type Answer,
 	type RunGrant,
@@ -81,8 +82,8 @@ const maxSignInRoundsPerCall = 2
 
 /** A sign-in the runtime asked the engine for, and the calls that wait for it. */
 interface SignIn {
-	/** Settles once the user signed in, as the engine answers. */
-	readonly settled: Promise<void>
+	/** Settles once the engine answered: with `true` when it did because the run was resumed, not because the user signed in. */
+	readonly settled: Promise<boolean>
 	/** How many wait for it now. At 0 it is stopped. */
 	waiters: number
 	/** Stops waiting for the answer, and tells the engine nothing waits for it any more. */
@@ -150,13 +151,14 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 	/**
 	 * Asks the engine for a sign-in to `connector` and waits for it, as for a human: it doesn't count
 	 * toward a loop's `limit`. Calls that need the same sign-in share it, and once none of them waits
-	 * any more, the request is cancelled, so the engine stops asking the user for it.
+	 * any more, the request is cancelled, so the engine stops asking the user for it. Resolves to
+	 * whether the engine answered because the run was resumed, not because the user signed in.
 	 */
-	const waitForSignIn = async (connector: string, abortSignal: AbortSignal): Promise<void> => {
+	const waitForSignIn = async (connector: string, abortSignal: AbortSignal): Promise<boolean> => {
 		const signIn = signIns.get(connector) ?? askForSignIn(connector)
 		signIn.waiters++
 		try {
-			await waitingOnSignIn(() => untilAborted(signIn.settled, abortSignal))
+			return await waitingOnSignIn(() => untilAborted(signIn.settled, abortSignal))
 		} finally {
 			signIn.waiters--
 			if (signIn.waiters === 0 && signIns.get(connector) === signIn) {
@@ -170,8 +172,10 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 		const id = `login-${idPrefix}-${String(++loginCount)}`
 		const stopped = new AbortController()
 		channel.send({ type: 'request', request: { kind: 'login', id, connector } })
-		const settled = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then(() => {
-			answeredSignIns++
+		const settled = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then((answer) => {
+			const resumed = LoginAnswer.safeParse(answer.value ?? {}).data?.resumed === true
+			if (!resumed) answeredSignIns++
+			return resumed
 		})
 		settled.catch(() => undefined)
 		const signIn: SignIn = {
@@ -204,7 +208,11 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 			if (signInRounds >= maxSignInRoundsPerCall) throw new GatewayCallError(outcome.error)
 			signInRounds++
 			// A sign-in answered while the call was on its way may be the one it needs.
-			if (answeredSignIns === answeredBefore) await waitForSignIn(outcome.signInTo, abortSignal)
+			if (answeredSignIns === answeredBefore) {
+				const resumed = await waitForSignIn(outcome.signInTo, abortSignal)
+				// A resume answers without a sign-in: the call goes again without using up a round.
+				if (resumed) signInRounds--
+			}
 		}
 	}
 
