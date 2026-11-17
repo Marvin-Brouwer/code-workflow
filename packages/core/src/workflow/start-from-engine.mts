@@ -6,7 +6,7 @@ import { z } from 'zod'
 import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
 import { describeApp } from '../app/describe-app.mts'
 import { gatewayClient, type GatewayClient } from '../gateway/gateway-client.mts'
-import { gatewayPackages } from '../gateway/gateway-packages.mts'
+import { packageFetchThroughGateway } from '../gateway/gateway-packages.mts'
 import { startPackageAccess } from '../packages/package-access.mts'
 import type { PackageProxy } from '../packages/package-proxy.mts'
 import { describeError } from '../run/describe-error.mts'
@@ -107,7 +107,7 @@ async function servePackages(
 		throw new Error(`The app restores from ${registries.map(registryName).join(', ')}, which takes a gateway, and this run has none.`)
 	const { proxy, environment } = await startPackageAccess({
 		registries,
-		fetchThroughGateway: gatewayPackages(gateway),
+		fetchStaged: packageFetchThroughGateway(gateway),
 		directory: path.join(homedir(), '.mesh-flow'),
 		abortSignal,
 	})

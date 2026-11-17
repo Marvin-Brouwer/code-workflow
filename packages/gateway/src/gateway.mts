@@ -20,9 +20,9 @@ import { openRunStates, type EndpointState, type RunState } from './endpoints/ru
 import { newLoopEndpointId, newToken, tokenHash } from './endpoints/tokens.mts'
 import { messageOf } from './errors.mts'
 import { ownEntry } from './own-entry.mts'
-import type { ResolveRegistryFetch } from './packages/connector-registry.mts'
+import type { ResolveRegistryTarget } from './packages/connector-registry.mts'
 import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/fetch-from-connector-registry.mts'
-import { fetchPackage, type FetchedPackage } from './packages/fetch-package.mts'
+import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
 import { chosenModel, resolveModel } from './providers/resolve-model.mts'
@@ -43,7 +43,7 @@ export interface GatewayOptions {
 	/** Sends model requests and package fetches. Default: the global `fetch`. */
 	readonly fetch?: typeof fetch
 	/** How each connector with registries of its own, such as `aws` for CodeArtifact, reaches them, by connector. Default: none. */
-	readonly registries?: Readonly<Record<string, ResolveRegistryFetch>>
+	readonly registries?: Readonly<Record<string, ResolveRegistryTarget>>
 	/** Where fetched packages are kept for every run. Default: the `packages` folder in `home`. */
 	readonly packageCache?: PackageCache
 }
@@ -94,8 +94,8 @@ export interface InterruptedCall {
  * ([gateway plan](https://github.com/Marvin-Brouwer/code-workflow/blob/main/docs/plans/gateway-tool-calls.md)):
  * it holds the credentials and runs everything that needs one, for runs in sandboxes that hold none.
  *
- * Each run gets an endpoint for its workflow code and model calls, and each loop one for the tools
- * in its template. Every call spends a single-use token; the answer carries the next. A token that
+ * Each run gets an endpoint for its workflow code and model calls, each loop one for the tools in
+ * its template, and, when its app restores packages, the run a package endpoint. Every call spends a single-use token; the answer carries the next. A token that
  * comes again closes the run's endpoints.
  */
 export interface Gateway {
@@ -185,14 +185,14 @@ export function openGateway(options: GatewayOptions): Gateway {
 	const cache = options.packageCache ?? openPackageCache(path.join(options.home, 'packages'))
 
 	/** Fetches a package from the cache, or from its registry, and keeps it in the cache when it's one that never changes. */
-	const fetchedPackage = async (request: PackageRequest, abortSignal: AbortSignal): Promise<FetchedPackage> => {
+	const fetchedPackage = async (request: PackageRequest, abortSignal: AbortSignal): Promise<RegistryAnswer> => {
 		const { registry } = request
 		const connectorFetch = typeof registry === 'string' ? undefined : connectorRegistryFetch({ ...request, registry }, connectorRegistries)
 		const cached = await cache.get(request, abortSignal)
 		if (cached !== undefined) return cached
 		const fetched =
 			connectorFetch === undefined
-				? await fetchPackage(request, { fetchFromHost }, abortSignal)
+				? await fetchFromPublicRegistry(request, { fetchFromHost }, abortSignal)
 				: await fetchFromConnectorRegistry(
 						request,
 						await connectorFetch.resolve(connectorFetch.request, abortSignal),

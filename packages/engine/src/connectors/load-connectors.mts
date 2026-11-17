@@ -21,7 +21,7 @@ import {
 	type ConnectorSignInContext,
 	type CredentialStore,
 	type HostTool,
-	type ResolveRegistryFetch,
+	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
@@ -54,7 +54,7 @@ export interface LoadedConnector {
 	/** Signs the user in, for `mesh-flow login <name>` and runs that wait for it, when the connector's service has sessions. */
 	readonly signIn?: (context: SignInContext) => Promise<void>
 	/** How the gateway reaches the connector's package registries, when it has any. */
-	readonly registries?: ResolveRegistryFetch
+	readonly registries?: ResolveRegistryTarget
 	/** The settings the connector still needs, each as a line that says how to set it. */
 	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<string[]>
 }
@@ -104,49 +104,54 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 							signInCount.finished++
 						},
 					}),
-			...(registries === undefined ? {} : { registries: withOwnRegistrySignIns(host.name, registries(hostOptions)) }),
+			...(registries === undefined ? {} : { registries: withOwnRegistrySignIns(host.name, registries(hostOptions), signInCount) }),
 			...(missingSettings === undefined
 				? {}
-				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(credentials, abortSignal) }),
+				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(hostOptions, abortSignal) }),
 		})
 	}
 	return loaded
 }
 
-/**
- * `tool`, as the engine runs it for `connector`:
- *
- * - a sign-in it asks for has to be to its own connector's service. One to another connector's is
- *   a plain failure, so a tool can't make runs wait for a sign-in that isn't its connector's;
- * - when a sign-in to its connector finished while it ran, the tool may have read the store just
- *   before the session was written: it runs once more before it asks for another sign-in. A tool
- *   that asks for one has changed nothing yet, so running it again is safe.
- */
-function withOwnSignIns(connector: string, tool: HostTool, signInCount: { readonly finished: number }): HostTool {
-	const runOnce: HostTool['run'] = (input, context) => ownSignInsOnly(connector, tool.name, () => tool.run(input, context))
+/** How many sign-ins to a connector have finished since the engine loaded it. */
+interface SignInCount {
+	readonly finished: number
+}
+
+/** `tool`, as the engine runs it for `connector`: see {@link withOwnSignInRules}. */
+function withOwnSignIns(connector: string, tool: HostTool, signInCount: SignInCount): HostTool {
 	return Object.freeze<HostTool>({
 		name: tool.name,
-		run: async (input, context) => {
-			const finishedBefore = signInCount.finished
-			try {
-				return await runOnce(input, context)
-			} catch (error) {
-				if (signInOf(error) === undefined || signInCount.finished === finishedBefore) throw error
-				return runOnce(input, context)
-			}
-		},
+		run: (input, context) => withOwnSignInRules(connector, tool.name, signInCount, () => tool.run(input, context)),
 	})
 }
 
-/** A connector's registries, which may only ask for a sign-in to its own service, as its tools. */
-function withOwnRegistrySignIns(connector: string, resolveFetch: ResolveRegistryFetch): ResolveRegistryFetch {
-	return (request, abortSignal) => ownSignInsOnly(connector, request.registry.name, () => resolveFetch(request, abortSignal))
+/** A connector's registries, under the same rules as its tools: see {@link withOwnSignInRules}. */
+function withOwnRegistrySignIns(connector: string, resolveTarget: ResolveRegistryTarget, signInCount: SignInCount): ResolveRegistryTarget {
+	return (request, abortSignal) =>
+		withOwnSignInRules(connector, request.registry.name, signInCount, () => resolveTarget(request, abortSignal))
 }
 
 /**
- * Runs `work` of `connector`, named `what` for the error, and turns its ask for a sign-in to
- * another connector's service into a plain failure.
+ * Runs `work` of `connector`, named `what` for the error:
+ *
+ * - a sign-in it asks for has to be to its own connector's service. One to another connector's is
+ *   a plain failure, so a connector can't make runs wait for a sign-in that isn't its own;
+ * - when a sign-in to its connector finished while it ran, the work may have read the store just
+ *   before the session was written: it runs once more before it asks for another sign-in. Work
+ *   that asks for one has changed nothing yet, so running it again is safe.
  */
+async function withOwnSignInRules<T>(connector: string, what: string, signInCount: SignInCount, work: () => Promise<T>): Promise<T> {
+	const finishedBefore = signInCount.finished
+	try {
+		return await ownSignInsOnly(connector, what, work)
+	} catch (error) {
+		if (signInOf(error) === undefined || signInCount.finished === finishedBefore) throw error
+		return ownSignInsOnly(connector, what, work)
+	}
+}
+
+/** Runs `work`, and turns its ask for a sign-in to another connector's service into a plain failure. */
 async function ownSignInsOnly<T>(connector: string, what: string, work: () => Promise<T>): Promise<T> {
 	try {
 		return await work()

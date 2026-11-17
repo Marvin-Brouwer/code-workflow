@@ -35,7 +35,7 @@ export {
 export {
 	ConnectorRegistry,
 	PackageRegistry,
-	packageRegistryHosts,
+	publicRegistryHosts,
 	PackageRequest,
 	PackageResponse,
 	PublicRegistry,

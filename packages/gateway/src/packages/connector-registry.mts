@@ -10,7 +10,7 @@ export interface ConnectorRegistryRequest {
 }
 
 /** Where a fetch on a connector's registry goes, with the credential the connector adds. */
-export interface RegistryFetch {
+export interface RegistryTarget {
 	/** The URL to fetch, on the registry's host. */
 	readonly url: string
 	/** The headers to send it with, such as `authorization`. Only sent to the registry's own host, not after a redirect. */
@@ -24,10 +24,10 @@ export interface RegistryFetch {
  * in first, and an error when the fetch isn't a read on the registry.
  *
  * ```ts
- * const resolve: ResolveRegistryFetch = async ({ registry, path }, abortSignal) => {
+ * const resolve: ResolveRegistryTarget = async ({ registry, path }, abortSignal) => {
  * 	if (!registry.paths.some((prefix) => path.startsWith(prefix))) throw new Error(`${path} isn't on ${registry.name}.`)
  * 	return { url: `https://${registry.host}${path}`, headers: { authorization: `Bearer ${await token(abortSignal)}` } }
  * }
  * ```
  */
-export type ResolveRegistryFetch = (request: ConnectorRegistryRequest, abortSignal: AbortSignal) => Promise<RegistryFetch>
+export type ResolveRegistryTarget = (request: ConnectorRegistryRequest, abortSignal: AbortSignal) => Promise<RegistryTarget>

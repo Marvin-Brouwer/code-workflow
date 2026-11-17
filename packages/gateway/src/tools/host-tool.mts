@@ -1,7 +1,7 @@
 import { ConnectorName, ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
-import type { ResolveRegistryFetch } from '../packages/connector-registry.mts'
+import type { ResolveRegistryTarget } from '../packages/connector-registry.mts'
 import type { ConnectorSignIn } from './connector-sign-in.mts'
 
 /** What a host tool's action gets besides its input. */
@@ -110,7 +110,7 @@ export interface ConnectorHostOptions {
  */
 export interface ConnectorHost {
 	/** Names the connector, as a directory name: lowercase letters, digits and dashes. */
-	readonly name: string
+	readonly name: ConnectorName
 	readonly tools: (options: ConnectorHostOptions) => readonly HostTool[]
 	/** Signs the user in to the connector's service, for `mesh-flow login <name>`. Only for a service with sessions to sign in to. */
 	readonly signIn?: ConnectorSignIn
@@ -118,12 +118,12 @@ export interface ConnectorHost {
 	 * How the gateway reaches the connector's package registries, such as CodeArtifact
 	 * repositories, made with the same options as its tools. Only for a connector with registries.
 	 */
-	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryFetch
+	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryTarget
 	/**
 	 * The settings the connector still needs, each as a line that says how to set it, from its own
-	 * credentials. `mesh-flow deploy` and a trigger report them for an app that uses the connector.
+	 * credentials, made with the same options as its tools. `mesh-flow deploy` and a trigger report them for an app that uses the connector.
 	 */
-	readonly missingSettings?: (credentials: CredentialReader, abortSignal: AbortSignal) => Promise<string[]>
+	readonly missingSettings?: (options: ConnectorHostOptions, abortSignal: AbortSignal) => Promise<string[]>
 }
 
 /** What else a connector's host half brings besides its tools. */

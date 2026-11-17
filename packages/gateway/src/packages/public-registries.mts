@@ -1,4 +1,4 @@
-import { packageRegistryHosts, type PublicRegistry } from '@mesh-flow/protocol'
+import { publicRegistryHosts, type PublicRegistry } from '@mesh-flow/protocol'
 
 /** Where a public registry is, and the paths on it that are package fetches. */
 export interface PublicRegistryEndpoint {
@@ -21,11 +21,11 @@ const nugetPathPrefixes = ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/',
  */
 export const publicRegistries: Readonly<Record<PublicRegistry, PublicRegistryEndpoint>> = Object.freeze({
 	nuget: {
-		origin: `https://${packageRegistryHosts.nuget}`,
+		origin: `https://${publicRegistryHosts.nuget}`,
 		fetches: (pathname) => nugetPathPrefixes.some((prefix) => pathname.startsWith(prefix)),
 	},
 	npm: {
-		origin: `https://${packageRegistryHosts.npm}`,
+		origin: `https://${publicRegistryHosts.npm}`,
 		fetches: (pathname) => pathname.length > 1 && !pathname.startsWith('/-/'),
 	},
 })

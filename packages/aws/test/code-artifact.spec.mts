@@ -38,7 +38,8 @@ async function setUp({
 	const aws = await fakeAws(now, {})
 	const host = awsConnectorHost({ endpoints: aws.endpoints, now, wait: () => Promise.resolve() })
 	if (signedIn) await host.signIn?.({ credentials, show: () => undefined, abortSignal })
-	const resolve = host.registries?.({ directory: home, credentials })
+	const hostOptions = { directory: home, credentials }
+	const resolve = host.registries?.(hostOptions)
 	if (resolve === undefined) throw new Error('The AWS connector has no registries.')
 	const repository = fakeCodeArtifact()
 	const gateway = openGateway({
@@ -55,7 +56,7 @@ async function setUp({
 		repository,
 		aws,
 		host,
-		credentials,
+		hostOptions,
 	}
 }
 
@@ -198,8 +199,8 @@ describe('restoring from CodeArtifact', () => {
 		const set = await setUp({ signedIn: false })
 
 		// Act
-		const missing = await unset.host.missingSettings?.(unset.credentials, abortSignal)
-		const none = await set.host.missingSettings?.(set.credentials, abortSignal)
+		const missing = await unset.host.missingSettings?.(unset.hostOptions, abortSignal)
+		const none = await set.host.missingSettings?.(set.hostOptions, abortSignal)
 
 		// Assert
 		expect(missing).toEqual([expect.stringContaining(`mesh-flow credential set ${awsCredentialNames.startUrl}`)])

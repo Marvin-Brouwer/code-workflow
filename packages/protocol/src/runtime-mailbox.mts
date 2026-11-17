@@ -56,7 +56,7 @@ export class RuntimeMailbox {
 	}
 
 	/**
-	 * The run's gateway endpoint and its tokens, as JSON: check it with `EndpointGrant`. Removed once
+	 * The run's gateway endpoints and their tokens, as JSON: check it with `RunGrant`. Removed once
 	 * it's read, so the tokens are only in the runtime's memory. `undefined` when the engine wrote
 	 * none, because it has no gateway.
 	 */

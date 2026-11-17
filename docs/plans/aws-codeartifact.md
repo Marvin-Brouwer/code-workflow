@@ -134,7 +134,7 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
   the call's answer, up to 256 MB a fetch (`maxPackageBytes` in `@mesh-flow/gateway`), on the
   run's endpoint, whose four tokens model and tool calls share; staging also takes package fetches
   off those tokens. The engine writes each fetched package as a file
-  into the sandbox (`mailbox/packages/`) and the tool's answer only names it, so the mailbox carries
+  into the sandbox (`mailbox/staged/`) and the tool's answer only names it, so the mailbox carries
   small JSON and a 100 MB nupkg is never base64 in memory. The engine already reaches the sandbox
   only by writing files and running commands in it, so this is ingress only: the sandbox never
   opens a connection to anything, not even to the host.
@@ -226,7 +226,7 @@ Stacked PRs, each on the previous one's branch:
    and adds the CodeArtifact token (bearer for npm, `aws:<token>` for NuGet), on its own domain's
    host only; the gateway checks the path, follows redirects to signed downloads without the
    token, caps the body and caches `.nupkg` and `.tgz` packages on the host by registry, path and
-   `accept`. The engine writes each body into the sandbox's `mailbox/packages/` before the answer
+   `accept`. The engine writes each body into the sandbox's `mailbox/staged/` before the answer
    names it, and the proxy streams it from there. `deploy` and `trigger` report the AWS settings
    missing for an app that restores from CodeArtifact or calls an AWS tool. Package fetches go on
    a package endpoint of the run's own (a `RunGrant`'s `packages`, eight tokens), which takes

@@ -1,4 +1,4 @@
-import type { ResolveRegistryFetch } from '@mesh-flow/gateway'
+import type { ResolveRegistryTarget } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { codeArtifactFormats, codeArtifactHost, codeArtifactPath, CodeArtifactRepository } from '../registries/code-artifact-repository.mts'
 import type { AwsSession } from './aws-session.mts'
@@ -13,7 +13,7 @@ const nugetUser = 'aws'
  * `aws codeartifact login` sets them up. Without a session it throws an `AwsSignInNeededError`, so
  * the run waits for a sign-in and fetches again.
  */
-export function codeArtifactFetch(session: AwsSession): ResolveRegistryFetch {
+export function codeArtifactFetch(session: AwsSession): ResolveRegistryTarget {
 	return async ({ registry, path }, abortSignal) => {
 		const parsed = CodeArtifactRepository.safeParse(registry.settings)
 		if (!parsed.success) throw new Error(`${registry.name} isn't a CodeArtifact repository:\n${z.prettifyError(parsed.error)}`)

@@ -10,8 +10,8 @@ import {
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
 import { tokensPerPackageEndpoint, type GatewayOptions } from '../src/gateway.mts'
-import type { ResolveRegistryFetch } from '../src/packages/connector-registry.mts'
-import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
+import type { ResolveRegistryTarget } from '../src/packages/connector-registry.mts'
+import { fetchFromPublicRegistry, maxPackageBytes } from '../src/packages/fetch-from-public-registry.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
 import { SignInNeededError } from '../src/tools/sign-in-needed.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
@@ -558,7 +558,7 @@ const cloudRegistry: ConnectorRegistry = {
 }
 
 /** Resolves fetches on {@link cloudRegistry} to its host, with a bearer token. */
-const cloudResolve = vi.fn<ResolveRegistryFetch>(({ path }) =>
+const cloudResolve = vi.fn<ResolveRegistryTarget>(({ path }) =>
 	Promise.resolve({ url: `https://packages.cloud.example${path}`, headers: { authorization: 'Bearer cloud-token' } }),
 )
 
@@ -668,7 +668,7 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 
 		// Act
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
 
 		// Assert
 		await expect(fetching).rejects.toThrow('the most a package fetch takes')
@@ -679,7 +679,7 @@ describe('package calls', () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
 		const stop = new AbortController()
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -696,7 +696,7 @@ describe('package calls', () => {
 		const body = new ReadableStream<Uint8Array>()
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 		const stop = new AbortController()
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -919,7 +919,7 @@ describe('package calls', () => {
 		async (path) => {
 			// Arrange
 			const sent = vi.fn<typeof fetch>()
-			const resolve = vi.fn<ResolveRegistryFetch>()
+			const resolve = vi.fn<ResolveRegistryTarget>()
 			const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
 
 			// Act
@@ -991,7 +991,7 @@ describe('package calls', () => {
 	])('settles a package call promptly when it is stopped, even if %s never answers', async (_who, stuck) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(stuck === 'fetch' ? never : () => Promise.resolve(new Response('{}')))
-		const resolve = vi.fn<ResolveRegistryFetch>(stuck === 'resolve' ? never : cloudResolve)
+		const resolve = vi.fn<ResolveRegistryTarget>(stuck === 'resolve' ? never : cloudResolve)
 		const { gateway, grant } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
 		const accepted = await gateway.accept(
 			runId,
@@ -1015,7 +1015,7 @@ describe('package calls', () => {
 
 	test('passes on the sign-in a connector needs to fetch from its registry', async () => {
 		// Arrange
-		const resolve = vi.fn<ResolveRegistryFetch>(() => Promise.reject(new SignInNeededError('cloud', 'Sign in to cloud first.')))
+		const resolve = vi.fn<ResolveRegistryTarget>(() => Promise.reject(new SignInNeededError('cloud', 'Sign in to cloud first.')))
 		const { fetchPath } = await packageRun(vi.fn<typeof fetch>(), cloudRegistry, { registries: { cloud: resolve } })
 
 		// Act

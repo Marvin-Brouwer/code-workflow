@@ -17,7 +17,7 @@ export interface PackageProxyOptions {
 	/** Signs the certificates the proxy shows for the registries' hosts. */
 	readonly authority: CertificateAuthority
 	/** Fetches a package, through the gateway. */
-	readonly fetchThroughGateway: GatewayFetch
+	readonly fetchStaged: GatewayFetch
 	/** Stops the proxy, as {@link PackageProxy.close} does: every request it still serves is aborted. */
 	readonly abortSignal: AbortSignal
 }
@@ -106,7 +106,7 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		})
 		try {
 			const fetchAbortSignal = AbortSignal.any([stopped.signal, options.abortSignal])
-			const answer = await options.fetchThroughGateway(asked.data, fetchAbortSignal)
+			const answer = await options.fetchStaged(asked.data, fetchAbortSignal)
 			try {
 				// Opened before the head goes out, so a body that is gone is a 502 the package manager
 				// tries again, not a cut-off response.

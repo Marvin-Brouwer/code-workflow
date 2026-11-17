@@ -13,7 +13,7 @@ export type PublicRegistry = z.infer<typeof PublicRegistry>
  * The host of each public registry, as package managers ask for it over HTTPS: the runtime's proxy
  * in the sandbox takes requests for these hosts, and the gateway sends them there.
  */
-export const packageRegistryHosts: Readonly<Record<PublicRegistry, string>> = Object.freeze({
+export const publicRegistryHosts: Readonly<Record<PublicRegistry, string>> = Object.freeze({
 	nuget: 'api.nuget.org',
 	npm: 'registry.npmjs.org',
 })
@@ -78,7 +78,7 @@ export function uniqueRegistries<Registry extends PackageRegistry>(registries: r
 
 /** The host a registry's packages are asked for on. */
 export function registryHost(registry: PackageRegistry): string {
-	return typeof registry === 'string' ? packageRegistryHosts[registry] : registry.host
+	return typeof registry === 'string' ? publicRegistryHosts[registry] : registry.host
 }
 
 /** The paths on its host that are a registry's: all of them for a public one. */
@@ -106,7 +106,7 @@ export const PackageRequest = z.object({
 })
 export type PackageRequest = z.infer<typeof PackageRequest>
 
-/** Names a file the engine staged in the mailbox's `packages` folder: see `stagedFile`. */
+/** Names a file the engine staged in the mailbox's `staged` folder: see `stagedFile`. */
 export const StagedFileName = z.string().regex(stagedFileNamePattern)
 
 /**
@@ -118,7 +118,7 @@ export const PackageResponse = z.object({
 	status: z.int(),
 	/** The headers the package manager needs, such as `content-type` and `etag`. */
 	headers: z.record(z.string(), z.string()),
-	/** The body's file in the mailbox's `packages` folder. The runtime removes it once it read it. */
+	/** The body's file in the mailbox's `staged` folder. The runtime removes it once it read it. */
 	body: StagedFileName,
 	/** The body's length, in bytes. */
 	size: z.int().nonnegative(),

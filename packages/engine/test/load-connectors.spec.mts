@@ -102,7 +102,7 @@ describe('loadConnectors', () => {
 		url: 'https://packages.cloud.example' + path,
 		headers: { authorization: 'Bearer ' + (await credentials.get('cloud/token', abortSignal)) },
 	}),
-	missingSettings: async (credentials, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? ['Set cloud/start-url.'] : []),
+	missingSettings: async ({ credentials }, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? ['Set cloud/start-url.'] : []),
 }
 `
 		const from = await installed({ cloud: withRegistries })
@@ -164,6 +164,50 @@ export const connector = {
 
 		// Assert
 		await expect(fetching).resolves.toBe(2)
+	})
+
+	test("resolves a registry once more when its connector's sign-in finished while it resolved", async () => {
+		// Arrange
+		const signingIn = `let signedIn = false
+let resolves = 0
+export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: () => async ({ path }) => {
+		resolves++
+		if (resolves === 1) {
+			await globalThis.cloudRegistrySignInFinished
+			throw Object.assign(new Error('Sign in to cloud.'), { signInTo: 'cloud' })
+		}
+		if (!signedIn) throw new Error('No session.')
+		return { url: \`https://packages.cloud.example\${path}\`, headers: {} }
+	},
+	signIn: async () => {
+		signedIn = true
+	},
+}
+`
+		const from = await installed({ cloud: signingIn })
+		const { promise: signInFinished, resolve: finishSignIn } = Promise.withResolvers<undefined>()
+		Object.assign(globalThis, { cloudRegistrySignInFinished: signInFinished })
+		onTestFinished(() => {
+			Reflect.deleteProperty(globalThis, 'cloudRegistrySignInFinished')
+		})
+		const [cloud] = await loadConnectors({
+			connectors: [{ package: 'cloud' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const resolving = cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+		await cloud?.signIn?.({ show: () => undefined, abortSignal })
+		finishSignIn(undefined)
+
+		// Assert
+		await expect(resolving).resolves.toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: {} })
 	})
 
 	test("turns a tool's ask for another connector's sign-in into a plain failure", async () => {

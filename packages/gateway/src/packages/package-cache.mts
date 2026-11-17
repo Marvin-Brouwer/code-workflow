@@ -4,7 +4,7 @@ import path from 'node:path'
 import { registryKey, type PackageRequest } from '@mesh-flow/protocol'
 import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
-import type { FetchedPackage } from './fetch-package.mts'
+import type { RegistryAnswer } from './fetch-from-public-registry.mts'
 
 /**
  * The packages every run on the gateway has fetched, on the host: a published version doesn't
@@ -15,13 +15,13 @@ export interface PackageCache {
 	 * The cached answer to `request`, if it's a package that was fetched before. An entry that can't
 	 * be read, such as a damaged one, is a miss: the package is fetched again and the entry written anew.
 	 */
-	readonly get: (request: PackageRequest, abortSignal: AbortSignal) => Promise<FetchedPackage | undefined>
+	readonly get: (request: PackageRequest, abortSignal: AbortSignal) => Promise<RegistryAnswer | undefined>
 	/**
 	 * Keeps the answer to `request` when it's a package that was fetched whole. Version lists and
 	 * metadata aren't kept. Only rejects when aborted: a package that can't be kept, such as on a
 	 * full disk, was still fetched, and the next fetch tries to keep it again.
 	 */
-	readonly put: (request: PackageRequest, fetched: FetchedPackage, abortSignal: AbortSignal) => Promise<void>
+	readonly put: (request: PackageRequest, fetched: RegistryAnswer, abortSignal: AbortSignal) => Promise<void>
 }
 
 /** What the cache keeps next to a package's body. */

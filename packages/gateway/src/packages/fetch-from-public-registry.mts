@@ -27,16 +27,16 @@ const bytesPerMb = 1024 * 1024
  */
 export const maxPackageBytes = 256 * bytesPerMb
 
-/** How {@link fetchPackage} and `fetchFromConnectorRegistry` fetch. */
-export interface PackageFetchOptions {
+/** How {@link fetchFromPublicRegistry} and `fetchFromConnectorRegistry` fetch. */
+export interface RegistryFetchOptions {
 	/** The host's `fetch`. */
 	readonly fetchFromHost: typeof fetch
 	/** The largest body it takes. Default: {@link maxPackageBytes}. */
 	readonly maxBytes?: number
 }
 
-/** What a registry answered, on the host: the body is staged for the sandbox, not sent in the answer. */
-export interface FetchedPackage {
+/** What a registry answered, with the body as the registry sent it. */
+export interface RegistryAnswer {
 	readonly status: number
 	readonly headers: Readonly<Record<string, string>>
 	readonly body: Buffer
@@ -52,11 +52,11 @@ export interface FetchedPackage {
  * @throws When the path isn't a package fetch on that registry, and when the body is larger than
  * `maxBytes`.
  */
-export async function fetchPackage(
+export async function fetchFromPublicRegistry(
 	request: PackageRequest,
-	options: PackageFetchOptions,
+	options: RegistryFetchOptions,
 	abortSignal: AbortSignal,
-): Promise<FetchedPackage> {
+): Promise<RegistryAnswer> {
 	if (typeof request.registry !== 'string') throw new Error(`${registryName(request.registry)} isn't a public registry.`)
 	const registry = publicRegistries[request.registry]
 	const url = new URL(request.path, registry.origin)
@@ -93,7 +93,7 @@ export async function fetchedOf(
 	fetched: string,
 	abortSignal: AbortSignal,
 	leftOut: readonly string[] = [],
-): Promise<FetchedPackage> {
+): Promise<RegistryAnswer> {
 	const body = await cappedBody(response, maxBytes, fetched, abortSignal)
 	const headers = Object.fromEntries(
 		keptHeaders

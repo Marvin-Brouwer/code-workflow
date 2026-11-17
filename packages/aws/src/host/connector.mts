@@ -20,17 +20,17 @@ export interface AwsConnectorOptions extends SignInOptions {
  */
 export function awsConnectorHost(options: AwsConnectorOptions = {}): ConnectorHost {
 	const sessions = new WeakMap<CredentialStore, AwsSession>()
-	const sessionOf = (credentials: CredentialStore) => {
+	const sessionFor = (credentials: CredentialStore) => {
 		const known = sessions.get(credentials)
 		if (known !== undefined) return known
 		const opened = openAwsSession({ credentials, ...options })
 		sessions.set(credentials, opened)
 		return opened
 	}
-	return connectorHost(awsConnector, ({ credentials }) => awsHostTools(sessionOf(credentials)), {
+	return connectorHost(awsConnector, ({ credentials }) => awsHostTools(sessionFor(credentials)), {
 		signIn: (context) => signIn(context, options),
-		registries: ({ credentials }) => codeArtifactFetch(sessionOf(credentials)),
-		async missingSettings(credentials, abortSignal) {
+		registries: ({ credentials }) => codeArtifactFetch(sessionFor(credentials)),
+		async missingSettings({ credentials }, abortSignal) {
 			try {
 				await readAwsSettings(credentials, abortSignal)
 				return []

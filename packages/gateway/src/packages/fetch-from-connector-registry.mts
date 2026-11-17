@@ -2,16 +2,16 @@ import { registryName, type ConnectorRegistry, type PackageRequest } from '@mesh
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { ownEntry } from '../own-entry.mts'
 import { untilAborted } from '../until-aborted.mts'
-import type { ConnectorRegistryRequest, RegistryFetch, ResolveRegistryFetch } from './connector-registry.mts'
+import type { ConnectorRegistryRequest, RegistryTarget, ResolveRegistryTarget } from './connector-registry.mts'
 import {
 	anyMediaType,
 	fetchedOf,
 	maxPackageBytes,
 	sent,
 	userAgent,
-	type FetchedPackage,
-	type PackageFetchOptions,
-} from './fetch-package.mts'
+	type RegistryAnswer,
+	type RegistryFetchOptions,
+} from './fetch-from-public-registry.mts'
 
 /** How many redirects a fetch on a connector's registry follows, as to a signed download URL. */
 const maxRedirects = 3
@@ -25,13 +25,13 @@ const maxRedirects = 3
  */
 export function connectorRegistryFetch(
 	request: PackageRequest & { readonly registry: ConnectorRegistry },
-	resolvers: Readonly<Record<string, ResolveRegistryFetch>>,
-): { readonly request: ConnectorRegistryRequest; readonly resolve: ResolveRegistryFetch } {
+	resolvers: Readonly<Record<string, ResolveRegistryTarget>>,
+): { readonly request: ConnectorRegistryRequest; readonly resolve: ResolveRegistryTarget } {
 	const { registry, path, accept } = request
 	const resolve = ownEntry(resolvers, registry.connector)
 	if (resolve === undefined) throw new Error(`${registryName(registry)} needs connector ${registry.connector}, which isn't loaded.`)
 	const checked: ConnectorRegistryRequest = { registry, path, ...(accept === undefined ? {} : { accept }) }
-	if (!isConnectorRegistryFetch(checked)) throw new Error(`${path} isn't a package fetch on ${registry.name}.`)
+	if (!isConnectorRegistryRequest(checked)) throw new Error(`${path} isn't a package fetch on ${registry.name}.`)
 	return { request: checked, resolve }
 }
 
@@ -39,7 +39,7 @@ export function connectorRegistryFetch(
  * Whether `request` is a fetch on one of its connector registry's paths, already normalized (no
  * `..`, `//` or fragment), so a connector only has to say where it goes.
  */
-export function isConnectorRegistryFetch(request: ConnectorRegistryRequest): boolean {
+export function isConnectorRegistryRequest(request: ConnectorRegistryRequest): boolean {
 	const url = new URL(request.path, `https://${request.registry.host}`)
 	return (
 		url.host === request.registry.host &&
@@ -58,10 +58,10 @@ export function isConnectorRegistryFetch(request: ConnectorRegistryRequest): boo
  */
 export function fetchFromConnectorRegistry(
 	request: PackageRequest,
-	where: RegistryFetch,
-	options: PackageFetchOptions,
+	where: RegistryTarget,
+	options: RegistryFetchOptions,
 	abortSignal: AbortSignal,
-): Promise<FetchedPackage> {
+): Promise<RegistryAnswer> {
 	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
 	return untilAborted(followedFetch(request, where, options, abortSignal), abortSignal)
 }
@@ -69,10 +69,10 @@ export function fetchFromConnectorRegistry(
 /** Fetches where the connector said, following its redirects. */
 async function followedFetch(
 	request: PackageRequest,
-	where: RegistryFetch,
-	{ fetchFromHost, maxBytes = maxPackageBytes }: PackageFetchOptions,
+	where: RegistryTarget,
+	{ fetchFromHost, maxBytes = maxPackageBytes }: RegistryFetchOptions,
 	abortSignal: AbortSignal,
-): Promise<FetchedPackage> {
+): Promise<RegistryAnswer> {
 	const fetched = `${registryName(request.registry)} ${request.path}`
 	const send = retryingFetch(fetchFromHost, defaultFetchRetry)
 	const origin = new URL(where.url).origin

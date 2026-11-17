@@ -22,7 +22,7 @@ export interface MailboxLayout {
 	/** The runtime's stdout and stderr. */
 	readonly logFile: string
 	/**
-	 * The run's gateway endpoint and its tokens, an `EndpointGrant`, written by the engine before it
+	 * The run's gateway endpoints and their tokens, a `RunGrant`, written by the engine before it
 	 * starts the runtime. The runtime removes it once it has read it.
 	 */
 	readonly grantFile: string
@@ -30,7 +30,7 @@ export interface MailboxLayout {
 	 * Where the engine stages what a call fetched for the runtime, such as a package, as a file of
 	 * its own: see {@link stagedFile}. The call's answer names the file, so it stays small.
 	 */
-	readonly packages: string
+	readonly staged: string
 }
 
 /** The layout of a mailbox in `directory`. */
@@ -44,7 +44,7 @@ export function mailboxLayout(directory: string): MailboxLayout {
 		pidFile: path.posix.join(directory, 'runtime.pid'),
 		logFile: path.posix.join(directory, 'runtime.log'),
 		grantFile: path.posix.join(directory, 'gateway.json'),
-		packages: path.posix.join(directory, 'packages'),
+		staged: path.posix.join(directory, 'staged'),
 	})
 }
 
@@ -67,7 +67,7 @@ export function stagedFileName(callId: string): string {
 /** The file a staged body is in, by the name a `PackageResponse` gives it. Refuses any other name. */
 export function stagedFile(layout: MailboxLayout, name: string): string {
 	if (!stagedFileNamePattern.test(name)) throw new Error(`${name} isn't the name of a staged file.`)
-	return path.posix.join(layout.packages, name)
+	return path.posix.join(layout.staged, name)
 }
 
 /** The default mailbox directory in a sandbox. */

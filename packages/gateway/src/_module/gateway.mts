@@ -30,9 +30,9 @@ export {
 	type FetchRetryOptions,
 	type OutgoingRequest,
 } from '../http/retrying-fetch.mts'
-export type { ConnectorRegistryRequest, RegistryFetch, ResolveRegistryFetch } from '../packages/connector-registry.mts'
-export { maxPackageBytes, type FetchedPackage } from '../packages/fetch-package.mts'
-export { isPackageDownload, openPackageCache, type PackageCache } from '../packages/package-cache.mts'
+export type { ConnectorRegistryRequest, RegistryTarget, ResolveRegistryTarget } from '../packages/connector-registry.mts'
+export { maxPackageBytes, type RegistryAnswer } from '../packages/fetch-from-public-registry.mts'
+export { openPackageCache, type PackageCache } from '../packages/package-cache.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'

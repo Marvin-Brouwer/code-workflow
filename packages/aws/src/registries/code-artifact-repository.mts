@@ -9,11 +9,15 @@ export const CodeArtifactRepository = z.object({
 })
 export type CodeArtifactRepository = z.infer<typeof CodeArtifactRepository>
 
+/** A CodeArtifact domain, and the account and region it is in: a repository without its name. */
+export const CodeArtifactDomain = CodeArtifactRepository.omit({ repository: true })
+export type CodeArtifactDomain = z.infer<typeof CodeArtifactDomain>
+
 /** The package formats a repository serves to the package managers the sandbox restores with. */
 export const codeArtifactFormats = ['nuget', 'npm'] as const
 
 /** The host a CodeArtifact domain's repositories are on, as `aws codeartifact login` points package managers at it. */
-export function codeArtifactHost({ domain, owner, region }: Omit<CodeArtifactRepository, 'repository'>): string {
+export function codeArtifactHost({ domain, owner, region }: CodeArtifactDomain): string {
 	return `${domain}-${owner}.d.codeartifact.${region}.amazonaws.com`
 }
 

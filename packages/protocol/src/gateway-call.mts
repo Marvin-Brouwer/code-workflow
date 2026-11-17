@@ -64,7 +64,7 @@ export type ResolvedModel = z.infer<typeof ResolvedModel>
  * - `close`: close a loop's endpoint once the loop has settled. Only on the run's endpoint;
  * - `resolve-model`: which provider serves a model, model first;
  * - `model`: send a model request with the provider's credential;
- * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's endpoint.
+ * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's package endpoint, a `RunGrant`'s `packages`.
  */
 export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('tool'), tool: ToolName, input: z.unknown() }),

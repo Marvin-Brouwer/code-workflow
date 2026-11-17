@@ -37,7 +37,7 @@ describe('RuntimeMailbox', () => {
 
 		// Assert
 		expect(staged).toBe(stagedFile(mailboxLayout('/mailbox'), 'call-1.body'))
-		expect(staged).toMatch(/[/\\]packages[/\\]call-1\.body$/)
+		expect(staged).toMatch(/[/\\]staged[/\\]call-1\.body$/)
 		expect(elsewhere).toThrow("isn't the name of a staged file")
 	})
 

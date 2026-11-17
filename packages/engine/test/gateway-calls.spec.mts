@@ -384,8 +384,8 @@ await new Promise(() => {})
 				calls: callingScript(`
 const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
 // As if the engine had staged a body for the call, and been stopped before it answered.
-const staged = process.env.MESH_FLOW_MAILBOX + '/packages/call-1.body.tmp'
-mkdirSync(process.env.MESH_FLOW_MAILBOX + '/packages', { recursive: true })
+const staged = process.env.MESH_FLOW_MAILBOX + '/staged/call-1.body.tmp'
+mkdirSync(process.env.MESH_FLOW_MAILBOX + '/staged', { recursive: true })
 writeFileSync(staged, 'cut short')
 const answer = await call('call-1', { type: 'tool', tool: 'never', input: {} }, grant.tokens[0])
 const next = await call('call-2', { type: 'tool', tool: 'echo', input: { text: 'after' } }, answer.next)

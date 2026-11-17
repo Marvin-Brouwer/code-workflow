@@ -9,7 +9,7 @@ import { keyFile, openCredentialStore, openGateway, openProviderSettings } from 
 import type { ConnectorRegistry, PackageRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
-import { gatewayPackages, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
+import { packageFetchThroughGateway, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
 import { gatewayChannel } from './support/gateway-channel.mts'
 import { storedZip } from './support/stored-zip.mts'
@@ -79,7 +79,7 @@ async function throughGateway(registries: readonly PackageRegistry[], fetchFromH
 		lifetime.abort()
 	})
 	const grant = await gateway.openRun('run-1', { tools: [], registries }, lifetime.signal)
-	return gatewayPackages(gatewayClient(gatewayChannel(gateway, 'run-1', lifetime.signal), grant, 'test', lifetime.signal))
+	return packageFetchThroughGateway(gatewayClient(gatewayChannel(gateway, 'run-1', lifetime.signal), grant, 'test', lifetime.signal))
 }
 
 /**
@@ -92,23 +92,23 @@ async function proxyWith(
 ): Promise<{ environment: PackageEnvironment; stop: AbortController; staging: string }> {
 	const staging = await temporaryDirectory()
 	let staged = 0
-	const fetchThroughGateway: GatewayFetch = async (asked, abortSignal) => {
+	const fetchStaged: GatewayFetch = async (asked, abortSignal) => {
 		const answered = await fetch(asked, abortSignal)
 		const file = path.join(staging, `call-${String(++staged)}.body`)
 		await writeFile(file, answered.body)
 		return { status: answered.status, headers: answered.headers, file, size: answered.body.length }
 	}
-	return { ...(await proxyOver(fetchThroughGateway, registries)), staging }
+	return { ...(await proxyOver(fetchStaged, registries)), staging }
 }
 
-/** Starts the proxy with `fetchThroughGateway` behind it, stopped when the test ends. */
+/** Starts the proxy with `fetchStaged` behind it, stopped when the test ends. */
 async function proxyOver(
-	fetchThroughGateway: GatewayFetch,
+	fetchStaged: GatewayFetch,
 	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
 ): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
-	const { proxy, environment } = await startPackageAccess({ registries, fetchThroughGateway, directory, abortSignal: stop.signal })
+	const { proxy, environment } = await startPackageAccess({ registries, fetchStaged, directory, abortSignal: stop.signal })
 	onTestFinished(() => proxy.close())
 	return { environment, stop }
 }
@@ -541,7 +541,7 @@ describe('package access', () => {
 		// Act
 		const { proxy, environment } = await startPackageAccess({
 			registries: ['npm'],
-			fetchThroughGateway: vi.fn<GatewayFetch>(),
+			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: stop.signal,
 		})
@@ -561,7 +561,7 @@ describe('package access', () => {
 		// Act
 		const starting = startPackageAccess({
 			registries: ['npm'],
-			fetchThroughGateway: vi.fn<GatewayFetch>(),
+			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: AbortSignal.abort(reason),
 		})

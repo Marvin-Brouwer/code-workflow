@@ -327,13 +327,13 @@ describe('an entry file started by the engine', () => {
 				result: { status: 200, headers: { 'content-type': 'application/json' }, body: stagedFileName(callId), size: body.length },
 			},
 		}
-		await mkdir(run.layout.packages, { recursive: true })
+		await mkdir(run.layout.staged, { recursive: true })
 		await writeFile(stagedFile(run.layout, stagedFileName(callId)), body)
 		await writeFile(answerFile(run.layout, callId), JSON.stringify({ value: answer }))
 
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(0)
-		expect(await readdir(run.layout.packages)).toEqual([])
+		expect(await readdir(run.layout.staged)).toEqual([])
 		expect(fetchTokens).toContain(call?.type === 'call' ? call.token : undefined)
 		expect(call).toMatchObject({
 			type: 'call',

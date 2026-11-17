@@ -1,6 +1,7 @@
 import { CodeartifactClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-codeartifact'
 import { GetRoleCredentialsCommand, SSOClient, UnauthorizedException } from '@aws-sdk/client-sso'
 import { oneAtATime, type CredentialStore } from '@mesh-flow/gateway'
+import type { CodeArtifactDomain } from '../registries/code-artifact-repository.mts'
 import { sessionAccessTokens } from './access-token.mts'
 import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
 import { readAwsSettings, settingsKey, type AwsSettings } from './aws-settings.mts'
@@ -13,14 +14,6 @@ export interface RoleCredentials {
 	readonly secretAccessKey: string
 	readonly sessionToken: string
 	readonly expiresAt: Date
-}
-
-/** A CodeArtifact domain, and the account and region it is in. */
-export interface CodeArtifactDomain {
-	readonly domain: string
-	/** The account that owns the domain. */
-	readonly owner: string
-	readonly region: string
 }
 
 /** A CodeArtifact authorization token, for a package manager's requests to the domain's repositories. */

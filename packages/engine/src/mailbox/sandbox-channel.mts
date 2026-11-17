@@ -46,7 +46,7 @@ export class SandboxChannel {
 
 	/** Makes the mailbox, readable for the runtime's user only. */
 	async prepare(abortSignal: AbortSignal): Promise<void> {
-		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.packages], abortSignal)
+		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.staged], abortSignal)
 		await this.#run(['chmod', '700', this.#layout.directory], abortSignal)
 	}
 
