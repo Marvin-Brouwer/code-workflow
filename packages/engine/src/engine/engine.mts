@@ -33,6 +33,12 @@ import type { SignInState } from './sign-in-state.mts'
 import { noSignInError, type SignIns } from './sign-ins.mts'
 import { wakeAt } from './wake-at.mts'
 
+/** The answer to a run's `login` once the user signed in. */
+const signedInLogin: LoginAnswer = {}
+
+/** The answer to a resumed run's `login`: the call goes again, and asks again if it still needs a sign-in. */
+const resumedLogin: LoginAnswer = { resumed: true }
+
 /** What an engine runs on. */
 export interface EngineOptions {
 	/** Where the runs' sandboxes are made. */
@@ -388,7 +394,7 @@ export class Engine {
 				for (const request of resumed.pending) {
 					// The user may have signed in while the run was paused: the runtime calls its host tool
 					// again, which asks for a new sign-in if it still needs one.
-					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, { resumed: true }, runSignal)
+					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, resumedLogin, runSignal)
 					else this.#schedule(record.id, channel, request, runSignal)
 				}
 				await this.#pump(record.id, channel, runSignal)
@@ -707,7 +713,7 @@ export class Engine {
 		} finally {
 			logins?.delete(request.id)
 		}
-		await this.#answerLogin(id, channel, request, {}, abortSignal)
+		await this.#answerLogin(id, channel, request, signedInLogin, abortSignal)
 	}
 
 	/** Answers a run's `login`, so the runtime calls its host tool again. A failure fails the run. */

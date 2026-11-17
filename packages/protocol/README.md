@@ -24,6 +24,9 @@ const { value } = await mailbox.answer('story', abortSignal)
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'tomorrow', at: '2026-11-08T09:00:00Z' } })
 await mailbox.answer('tomorrow', abortSignal)
 
+mailbox.send({ type: 'request', request: { kind: 'login', id: 'aws-1', connector: 'aws' } })
+await mailbox.answer('aws-1', abortSignal) // check its value with LoginAnswer
+
 mailbox.send({ type: 'succeeded' })
 ```
 
@@ -57,14 +60,15 @@ The runtime appends one message per line to `outbox.jsonl`:
 | `{ type: 'call', id, endpoint, token, call }` | a call to the gateway on the host, answered in the inbox under `id` (see [Calls](#calls)) |
 | `{ type: 'cancel', id }` | the runtime stopped waiting for call `id`; the host stops it and still answers |
 
-There are two kinds of request:
+There are three kinds of request:
 
 | Request | Answered |
 |---|---|
 | `{ kind: 'input', id, question, fields }` | by a human. `fields` holds JSON Schema per field, and the runtime validates the answer |
 | `{ kind: 'wake', id, at }` | by the engine's clock at `at`. Timers inside a sandbox disagree across a pause, so the engine keeps the time |
+| `{ kind: 'login', id, connector }` | by the engine, once the user signed in to the connector's service, or with `{ resumed: true }` when the run was resumed instead (`LoginAnswer`); the runtime then calls the host tool again |
 
-The engine writes each answer to `inbox/<request id>.json`, as `{ value }`, or `{}` for a wake. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters. An answer stays in the inbox, so an id is used once per run attempt: a workflow that waits in a loop gives each wait its own id, such as `poll-ci-3`. `RuntimeMailbox` throws when a request id comes again.
+The engine writes each answer to `inbox/<request id>.json`, as `{ value }`: `{}` for a wake, a `LoginAnswer` as the value for a login. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters. An answer stays in the inbox, so an id is used once per run attempt: a workflow that waits in a loop gives each wait its own id, such as `poll-ci-3`. `RuntimeMailbox` throws when a request id comes again.
 
 ## Calls
 

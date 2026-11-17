@@ -133,10 +133,10 @@ export function openSignIns(options: SignInsOptions): SignIns {
 		}
 		const signIn: SignIn = { controller, settled: tryUntilSignedIn(), shown, waiters: 0 }
 		signIn.settled.catch(() => undefined)
-		const forgetIt = () => {
+		const forgetThisSignIn = () => {
 			forget(connector, signIn)
 		}
-		void signIn.settled.then(forgetIt, forgetIt)
+		void signIn.settled.then(forgetThisSignIn, forgetThisSignIn)
 		underWay.set(connector, signIn)
 		return signIn
 	}
