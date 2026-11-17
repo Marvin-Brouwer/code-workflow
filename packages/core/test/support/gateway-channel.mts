@@ -8,6 +8,9 @@ import { onTestFinished } from 'vitest'
 import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
 
+/** How long the end of a test waits for the calls still being answered. */
+const settleTimeoutMs = 5_000
+
 /** What else the channel answers besides calls. */
 export interface GatewayChannelOptions {
 	/** Answers a `login` request once it resolves, as the engine does once the user signed in. Without it, a login is never answered. */
@@ -28,7 +31,13 @@ export function gatewayChannel(
 	options: GatewayChannelOptions = {},
 ): GatewayChannel {
 	const staging = mkdtempSync(path.join(tmpdir(), 'mesh-flow-staged-'))
-	onTestFinished(() => rm(staging, { recursive: true, force: true }))
+	const answering = new Set<Promise<void>>()
+	// The gateway writes a call's run state until the call settles, so the test's directories go
+	// only once the calls are done.
+	onTestFinished(async () => {
+		await untilAborted(Promise.allSettled(answering), AbortSignal.timeout(settleTimeoutMs)).catch(() => undefined)
+		await rm(staging, { recursive: true, force: true })
+	})
 	const stagedFile = (name: string) => path.join(staging, name)
 	const answers = new Map<string, PromiseWithResolvers<Answer>>()
 	const running = new Map<string, AbortController>()
@@ -71,9 +80,11 @@ export function gatewayChannel(
 				)
 			}
 			if (message.type !== 'call') return
-			answer(message).catch((error: unknown) => {
+			const answered = answer(message).catch((error: unknown) => {
 				slot(message.id).reject(error)
 			})
+			answering.add(answered)
+			void answered.finally(() => answering.delete(answered))
 		},
 		async take(requestId, abortSignal) {
 			const taken = await untilAborted(slot(requestId).promise, abortSignal)
