@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
-import { renewAheadMs } from '../src/host/renewal.mts'
+import { renewAheadMs, useAheadMs } from '../src/host/renewal.mts'
 import { AwsSignInNeededError } from '../src/host/sign-in-needed.mts'
 import { msPerMinute } from '../src/host/time.mts'
 import { abortSignal, domain, holdRefreshes, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
@@ -236,6 +236,24 @@ describe('the AWS session', () => {
 		expect(stillUsed).toBe(last)
 		await expect(afterwards).rejects.toThrow(AwsSignInNeededError)
 		expect(await opened.status(abortSignal)).toBe('sign-in-needed')
+	})
+
+	test('needs a sign-in once the last credentials are too close to their end for a call', async () => {
+		// Arrange
+		const { aws, clock, login, session } = await setUp({
+			fake: { accessTokenSeconds: shortAccessTokenSeconds, roleCredentialsMs: roleCredentialsMinutes * msPerMinute },
+		})
+		await login()
+		const opened = session()
+		await opened.roleCredentials(abortSignal)
+		aws.state.refreshWorks = false
+
+		// Act
+		clock.advance(roleCredentialsMinutes - useAheadMs / 2 / msPerMinute)
+		const almostOver = opened.roleCredentials(abortSignal)
+
+		// Assert
+		await expect(almostOver).rejects.toThrow(AwsSignInNeededError)
 	})
 
 	test('hands out a CodeArtifact token per domain, renewed together with the role credentials', async () => {

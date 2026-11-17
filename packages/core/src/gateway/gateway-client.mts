@@ -9,7 +9,7 @@ import {
 	type RuntimeMessage,
 } from '@mesh-flow/protocol'
 import { z } from 'zod'
-import { waitingOnHuman } from '../loop/loop-clock.mts'
+import { waitingOnSignIn } from '../loop/loop-clock.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import { TokenPool } from './token-pool.mts'
 
@@ -81,9 +81,9 @@ const maxSignInRoundsPerCall = 2
 
 /** A sign-in the runtime asked the engine for, and the calls that wait for it. */
 interface SignIn {
-	/** Settles when the engine answered that the user signed in. */
-	readonly answered: Promise<void>
-	/** How many calls wait for it now. At 0 it is stopped. */
+	/** Settles once the user signed in, as the engine answers. */
+	readonly settled: Promise<void>
+	/** How many wait for it now. At 0 it is stopped. */
 	waiters: number
 	/** Stops waiting for the answer, and tells the engine nothing waits for it any more. */
 	readonly stop: () => void
@@ -156,7 +156,7 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 		const signIn = signIns.get(connector) ?? askForSignIn(connector)
 		signIn.waiters++
 		try {
-			await waitingOnHuman(() => untilAborted(signIn.answered, abortSignal))
+			await waitingOnSignIn(() => untilAborted(signIn.settled, abortSignal))
 		} finally {
 			signIn.waiters--
 			if (signIn.waiters === 0 && signIns.get(connector) === signIn) {
@@ -170,12 +170,12 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 		const id = `login-${idPrefix}-${String(++loginCount)}`
 		const stopped = new AbortController()
 		channel.send({ type: 'request', request: { kind: 'login', id, connector } })
-		const answered = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then(() => {
+		const settled = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then(() => {
 			answeredSignIns++
 		})
-		answered.catch(() => undefined)
+		settled.catch(() => undefined)
 		const signIn: SignIn = {
-			answered,
+			settled,
 			waiters: 0,
 			stop: () => {
 				stopped.abort(new Error(`Nothing waits for the sign-in to ${connector} any more.`))
@@ -185,7 +185,7 @@ export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix
 		const forget = () => {
 			if (signIns.get(connector) === signIn) signIns.delete(connector)
 		}
-		void answered.then(forget, forget)
+		void settled.then(forget, forget)
 		signIns.set(connector, signIn)
 		return signIn
 	}

@@ -4,6 +4,10 @@ import { openSignIns } from '../src/engine/sign-ins.mts'
 import { approvableLogin, prompt } from './support/approvable-login.mts'
 
 const abortSignal = new AbortController().signal
+
+/** How long a sign-in nobody waits for goes on in these tests. */
+const shortIdleMs = 50
+
 describe('sign-ins', () => {
 	test('shares one sign-in between everyone who waits for it, and shows where to sign in', async () => {
 		// Arrange
@@ -76,24 +80,61 @@ describe('sign-ins', () => {
 		expect(waited[3]).toBeLessThan(4 * retryMs)
 	})
 
-	test('stops the sign-in once nobody waits for it any more', async () => {
+	test('stops the sign-in a while after nobody waits for it any more', async () => {
 		// Arrange
 		const { login, contexts } = approvableLogin()
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }], idleMs: shortIdleMs })
 		const first = new AbortController()
 		const second = new AbortController()
 
 		// Act
 		const waits = [signIns.waitFor('cloud', first.signal), signIns.waitFor('cloud', second.signal)]
 		first.abort(new Error('The first run stopped.'))
-		const stillUnderWay = contexts[0]?.abortSignal.aborted
 		second.abort(new Error('The second run stopped.'))
 		const outcomes = await Promise.allSettled(waits)
+		const stillUnderWay = !(contexts[0]?.abortSignal.aborted ?? true)
 
 		// Assert
-		expect(stillUnderWay).toBe(false)
-		expect(contexts[0]?.abortSignal.aborted).toBe(true)
+		expect(stillUnderWay).toBe(true)
 		expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected'])
+		await vi.waitFor(() => {
+			expect(contexts[0]?.abortSignal.aborted).toBe(true)
+		})
+		expect(signIns.list()).toEqual([])
+	})
+
+	test('keeps the code of a sign-in nobody waited for a moment, for a package manager that tries again', async () => {
+		// Arrange
+		const { login, approve } = approvableLogin()
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const timedOut = new AbortController()
+
+		// Act
+		const first = signIns.waitFor('cloud', timedOut.signal)
+		timedOut.abort(new Error('The package manager timed out.'))
+		await first.catch(() => undefined)
+		const again = signIns.waitFor('cloud', abortSignal)
+		approve()
+		await again
+
+		// Assert
+		expect(login).toHaveBeenCalledTimes(1)
+	})
+
+	test('stops a sign-in nobody waits for at once when it closes', async () => {
+		// Arrange
+		const { login, contexts } = approvableLogin()
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const stopped = new AbortController()
+		const waiting = signIns.waitFor('cloud', stopped.signal)
+		stopped.abort(new Error('The run stopped.'))
+		await waiting.catch(() => undefined)
+
+		// Act
+		signIns.close()
+
+		// Assert
+		expect(contexts[0]?.abortSignal.aborted).toBe(true)
 		expect(signIns.list()).toEqual([])
 	})
 

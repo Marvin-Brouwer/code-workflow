@@ -9,6 +9,7 @@ List the repository in the sandbox's `registries`. `dotnet restore` and `npm ci`
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { develop } from './develop.mts'
 
 export default defineMeshFlow({
 	sandbox: image({
@@ -22,17 +23,21 @@ export default defineMeshFlow({
 - The run's package proxy takes the fetch for `<domain>-<owner>.d.codeartifact.<region>.amazonaws.com`, below the repository's `/nuget/<repository>/` and `/npm/<repository>/`, and the host fetches it with a CodeArtifact token from the session: a bearer token for npm, the password of the user `aws` for NuGet, as `aws codeartifact login` sets them up. The token goes to the repository's own domain only, and not along a redirect to a signed download.
 - Only reads go through: the proxy refuses anything but a `GET`, so nothing can publish or delete.
 - The packages are cached on the host, so a warm restore doesn't go to CodeArtifact. Whether a package comes from the repository or its upstreams stays CodeArtifact's setup.
-- Without a session, the fetch waits for a sign-in like an AWS tool does, so a restore that hits it takes longer, or times out in the package manager if nobody signs in.
+- Without a session, the fetch waits for a sign-in like an AWS tool does, so a restore that hits it takes longer, or times out in the package manager if nobody signs in. A package manager that timed out and tries again finds the same code to approve: the sign-in goes on until its code runs out.
 - `mesh-flow deploy` and a trigger say which AWS settings are still missing for an app that restores from CodeArtifact or calls an AWS tool.
 
 Code fetches from it with `fetchPackage` from `@mesh-flow/core`, as from any registry the app restores from:
 
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
-import { fetchPackage } from '@mesh-flow/core'
+import { fetchPackage, workflow } from '@mesh-flow/core'
 
 const packages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
-const index = await fetchPackage({ registry: packages, path: '/nuget/packages/v3/index.json' }, abortSignal)
+
+export const packageIndex = workflow('package-index', async ({ abortSignal }) => {
+	const index = await fetchPackage({ registry: packages, path: '/nuget/packages/v3/index.json' }, abortSignal)
+	return index.body.toString('utf8')
+})
 ```
 
 ## In a workflow
@@ -77,9 +82,9 @@ import { keyFile, openCredentialStore } from '@mesh-flow/gateway'
 
 const credentials = openCredentialStore('/srv/mesh-flow/credentials.json', keyFile('/srv/mesh-flow/store.key'))
 const abortSignal = AbortSignal.timeout(30_000)
-const aws = openAwsSession({ credentials })
-const { accessKeyId, secretAccessKey, sessionToken } = await aws.roleCredentials(abortSignal)
-const { token } = await aws.codeArtifactToken({ domain: 'example', owner: '123456789012', region: 'eu-west-1' }, abortSignal)
+const session = openAwsSession({ credentials })
+const { accessKeyId, secretAccessKey, sessionToken } = await session.roleCredentials(abortSignal)
+const { token } = await session.codeArtifactToken({ domain: 'example', owner: '123456789012', region: 'eu-west-1' }, abortSignal)
 ```
 
 - Role credentials come from the access portal for the account and role in the settings. They are kept in memory only, fetched again when they near their end, and at once when the settings change.

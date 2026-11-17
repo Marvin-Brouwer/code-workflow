@@ -26,13 +26,16 @@ async function openEngine(login: (context: SignInContext) => Promise<void>, home
 			store: openRunStore(path.join(directory, 'runs')),
 			apps,
 			layout: hostSandboxLayout,
-			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn: login }, { name: 'tracker' }] }),
+			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn: login }, { name: 'tracker' }], idleMs: shortIdleMs }),
 		},
 		abortSignal,
 	)
 	onTestFinished(() => engine.close(deadlines()))
 	return { engine, apps, home: directory }
 }
+
+/** How long a sign-in nobody waits for goes on in these tests. */
+const shortIdleMs = 50
 
 /** How long the runtime that cancels its login waits before it does, so the sign-in has started. */
 const cancelAfterMs = 1_000
@@ -113,7 +116,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		expect(login).toHaveBeenCalledTimes(1)
 	})
 
-	test('pauses a run that waits for a sign-in on close, and signs in again once it is resumed', async () => {
+	test('pauses a run that waits for a sign-in on close, and answers it once resumed, without a new sign-in', async () => {
 		// Arrange
 		const first = approvableLogin({ honoursAbort: false })
 		const opened = await openEngine(first.login)
@@ -127,13 +130,12 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 
 		// Act
 		const resumed = await reopened.engine.resume(id, abortSignal)
-		await untilCalled(second.login)
-		second.approve()
 		await untilStatus(reopened.engine, id, 'succeeded')
 
 		// Assert
 		expect(first.contexts[0]?.abortSignal.aborted).toBe(true)
 		expect(resumed.pending).toEqual([{ kind: 'login', id: 'login-1', connector: 'cloud' }])
+		expect(second.login).not.toHaveBeenCalled()
 	})
 
 	test('shuts down promptly while a run waits for a sign-in that never settles', async () => {
@@ -155,7 +157,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		expect(engine.get(id).status).toBe('paused')
 	})
 
-	test('stops the sign-in a run cancels, while the run goes on', async () => {
+	test('stops the sign-in a run cancels a while after, while the run goes on', async () => {
 		// Arrange
 		const { login, contexts } = approvableLogin({ honoursAbort: false })
 		const { engine, apps } = await openEngine(login)

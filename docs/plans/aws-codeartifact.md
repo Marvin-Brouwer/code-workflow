@@ -1,7 +1,8 @@
 # Plan: AWS sign-in and CodeArtifact restores
 
-Status: agreed 2026-11-16; delivery steps 1 (no direct egress), 2 (the AWS host half) and 3 (the
-`login` request) built, step 4 not. Covers the first part of roadmap step 5 of
+Status: agreed 2026-11-16; delivery steps 1 (no direct egress), 2 (the AWS host half), 3 (the
+`login` request) and 4 (CodeArtifact restores) built. The "As built" notes under each delivery step
+say where the build differs from the design above them. Covers the first part of roadmap step 5 of
 [`../design.md`](../design.md#roadmap): an AWS session on the host that the user signs in to
 interactively, `checkSession`, and package restores from a private CodeArtifact repository in the
 sandbox. Publishing to CodeArtifact, other AWS operations and the package managers beyond npm and
@@ -82,16 +83,16 @@ work:
 
 - **Up front:** `mesh-flow login aws` prints the URL and code, waits for the approval, and stores
   the session.
-- **From a run, when it's needed:** any host tool that needs AWS, such as `codeArtifact.fetch`,
-  finds no valid session and the run waits for a sign-in right there, in front of the call. Nothing
+- **From a run, when it's needed:** any host tool or registry fetch that needs AWS, such as a
+  restore from CodeArtifact, finds no valid session and the run waits for a sign-in right there, in front of the call. Nothing
   has to call `checkSession` first. `mesh-flow list` shows `needs login: aws`, `mesh-flow show <run>`
   shows the URL and code. The engine polls `CreateToken` itself, so there's nothing to answer: the
   call goes on once the approval is in. Every run waiting on the AWS session waits on the same
   device authorization.
 
 A run waiting for a sign-in is waiting on a human, like `input`: it doesn't count towards a loop's
-`limit`, and it survives an engine restart (a new device authorization is started if the old one
-expired meanwhile). This needs one new request kind in `@mesh-flow/protocol`, `login`, which the
+`limit`, and it survives an engine restart (once resumed, the call is made again, and asks for a
+new sign-in only if it still needs one). This needs one new request kind in `@mesh-flow/protocol`, `login`, which the
 engine answers instead of a human. The UI later turns it into a notification with a button.
 
 ### 3. `checkSession`
@@ -109,7 +110,7 @@ The trigger doesn't refuse a run without a session (unlike a missing model provi
 signing in is something the run can wait for. `deploy` and `trigger` do say when the AWS settings
 themselves are missing, the same way they report missing host tools.
 
-### 4. The registry shim (sandbox)
+### 4. The package proxy (sandbox)
 
 The sandbox gets no direct egress at all (Marvin, 2026-11-16): every package fetch, from
 CodeArtifact and from public registries alike, is a tool call to the host. That supersedes "public
@@ -117,9 +118,9 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
 `egress` hosts of PR #26; the sandbox runs without a network on every backend.
 
 - **Fetches are tool calls**, so code and a user can make them too, not only a package manager:
-  `codeArtifact.fetch({ repository, format, path })` with the CodeArtifact token on the host, and
-  `fetchPackage({ registry, path }, abortSignal)` from `@mesh-flow/core` for the public registries
-  the app allows (nuget.org, npmjs), without a credential. Both only accept the read paths of the
+  `fetchPackage({ registry, path }, abortSignal)` from `@mesh-flow/core`, for the public registries
+  the app allows (nuget.org, npmjs) without a credential, and for a CodeArtifact repository
+  (`registry: codeArtifact(...)`) with the CodeArtifact token added on the host. Both only accept the read paths of the
   format: for **NuGet v3** the service index, the flat container (version lists and `.nupkg`
   downloads) and the registration resources restore reads; for **npm** package documents and
   tarballs. There is no write path, so nothing can publish or delete through them.
@@ -130,10 +131,9 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
   with a CA made in the sandbox for that run and put in its trust store (and `NODE_EXTRA_CA_CERTS`
   for npm); the CA's key unlocks nothing outside the sandbox. It answers each request it recognizes
   with the matching tool call and refuses everything else, so there's no way out but the tools.
-- **Package bytes are staged, not sent back.** Delivery step 1 still sends them back, base64 in
-  the call's answer, up to 256 MB a fetch (`maxPackageBytes` in `@mesh-flow/gateway`), on the
-  run's endpoint, whose four tokens model and tool calls share; staging also takes package fetches
-  off those tokens. The engine writes each fetched package as a file
+- **Package bytes are staged, not sent back.** Up to 256 MB a fetch (`maxPackageBytes` in
+  `@mesh-flow/gateway`), on a package endpoint of the run's own, with tokens of its own, so package
+  fetches don't hold up model and tool calls. The engine writes each fetched package as a file
   into the sandbox (`mailbox/staged/`) and the tool's answer only names it, so the mailbox carries
   small JSON and a 100 MB nupkg is never base64 in memory. The engine already reaches the sandbox
   only by writing files and running commands in it, so this is ingress only: the sandbox never
@@ -147,8 +147,7 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
   CodeArtifact's setup, as the repository's config names it.
 
 The app declares where it restores from, since it's non-secret team config that belongs in git.
-`registries` takes a registry's name today; delivery step 3 widens it to take a CodeArtifact
-repository as well:
+`registries` takes a public registry's name or a CodeArtifact repository:
 
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
@@ -216,9 +215,11 @@ Stacked PRs, each on the previous one's branch:
    the `login` and calls again, sharing one request per connector. The engine keeps one sign-in per
    connector for every waiting run, starts a new code when one runs out, and `mesh-flow login` joins
    it while the engine serves. Connectors get only their own credentials (`<connector>/...`),
-   writable, for their tools and their sign-in. A resumed run starts a new device authorization.
+   writable, for their tools and their sign-in. A resumed run answers its `login` at once, and the
+   call asks again if it still needs a sign-in. A sign-in nobody waits for any more goes on until
+   its code runs out, so a package manager that timed out and tries again finds the same code.
    `deploy` and `trigger` saying when the AWS settings are missing came with step 4.
-4. `codeArtifact.fetch` behind the proxy, with the host cache and staged files (built). Conformance
+4. CodeArtifact restores behind the proxy, with the host cache and staged files (built). Conformance
    test against a fake CodeArtifact; then the real one by hand. As built: `codeArtifact(...)` is a
    connector's registry (connector, host, paths, settings) in `registries`, and code fetches from
    it with `fetchPackage({ registry, path })` from `@mesh-flow/core`, as from a public registry,

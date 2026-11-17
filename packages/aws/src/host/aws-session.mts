@@ -5,7 +5,7 @@ import type { CodeArtifactDomain } from '../registries/code-artifact-repository.
 import { sessionAccessTokens } from './access-token.mts'
 import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
 import { readAwsSettings, settingsKey, type AwsSettings } from './aws-settings.mts'
-import { lastsBeyondRenewal } from './renewal.mts'
+import { lastsBeyondRenewal, lastsForUse } from './renewal.mts'
 import { AwsSignInNeededError, sessionEnded } from './sign-in-needed.mts'
 
 /** Temporary credentials for the role in the settings. Kept in memory only. */
@@ -161,7 +161,7 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 				return fetched
 			} catch (error) {
 				// Whether the session is over or the portal fails for now, what was fetched holds until it runs out.
-				if (!abortSignal.aborted && kept !== undefined && kept.expiresAt > now()) return kept
+				if (!abortSignal.aborted && kept !== undefined && lastsForUse(kept.expiresAt, now())) return kept
 				throw error
 			}
 		})
@@ -196,7 +196,7 @@ export function openAwsSession(options: AwsSessionOptions): AwsSession {
 		return turns(codeArtifactTurn(key), abortSignal, async () => {
 			const role = await currentRoleCredentials(abortSignal)
 			const kept = tokens.get(key)
-			if (kept?.credentials === role && kept.token.expiresAt > now()) return kept.token
+			if (kept?.credentials === role && lastsForUse(kept.token.expiresAt, now())) return kept.token
 			try {
 				return await fetchToken(domain, key, role, abortSignal)
 			} catch (error) {

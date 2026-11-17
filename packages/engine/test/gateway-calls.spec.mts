@@ -8,6 +8,7 @@ import {
 	openProviderSettings,
 	SignInNeededError,
 	type HostTool,
+	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -45,8 +46,11 @@ async function openEngine({
 	connectorSettings,
 	signIns,
 	sandboxes,
+	registries,
 }: {
 	readonly home?: string
+	/** How the gateway reaches each connector's package registries. */
+	readonly registries?: Readonly<Record<string, ResolveRegistryTarget>>
 	/** Changes the sandboxes the host backend makes, such as to make one of their parts hang. */
 	readonly sandboxes?: (sandbox: Sandbox) => Sandbox
 	readonly tools?: readonly HostTool[]
@@ -65,6 +69,7 @@ async function openEngine({
 		providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 		tools,
 		...(fetch === undefined ? {} : { fetch }),
+		...(registries === undefined ? {} : { registries }),
 	})
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend: SandboxBackend =
@@ -264,6 +269,52 @@ mailbox.send({ type: 'succeeded' })
 		const [done] = await engine.events(run.id)
 		expect(done).toMatchObject({ first: { ok: false, signInTo: 'cloud' }, second: { ok: true, result: 'live' } })
 		expect(login).toHaveBeenCalledOnce()
+	})
+
+	test("signs in for a fetch from a connector's registry, and fetches it again, staged for the sandbox", async () => {
+		// Arrange
+		const cloud = { signedIn: false }
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/packages/'], settings: {} }
+		const resolveTarget = vi.fn<ResolveRegistryTarget>(({ path: fetched }) => {
+			if (!cloud.signedIn) return Promise.reject(new SignInNeededError('cloud'))
+			return Promise.resolve({ url: `https://packages.cloud.example${fetched}`, headers: { authorization: 'Bearer from-the-session' } })
+		})
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
+		const login = vi.fn(() => {
+			cloud.signedIn = true
+			return Promise.resolve()
+		})
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const { engine, apps } = await openEngine({ fetch: sent, signIns, registries: { cloud: resolveTarget } })
+		await deployTestApp(
+			apps,
+			{
+				calls: callingScript(`
+const request = { registry: ${JSON.stringify(registry)}, path: '/npm/packages/left-pad' }
+const first = await call('call-1', { type: 'package', request }, grant.packages.tokens[0], grant.packages.endpoint)
+mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: first.outcome.signInTo } })
+await mailbox.answer('login-1', signal)
+const second = await call('call-2', { type: 'package', request }, first.next, grant.packages.endpoint)
+const { readFile } = await import('node:fs/promises')
+const staged = await readFile(mailbox.staged(second.outcome.result.body), 'utf8')
+event('done', 'called', { first: first.outcome, staged })
+mailbox.send({ type: 'succeeded' })
+`),
+			},
+			{ registries: [registry] },
+		)
+
+		// Act
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		const [done] = await engine.events(run.id)
+		expect(done).toMatchObject({ first: { ok: false, signInTo: 'cloud' }, staged: '{"name":"left-pad"}' })
+		expect(login).toHaveBeenCalledOnce()
+		const [url, init] = sent.mock.calls[0] ?? []
+		expect(url).toBe('https://packages.cloud.example/npm/packages/left-pad')
+		expect(init?.headers).toMatchObject({ authorization: 'Bearer from-the-session' })
 	})
 
 	test("refuses a tool the app doesn't list", async () => {

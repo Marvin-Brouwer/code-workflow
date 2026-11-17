@@ -384,7 +384,12 @@ export class Engine {
 				if (!channel) return
 				const resumed = this.get(record.id)
 				resolve(resumed)
-				for (const request of resumed.pending) this.#schedule(record.id, channel, request, runSignal)
+				for (const request of resumed.pending) {
+					// The user may have signed in while the run was paused: the runtime calls its host tool
+					// again, which asks for a new sign-in if it still needs one.
+					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, runSignal)
+					else this.#schedule(record.id, channel, request, runSignal)
+				}
 				await this.#pump(record.id, channel, runSignal)
 			})
 		})
@@ -432,6 +437,7 @@ export class Engine {
 
 	async #close({ pause, backend }: CloseDeadlines): Promise<void> {
 		this.#lifetime.abort(new EngineError('conflict', 'The engine is shutting down.'))
+		this.#signIns?.close()
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
@@ -700,6 +706,11 @@ export class Engine {
 		} finally {
 			logins?.delete(request.id)
 		}
+		await this.#answerLogin(id, channel, request, abortSignal)
+	}
+
+	/** Answers a run's `login`, so the runtime calls its host tool again. A failure fails the run. */
+	async #answerLogin(id: RunId, channel: SandboxChannel, request: LoginRequest, abortSignal: AbortSignal): Promise<void> {
 		// A sign-in an attempt that ended waited for isn't for the next one.
 		if (this.#active.get(id)?.channel !== channel) return
 		try {
