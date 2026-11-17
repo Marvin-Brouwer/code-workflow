@@ -492,6 +492,20 @@ describe.skipIf(onWindows)('package proxy', () => {
 		})
 	})
 
+	test('answers 502 when the staged body is gone before it was sent, so the package manager tries again', async () => {
+		// Arrange
+		const staging = await temporaryDirectory()
+		const gone = path.join(staging, 'gone.body')
+		const { environment } = await proxyOver(() => Promise.resolve({ status: 200, headers: {}, file: gone, size: 1 }))
+		const home = await temporaryDirectory()
+
+		// Act
+		const answered = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect(answered).toBe('502')
+	})
+
 	test('stops promptly while a fetch never settles', async () => {
 		// Arrange
 		let fetchSignal: AbortSignal | undefined

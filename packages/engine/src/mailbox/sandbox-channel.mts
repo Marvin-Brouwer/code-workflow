@@ -9,7 +9,7 @@ import {
 	type RunGrant,
 	type RunStart,
 } from '@mesh-flow/protocol'
-import type { Command, Sandbox } from '@mesh-flow/sandbox'
+import { temporaryFileOf, type Command, type Sandbox } from '@mesh-flow/sandbox'
 import { pollIntervalSeconds, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */
@@ -107,7 +107,7 @@ export class SandboxChannel {
 	async unstage(names: readonly string[], abortSignal: AbortSignal): Promise<void> {
 		if (names.length === 0) return
 		const files = names.map((name) => stagedFile(this.#layout, name))
-		await this.#run(['rm', '-f', '--', ...files.flatMap((file) => [file, `${file}.tmp`])], abortSignal)
+		await this.#run(['rm', '-f', '--', ...files.flatMap((file) => [file, temporaryFileOf(file)])], abortSignal)
 	}
 
 	/** Writes the answer to a request where the runtime looks for it. */

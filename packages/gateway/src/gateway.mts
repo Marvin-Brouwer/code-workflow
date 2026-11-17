@@ -102,9 +102,9 @@ export interface Gateway {
 	/**
 	 * Opens the run's own endpoint, for the host tools its app lists, and returns its tokens: one per
 	 * call that may run at the same time. When the app restores packages, it also opens the run's
-	 * package endpoint, which only takes package fetches, with {@link tokensPerPackageEndpoint} tokens of its
-	 * own. Opening them again, for a restart, closes the earlier attempt's endpoints. The run's usage
-	 * so far stays.
+	 * package endpoint, which only takes package fetches, with {@link tokensPerPackageEndpoint}
+	 * tokens of its own. Opening them again, for a restart, closes the earlier attempt's endpoints.
+	 * The run's usage so far stays.
 	 */
 	readonly openRun: (runId: string, access: RunAccess, abortSignal: AbortSignal) => Promise<RunGrant>
 	/**
@@ -187,15 +187,15 @@ export function openGateway(options: GatewayOptions): Gateway {
 	/** Fetches a package from the cache, or from its registry, and keeps it in the cache when it's one that never changes. */
 	const fetchedPackage = async (request: PackageRequest, abortSignal: AbortSignal): Promise<FetchedPackage> => {
 		const { registry } = request
-		const onConnector = typeof registry === 'string' ? undefined : connectorRegistryFetch({ ...request, registry }, connectorRegistries)
+		const connectorFetch = typeof registry === 'string' ? undefined : connectorRegistryFetch({ ...request, registry }, connectorRegistries)
 		const cached = await cache.get(request, abortSignal)
 		if (cached !== undefined) return cached
 		const fetched =
-			onConnector === undefined
+			connectorFetch === undefined
 				? await fetchPackage(request, { fetchFromHost }, abortSignal)
 				: await fetchFromConnectorRegistry(
 						request,
-						await onConnector.resolve(onConnector.request, abortSignal),
+						await connectorFetch.resolve(connectorFetch.request, abortSignal),
 						{ fetchFromHost },
 						abortSignal,
 					)

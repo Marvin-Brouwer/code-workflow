@@ -5,6 +5,7 @@ import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
 import { startInOwnSession } from '../start-in-own-session.mts'
+import { temporaryFileOf } from '../temporary-file.mts'
 
 /** A running E2B sandbox. Its id is E2B's own sandbox id. */
 export class E2bSandbox implements Sandbox {
@@ -53,8 +54,9 @@ export class E2bSandbox implements Sandbox {
 
 	async writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void> {
 		const bound = this.#lifetime.bind(abortSignal)
-		await this.#sandbox.files.write(`${path}.tmp`, content, { signal: bound })
-		await this.#sandbox.files.rename(`${path}.tmp`, path, { signal: bound })
+		const temporary = temporaryFileOf(path)
+		await this.#sandbox.files.write(temporary, content, { signal: bound })
+		await this.#sandbox.files.rename(temporary, path, { signal: bound })
 	}
 
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {

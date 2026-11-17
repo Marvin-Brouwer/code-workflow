@@ -1,5 +1,4 @@
-import { createReadStream } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { open, rm } from 'node:fs/promises'
 import { createServer, STATUS_CODES, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
@@ -109,8 +108,15 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			const fetchAbortSignal = AbortSignal.any([stopped.signal, options.abortSignal])
 			const answer = await options.fetchThroughGateway(asked.data, fetchAbortSignal)
 			try {
-				response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
-				await pipeline(createReadStream(answer.file), response, { signal: fetchAbortSignal })
+				// Opened before the head goes out, so a body that is gone is a 502 the package manager
+				// tries again, not a cut-off response.
+				const body = (await open(answer.file)).createReadStream()
+				try {
+					response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
+					await pipeline(body, response, { signal: fetchAbortSignal })
+				} finally {
+					body.destroy()
+				}
 			} finally {
 				await rm(answer.file, { force: true })
 			}

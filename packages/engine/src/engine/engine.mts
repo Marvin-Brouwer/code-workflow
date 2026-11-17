@@ -637,7 +637,9 @@ export class Engine {
 	 */
 	async #answerInterrupted(id: RunId, channel: SandboxChannel, abortSignal: AbortSignal): Promise<void> {
 		const interrupted = (await this.#gateway?.interrupted(id, abortSignal)) ?? []
-		// A body staged for a call that was cut short is never named by an answer.
+		// A body staged for a call that was cut short is never named by an answer. After a crash
+		// between answering a call and settling it, the runtime may have the answer but not have
+		// opened the body yet: the package proxy then answers 502 and the package manager tries again.
 		await channel.unstage(
 			interrupted.map((call) => stagedFileName(call.id)),
 			abortSignal,
