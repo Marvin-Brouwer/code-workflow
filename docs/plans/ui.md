@@ -57,20 +57,39 @@ so each becomes `{ message, fix }`, with `fix` one of:
 
 The CLI keeps printing `message`. `ConnectorHost.missingSettings` changes the same way.
 
-### 3. The pages
+### 3. Tool calls in the event tree (core)
+
+- `tool-call-succeeded` carries the call's result, cut to a few KB, with bytes left out, so a chip
+  can show it. Results are already in the sandbox, so this shows nothing the run didn't have.
+- A tool may give `describe(input, output)`, which returns a line of text that titles its bar
+  ("Collected issue #63"). Without one the bar is titled by the tool's name.
+
+### 4. The pages
 
 Vertical slices, as rooted lays an app out, one folder per page with its `_routes.mts`:
 
 | Slice | Shows | Does |
 |---|---|---|
 | `runs` | every run: workflow, app, status, what it waits on; "needs input" and "needs login" on top | open a run |
-| `runs` (one run) | status, open requests, the event tree as nested lists, usage per model when done | answer a request, stop, resume, restart, sign in |
+| `runs` (one run) | status, the run as bars (below), usage per model when done | answer a request, stop, resume, restart, sign in |
 | `apps` | deployed apps, their workflows and triggers; webhooks and schedules with whether a secret is set | start a workflow from its button |
 | `start` | the workflow's parameters as a form, after the wizard | start a run, then go to it |
 | `settings/providers` | providers in order, kind, whether a key is set | add, set key, reorder, remove |
 | `settings/credentials` | credential names, never their values | set, remove; generate a webhook secret |
 | `settings/connectors` | loaded connectors, and sign-ins under way with their URL and code | sign in |
 
+- **The run view** reads top to bottom as bars, one per step, built from the event tree:
+  - a bar per tool call from code (`tool-call`, `from: 'code'`), titled by the tool, with its
+    status from `-succeeded`/`-failed`;
+  - a bar per agent invocation (`loop`): the text of its `turn`s as a stream, with its tool and
+    exit calls as chips in it; a chip opens the call's input, result or error;
+  - a bar for `input` (with the answer form in it), `wait` and login requests;
+  - steps that overlap (`Promise.all`, `inDependencyOrder` nodes) are bars stacked by start time;
+    a node is a bar grouping its own steps.
+
+  Bars are collapsed except the latest and failed ones; opening one shows more. Connectors don't
+  ship UI: every step gets these bars from the tree. The design section 10 views (lanes, a review
+  feed) can come later as first-party renderers in `@mesh-flow/ui`.
 - **The wizard** is the start page asking the engine what the app is missing first, and showing
   one form per `fix` before the parameters. Nothing missing, no wizard.
 - **Forms** come from JSON Schema, which both workflow parameters and input request `fields` are.
@@ -109,7 +128,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 Stacked PRs, each on the one before:
 
 1. This plan.
-2. Structured missing settings in the engine and the connectors.
+2. Structured missing settings in the engine and the connectors; tool results and `describe` in
+   the event tree.
 3. `mesh-flow ui`: the server, access, the settings and runs API. `@mesh-flow/ui` as an empty
    rooted app with the shell, so the command has something to serve.
 4. Settings pages and the wizard's forms.
