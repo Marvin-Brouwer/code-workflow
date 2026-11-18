@@ -1,8 +1,17 @@
 import { mkdir, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { keyFile, openCredentialStore, signInOf } from '@mesh-flow/gateway'
+import { describe, expect, onTestFinished, test } from 'vitest'
 import { loadConnectors } from '../src/connectors/load-connectors.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
+
+const abortSignal = new AbortController().signal
+
+/** A credential store of its own, in a fresh directory. */
+async function credentialStore() {
+	const home = await temporaryDirectory()
+	return openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
+}
 
 /** A host entry point that brings host tools named `tools`, under the connector name `name`. */
 function hostModule(name: string, tools: readonly string[]): string {
@@ -39,7 +48,12 @@ describe('loadConnectors', () => {
 		const directory = path.join(await temporaryDirectory(), 'connectors')
 
 		// Act
-		const loaded = await loadConnectors({ connectors: [{ package: '@team/github' }, { package: 'tracker' }], from, directory })
+		const loaded = await loadConnectors({
+			connectors: [{ package: '@team/github' }, { package: 'tracker' }],
+			from,
+			directory,
+			credentials: await credentialStore(),
+		})
 
 		// Assert
 		expect(loaded.map((connector) => [connector.package, connector.name, connector.tools.map((tool) => tool.name)])).toEqual([
@@ -50,30 +64,113 @@ describe('loadConnectors', () => {
 		await expect(loaded[0]?.tools[0]?.run({}, context)).resolves.toBe(path.join(directory, 'github'))
 	})
 
-	test("carries a connector's sign-in, for `mesh-flow login`", async () => {
+	test("carries a connector's sign-in, which only has the connector's own credentials", async () => {
 		// Arrange
-		const withLogin = `export const connector = { name: 'cloud', tools: () => [], login: () => Promise.resolve() }\n`
+		const withLogin = `export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	login: async ({ credentials, abortSignal }) => {
+		await credentials.set('cloud/session', 'token', abortSignal)
+		await credentials.get('provider/work', abortSignal)
+	},
+}
+`
 		const from = await installed({ cloud: withLogin, tracker: hostModule('tracker', ['search']) })
 		const directory = await temporaryDirectory()
+		const credentials = await credentialStore()
+		await credentials.set('provider/work', 'model key', abortSignal)
 
 		// Act
-		const loaded = await loadConnectors({ connectors: [{ package: 'cloud' }, { package: 'tracker' }], from, directory })
+		const loaded = await loadConnectors({ connectors: [{ package: 'cloud' }, { package: 'tracker' }], from, directory, credentials })
+		const signingIn = loaded[0]?.login?.({ show: () => undefined, abortSignal })
 
 		// Assert
 		expect(loaded.map((connector) => [connector.name, typeof connector.login])).toEqual([
 			['cloud', 'function'],
 			['tracker', 'undefined'],
 		])
+		await expect(signingIn).rejects.toThrow('only has the credentials named cloud/')
+		expect(await credentials.get('cloud/session', abortSignal)).toBe('token')
+	})
+
+	test("runs a tool once more when its connector's sign-in finished while it ran", async () => {
+		// Arrange
+		const signingIn = `let signedIn = false
+let runs = 0
+export const connector = {
+	name: 'cloud',
+	tools: () => [{
+		name: 'cloudFetch',
+		run: async () => {
+			runs++
+			if (runs === 1) {
+				await globalThis.cloudLoginFinished
+				throw Object.assign(new Error('Sign in to cloud.'), { signInTo: 'cloud' })
+			}
+			return signedIn ? runs : 'no session'
+		},
+	}],
+	login: async () => {
+		signedIn = true
+	},
+}
+`
+		const from = await installed({ cloud: signingIn })
+		const { promise: loginFinished, resolve: finishLogin } = Promise.withResolvers<undefined>()
+		Object.assign(globalThis, { cloudLoginFinished: loginFinished })
+		onTestFinished(() => {
+			Reflect.deleteProperty(globalThis, 'cloudLoginFinished')
+		})
+		const [cloud] = await loadConnectors({
+			connectors: [{ package: 'cloud' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const context = { abortSignal, credentials: { get: () => Promise.resolve(undefined) }, runId: 'run-1' }
+
+		// Act
+		const fetching = cloud?.tools[0]?.run({}, context)
+		await cloud?.login?.({ show: () => undefined, abortSignal })
+		finishLogin(undefined)
+
+		// Assert
+		await expect(fetching).resolves.toBe(2)
+	})
+
+	test("turns a tool's ask for another connector's sign-in into a plain failure", async () => {
+		// Arrange
+		const foreign = `export const connector = {
+	name: 'tracker',
+	tools: () => [{ name: 'search', run: async () => { throw Object.assign(new Error('Sign in.'), { signInTo: 'aws' }) } }],
+}
+`
+		const from = await installed({ tracker: foreign })
+		const [tracker] = await loadConnectors({
+			connectors: [{ package: 'tracker' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const context = { abortSignal, credentials: { get: () => Promise.resolve(undefined) }, runId: 'run-1' }
+
+		// Act
+		const searching = tracker?.tools[0]?.run({}, context)
+
+		// Assert
+		await expect(searching).rejects.toThrow('search asked for a sign-in to aws, not to its own connector tracker')
+		expect(signInOf(await searching?.catch((rejected: unknown) => rejected))).toBeUndefined()
 	})
 
 	test('names the package that is not installed or has no host entry point', async () => {
 		// Arrange
 		const from = await installed({ 'no-host': undefined })
 		const directory = await temporaryDirectory()
+		const credentials = await credentialStore()
 
 		// Act
-		const missing = loadConnectors({ connectors: [{ package: '@team/missing' }], from, directory })
-		const noHost = loadConnectors({ connectors: [{ package: 'no-host' }], from, directory })
+		const missing = loadConnectors({ connectors: [{ package: '@team/missing' }], from, directory, credentials })
+		const noHost = loadConnectors({ connectors: [{ package: 'no-host' }], from, directory, credentials })
 
 		// Assert
 		await expect(missing).rejects.toThrow("@team/missing isn't installed")
@@ -90,9 +187,11 @@ describe('loadConnectors', () => {
 		const directory = await temporaryDirectory()
 
 		// Act, Assert: one at a time, or the second rejects unhandled while the first is awaited
-		await expect(loadConnectors({ connectors: [{ package: 'plain' }], from, directory })).rejects.toThrow("doesn't export a connector host")
-		await expect(loadConnectors({ connectors: [{ package: 'one' }, { package: 'two' }], from, directory })).rejects.toThrow(
-			'one and two both bring a host tool shared',
-		)
+		await expect(
+			loadConnectors({ connectors: [{ package: 'plain' }], from, directory, credentials: await credentialStore() }),
+		).rejects.toThrow("doesn't export a connector host")
+		await expect(
+			loadConnectors({ connectors: [{ package: 'one' }, { package: 'two' }], from, directory, credentials: await credentialStore() }),
+		).rejects.toThrow('one and two both bring a host tool shared')
 	})
 })

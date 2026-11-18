@@ -13,8 +13,8 @@ export interface LoginPrompt {
 /** What a connector's sign-in gets. */
 export interface ConnectorLoginContext {
 	/**
-	 * The gateway's credentials, to read the connector's settings and keep the session it signs in
-	 * to. Unlike a host tool's, these can be written.
+	 * The connector's own credentials, named `<connector>/...`: its settings, and the session it
+	 * signs in to. Unlike a host tool's, these can be written.
 	 */
 	readonly credentials: CredentialStore
 	/** Shows the user where to sign in. Called once the service has handed out a code. */

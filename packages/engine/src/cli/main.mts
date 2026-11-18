@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
+import type { CredentialStore } from '@mesh-flow/gateway'
 import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
@@ -274,8 +275,9 @@ export async function main(argv: readonly string[]): Promise<void> {
 	addCredentialCommands(program, gatewayHome)
 	addConnectorCommands(program, home)
 	addLoginCommand(program, {
-		gatewayHome,
-		connectors: (abortSignal) => loadAddedConnectors(home(), abortSignal),
+		credentials: async (abortSignal) => (await gatewayHome(abortSignal)).credentials,
+		connectors: (credentials, abortSignal) => loadAddedConnectors(home(), credentials, abortSignal),
+		engine: client,
 	})
 
 	program
@@ -292,7 +294,10 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Shows a run, with what it waits for.')
 		.argument('<run>')
 		.action(async (run: string) => {
-			console.log(formatRun(await client().get(run, requestSignal())))
+			const abortSignal = requestSignal()
+			const record = await client().get(run, abortSignal)
+			const waitsForSignIn = record.pending.some((request) => request.kind === 'login')
+			console.log(formatRun(record, waitsForSignIn ? await client().signIns(abortSignal) : []))
 		})
 
 	program
@@ -345,11 +350,12 @@ function connectorsDirectory(home: string): string {
 }
 
 /** The connector packages the user added, resolved from the directory the command runs in. */
-async function loadAddedConnectors(home: string, abortSignal: AbortSignal): Promise<LoadedConnector[]> {
+async function loadAddedConnectors(home: string, credentials: CredentialStore, abortSignal: AbortSignal): Promise<LoadedConnector[]> {
 	return loadConnectors({
 		connectors: await openConnectorSettings(connectorSettingsFile(home)).list(abortSignal),
 		from: process.cwd(),
 		directory: connectorsDirectory(home),
+		credentials,
 	})
 }
 
@@ -357,11 +363,17 @@ async function loadAddedConnectors(home: string, abortSignal: AbortSignal): Prom
  * Serves an engine with the host tools of the connector packages the user added, resolved from the
  * directory `mesh-flow serve` runs in.
  */
-async function serveWithConnectors(home: string, options: Omit<ServeEngineOptions, 'home' | 'tools'>): Promise<ServedEngine> {
-	const connectors = await loadAddedConnectors(home, options.abortSignal)
-	for (const connector of connectors)
-		log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
-	return serveEngine({ home, tools: connectors.flatMap((connector) => connector.tools), ...options })
+async function serveWithConnectors(home: string, options: Omit<ServeEngineOptions, 'home' | 'connectors'>): Promise<ServedEngine> {
+	return serveEngine({
+		home,
+		connectors: async (credentials, abortSignal) => {
+			const connectors = await loadAddedConnectors(home, credentials, abortSignal)
+			for (const connector of connectors)
+				log(`Loaded connector ${connector.name} from ${connector.package}: ${String(connector.tools.length)} host tools.`)
+			return connectors
+		},
+		...options,
+	})
 }
 
 function parseBackend(value: string): BackendName {

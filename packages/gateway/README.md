@@ -109,7 +109,7 @@ const send = retryingFetch(fetch, defaultFetchRetry, (request) => readsOnly(requ
 
 `projectUrl` is where the footer of a post a connector signs links to, so every connector's footer points at the same place.
 
-A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.
+A connector package exports its host half from a `host` entry point, as a `ConnectorHost`: a name, and the host tools it brings, made with a directory of the connector's own for what it keeps between calls and the connector's own credentials, those named `<connector>/...`, which it may also write, such as a session it renews. The engine loads the connectors the user added (`mesh-flow connector add @mesh-flow/github`) and gives every run the tools its app lists; `gateway.missingTools(names)` says which of an app's tools no loaded connector brings, so a trigger can refuse the run before a sandbox starts.
 
 ```ts
 import { connectorHost } from '@mesh-flow/gateway'
@@ -118,7 +118,7 @@ import { commentTool } from './tools/comment.mts'
 export const connector = connectorHost('github', ({ directory }) => [commentTool(directory)])
 ```
 
-A connector whose service has sessions brings a `login` too, which `mesh-flow login <name>` runs. It gets the credential store to write to, unlike a host tool, and `show`, to tell the user where to approve the sign-in once the service hands out a code:
+A connector whose service has sessions brings a `login` too, which `mesh-flow login <name>` runs, and the engine when a run waits for a sign-in. It gets the connector's own credentials to write to, and `show`, to tell the user where to approve the sign-in once the service hands out a code:
 
 ```ts
 import { connectorHost } from '@mesh-flow/gateway'
@@ -131,6 +131,22 @@ export const connector = connectorHost('cloud', () => [], {
 		await credentials.set('cloud/session', await approved, abortSignal)
 	},
 })
+```
+
+A host tool that needs the session and finds none throws a `SignInNeededError` before it changes anything. The run then waits for the sign-in instead of failing, and its stub calls the tool again with the same input:
+
+```ts
+import { connectorHost, hostTool, SignInNeededError, type CredentialStore } from '@mesh-flow/gateway'
+import { bucketsOf, listBucketsDefinition } from './tools/buckets.mts'
+
+const listBuckets = (credentials: CredentialStore) =>
+	hostTool(listBucketsDefinition, async (_input, { abortSignal }) => {
+		const session = await credentials.get('cloud/session', abortSignal)
+		if (session === undefined) throw new SignInNeededError('cloud')
+		return bucketsOf(session, abortSignal)
+	})
+
+export const connector = connectorHost('cloud', ({ credentials }) => [listBuckets(credentials)])
 ```
 
 ## Endpoints and tokens

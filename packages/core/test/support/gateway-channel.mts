@@ -3,13 +3,27 @@ import type { Answer, CallMessage } from '@mesh-flow/protocol'
 import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
 
+/** What else the channel answers besides calls. */
+export interface GatewayChannelOptions {
+	/** Answers a `login` request once it resolves, as the engine does once the user signed in. Without it, a login is never answered. */
+	readonly signIn?: (connector: string) => Promise<void>
+	/** Told when the runtime cancels a `login` it asked for. */
+	readonly signInCancelled?: (connector: string) => void
+}
+
 /**
  * A channel straight to a gateway in this process, as the engine would carry the calls: each call
- * is accepted, answered and settled, and a cancel stops the call it names.
+ * is accepted, answered and settled, and a cancel stops the call it names or drops the sign-in.
  */
-export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal): GatewayChannel {
+export function gatewayChannel(
+	gateway: Gateway,
+	runId: string,
+	lifetime: AbortSignal,
+	options: GatewayChannelOptions = {},
+): GatewayChannel {
 	const answers = new Map<string, PromiseWithResolvers<Answer>>()
 	const running = new Map<string, AbortController>()
+	const logins = new Map<string, string>()
 	const slot = (id: string) => {
 		const known = answers.get(id)
 		if (known !== undefined) return known
@@ -29,7 +43,23 @@ export function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortS
 	}
 	return {
 		send(message) {
-			if (message.type === 'cancel') running.get(message.id)?.abort(new Error('The runtime cancelled the call.'))
+			if (message.type === 'cancel') {
+				running.get(message.id)?.abort(new Error('The runtime cancelled the call.'))
+				const connector = logins.get(message.id)
+				if (connector !== undefined) options.signInCancelled?.(connector)
+			}
+			if (message.type === 'request' && message.request.kind === 'login') {
+				const { id, connector } = message.request
+				logins.set(id, connector)
+				options.signIn?.(connector).then(
+					() => {
+						slot(id).resolve({})
+					},
+					(error: unknown) => {
+						slot(id).reject(error)
+					},
+				)
+			}
 			if (message.type !== 'call') return
 			answer(message).catch((error: unknown) => {
 				slot(message.id).reject(error)

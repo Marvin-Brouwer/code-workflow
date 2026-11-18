@@ -5,6 +5,7 @@ import {
 	openCredentialStore,
 	openGateway,
 	openProviderSettings,
+	SignInNeededError,
 	tokensPerEndpoint,
 	type Gateway,
 	type HostTool,
@@ -31,16 +32,26 @@ const echoDefinition = {
 	output: z.object({ echoed: z.string() }),
 }
 const neverDefinition = { name: 'never', input: z.object({}) }
+const sessionDefinition = { name: 'cloudSession', input: z.object({}), output: z.object({ session: z.string() }) }
 
 const echo = hostToolStub(echoDefinition)
 const never = hostToolStub(neverDefinition)
+const cloudSession = hostToolStub(sessionDefinition)
 /** A stub of a host tool the gateway doesn't have. */
 const unlisted = hostToolStub({ name: 'unlisted', input: z.object({}) })
+
+/** Whether the user signed in to `cloud`, for {@link cloudSession}, and how often it was called. */
+const cloud = { signedIn: false, calls: 0 }
 
 /** Started, and never settles until its call is stopped. */
 const neverStarted = vi.fn<(abortSignal: AbortSignal) => void>()
 const hostTools: readonly HostTool[] = [
 	hostTool(echoDefinition, ({ text }) => Promise.resolve({ echoed: text })),
+	hostTool(sessionDefinition, () => {
+		cloud.calls++
+		if (!cloud.signedIn) return Promise.reject(new SignInNeededError('cloud'))
+		return Promise.resolve({ session: 'live' })
+	}),
 	hostTool(neverDefinition, (_input, context) => {
 		neverStarted(context.abortSignal)
 		return new Promise<never>(() => undefined)
@@ -48,9 +59,19 @@ const hostTools: readonly HostTool[] = [
 ]
 
 /** A gateway in a fresh directory, and what the runtime's side needs to reach it. Records the endpoint of every call. */
-async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
+async function withGateway({
+	signIn,
+	signInCancelled,
+	...options
+}: {
+	readonly fetch?: typeof fetch
+	readonly signIn?: (connector: string) => Promise<void>
+	readonly signInCancelled?: (connector: string) => void
+} = {}) {
 	onTestFinished(() => {
 		neverStarted.mockClear()
+		cloud.signedIn = false
+		cloud.calls = 0
 	})
 	const home = await temporaryDirectory()
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
@@ -65,7 +86,16 @@ async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
 		},
 	}
 	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, abortSignal)
-	const client = (lifetime: AbortSignal) => gatewayClient(gatewayChannel(gateway, runId, lifetime), grant, 'test', lifetime)
+	const client = (lifetime: AbortSignal) =>
+		gatewayClient(
+			gatewayChannel(gateway, runId, lifetime, {
+				...(signIn === undefined ? {} : { signIn }),
+				...(signInCancelled === undefined ? {} : { signInCancelled }),
+			}),
+			grant,
+			'test',
+			lifetime,
+		)
 	return { gateway, credentials, providers, calls, client }
 }
 
@@ -102,7 +132,7 @@ describe('gateway', () => {
 		const tools = definedHostTools()
 
 		// Assert
-		expect(tools).toEqual(['echo', 'never', 'unlisted'])
+		expect(tools).toEqual(['cloudSession', 'echo', 'never', 'unlisted'])
 	})
 
 	test('runs a host tool called from code on the run endpoint', async () => {
@@ -139,6 +169,76 @@ describe('gateway', () => {
 		// Assert
 		await expect(calling).rejects.toThrow(GatewayCallError)
 		expect(calls).toEqual([])
+	})
+
+	test('waits for one sign-in when host tools need one, and calls each of them again after it', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => {
+			cloud.signedIn = true
+			return Promise.resolve()
+		})
+		const { client } = await withGateway({ signIn })
+
+		// Act
+		const run = await runBody(() => Promise.all([cloudSession({}), cloudSession({})]), { gateway: client })
+
+		// Assert
+		expect(await run.result).toEqual([{ session: 'live' }, { session: 'live' }])
+		expect(signIn.mock.calls).toEqual([['cloud']])
+		expect(cloud.calls).toBe(4)
+	})
+
+	test('fails a call whose host tool still asks for a sign-in after the user signed in', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => Promise.resolve())
+		const { client } = await withGateway({ signIn })
+
+		// Act
+		const run = await runBody(() => cloudSession({}), { gateway: client })
+
+		// Assert
+		await expect(run.result).rejects.toThrow(GatewayCallError)
+		expect(signIn).toHaveBeenCalledTimes(2)
+		expect(cloud.calls).toBe(3)
+	})
+
+	test('cancels the sign-in once no call waits for it any more', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => new Promise<void>(() => undefined))
+		const signInCancelled = vi.fn<(connector: string) => void>()
+		const { client } = await withGateway({ signIn, signInCancelled })
+		const gateway = client(abortSignal)
+		const caller = new AbortController()
+		const calling = gateway.call(gateway.run, { type: 'tool', tool: 'cloudSession', input: {} }, caller.signal)
+		calling.catch(() => undefined)
+		await vi.waitFor(() => {
+			expect(signIn).toHaveBeenCalled()
+		})
+
+		// Act
+		caller.abort(new Error('The caller stopped.'))
+
+		// Assert
+		await expect(calling).rejects.toThrow('The caller stopped.')
+		expect(signInCancelled.mock.calls).toEqual([['cloud']])
+	})
+
+	test('settles promptly when the run stops while it waits for a sign-in', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => new Promise<void>(() => undefined))
+		const { client } = await withGateway({ signIn })
+		const run = await runBody(() => cloudSession({}), { gateway: client })
+		await vi.waitFor(() => {
+			expect(signIn).toHaveBeenCalled()
+		})
+		const started = Date.now()
+
+		// Act
+		run.controller.abort(new Error('stop'))
+
+		// Assert
+		expect(await run.outcome).toMatchObject({ status: 'failed' })
+		expect(Date.now() - started).toBeLessThan(promptlyMs)
 	})
 
 	test("runs an agent's host tool on the loop's own endpoint, and closes it after the loop", async () => {

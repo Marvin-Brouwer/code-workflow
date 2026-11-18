@@ -1,10 +1,15 @@
+import type { SignInState } from '../engine/sign-in-state.mts'
 import type { RunRecord } from '../runs/run-record.mts'
 
 /** One line per run, for `list`. */
 export function formatRunLine(record: RunRecord): string {
 	const inputs = record.pending.filter((request) => request.kind === 'input').map((request) => request.id)
-	const needs = inputs.length > 0 ? `  needs input: ${inputs.join(', ')}` : ''
-	return `${record.id}  ${record.workflow}  ${record.status}${needs}`
+	const logins = [...new Set(record.pending.flatMap((request) => (request.kind === 'login' ? [request.connector] : [])))]
+	const needs = [
+		...(inputs.length > 0 ? [`needs input: ${inputs.join(', ')}`] : []),
+		...(logins.length > 0 ? [`needs login: ${logins.join(', ')}`] : []),
+	]
+	return [`${record.id}  ${record.workflow}  ${record.status}`, ...needs].join('  ')
 }
 
 /** Every label of `show` is padded to this width, and continuation lines are indented by it. */
@@ -15,8 +20,20 @@ function field(label: string, value: string): string {
 	return `  ${`${label}:`.padEnd(labelWidth - 2)}${value.replaceAll('\n', `\n${' '.repeat(labelWidth)}`)}`
 }
 
-/** Everything about one run, for `show`. */
-export function formatRun(record: RunRecord): string {
+/** Where to sign in to `connector`, as far as the engine's sign-in got. */
+function signInLines(connector: string, signIns: readonly SignInState[]): string[] {
+	const signIn = signIns.find((candidate) => candidate.connector === connector)
+	const lines: string[] = []
+	if (signIn?.prompt)
+		lines.push(`    open ${signIn.prompt.url} and check that it shows ${signIn.prompt.code}, until ${signIn.prompt.expiresAt}`)
+	else lines.push('    waiting for a code from the service')
+	if (signIn?.error) lines.push(`    the last try failed: ${signIn.error}`)
+	lines.push(`    or: mesh-flow login ${connector}`)
+	return lines
+}
+
+/** Everything about one run, for `show`, with where to sign in when it waits for a sign-in. */
+export function formatRun(record: RunRecord, signIns: readonly SignInState[] = []): string {
 	const lines = [
 		`${record.id}: ${record.workflow}, ${record.status}`,
 		field('app', `${record.app.name} ${record.app.version}`),
@@ -34,6 +51,8 @@ export function formatRun(record: RunRecord): string {
 		if (request.kind === 'input') {
 			lines.push(`  input ${request.id}: ${request.question}`, `    fields: ${JSON.stringify(request.fields)}`)
 			lines.push(`    answer: mesh-flow answer ${record.id} ${request.id} '<json>'`)
+		} else if (request.kind === 'login') {
+			lines.push(`  login ${request.id}: sign in to ${request.connector}`, ...signInLines(request.connector, signIns))
 		} else {
 			lines.push(`  wake ${request.id} at ${request.at}`)
 		}

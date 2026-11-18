@@ -1,6 +1,7 @@
 import { request } from 'node:http'
 import { AppManifest, RuntimeEvent, type TriggerRef } from '@mesh-flow/protocol'
 import { z } from 'zod'
+import { SignInState } from '../engine/sign-in-state.mts'
 import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
 
@@ -14,6 +15,7 @@ export type DeployOutcome = z.infer<typeof DeployOutcome>
 
 /** Thrown when the engine refused a request or isn't running. */
 export class ControlError extends Error {
+	/** What the engine answered. `undefined` when no engine is running. */
 	readonly status: number | undefined
 
 	constructor(message: string, status?: number) {
@@ -40,6 +42,10 @@ export interface ControlClient {
 	stop(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	/** The sign-ins under way, with where to sign in. */
+	signIns(abortSignal: AbortSignal): Promise<SignInState[]>
+	/** Waits until the user signed in to `connector`, joining the sign-in runs wait for. */
+	signIn(connector: string, abortSignal: AbortSignal): Promise<void>
 	/** Every deployed app's current version. */
 	apps(abortSignal: AbortSignal): Promise<DeployedApp[]>
 	/** Deploys the built app packed in `tarball`, on this machine, as the new current version of `name`. */
@@ -66,6 +72,10 @@ export function controlClient(socketPath: string): ControlClient {
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
+		signIns: (abortSignal) => call(socketPath, z.array(SignInState), 'GET', '/logins', undefined, abortSignal),
+		signIn: async (connector, abortSignal) => {
+			await call(socketPath, z.object({ signedIn: z.string() }), 'POST', `/logins/${encodeURIComponent(connector)}`, {}, abortSignal)
+		},
 		apps: (abortSignal) => call(socketPath, z.array(DeployedApp), 'GET', '/apps', undefined, abortSignal),
 		deploy: (name, tarball, abortSignal) =>
 			call(socketPath, DeployOutcome, 'PUT', `/apps/${encodeURIComponent(name)}`, { tarball }, abortSignal),

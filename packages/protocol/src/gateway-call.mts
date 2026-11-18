@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ConnectorName } from './connector-name.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
 
@@ -88,7 +89,10 @@ export const CallMessage = z.object({
 })
 export type CallMessage = z.infer<typeof CallMessage>
 
-/** The runtime doesn't wait for a call any more: the host stops it. It still answers, with the next token. */
+/**
+ * The runtime doesn't wait for a call, or for a `login` it asked for, any more: the host stops it.
+ * A call still answers, with the next token. A `login` isn't answered.
+ */
 export const CancelMessage = z.object({ type: z.literal('cancel'), id: RequestId })
 export type CancelMessage = z.infer<typeof CancelMessage>
 
@@ -105,6 +109,11 @@ export const CallAnswer = z.object({
 			error: z.string(),
 			/** The failure may pass on another try: the network or the service was down, or the engine stopped mid-call. */
 			transient: z.boolean().optional(),
+			/**
+			 * The call needs a session with this connector's service, and there is none: the user has to
+			 * sign in. The tool did nothing, so the runtime asks for a `login` and calls again.
+			 */
+			signInTo: ConnectorName.optional(),
 		}),
 	]),
 })

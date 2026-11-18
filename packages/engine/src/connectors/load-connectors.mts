@@ -13,7 +13,16 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ConnectorName, type ConnectorHost, type ConnectorLogin, type HostTool } from '@mesh-flow/gateway'
+import {
+	connectorCredentials,
+	signInOf,
+	type ConnectorHost,
+	type ConnectorLogin,
+	type ConnectorLoginContext,
+	type CredentialStore,
+	type HostTool,
+} from '@mesh-flow/gateway'
+import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
@@ -31,13 +40,16 @@ const HostModule = z.object({
 	}),
 })
 
+/** What a loaded connector's sign-in takes: it has the connector's own credentials already. */
+export type LoginContext = Omit<ConnectorLoginContext, 'credentials'>
+
 /** A connector the engine loaded: where it came from, the host tools it brought, and how to sign in to its service. */
 export interface LoadedConnector {
 	readonly package: string
 	readonly name: string
 	readonly tools: readonly HostTool[]
-	/** Signs the user in, for `mesh-flow login <name>`, when the connector's service has sessions. */
-	readonly login?: ConnectorLogin
+	/** Signs the user in, for `mesh-flow login <name>` and runs that wait for it, when the connector's service has sessions. */
+	readonly login?: (context: LoginContext) => Promise<void>
 }
 
 /** What `loadConnectors` takes. */
@@ -47,6 +59,8 @@ export interface LoadConnectorsOptions {
 	readonly from: string
 	/** Where connectors keep what they hold between calls: each gets a folder of its own in it. */
 	readonly directory: string
+	/** The gateway's credentials. Each connector gets the ones named after it, `<connector>/...`, to write too. */
+	readonly credentials: CredentialStore
 }
 
 /**
@@ -61,15 +75,65 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		const host = await importHost(name, options.from)
 		const directory = path.join(options.directory, host.name)
 		await mkdir(directory, { recursive: true, mode: 0o700 })
-		const tools = host.tools({ directory })
+		const credentials = connectorCredentials(options.credentials, host.name)
+		const signInCount = { finished: 0 }
+		const tools = host.tools({ directory, credentials }).map((tool) => withOwnSignIns(host.name, tool, signInCount))
 		for (const tool of tools) {
 			const owner = owners.get(tool.name)
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
 			owners.set(tool.name, name)
 		}
-		loaded.push({ package: name, name: host.name, tools, ...(host.login === undefined ? {} : { login: host.login }) })
+		const { login } = host
+		loaded.push({
+			package: name,
+			name: host.name,
+			tools,
+			...(login === undefined
+				? {}
+				: {
+						login: async (context: LoginContext) => {
+							await login({ ...context, credentials })
+							signInCount.finished++
+						},
+					}),
+		})
 	}
 	return loaded
+}
+
+/**
+ * `tool`, as the engine runs it for `connector`:
+ *
+ * - a sign-in it asks for has to be to its own connector's service. One to another connector's is
+ *   a plain failure, so a tool can't make runs wait for a sign-in that isn't its connector's;
+ * - when a sign-in to its connector finished while it ran, the tool may have read the store just
+ *   before the session was written: it runs once more before it asks for another sign-in. A tool
+ *   that asks for one has changed nothing yet, so running it again is safe.
+ */
+function withOwnSignIns(connector: string, tool: HostTool, signInCount: { readonly finished: number }): HostTool {
+	const runOnce: HostTool['run'] = async (input, context) => {
+		try {
+			return await tool.run(input, context)
+		} catch (error) {
+			const signInTo = signInOf(error)
+			if (signInTo === undefined || signInTo === connector) throw error
+			throw new Error(`${tool.name} asked for a sign-in to ${signInTo}, not to its own connector ${connector}: ${messageOf(error)}`, {
+				cause: error,
+			})
+		}
+	}
+	return Object.freeze<HostTool>({
+		name: tool.name,
+		run: async (input, context) => {
+			const finishedBefore = signInCount.finished
+			try {
+				return await runOnce(input, context)
+			} catch (error) {
+				if (signInOf(error) === undefined || signInCount.finished === finishedBefore) throw error
+				return runOnce(input, context)
+			}
+		},
+	})
 }
 
 async function importHost(name: string, from: string): Promise<ConnectorHost> {

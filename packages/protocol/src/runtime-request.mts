@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ConnectorName } from './connector-name.mts'
 import { RequestId } from './request-id.mts'
 
 /**
@@ -24,6 +25,18 @@ export const WakeRequest = z.object({
 })
 export type WakeRequest = z.infer<typeof WakeRequest>
 
+/**
+ * The runtime waits until the user signed in to a connector's service again, because a host tool
+ * answered that it needs a session. The engine runs the connector's sign-in, shows where to sign
+ * in, and answers once the user approved; the runtime then calls the tool again.
+ */
+export const LoginRequest = z.object({
+	kind: z.literal('login'),
+	id: RequestId,
+	connector: ConnectorName,
+})
+export type LoginRequest = z.infer<typeof LoginRequest>
+
 /** Something the runtime waits on that only the engine can answer. */
-export const RuntimeRequest = z.discriminatedUnion('kind', [InputRequest, WakeRequest])
+export const RuntimeRequest = z.discriminatedUnion('kind', [InputRequest, WakeRequest, LoginRequest])
 export type RuntimeRequest = z.infer<typeof RuntimeRequest>

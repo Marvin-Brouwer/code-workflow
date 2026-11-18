@@ -1,4 +1,11 @@
-import { Sandbox as MicrosandboxSdkSandbox, Snapshot, type SandboxHandle, type SnapshotHandle } from 'microsandbox'
+import {
+	Sandbox as MicrosandboxSdkSandbox,
+	SandboxNotFoundError,
+	SandboxNotRunningError,
+	Snapshot,
+	type SandboxHandle,
+	type SnapshotHandle,
+} from 'microsandbox'
 import { snapshotsOf } from './snapshots.mts'
 
 /**
@@ -25,10 +32,18 @@ export async function allSandboxes(): Promise<SandboxHandle[]> {
 export async function removeSandboxAndSnapshots(id: string): Promise<void> {
 	const handle = (await allSandboxes()).find((candidate) => candidate.name === id)
 	if (handle) {
-		if (handle.status !== 'stopped' && handle.status !== 'crashed') await handle.kill()
-		await handle.remove()
+		// The VM may have exited, or been removed, since it was listed.
+		if (handle.status !== 'stopped' && handle.status !== 'crashed') await handle.kill().catch(unlessGone)
+		await handle.remove().catch(unlessGone)
 	}
 	for (const snapshot of await snapshotsOf(id)) await removeSnapshot(snapshot, { force: true })
+}
+
+/** Rethrows anything but a VM that isn't there, or isn't running, any more. */
+function unlessGone(error: unknown): void {
+	if (error instanceof SandboxNotFoundError) return
+	if (error instanceof SandboxNotRunningError) return
+	throw error
 }
 
 /**
