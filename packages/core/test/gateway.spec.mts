@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import {
 	hostTool,
 	keyFile,
@@ -24,7 +25,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const abortSignal = new AbortController().signal
 const runId = 'run-1'
 /** How long a stopped run may take to settle while a host tool never does. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 /** How often the engine restarts, and answers a resumed run's sign-in, before the user signs in. */
 const resumesBeforeSignIn = 2
 
@@ -262,7 +263,7 @@ describe('gateway', () => {
 
 		// Assert
 		expect(await run.outcome).toMatchObject({ status: 'failed' })
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test("runs an agent's host tool on the loop's own endpoint, and closes it after the loop", async () => {
@@ -317,7 +318,7 @@ describe('gateway', () => {
 
 		// Assert
 		expect(await run.outcome).toMatchObject({ status: 'failed' })
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(neverStarted.mock.calls[0]?.[0].aborted).toBe(true)
 	})
 
@@ -336,6 +337,6 @@ describe('gateway', () => {
 
 		// Assert
 		expect(await run.outcome).toMatchObject({ status: 'failed' })
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

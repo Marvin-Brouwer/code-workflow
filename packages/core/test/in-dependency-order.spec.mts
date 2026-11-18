@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { DependencyOrderFailed, inDependencyOrder } from '../src/workflow/in-dependency-order.mts'
 import { runBody } from './support/run-body.mts'
@@ -31,7 +32,7 @@ describe('inDependencyOrder', () => {
 		const run = await runBody(() =>
 			inDependencyOrder([node('a'), node('b'), node('c')], async () => {
 				most = Math.max(most, ++running)
-				await new Promise((resolve) => setTimeout(resolve, 20))
+				await new Promise((resolve) => setTimeout(resolve, duration.of('20ms').to('ms')))
 				running--
 			}),
 		)

@@ -77,13 +77,15 @@ export function describe(agent: Agent, repository: Checkout, options: DescribeCh
 
 ```ts
 import { untilCompleted, type CommitChecks } from '@mesh-flow/code-repository'
-import { check } from '@mesh-flow/core'
+import { check, duration } from '@mesh-flow/core'
 
 declare function pipelineOf(sha: string): Promise<CommitChecks<{ readonly name: string }>>
 
+const lookEvery = duration.of('10s')
+
 const pipelinePasses = (sha: string) =>
 	check('pipeline', async () => {
-		const failures = await untilCompleted(() => pipelineOf(sha), { every: { seconds: 10 } })
+		const failures = await untilCompleted(() => pipelineOf(sha), { every: lookEvery })
 		return failures.map((failure) => ({ source: `pipeline: ${failure.name}`, message: 'failed' }))
 	})
 ```

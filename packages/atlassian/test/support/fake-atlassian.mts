@@ -1,3 +1,4 @@
+import { duration, type Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 
 /** A request the fake was sent. */
@@ -90,7 +91,7 @@ export interface FakeAtlassian {
 	/** Requests, as `METHOD /path`, that are served but answered 504: an answer a proxy lost. */
 	readonly losesAnswers: Set<string>
 	/** How long each answer takes, in milliseconds: room for calls to interleave. */
-	latencyMs: number
+	latency: Duration
 }
 
 /** The first bytes of a PNG file: enough of an image for the fake to serve. */
@@ -248,7 +249,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			body,
 			abortSignal: init?.signal ?? undefined,
 		})
-		if (state.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, state.latencyMs))
+		if (state.latency.to('ms') > 0) await new Promise((resolve) => setTimeout(resolve, state.latency.to('ms')))
 		if (hanging.has(url.pathname))
 			return new Promise<Response>((_resolve, reject) => {
 				init?.signal?.addEventListener('abort', () => {
@@ -277,7 +278,7 @@ export function fakeAtlassian(): FakeAtlassian {
 		return losesAnswers.has(`${method} ${url.pathname}`) ? json(504, { errorMessages: ['Gateway timeout'] }) : served
 	}
 
-	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, users, hanging, failNext, losesAnswers, latencyMs: 0 }
+	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, users, hanging, failNext, losesAnswers, latency: duration({}) }
 	return state
 }
 

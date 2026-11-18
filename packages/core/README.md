@@ -29,19 +29,20 @@ export const reviewer = agent({ model: 'claude-opus-5-5' })
 `loop` runs the agent until it calls one of the exits in its template, and resolves to that exit's result. Its type comes from the exits:
 
 ```ts
-import { check, fail, limit, propose, succeed, verify } from '@mesh-flow/core'
+import { check, duration, fail, limit, propose, succeed, verify } from '@mesh-flow/core'
 import { z } from 'zod'
 import { developer, planner } from './agents.mts'
 
 const story = 'stories/ABC-1.md'
 const Plan = z.object({ steps: z.array(z.string()) })
 const lint = check('lint', async () => [])
+const implementationTime = duration.of('30m')
 
 // Plan: a human approves it, or the agent gets their feedback and tries again.
 const plan = await planner.loop`Plan ${story}. Propose the plan with ${propose(Plan)}, or ${fail} when it can't be done.`
 
 // void: the agent hands in with verify, and finishes only when the checks pass.
-await developer.loop`Implement ${plan}. Hand in with ${verify(lint)}. ${limit({ turns: 40, minutes: 30 })}`
+await developer.loop`Implement ${plan}. Hand in with ${verify(lint)}. ${limit({ turns: 40, time: implementationTime })}`
 
 // { title: string }: the checks run before succeed is accepted.
 const summary = await developer.loop`Summarise the change with ${succeed(z.object({ title: z.string() }))}, after ${verify(lint)}.`
@@ -61,7 +62,7 @@ const answer = await planner.loop`What does ${story} ask for, in one sentence?`
 
 Exits and limits go in the loop's own template, never in a nested `prompt` or a system prompt: that's where `loop` reads its result type from.
 
-`limit({ turns, minutes })` caps a loop. `minutes` counts the agent's own time, and stops while it, or an agent it called as a tool, waits on a human. The loop rejects with:
+`limit({ turns, time })` caps a loop. `time` is a `Duration` (`duration.of('30m')`, from `@mesh-flow/duration`, also exported here) and counts the agent's own time, and stops while it, or an agent it called as a tool, waits on a human. The loop rejects with:
 - `LoopLimitExceeded` when a limit runs out;
 - `ExitNotCalled` when the agent stops without an exit, and still does after three reminders;
 - `LoopFailed` when the model fails or hits its context limit. There is no compaction.
@@ -191,7 +192,7 @@ Each of these functions is a connector's, and how it waits is the connector's co
 A connector waits with `wait`: a pause on the engine's clock, so the sandbox can be paused meanwhile and a timer that disagrees across a pause never matters. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`. It belongs in a connector's function, behind an `await` that names what the workflow waits for, not in workflow code.
 
 ```ts
-import { hostToolStub, wait } from '@mesh-flow/core'
+import { duration, hostToolStub, wait } from '@mesh-flow/core'
 import { z } from 'zod'
 
 const pipeline = hostToolStub({
@@ -201,9 +202,11 @@ const pipeline = hostToolStub({
 	output: z.object({ done: z.boolean() }),
 })
 
+const lookEvery = duration.of('30s')
+
 /** Returns once the pipeline has finished: what a workflow awaits. */
 export async function finished(id: string): Promise<void> {
-	while (!(await pipeline({ id })).done) await wait({ seconds: 30 })
+	while (!(await pipeline({ id })).done) await wait(lookEvery)
 }
 ```
 
@@ -353,12 +356,12 @@ Anywhere else, such as in a test, run a workflow with a channel of your own. A c
 
 ```ts
 import { createModels } from '@earendil-works/pi-ai/models'
-import { runWorkflow, type RunChannel } from '@mesh-flow/core'
+import { duration, runWorkflow, type RunChannel } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
 // The providers the agents' models run on: under the engine they come through the gateway.
 const models = createModels()
-const anHourMs = 60 * 60_000
+const runFor = duration.of('1h')
 
 const channel: RunChannel = {
 	send: (message) => {
@@ -372,7 +375,7 @@ const outcome = await runWorkflow(develop, {
 	parameters: { story: 'ABC-1' },
 	channel,
 	models,
-	abortSignal: AbortSignal.timeout(anHourMs),
+	abortSignal: runFor.toAbortSignal(),
 	workspace: 'workspace',
 })
 ```

@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { duration } from '../duration/src/_module/duration.mts'
 
 const packagesDirectory = fileURLToPath(new URL('..', import.meta.url))
 
@@ -15,7 +16,7 @@ export default defineConfig({
 	},
 	test: {
 		include: ['test/**/*.{test,spec}.mts'],
-		testTimeout: 30_000,
-		hookTimeout: 30_000,
+		testTimeout: duration.of('30s').to('ms'),
+		hookTimeout: duration.of('30s').to('ms'),
 	},
 })

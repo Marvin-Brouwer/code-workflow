@@ -1,5 +1,6 @@
 import { watchReview } from '@mesh-flow/code-repository'
-import type { ToolContext, WaitSpec } from '@mesh-flow/core'
+import type { ToolContext } from '@mesh-flow/core'
+import type { Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef, ReviewItem } from '../tools/merge-request-tools.mts'
 import type { JobFailure } from '../tools/pipeline-tools.mts'
@@ -28,13 +29,13 @@ export interface ReviewHandlers {
 /** Options of `review`. */
 export interface ReviewOptions {
 	/** How long to wait between looks. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before `review`
 	 * gives up with the last error. Counted in looks, `toleratedOutage / every` of them. Only
 	 * failures that may pass count; a bad token or a missing permission fails at once. Default: 10 minutes.
 	 */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 }
 
 /** How a review ended. */

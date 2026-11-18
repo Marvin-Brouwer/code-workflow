@@ -39,9 +39,11 @@ export const writer = agent({
 
 ```ts
 // workflows/fix-issue.mts
-import { limit, succeed, workflow } from '@mesh-flow/core'
+import { duration, limit, succeed, workflow } from '@mesh-flow/core'
 import { github, IssueParameters } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
+
+const fixTime = duration.of('30m')
 
 export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters }) => {
 	const issue = await github.collect(parameters.issue)
@@ -49,7 +51,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 	await developer.loop`
 		Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
-		${limit({ minutes: 30 })}
+		${limit({ time: fixTime })}
 	`
 
 	const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
@@ -171,7 +173,7 @@ const tools = githubHostTools({
 	directory: '/tmp/github-host',
 	apiUrl: 'http://127.0.0.1:4010',
 	remoteUrl: (repository) => `file:///tmp/remotes/${repository}.git`,
-	retry: { ...defaultFetchRetry, attempts: 1 },
+	retry: { ...defaultFetchRetry, waits: [] },
 })
 ```
 

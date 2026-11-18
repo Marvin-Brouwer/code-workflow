@@ -122,9 +122,9 @@ async function driveLoop({ agent, template, system, key, storeKey, scope: eventS
 		ended.finished()
 	}
 
-	const { turns: maxTurns, minutes } = template.limit ?? {}
-	const clock = startLoopClock(minutes, () => {
-		finish({ kind: 'error', error: new LoopLimitExceeded('minutes', minutes ?? 0) }, 'now')
+	const { turns: maxTurns, time } = template.limit ?? {}
+	const clock = startLoopClock(time, (allowed) => {
+		finish({ kind: 'error', error: new LoopLimitExceeded('time', allowed) }, 'now')
 	})
 	const onAbort = () => {
 		finish({ kind: 'error', error: stopped.reason }, 'now')

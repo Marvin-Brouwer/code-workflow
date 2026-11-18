@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { AppVersion } from '../apps/app-store.mts'
-import { startRunTimeoutMs, type Engine } from '../engine/engine.mts'
+import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { EngineError } from '../engine/engine-error.mts'
 import { messageOf } from '../errors.mts'
 import { payloadProblems } from './payload-problems.mts'
@@ -111,7 +111,7 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 				input: payload,
 				trigger: { kind: 'webhook', id },
 				key,
-				abortSignal: AbortSignal.timeout(startRunTimeoutMs),
+				abortSignal: startRunTimeout.toAbortSignal(),
 			})
 			return c.json({ run: record.id, status: record.status }, 202)
 		},

@@ -1,9 +1,15 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { duration } from '../duration/src/_module/duration.mts'
 
 export default defineConfig({
+	resolve: {
+		// The duration package resolves to its sources, so nothing has to be built first.
+		alias: { '@mesh-flow/duration': fileURLToPath(new URL('../duration/src/_module/duration.mts', import.meta.url)) },
+	},
 	test: {
 		include: ['test/**/*.{test,spec}.mts'],
-		testTimeout: 30_000,
-		hookTimeout: 30_000,
+		testTimeout: duration.of('30s').to('ms'),
+		hookTimeout: duration.of('30s').to('ms'),
 	},
 })

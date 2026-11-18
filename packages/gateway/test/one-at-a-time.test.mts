@@ -1,12 +1,13 @@
 import { setTimeout } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { oneAtATime } from '../src/one-at-a-time.mts'
 
 /** Long enough for a call that didn't wait its turn to have started. */
-const waitMs = 20
+const turnStarted = duration.of('20ms')
 
 /** How soon a call that stopped has to settle. */
-const promptlyMs = 1000
+const promptly = duration.of('1s')
 
 describe('oneAtATime', () => {
 	test('runs calls with one key in turn, side by side with another key, and past a failure', async () => {
@@ -52,7 +53,7 @@ describe('oneAtATime', () => {
 
 		// Assert
 		await expect(waiting).rejects.toThrow('The run stopped.')
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(ran).toBe(false)
 	})
 
@@ -78,7 +79,7 @@ describe('oneAtATime', () => {
 		const later = queue('a', abortSignal, async () => {
 			ran.push('later')
 		})
-		await setTimeout(waitMs)
+		await setTimeout(turnStarted.to('ms'))
 		const whileFirstRuns = [...ran]
 		endFirst(undefined)
 		await Promise.all([first, later])

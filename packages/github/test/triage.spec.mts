@@ -5,7 +5,7 @@ import { triage } from '../src/pull-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import { stubs } from '../src/stubs.mts'
 import { ReviewItemId, type ReviewItem } from '../src/tools/pull-request-tools.mts'
-import { branch, connectedGithub, promptlyMs, repositoryName } from './support/connected-github.mts'
+import { branch, connectedGithub, promptly, repositoryName } from './support/connected-github.mts'
 import { reactionsOf } from './support/fake-github.mts'
 import { replyingTo } from './support/review-items.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
@@ -173,7 +173,7 @@ describe('triage', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 

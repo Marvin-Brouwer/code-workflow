@@ -4,8 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { answerFile, mailboxEnvironmentVariable, mailboxLayout, stagedFile, type MailboxLayout } from './mailbox-layout.mts'
 import type { Answer, RuntimeMessage } from './runtime-message.mts'
 
-/** How often the runtime looks for an answer. Only a polling interval, never a wall-clock wait. */
-const answerPollMs = 250
+/**
+ * How often the runtime looks for an answer, in milliseconds. Only a polling interval, never a
+ * wall-clock wait. A number, not a `Duration`: the mailbox runs in the sandbox without dependencies.
+ */
+const answerPollInterval = 250
 
 /**
  * The runtime's side of the mailbox, used inside the sandbox. It sends messages by appending a
@@ -100,7 +103,7 @@ export class RuntimeMailbox {
 			})
 			if (text !== undefined) return toAnswer(JSON.parse(text))
 			// `delay` rejects with a plain AbortError; the signal's reason says why the wait stopped.
-			await delay(answerPollMs, undefined, { signal: abortSignal }).catch(() => {
+			await delay(answerPollInterval, undefined, { signal: abortSignal }).catch(() => {
 				abortSignal.throwIfAborted()
 			})
 		}

@@ -45,6 +45,7 @@
 		"@mesh-flow/core": "workspace:*"
 	},
 	"devDependencies": {
+		"@mesh-flow/duration": "workspace:*",
 		"@mesh-flow/protocol": "workspace:*",
 		"@types/node": "^26.6.6",
 		"tsdown": "^0.23.4",

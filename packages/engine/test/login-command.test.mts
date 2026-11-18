@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { keyFile, openCredentialStore, type CredentialStore } from '@mesh-flow/gateway'
 import { Command } from 'commander'
 import { describe, expect, test, vi } from 'vitest'
@@ -11,13 +12,13 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const abortSignal = new AbortController().signal
 
 /** How long the command may take to settle once stopped, while the sign-in never does. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 
 /** How many times the command looks for the engine's code before the test approves: more than once, to show it isn't shown again. */
 const pollsBeforeApproval = 2
 
 /** How long a test waits for the command to poll the engine that often. */
-const waitMs = 5_000
+const waitForPolls = duration.of('5s')
 
 const prompt = { url: 'https://device.example/?user_code=ABCD-EFGH', code: 'ABCD-EFGH', expiresAt: new Date('2026-11-16T09:10:00Z') }
 
@@ -82,7 +83,7 @@ describe('mesh-flow login', () => {
 			() => {
 				expect(signIns.mock.calls.length).toBeGreaterThan(2)
 			},
-			{ timeout: 5_000 },
+			{ timeout: duration.of('5s').to('ms') },
 		)
 		approve(undefined)
 		await loggingIn
@@ -107,7 +108,7 @@ describe('mesh-flow login', () => {
 			() => {
 				expect(signIns.mock.calls.length).toBeGreaterThan(pollsBeforeApproval)
 			},
-			{ timeout: waitMs },
+			{ timeout: waitForPolls.to('ms') },
 		)
 		approve(undefined)
 		await loggingIn
@@ -191,7 +192,7 @@ describe('mesh-flow login', () => {
 
 		// Assert
 		await expect(loggingIn).rejects.toThrow('Stopped waiting for the sign-in.')
-		expect(Date.now() - stoppedAt).toBeLessThan(promptlyMs)
+		expect(Date.now() - stoppedAt).toBeLessThan(promptly.to('ms'))
 		expect(process.listenerCount('SIGINT')).toBe(listeners)
 	})
 })

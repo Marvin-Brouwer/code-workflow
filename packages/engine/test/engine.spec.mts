@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
@@ -14,7 +15,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployTestApp, runtimeScript, testAppName, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
+const deadlines = () => ({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
 
 interface OpenEngineOptions {
 	/** An engine home to open again. Default: a new one. */
@@ -45,7 +46,7 @@ async function untilStatus(engine: Engine, id: string, status: RunStatus): Promi
 			if (record.status !== status) throw new Error(`Run is ${record.status}${record.error ? `: ${record.error}` : ''}`)
 			return record
 		},
-		{ timeout: 20_000, interval: 50 },
+		{ timeout: duration.of('20s').to('ms'), interval: 50 },
 	)
 }
 
@@ -54,7 +55,7 @@ async function untilPending(engine: Engine, id: string, requestId: string): Prom
 		() => {
 			if (!engine.get(id).pending.some((request) => request.id === requestId)) throw new Error(`Not waiting for ${requestId} yet`)
 		},
-		{ timeout: 20_000, interval: 50 },
+		{ timeout: duration.of('20s').to('ms'), interval: 50 },
 	)
 }
 
@@ -233,7 +234,7 @@ writeFileSync(${JSON.stringify(marker)}, '')
 const at = new Date(Date.now() + (restarted ? 3_000 : 1_000)).toISOString()
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'later', at } })
 if (!restarted) {
-	await new Promise((resolve) => setTimeout(resolve, 300))
+	await new Promise((resolve) => setTimeout(resolve, duration.of('300ms').to('ms')))
 	mailbox.send({ type: 'failed', error: 'A parallel branch threw.' })
 } else {
 	await mailbox.answer('later', signal)
@@ -389,7 +390,7 @@ if (!restarted) {
 
 		// Assert
 		expect(stopped.status).toBe('stopped')
-		await delay(500)
+		await delay(duration.of('500ms').to('ms'))
 		expect(engine.get(id).status).toBe('stopped')
 		expect(await backend.list(signal)).toEqual([])
 	})

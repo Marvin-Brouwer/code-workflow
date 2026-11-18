@@ -7,10 +7,10 @@ import {
 	StartDeviceAuthorizationCommand,
 	type SSOOIDCClient,
 } from '@aws-sdk/client-sso-oidc'
+import { duration, type Duration } from '@mesh-flow/duration'
 import type { AwsSettings } from './aws-settings.mts'
 import { deviceCodeGrant, expiresIn, sessionOf, type RegisteredClient } from './oidc.mts'
 import type { StoredSession } from './stored-session.mts'
-import { msPerSecond } from './time.mts'
 
 /** A device authorization the user has yet to approve. */
 export interface DeviceAuthorization {
@@ -19,17 +19,22 @@ export interface DeviceAuthorization {
 	readonly code: string
 	readonly expiresAt: Date
 	/** How long to wait between looks, as Identity Center asks. */
-	readonly intervalMs: number
+	readonly interval: Duration
 }
 
 /** When Identity Center doesn't say how often to look: RFC 8628's default. */
-const defaultIntervalSeconds = 5
+const defaultInterval = duration.of('5s')
 
 /** How much longer to wait between looks after Identity Center says to slow down: RFC 8628's step. */
-export const slowDownStepMs = 5 * msPerSecond
+export const slowDownStep = duration.of('5s')
 
 /** Waits between looks for the approval. */
-export type Wait = (ms: number, abortSignal: AbortSignal) => Promise<void>
+export type Wait = (time: Duration, abortSignal: AbortSignal) => Promise<void>
+
+/** The interval after Identity Center said to slow down: longer by {@link slowDownStep}. */
+function slowedDown(interval: Duration): Duration {
+	return duration({ seconds: interval.to('s') + slowDownStep.to('s') })
+}
 
 /** Starts a device authorization for the access portal in the settings. */
 export async function startDeviceAuthorization(
@@ -51,7 +56,7 @@ export async function startDeviceAuthorization(
 		url,
 		code: started.userCode,
 		expiresAt: expiresIn(now(), started.expiresIn, 'the device code'),
-		intervalMs: (started.interval ?? defaultIntervalSeconds) * msPerSecond,
+		interval: started.interval === undefined ? defaultInterval : duration({ seconds: started.interval }),
 	}
 }
 
@@ -75,7 +80,7 @@ export async function approvedSession(
 	wait: Wait,
 	abortSignal: AbortSignal,
 ): Promise<StoredSession> {
-	let intervalMs = authorization.intervalMs
+	let interval = authorization.interval
 	for (;;) {
 		if (now() >= authorization.expiresAt) throw endedUnapproved()
 		try {
@@ -91,13 +96,13 @@ export async function approvedSession(
 			return sessionOf(token, settings, client, now())
 		} catch (error) {
 			abortSignal.throwIfAborted()
-			if (error instanceof SlowDownException) intervalMs += slowDownStepMs
+			if (error instanceof SlowDownException) interval = slowedDown(interval)
 			else if (error instanceof ExpiredTokenException) throw endedUnapproved()
 			else if (error instanceof AccessDeniedException) throw new Error('The AWS sign-in was denied.', { cause: error })
 			else if (!(error instanceof AuthorizationPendingException)) throw error
 		}
 		try {
-			await wait(intervalMs, abortSignal)
+			await wait(interval, abortSignal)
 		} catch (error) {
 			// A stop says why: the timer's own error doesn't.
 			abortSignal.throwIfAborted()

@@ -1,13 +1,14 @@
 import { watch, type FSWatcher } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { hasErrorCode, messageOf } from '../errors.mts'
 
 /** Folders whose changes never change the app: dependencies, git, and the build itself. */
 const ignored = new Set(['node_modules', '.git', '.mesh-flow'])
 
 /** How long changes are gathered before one rebuild. */
-const settleMs = 300
+const settleTime = duration.of('300ms')
 
 /** What `watchApp` takes. */
 export interface WatchAppOptions {
@@ -58,7 +59,7 @@ export async function watchApp(options: WatchAppOptions): Promise<void> {
 	}
 	const settle = () => {
 		clearTimeout(timer)
-		timer = setTimeout(() => void run(), settleMs)
+		timer = setTimeout(() => void run(), settleTime.to('ms'))
 	}
 	const stop = () => {
 		clearTimeout(timer)

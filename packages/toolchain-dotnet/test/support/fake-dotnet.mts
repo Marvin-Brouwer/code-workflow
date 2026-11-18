@@ -1,6 +1,7 @@
 import { chmod, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Duration } from '@mesh-flow/duration'
 import { vi } from 'vitest'
 import { z } from 'zod'
 import { temporaryDirectory } from './temporary-directory.mts'
@@ -14,7 +15,7 @@ export interface FakeAnswer {
 	/** Never exits, as a build that hangs. */
 	readonly hang?: boolean
 	/** Exits after this long, with nothing written. */
-	readonly holdMs?: number
+	readonly hold?: Duration
 	/** Starts a process that ignores SIGTERM, and writes its pid to this file. */
 	readonly stubbornChildPidFile?: string
 	/** Ignores SIGTERM, as a `dotnet` stuck in its exit handlers. */
@@ -23,6 +24,16 @@ export interface FakeAnswer {
 	readonly pidFile?: string
 	/** Kills itself with this signal, as the system does when it runs out of memory. */
 	readonly killedWith?: NodeJS.Signals
+}
+
+/** The answers as the fake reads them: a duration as its parts, which `duration` takes back. */
+function answersOnFile(answers: Readonly<Record<string, FakeAnswer>>) {
+	return Object.fromEntries(
+		Object.entries(answers).map(([command, { hold, ...answer }]) => [
+			command,
+			hold === undefined ? answer : { ...answer, hold: { milliseconds: hold.to('ms') } },
+		]),
+	)
 }
 
 /** One logged call. */
@@ -39,7 +50,7 @@ export async function fakeDotnet(answers: Readonly<Record<string, FakeAnswer>>) 
 	const log = path.join(bin, 'calls.log')
 	const answersFile = path.join(bin, 'answers.json')
 	await writeFile(log, '')
-	await writeFile(answersFile, JSON.stringify(answers))
+	await writeFile(answersFile, JSON.stringify(answersOnFile(answers)))
 	await writeFile(path.join(bin, 'dotnet'), `#!/bin/sh\nexec node "${script}" "$@"\n`)
 	await chmod(path.join(bin, 'dotnet'), 0o755)
 	await writeFile(path.join(bin, 'dotnet.cmd'), `@node "${script}" %*\r\n`)

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { readdir, writeFile } from 'node:fs/promises'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { BackendMismatchError } from '../../src/backend-mismatch-error.mts'
 import { gvisorBackend } from '../../src/gvisor/gvisor.backend.mts'
@@ -13,7 +14,7 @@ import { temporaryDirectory } from '../support/temporary-directory.mts'
 const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 function timeout(): AbortSignal {
-	return AbortSignal.timeout(5000)
+	return duration.of('5s').toAbortSignal()
 }
 
 interface FakeBackend {

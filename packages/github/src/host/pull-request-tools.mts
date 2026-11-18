@@ -9,6 +9,7 @@ import {
 	signedBy,
 	signedDescription,
 } from '@mesh-flow/code-repository/host'
+import { duration } from '@mesh-flow/duration'
 import { hostTool, oneAtATime, type HostTool } from '@mesh-flow/gateway'
 import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
@@ -64,7 +65,8 @@ function pullRequestData(repository: string, data: ApiPullRequest): PullRequestD
 /** Check conclusions and status states that count as failed. */
 const failedConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'error'])
 
-const secondMs = 1_000
+/** GitHub's precision for `since`. */
+const sincePrecision = duration.of('1s')
 
 /** The open pull request of branch `head` onto `base`, when there is one. */
 async function openOnBranch(
@@ -174,12 +176,12 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 		hostTool(reviewActivity, async ({ repository, number, since }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
-			const after = since === undefined ? undefined : new Date(since).getTime()
+			const after = since === undefined ? undefined : new Date(since)
 			// GitHub may take `since` as strictly after, at second precision: ask from a second earlier and filter here.
-			const listSince = after === undefined ? {} : { since: new Date(after - secondMs).toISOString() }
+			const listSince = after === undefined ? {} : { since: sincePrecision.before(after).toISOString() }
 			// At or after: GitHub keeps seconds, so a comment in the same second as the last one seen would be lost otherwise.
 			const isNew = (at: string | null | undefined): at is string =>
-				at !== null && at !== undefined && (after === undefined || new Date(at).getTime() >= after)
+				at !== null && at !== undefined && (after === undefined || new Date(at) >= after)
 			const [lineComments, reviews, comments] = await Promise.all([
 				client.paginate(client.rest.pulls.listReviewComments, {
 					...where,

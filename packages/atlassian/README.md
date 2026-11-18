@@ -115,10 +115,15 @@ On Data Center, a webhook has a secret, and so a signature, only on recent versi
 
 ```ts
 import { atlassianHostTools, defaultFetchRetry } from '@mesh-flow/atlassian/host'
+import { duration } from '@mesh-flow/duration'
 
-// A site that answers every request with an empty object, and retries without waiting.
+// A site that answers every request with an empty object, and retries once, almost at once.
 const answersItself: typeof fetch = async () => new Response('{}', { headers: { 'content-type': 'application/json' } })
-const tools = atlassianHostTools({ fetch: answersItself, retry: { ...defaultFetchRetry, attempts: 2, firstDelayMs: 1 } })
+const retry = {
+	...defaultFetchRetry,
+	waits: [duration.of('1ms')],
+}
+const tools = atlassianHostTools({ fetch: answersItself, retry })
 ```
 
 Reads, searches and updates that Jira or Confluence didn't answer within half a minute, or answered 500, 502, 503, 504 or 429, are sent again, as by the code host connectors: up to five times over about fifteen seconds (`defaultFetchRetry`), or after the wait a `retry-after` asks for (`atlassianResends` says which requests). A failure that may still pass after that reaches the sandbox marked transient. A look-up of who a mention names is tried once: without an answer, the mention keeps what its link holds. A request that makes something, a comment or a transition, is sent once, since a retry after a lost answer would make it twice: a transition whose answer was lost counts as made when the issue has the status after all.

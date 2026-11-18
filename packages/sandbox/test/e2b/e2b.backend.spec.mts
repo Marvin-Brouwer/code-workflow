@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 
@@ -34,10 +35,10 @@ describe('E2B backend, on a fake SDK', () => {
 	test('close kills the sandboxes it still runs', async () => {
 		// Arrange
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:26-slim': 'node-26' } })
-		await backend.create(spec, AbortSignal.timeout(1000))
+		await backend.create(spec, duration.of('1s').toAbortSignal())
 
 		// Act
-		await backend.close(AbortSignal.timeout(1000))
+		await backend.close(duration.of('1s').toAbortSignal())
 
 		// Assert
 		expect(sdk.kill).toHaveBeenCalledOnce()
@@ -48,7 +49,7 @@ describe('E2B backend, on a fake SDK', () => {
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: {} })
 
 		// Act
-		const creating = backend.create(spec, AbortSignal.timeout(1000))
+		const creating = backend.create(spec, duration.of('1s').toAbortSignal())
 
 		// Assert
 		await expect(creating).rejects.toThrow("No E2B template is configured for the image 'node:26-slim'.")

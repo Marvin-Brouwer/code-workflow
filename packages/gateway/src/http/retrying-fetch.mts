@@ -1,16 +1,14 @@
-import { setTimeout as sleep } from 'node:timers/promises'
+import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { unavailable } from './http-statuses.mts'
 
 /** How a request to a service is tried again when the connection drops or the service is briefly unavailable. */
 export interface FetchRetryOptions {
-	/** How many times a request is sent at most, the first time included. */
-	readonly attempts: number
-	/** The wait before the first retry; every next one waits twice as long. */
-	readonly firstDelayMs: number
+	/** The wait before each retry, in order: a request is sent once more than there are waits. None sends it once. */
+	readonly waits: readonly Duration[]
 	/** The longest `retry-after` that is waited out. A longer one is handed back as it is, so the caller sees the rate limit. */
-	readonly longestRetryAfterMs: number
+	readonly longestRetryAfter: Duration
 	/** How long one attempt may wait for the answer before it counts as dropped. */
-	readonly attemptTimeoutMs: number
+	readonly attemptTimeout: Duration
 }
 
 /**
@@ -19,10 +17,9 @@ export interface FetchRetryOptions {
  * attempt that gets no answer in half a minute, on a connection that went quiet, counts as dropped.
  */
 export const defaultFetchRetry: FetchRetryOptions = {
-	attempts: 5,
-	firstDelayMs: 1000,
-	longestRetryAfterMs: 60_000,
-	attemptTimeoutMs: 30_000,
+	waits: [duration.of('1s'), duration.of('2s'), duration.of('4s'), duration.of('8s')],
+	longestRetryAfter: duration.of('1m'),
+	attemptTimeout: duration.of('30s'),
 }
 
 /**
@@ -49,12 +46,9 @@ export type FetchResends = (request: OutgoingRequest) => boolean
 /** Whether `request` is a read, the requests every service may get twice. */
 export const readsOnly: FetchResends = ({ method }) => readMethods.has(method)
 
-/** `retry-after` counts in seconds. */
-const msPerSecond = 1000
-
 /**
- * Wraps `send` so that the requests `resends` allows (reads by default) are sent again, with a
- * doubling wait in between, when the connection fails or goes quiet, or the service is unavailable
+ * Wraps `send` so that the requests `resends` allows (reads by default) are sent again, after
+ * each of the `waits` in turn, when the connection fails or goes quiet, or the service is unavailable
  * (500, 502, 503, 504 or 429). A `retry-after` header, in seconds or as a date, sets the wait when
  * there is one. An attempt that goes quiet fails as `fetch` does when undici's wait for the headers
  * runs out. The last answer or error is what the caller gets. Aborting the request's signal stops
@@ -67,42 +61,41 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions, re
 		if (!resends(request)) return send(input, init)
 		const abortSignal = init?.signal ?? undefined
 
-		for (let attempt = 1; ; attempt++) {
-			const lastAttempt = attempt >= options.attempts
-			const backoffMs = options.firstDelayMs * 2 ** (attempt - 1)
-			let delayMs: number
+		for (const backoff of [...options.waits, undefined]) {
+			let wait: Duration
 			try {
-				const response = await answeredWithin(options.attemptTimeoutMs, abortSignal, (attemptAbortSignal) =>
+				const response = await answeredWithin(options.attemptTimeout, abortSignal, (attemptAbortSignal) =>
 					send(input, { ...init, signal: attemptAbortSignal }),
 				)
-				if (lastAttempt || !unavailable(response.status)) return response
-				const retryAfterMs = retryAfterOf(response)
-				if (retryAfterMs !== undefined && retryAfterMs > options.longestRetryAfterMs) return response
-				delayMs = retryAfterMs ?? backoffMs
+				if (backoff === undefined || !unavailable(response.status)) return response
+				const retryAt = retryAfterOf(response)
+				if (retryAt !== undefined && retryAt > options.longestRetryAfter.after(new Date())) return response
+				wait = retryAt === undefined ? backoff : untilThen(retryAt)
 				await response.body?.cancel()
 			} catch (error) {
-				if (lastAttempt || abortSignal?.aborted === true) throw error
-				delayMs = backoffMs
+				if (backoff === undefined || abortSignal?.aborted === true) throw error
+				wait = backoff
 			}
-			await sleep(delayMs, undefined, abortSignal === undefined ? {} : { signal: abortSignal })
+			await sleep(wait, abortSignal ?? neverAborted)
 		}
+		throw new Error('A retrying fetch ended without an answer, which the last attempt always gives.')
 	}
 }
 
 /**
- * Sends with a signal that also aborts when no answer came within `timeoutMs`. Only the wait for
+ * Sends with a signal that also aborts when no answer came within `timeout`. Only the wait for
  * the answer is timed: once it's in, the timer is cleared, so a slow body is read to the end, under
  * the caller's signal alone.
  */
 async function answeredWithin(
-	timeoutMs: number,
+	timeout: Duration,
 	abortSignal: AbortSignal | undefined,
 	sendWith: (attemptAbortSignal: AbortSignal) => Promise<Response>,
 ): Promise<Response> {
 	const noAnswer = new AbortController()
 	const timer = setTimeout(() => {
-		noAnswer.abort(noAnswerError(timeoutMs))
-	}, timeoutMs)
+		noAnswer.abort(noAnswerError(timeout))
+	}, timeout.to('ms'))
 	try {
 		return await sendWith(abortSignal === undefined ? noAnswer.signal : AbortSignal.any([abortSignal, noAnswer.signal]))
 	} finally {
@@ -118,8 +111,8 @@ const headersTimeoutCode = 'UND_ERR_HEADERS_TIMEOUT'
  * own wait for the headers runs out, so a client that tells network failures apart by their code,
  * such as jira.js, counts it as one that may pass.
  */
-function noAnswerError(timeoutMs: number): TypeError {
-	const cause = Object.assign(new Error(`The service didn't answer within ${String(timeoutMs)} ms.`), { code: headersTimeoutCode })
+function noAnswerError(timeout: Duration): TypeError {
+	const cause = Object.assign(new Error(`The service didn't answer within ${timeout.toString()}.`), { code: headersTimeoutCode })
 	return new TypeError('fetch failed', { cause })
 }
 
@@ -128,12 +121,21 @@ function resendable(body: RequestInit['body']): boolean {
 	return body === undefined || body === null || typeof body === 'string'
 }
 
-/** The `retry-after` header in milliseconds, from a number of seconds or a date. */
-function retryAfterOf(response: Response): number | undefined {
+/** When the `retry-after` header says to try again, from a number of seconds or a date. */
+function retryAfterOf(response: Response): Date | undefined {
 	const header = response.headers.get('retry-after')
 	if (header === null || header.trim() === '') return undefined
 	const seconds = Number(header)
-	if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * msPerSecond : undefined
-	const at = Date.parse(header)
-	return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now())
+	if (Number.isFinite(seconds)) return seconds >= 0 ? duration({ seconds }).after(new Date()) : undefined
+	const at = new Date(header)
+	return Number.isNaN(at.getTime()) ? undefined : at
 }
+
+/** The time from now until `at`, or none when it has passed. */
+function untilThen(at: Date): Duration {
+	const now = new Date()
+	return at > now ? duration.between(now, at) : duration({})
+}
+
+/** For a request sent without a signal: nothing stops its waits. */
+const neverAborted = new AbortController().signal

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { main } from '../src/cli/main.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
@@ -19,7 +20,7 @@ async function serve() {
 		layout: hostSandboxLayout,
 		abortSignal: signal,
 	})
-	onTestFinished(() => served.close({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) }))
+	onTestFinished(() => served.close({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() }))
 	const client = controlClient(served.socketPath)
 	return { client, home }
 }
@@ -41,11 +42,11 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		const started = await client.startRun({ ...userRun('ask'), abortSignal: signal })
 		await vi.waitFor(async () => {
 			expect((await client.get(started.id, signal)).pending).toHaveLength(1)
-		}, 20_000)
+		}, duration.of('20s').to('ms'))
 		await client.answer(started.id, 'story', 'ABC-1', signal)
 		await vi.waitFor(async () => {
 			expect((await client.get(started.id, signal)).status).toBe('succeeded')
-		}, 20_000)
+		}, duration.of('20s').to('ms'))
 
 		// Assert
 		expect(await client.list(signal)).toEqual([expect.objectContaining({ id: started.id, workflow: 'ask' })])

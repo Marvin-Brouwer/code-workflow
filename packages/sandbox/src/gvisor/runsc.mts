@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { closeSync, openSync, readFileSync, rmSync } from 'node:fs'
+import { duration } from '@mesh-flow/duration'
 
 /** How to call runsc, and the flags every call shares. */
 export interface RunscConfig {
@@ -33,7 +34,7 @@ export interface RunscResult {
  * How long output may still come in after runsc exits. A command that leaves a background process
  * behind (`sh -c 'server &'`) keeps stdout open, and the call shouldn't wait for that process.
  */
-const outputGraceMs = 200
+const outputGrace = duration.of('200ms')
 
 /**
  * Runs `runsc <flags> <args>`. Aborting kills it. Without a network (`--network=none`), and the
@@ -73,7 +74,7 @@ export function runsc(config: RunscConfig, args: readonly string[], call: RunscC
 			grace = setTimeout(() => {
 				child.stdout?.destroy()
 				child.stderr?.destroy()
-			}, outputGraceMs)
+			}, outputGrace.to('ms'))
 		})
 		child.once('close', (code) => {
 			clearTimeout(grace)

@@ -9,7 +9,7 @@ import {
 	connectedGithub,
 	firstPullRequest,
 	issueRef,
-	promptlyMs,
+	promptly,
 	repositoryName,
 	sameSite,
 } from './support/connected-github.mts'
@@ -159,7 +159,7 @@ describe('openPullRequest', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 
@@ -309,7 +309,7 @@ describe('updatePullRequest', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 
@@ -491,7 +491,7 @@ describe('an edit while the text was written', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('asks nothing when the pull request still says what the new text was written from', async () => {

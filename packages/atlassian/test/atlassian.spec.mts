@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toPrompt } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { confluence, jira } from '../src/_module/atlassian.mts'
@@ -342,7 +343,7 @@ describe.each(deployments)(
 
 		test('comments with different keys at once each keep their own id', async () => {
 			// Arrange
-			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latency: duration.of('20ms') }
 
 			// Act
 			const { fake, result } = await runOnFake(settings, arrangement, () =>
@@ -357,7 +358,7 @@ describe.each(deployments)(
 
 		test('comments with one key at once post one comment', async () => {
 			// Arrange
-			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latencyMs: 20 }
+			const arrangement: Arrangement = { issues: [fakeIssue({ key: 'PROJ-7' })], latency: duration.of('20ms') }
 
 			// Act
 			const { fake, result } = await runOnFake(settings, arrangement, () =>
@@ -756,7 +757,7 @@ describe('trouble', () => {
 		// Arrange
 		const fake = fakeAtlassian()
 		fake.hanging.add('/rest/api/2/issue/PROJ-7')
-		const retry = { ...quickRetry, attemptTimeoutMs: 1 }
+		const retry = { ...quickRetry, attemptTimeout: duration.of('1ms') }
 		const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry }), dataCenter.settings)
 
 		// Act
@@ -764,7 +765,7 @@ describe('trouble', () => {
 
 		// Assert
 		await expect(started.result).rejects.toMatchObject({ transient: true })
-		expect(fake.requests).toHaveLength(retry.attempts)
+		expect(fake.requests).toHaveLength(retry.waits.length + 1)
 	})
 
 	test('a rate limit is sent again before the call fails', async () => {

@@ -1,6 +1,7 @@
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { agent, runCheck } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { gitCommand } from '@mesh-flow/git'
 import { describe, expect, test } from 'vitest'
 import { codeReview, deviations, Plan } from '../src/_module/preset-development.mts'
@@ -11,13 +12,13 @@ import { callsTool, modelId, neverAnswers, scriptedModel, textOf } from './suppo
 const reviewer = agent({ model: modelId })
 
 /** Long enough for a scripted review. */
-const checkTimeoutMs = 10_000
+const checkTimeout = duration.of('10s')
 
 /**
  * How long a review may take to ask the reviewer: it reads the checkout's state with git first,
  * which takes seconds on a Windows runner.
  */
-const reviewerAskedWithinMs = 10_000
+const reviewerAskedWithin = duration.of('10s')
 
 /** The workspace the review's plan is in; the scripted reviewer never reads it. */
 const workspaceDirectory = '/workspace'
@@ -112,7 +113,7 @@ describe('codeReview', () => {
 
 		// Act
 		const run = await runBody(
-			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checkTimeout.toAbortSignal() }),
 			model.models,
 		)
 
@@ -121,7 +122,7 @@ describe('codeReview', () => {
 		const prompt = textOf(model.requests[0])
 		const { stdout: base } = await gitCommand(['rev-parse', 'origin/main'], {
 			cwd: repository.directory,
-			abortSignal: AbortSignal.timeout(checkTimeoutMs),
+			abortSignal: checkTimeout.toAbortSignal(),
 		})
 		expect(prompt).toContain(`git diff ${base.trim()}`)
 		// The requests are JSON, where a Windows path's backslashes are escaped.
@@ -136,7 +137,7 @@ describe('codeReview', () => {
 		const model = scriptedModel([noFindings, noFindings, noFindings])
 		const review = codeReview(reviewer, repository, planIn(workspaceDirectory))
 		const reviewNow = async () =>
-			(await runBody(() => runCheck(review, { abortSignal: AbortSignal.timeout(checkTimeoutMs) }), model.models)).result
+			(await runBody(() => runCheck(review, { abortSignal: checkTimeout.toAbortSignal() }), model.models)).result
 
 		// Act
 		await reviewNow()
@@ -161,7 +162,7 @@ describe('codeReview', () => {
 
 		// Act
 		const run = await runBody(
-			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checkTimeout.toAbortSignal() }),
 			model.models,
 		)
 
@@ -174,10 +175,10 @@ describe('codeReview', () => {
 		const repository = await gitCheckout()
 		const model = scriptedModel([neverAnswers])
 		const run = await runBody(
-			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: AbortSignal.timeout(checkTimeoutMs) }),
+			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checkTimeout.toAbortSignal() }),
 			model.models,
 		)
-		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithinMs }).toBe(1)
+		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithin.to('ms') }).toBe(1)
 
 		// Act
 		run.controller.abort(new Error('Stopped.'))
@@ -195,7 +196,7 @@ describe('codeReview', () => {
 			() => runCheck(codeReview(reviewer, repository, planIn(workspaceDirectory)), { abortSignal: checking.signal }),
 			model.models,
 		)
-		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithinMs }).toBe(1)
+		await expect.poll(() => model.requests.length, { timeout: reviewerAskedWithin.to('ms') }).toBe(1)
 
 		// Act
 		checking.abort(new Error('Gave up on the review.'))

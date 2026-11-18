@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { mergeUsage, type AcceptedCall, type Gateway, type RunUsage } from '@mesh-flow/gateway'
 import {
 	runIdEnvironmentVariable,
@@ -114,10 +115,10 @@ interface ActiveRun {
 type SandboxRef = NonNullable<RunRecord['sandbox']>
 
 /** How long cleaning up after a run, such as removing its sandbox, may take. */
-const cleanupTimeoutMs = 60_000
+const cleanupTimeout = duration.of('1m')
 
 /** How long starting a run from a trigger may take: copying the app and saving the record. */
-export const startRunTimeoutMs = 60_000
+export const startRunTimeout = duration.of('1m')
 
 /**
  * The host process's view of runs: it starts each run in its own sandbox, relays requests and
@@ -131,7 +132,7 @@ export const startRunTimeoutMs = 60_000
  * const engine = await Engine.open({ backend, store, apps }, abortSignal)
  * const run = await engine.startRun({ app: 'team', trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
  * // ... later, on Ctrl+C:
- * await engine.close({ pause: AbortSignal.timeout(30_000), backend: AbortSignal.timeout(60_000) })
+ * await engine.close({ pause: duration.of('30s').toAbortSignal(), backend: duration.of('1m').toAbortSignal() })
  * ```
  */
 export class Engine {
@@ -816,7 +817,7 @@ export class Engine {
 
 	/** Bounds cleanup that has to finish whatever the caller does, up to a shutdown. */
 	#cleanupSignal(): AbortSignal {
-		return AbortSignal.any([this.#lifetime.signal, AbortSignal.timeout(cleanupTimeoutMs)])
+		return AbortSignal.any([this.#lifetime.signal, cleanupTimeout.toAbortSignal()])
 	}
 
 	/** Stops driving a run and waits until that has stopped. */

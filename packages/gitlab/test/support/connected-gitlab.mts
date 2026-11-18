@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
 import { gitlabHostTools } from '../../src/host/connector.mts'
 import type { Repository } from '../../src/repository/repository.mts'
@@ -24,7 +25,7 @@ export const sameSite = Object.freeze({ title: 'Keep the session on Safari', des
 export const firstMergeRequest = 1
 
 /** How soon a run that stopped has to settle. */
-export const promptlyMs = 1000
+export const promptly = duration.of('1s')
 
 /** A fake GitLab, a local remote standing in for its git side, and a gateway with the connector's host tools on them. */
 export async function connectedGitlab(retry: FetchRetryOptions = defaultFetchRetry) {
@@ -41,4 +42,8 @@ export async function changeLogin(repository: Repository, text: string): Promise
 }
 
 /** Host retries that are over in a moment. */
-export const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 }
+export const quickRetry: FetchRetryOptions = {
+	waits: [duration.of('1ms'), duration.of('1ms')],
+	longestRetryAfter: duration({}),
+	attemptTimeout: duration.of('1s'),
+}

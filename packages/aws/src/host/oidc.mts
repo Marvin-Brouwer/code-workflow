@@ -1,8 +1,8 @@
 import { RegisterClientCommand, SSOOIDCClient } from '@aws-sdk/client-sso-oidc'
+import { duration } from '@mesh-flow/duration'
 import { endpointOption, type AwsEndpoints } from './aws-endpoints.mts'
 import type { AwsSettings } from './aws-settings.mts'
 import type { StoredSession } from './stored-session.mts'
-import { msPerSecond } from './time.mts'
 
 /** The OAuth grant a device authorization ends in. */
 export const deviceCodeGrant = 'urn:ietf:params:oauth:grant-type:device_code'
@@ -34,7 +34,7 @@ export function oidcClient(settings: AwsSettings, endpoints: AwsEndpoints): SSOO
  */
 export function expiresIn(now: Date, seconds: number | undefined, what: string): Date {
 	if (seconds === undefined) throw new Error(`Identity Center didn't say how long ${what} lasts.`)
-	return new Date(now.getTime() + seconds * msPerSecond)
+	return duration({ seconds }).after(now)
 }
 
 /**

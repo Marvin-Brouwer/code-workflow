@@ -1,11 +1,13 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { duration } from '../duration/src/_module/duration.mts'
 
 export default defineConfig({
 	resolve: {
-		// The protocol resolves to its sources, so nothing has to be built first. Not through the
+		// Workspace packages resolve to their sources, so nothing has to be built first. Not through the
 		// `source` condition: Pi's packages declare it too, without shipping their sources.
 		alias: {
+			'@mesh-flow/duration': fileURLToPath(new URL('../duration/src/_module/duration.mts', import.meta.url)),
 			'@mesh-flow/protocol': fileURLToPath(new URL('../protocol/src/_module/protocol.mts', import.meta.url)),
 			// For tests only: the gateway on the host side of a test's channel.
 			'@mesh-flow/gateway': fileURLToPath(new URL('../gateway/src/_module/gateway.mts', import.meta.url)),
@@ -13,7 +15,7 @@ export default defineConfig({
 	},
 	test: {
 		include: ['test/**/*.{test,spec}.mts'],
-		testTimeout: 30_000,
-		hookTimeout: 30_000,
+		testTimeout: duration.of('30s').to('ms'),
+		hookTimeout: duration.of('30s').to('ms'),
 	},
 })

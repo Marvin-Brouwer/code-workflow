@@ -1,4 +1,5 @@
 import { limit, succeed, type Agent, type Limit } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 import type { Checkout } from '../checkout/checkout.mts'
 import type { CodeHostTerms } from '../describe/change-request.mts'
@@ -35,7 +36,7 @@ export interface PlannedChange<Item extends TriageItem> {
 }
 
 /** How long the loop may take when the caller sets no limit. */
-const defaultLimit = limit({ minutes: 10 })
+const defaultLimit = limit({ time: duration.of('10m') })
 
 /** What the agent sorts each item into: a question, a change it will make, or a change it won't make. */
 const ItemAsks = z.enum(['question', 'change', 'declined'])

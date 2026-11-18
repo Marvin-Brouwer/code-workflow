@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { signed, withHeader } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
@@ -33,16 +34,20 @@ async function connected(retry: FetchRetryOptions = defaultFetchRetry) {
 }
 
 /** Host retries that are over in a moment. */
-const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 0, attemptTimeoutMs: 1000 }
+const quickRetry: FetchRetryOptions = {
+	waits: [duration.of('1ms'), duration.of('1ms')],
+	longestRetryAfter: duration({}),
+	attemptTimeout: duration.of('1s'),
+}
 
 /** No host retries, so every request GitHub doesn't answer fails its call. */
-const noRetry: FetchRetryOptions = { ...quickRetry, attempts: 1 }
+const noRetry: FetchRetryOptions = { ...quickRetry, waits: [] }
 
 /** How soon a run that stopped has to settle. */
-const promptlyMs = 1000
+const promptly = duration.of('1s')
 
 /** Long enough for a second answer that didn't wait its turn to have listed the comments. */
-const secondLookMs = 300
+const secondLook = duration.of('300ms')
 
 /** The marker key of the 👀 reaction on a comment, as the reply that says it's being read carries it. */
 function eyesKeyOf(item: FakeComment | undefined): string {
@@ -391,7 +396,7 @@ describe('github', () => {
 			method === 'PATCH' && requestPath.includes('/issues/comments/') && ++edits === 1 ? secondLooked : undefined
 		const timer = setTimeout(() => {
 			secondHasLooked(undefined)
-		}, secondLookMs)
+		}, secondLook.to('ms'))
 		onTestFinished(() => {
 			clearTimeout(timer)
 		})
@@ -546,7 +551,7 @@ describe('github', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('posts the answer after a plan once, when it is tried again after failing halfway', async () => {
@@ -728,7 +733,7 @@ describe('github', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(comments).not.toHaveBeenCalled()
 	})
 
@@ -758,8 +763,8 @@ describe('github', () => {
 
 		// Act
 		const checked = await runOnGateway(gateway, ({ abortSignal }) => {
-			setTimeout(complete, 100)
-			return runCheck(checksPass({ repository: repositoryName, number: 4 }, { every: { seconds: 1 } }), { abortSignal })
+			setTimeout(complete, duration.of('100ms').to('ms'))
+			return runCheck(checksPass({ repository: repositoryName, number: 4 }, { every: duration.of('1s') }), { abortSignal })
 		})
 		const findings = await checked.result
 		const watched = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 4 }, { checksFailed }))
@@ -793,7 +798,7 @@ describe('github', () => {
 		const { api, gateway } = await connected(noRetry)
 		api.pullRequest(repositoryName, 9, { state: 'closed', merged: true })
 		api.pullRequest(repositoryName, 10)
-		const options = { every: { seconds: 1 }, toleratedOutage: { seconds: 3 } }
+		const options = { every: duration.of('1s'), toleratedOutage: duration.of('3s') }
 
 		// Act
 		api.unavailableRequests = 3
@@ -827,7 +832,7 @@ describe('github', () => {
 		}
 
 		// Act
-		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 18 }, {}, { every: { seconds: 1 } }))
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 18 }, {}, { every: duration.of('1s') }))
 
 		// Assert
 		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
@@ -840,7 +845,7 @@ describe('github', () => {
 		const { gateway } = await connected(noRetry)
 
 		// Act
-		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 404 }, {}, { every: { seconds: 1 } }))
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 404 }, {}, { every: duration.of('1s') }))
 
 		// Assert
 		await expect(run.result).rejects.toMatchObject({ name: 'GatewayCallError', transient: false })
@@ -857,7 +862,7 @@ describe('github', () => {
 			.checks.set(sha, [
 				{ name: 'tests', status: 'completed', conclusion: 'success', html_url: null, output: { title: null, summary: null } },
 			])
-		const options = { every: { seconds: 1 }, toleratedOutage: { seconds: 3 } }
+		const options = { every: duration.of('1s'), toleratedOutage: duration.of('3s') }
 
 		// Act
 		api.unavailableRequests = 3
@@ -999,16 +1004,19 @@ describe('github', () => {
 
 		// Act
 		const checked = await runOnGateway(gateway, ({ abortSignal }) =>
-			runCheck(checksPass({ repository: repositoryName, number: 6 }, { every: { seconds: 1 } }), { abortSignal }),
+			runCheck(checksPass({ repository: repositoryName, number: 6 }, { every: duration.of('1s') }), { abortSignal }),
 		)
 		const findings = await checked.result
 		const looksForFindings = looks
 		const watched = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 6 }, { checksFailed }))
 		await watched.result
 		const quiet = await runOnGateway(gateway, ({ abortSignal }) =>
-			runCheck(checksPass({ repository: 'team/quiet', number: noChecks.number }, { every: { seconds: 1 }, appearWithin: { seconds: 0 } }), {
-				abortSignal,
-			}),
+			runCheck(
+				checksPass({ repository: 'team/quiet', number: noChecks.number }, { every: duration.of('1s'), appearWithin: duration.of('0s') }),
+				{
+					abortSignal,
+				},
+			),
 		)
 
 		// Assert

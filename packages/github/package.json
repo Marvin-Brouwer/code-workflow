@@ -53,6 +53,7 @@
 	"dependencies": {
 		"@mesh-flow/code-repository": "workspace:*",
 		"@mesh-flow/core": "workspace:*",
+		"@mesh-flow/duration": "workspace:*",
 		"@mesh-flow/gateway": "workspace:*",
 		"@mesh-flow/git": "workspace:*",
 		"@octokit/rest": "^22.0.1",

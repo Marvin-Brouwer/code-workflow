@@ -1,9 +1,10 @@
+import { duration, type Duration } from '@mesh-flow/duration'
 import { atlassianHostTools, defaultFetchRetry } from '../../src/_module/host.mts'
 import { fakeAtlassian, type FakeIssue, type FakePage, type FakeUser } from './fake-atlassian.mts'
 import { runOnGateway, testGateway } from './test-run.mts'
 
 /** Retries as the connector's own, without the waits, so a test of a site in trouble takes no time. */
-export const quickRetry = { ...defaultFetchRetry, firstDelayMs: 1 }
+export const quickRetry = { ...defaultFetchRetry, waits: [duration.of('1ms'), duration.of('1ms'), duration.of('1ms'), duration.of('1ms')] }
 
 /** What the fake holds before a run. */
 export interface Arrangement {
@@ -11,7 +12,7 @@ export interface Arrangement {
 	readonly pages?: readonly FakePage[]
 	readonly failNext?: readonly number[]
 	readonly losesAnswers?: readonly string[]
-	readonly latencyMs?: number
+	readonly latency?: Duration
 	readonly users?: Readonly<Record<string, FakeUser>>
 }
 
@@ -25,7 +26,7 @@ export async function runOnFake<T>(settings: Readonly<Record<string, string>>, a
 	for (const page of arrangement.pages ?? []) fake.pages.set(page.id, page)
 	fake.failNext.push(...(arrangement.failNext ?? []))
 	for (const request of arrangement.losesAnswers ?? []) fake.losesAnswers.add(request)
-	fake.latencyMs = arrangement.latencyMs ?? 0
+	fake.latency = arrangement.latency ?? duration({})
 	for (const [id, user] of Object.entries(arrangement.users ?? {})) fake.users.set(id, user)
 	const gateway = await testGateway(atlassianHostTools({ fetch: fake.fetch, retry: quickRetry }), settings)
 	const started = await runOnGateway(gateway, body)

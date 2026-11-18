@@ -1,7 +1,7 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
 import type { AppVersion } from '../apps/app-store.mts'
-import { startRunTimeoutMs, type Engine } from '../engine/engine.mts'
+import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
 import type { RunStatus } from '../runs/run-record.mts'
@@ -78,7 +78,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 				app,
 				trigger: { kind: 'schedule', id: schedule.id },
 				key: `schedule ${name}/${at.toISOString()}`,
-				abortSignal: AbortSignal.timeout(startRunTimeoutMs),
+				abortSignal: startRunTimeout.toAbortSignal(),
 			})
 		} catch (error) {
 			// Disarmed meanwhile, as on shutdown: the engine turning the run down is expected then.

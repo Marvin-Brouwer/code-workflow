@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
-import { durationMs, wait } from '../src/wait/wait.mts'
+import { duration } from '@mesh-flow/duration'
+import { wait } from '../src/wait/wait.mts'
 import { runBody, type BodyRun } from './support/run-body.mts'
 
 /** The first wake request the run sends. */
@@ -14,8 +15,8 @@ function firstWake(run: BodyRun) {
 describe('wait', () => {
 	test('asks the engine to wake it at the time, and resolves once it does', async () => {
 		// Arrange
-		const before = Date.now()
-		const run = await runBody(() => wait({ seconds: 30 }))
+		const before = new Date()
+		const run = await runBody(() => wait(duration.of('30s')))
 
 		// Act
 		const asked = await firstWake(run)
@@ -24,15 +25,15 @@ describe('wait', () => {
 		// Assert
 		await expect(run.result).resolves.toBeUndefined()
 		expect(asked.id).toBe('wake-1')
-		const at = new Date(asked.at).getTime()
-		expect(at).toBeGreaterThanOrEqual(before + 30_000)
-		expect(at).toBeLessThan(before + 60_000)
+		const at = new Date(asked.at)
+		expect(at >= duration.of('30s').after(before)).toBe(true)
+		expect(at < duration.of('1m').after(before)).toBe(true)
 		expect(run.channel.events.map((event) => event.type)).toEqual(['workflow', 'wait', 'wait-succeeded', 'workflow-succeeded'])
 	})
 
 	test('ends with the run when the run is stopped while it waits', async () => {
 		// Arrange
-		const run = await runBody(() => wait({ hours: 1 }))
+		const run = await runBody(() => wait(duration.of('1h')))
 		await firstWake(run)
 
 		// Act
@@ -40,17 +41,5 @@ describe('wait', () => {
 
 		// Assert
 		await expect(run.result).rejects.toThrow('Stopped.')
-	})
-
-	test('adds the fields up and refuses a negative duration', () => {
-		// Arrange
-		const spec = { hours: 1, minutes: 1, seconds: 1 }
-
-		// Act
-		const ms = durationMs(spec)
-
-		// Assert
-		expect(ms).toBe(3_661_000)
-		expect(() => durationMs({ seconds: -1 })).toThrow('non-negative')
 	})
 })

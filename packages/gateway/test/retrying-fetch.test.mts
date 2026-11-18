@@ -1,10 +1,18 @@
 import { createServer } from 'node:http'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { retryingFetch, type FetchResends, type FetchRetryOptions } from '../src/http/retrying-fetch.mts'
 
 const url = 'https://api.example.com/items/1'
 /** Host retries that are over in a moment. */
-const quickRetry: FetchRetryOptions = { attempts: 3, firstDelayMs: 1, longestRetryAfterMs: 1000, attemptTimeoutMs: 1000 }
+const quickRetry: FetchRetryOptions = {
+	waits: [duration.of('1ms'), duration.of('1ms')],
+	longestRetryAfter: duration.of('1s'),
+	attemptTimeout: duration.of('1s'),
+}
+
+/** Waits between attempts far longer than a test runs. */
+const longWaits = [duration.of('1m'), duration.of('1m')]
 
 /** A response with `status`. */
 const answer = (status: number, headers: Record<string, string> = {}) => new Response(status === 204 ? null : '{}', { status, headers })
@@ -105,7 +113,7 @@ describe('retryingFetch', () => {
 			.mockResolvedValueOnce(answer(200))
 
 		// Act
-		const response = await retryingFetch(send, { ...quickRetry, attemptTimeoutMs: 10 })(url)
+		const response = await retryingFetch(send, { ...quickRetry, attemptTimeout: duration.of('10ms') })(url)
 
 		// Assert
 		expect(response.status).toBe(200)
@@ -124,25 +132,25 @@ describe('retryingFetch', () => {
 		)
 
 		// Act
-		const failed = retryingFetch(send, { ...quickRetry, attemptTimeoutMs: 1 })(url)
+		const failed = retryingFetch(send, { ...quickRetry, attemptTimeout: duration.of('1ms') })(url)
 
 		// Assert
 		await expect(failed).rejects.toThrow(TypeError)
 		await expect(failed).rejects.toMatchObject({ cause: { code: 'UND_ERR_HEADERS_TIMEOUT' } })
-		expect(send).toHaveBeenCalledTimes(quickRetry.attempts)
+		expect(send).toHaveBeenCalledTimes(quickRetry.waits.length + 1)
 	})
 
 	test('times only the wait for the answer, so a slow body is read to the end', async () => {
 		// Arrange
 		// Room for the headers to come back on a busy CI runner, and a body that takes far longer than that.
-		const answerTimeoutMs = 200
-		const bodyDelayMs = 5 * answerTimeoutMs
+		const answerTimeout = duration.of('200ms')
+		const bodyDelay = duration.of('1s')
 		const server = createServer((_request, response) => {
 			response.writeHead(200, { 'content-type': 'application/json' })
 			response.flushHeaders()
 			setTimeout(() => {
 				response.end('{"login":"mesh-flow-bot"}')
-			}, bodyDelayMs)
+			}, bodyDelay.to('ms'))
 		})
 		await new Promise<void>((resolve) => {
 			server.listen(0, '127.0.0.1', resolve)
@@ -155,7 +163,7 @@ describe('retryingFetch', () => {
 		if (address === null || typeof address === 'string') throw new Error('The server has no port.')
 
 		// Act
-		const response = await retryingFetch(fetch, { ...quickRetry, attemptTimeoutMs: answerTimeoutMs })(
+		const response = await retryingFetch(fetch, { ...quickRetry, attemptTimeout: answerTimeout })(
 			`http://127.0.0.1:${String(address.port)}/user`,
 		)
 		const body: unknown = await response.json()
@@ -211,8 +219,7 @@ describe('retryingFetch', () => {
 	test('reads a retry-after that is a date, and hands a far one back to the caller', async () => {
 		// Arrange
 		const past = new Date(0).toUTCString()
-		const anHourMs = 3_600_000
-		const later = new Date(Date.now() + anHourMs).toUTCString()
+		const later = duration.of('1h').after(new Date()).toUTCString()
 		const short = vi
 			.fn<typeof fetch>()
 			.mockResolvedValueOnce(answer(503, { 'retry-after': past }))
@@ -239,12 +246,12 @@ describe('retryingFetch', () => {
 		const started = performance.now()
 
 		// Act
-		const sent = retryingFetch(send, { ...quickRetry, firstDelayMs: 60_000 })(url, { signal: controller.signal })
+		const sent = retryingFetch(send, { ...quickRetry, waits: longWaits })(url, { signal: controller.signal })
 
 		// Assert
 		await expect(sent).rejects.toThrow('fetch failed')
 		expect(send).toHaveBeenCalledTimes(1)
-		expect(performance.now() - started).toBeLessThan(1000)
+		expect(performance.now() - started).toBeLessThan(duration.of('1s').to('ms'))
 	})
 
 	test('settles promptly when aborted while it waits between attempts', async () => {
@@ -254,14 +261,14 @@ describe('retryingFetch', () => {
 		const started = performance.now()
 
 		// Act
-		const sent = retryingFetch(send, { ...quickRetry, firstDelayMs: 60_000 })(url, { signal: controller.signal })
+		const sent = retryingFetch(send, { ...quickRetry, waits: longWaits })(url, { signal: controller.signal })
 		setTimeout(() => {
 			controller.abort(new Error('The run stopped.'))
-		}, 10)
+		}, duration.of('10ms').to('ms'))
 
 		// Assert
-		await expect(sent).rejects.toMatchObject({ name: 'AbortError' })
+		await expect(sent).rejects.toThrow('The run stopped.')
 		expect(send).toHaveBeenCalledTimes(1)
-		expect(performance.now() - started).toBeLessThan(1000)
+		expect(performance.now() - started).toBeLessThan(duration.of('1s').to('ms'))
 	})
 })

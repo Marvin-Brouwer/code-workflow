@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { FauxResponseStep } from '@earendil-works/pi-ai/providers/faux'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -21,16 +22,16 @@ import { asInRequest, callsTool, neverAnswers, says, scriptedModel, textOf } fro
 
 const Answer = z.object({ answer: z.number() })
 
-/** A minutes limit the scripted model never comes near, but a human wait would use up: 300 ms. */
-const budgetMinutes = 0.005
-/** Longer than `budgetMinutes`. */
-const humanWaitMs = 600
-/** A minutes limit that's up while the model is still thinking: 120 ms. */
-const tinyBudgetMinutes = 0.002
+/** A time limit the scripted model never comes near, but a human wait would use up. */
+const budget = duration.of('300ms')
+/** Longer than `budget`. */
+const humanWait = duration.of('600ms')
+/** A time limit that's up while the model is still thinking. */
+const tinyBudget = duration.of('120ms')
 /** How long a stopped run may take to settle: the body's and the store's grace, with a margin. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 /** The same, when a tool never settles, so closing the store takes its whole grace. */
-const promptlyWithStuckToolMs = 3_500
+const promptlyWithStuckTool = duration.of('3500ms')
 
 /** How many timers the process has running. */
 function timers(): number {
@@ -358,34 +359,34 @@ describe('loop', () => {
 		expect(textOf(model.requests[0])).toContain('You have at most 2 model turns for this task.')
 	})
 
-	test('rejects when the loop goes over its minutes, also while the model never answers', async () => {
+	test('rejects when the loop goes over its time, also while the model never answers', async () => {
 		// Arrange
 		const model = scriptedModel([neverAnswers])
 		const helper = agent({ model: model.id })
 
 		// Act
-		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ minutes: tinyBudgetMinutes })}`, model)
+		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ time: tinyBudget })}`, model)
 
 		// Assert
-		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
+		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'time' })
 	})
 
-	test('does not count time waiting on a human toward minutes', async () => {
+	test('does not count time waiting on a human toward its time', async () => {
 		// Arrange
 		const model = scriptedModel([callsTool('requestUserInput', { question: 'ok?' }), callsTool('succeed')])
 		const helper = agent({ model: model.id })
 
 		// Act
-		const run = await runBody(() => helper.loop`Ask with ${requestUserInput}. ${succeed()} ${limit({ minutes: budgetMinutes })}`, model)
+		const run = await runBody(() => helper.loop`Ask with ${requestUserInput}. ${succeed()} ${limit({ time: budget })}`, model)
 		const asked = await run.channel.nextInput()
-		await new Promise((resolve) => setTimeout(resolve, humanWaitMs))
+		await new Promise((resolve) => setTimeout(resolve, humanWait.to('ms')))
 		run.channel.reply(asked.id, { answer: 'yes' })
 
 		// Assert
 		await expect(run.result).resolves.toBeUndefined()
 	})
 
-	test('does not count a human wait of an agent it called as a tool toward its minutes', async () => {
+	test('does not count a human wait of an agent it called as a tool toward its time', async () => {
 		// Arrange
 		const model = scriptedModel([
 			callsTool('changeCode', { task: 'rename x' }),
@@ -398,18 +399,18 @@ describe('loop', () => {
 
 		// Act
 		const run = await runBody(
-			() => reviewer.loop`Ask ${developer.as('changeCode')} for changes. ${succeed()} ${limit({ minutes: budgetMinutes })}`,
+			() => reviewer.loop`Ask ${developer.as('changeCode')} for changes. ${succeed()} ${limit({ time: budget })}`,
 			model,
 		)
 		const asked = await run.channel.nextInput()
-		await new Promise((resolve) => setTimeout(resolve, humanWaitMs))
+		await new Promise((resolve) => setTimeout(resolve, humanWait.to('ms')))
 		run.channel.reply(asked.id, { answer: 'the first one' })
 
 		// Assert
 		await expect(run.result).resolves.toBeUndefined()
 	})
 
-	test('stops a loop run in a check of a loop that went over its minutes', async () => {
+	test('stops a loop run in a check of a loop that went over its time', async () => {
 		// Arrange
 		const model = scriptedModel([callsTool('verify'), neverAnswers])
 		const developer = agent({ model: model.id })
@@ -423,12 +424,12 @@ describe('loop', () => {
 		})
 
 		// Act
-		const run = await runBody(() => developer.loop`Work, then ${verify(codeReview)}. ${limit({ minutes: tinyBudgetMinutes })}`, model)
+		const run = await runBody(() => developer.loop`Work, then ${verify(codeReview)}. ${limit({ time: tinyBudget })}`, model)
 
 		// Assert
-		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
+		await expect(run.result).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'time' })
 		expect(reviews).toHaveLength(1)
-		await expect(reviews[0]).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'minutes' })
+		await expect(reviews[0]).rejects.toMatchObject({ name: 'LoopLimitExceeded', limit: 'time' })
 	})
 
 	test('leaves no timer running when the loop fails before it starts', async () => {
@@ -437,7 +438,7 @@ describe('loop', () => {
 		const before = timers()
 
 		// Act
-		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ minutes: 10 })}`, scriptedModel([]))
+		const run = await runBody(() => helper.loop`Work. ${succeed()} ${limit({ time: duration.of('10m') })}`, scriptedModel([]))
 		await run.outcome
 
 		// Assert
@@ -451,7 +452,9 @@ describe('loop keys', () => {
 		// Arrange
 		const model = scriptedModel([says('one'), says('two')])
 		const helper = agent({ model: model.id })
-		const slowToRender = { [toPrompt]: () => new Promise<string>((resolve) => setTimeout(resolve, 50, 'first item')) }
+		const slowToRender = {
+			[toPrompt]: () => new Promise<string>((resolve) => setTimeout(resolve, duration.of('50ms').to('ms'), 'first item')),
+		}
 		const items = [slowToRender, 'second item']
 
 		// Act
@@ -505,7 +508,7 @@ describe('stopping a run', () => {
 
 		// Assert
 		expect((await run.outcome).status).toBe('failed')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('settles promptly while a tool never settles and ignores its abort signal', async () => {
@@ -522,7 +525,7 @@ describe('stopping a run', () => {
 
 		// Assert
 		expect((await run.outcome).status).toBe('failed')
-		expect(Date.now() - started).toBeLessThan(promptlyWithStuckToolMs)
+		expect(Date.now() - started).toBeLessThan(promptlyWithStuckTool.to('ms'))
 	})
 
 	test('settles promptly while waiting on a human', async () => {

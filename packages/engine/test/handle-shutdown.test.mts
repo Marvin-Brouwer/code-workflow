@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test, vi } from 'vitest'
 import type { CloseDeadlines } from '../src/engine/engine.mts'
 import { handleShutdown, type ShutdownProcess } from '../src/shutdown/handle-shutdown.mts'
@@ -90,8 +91,8 @@ describe('handleShutdown', () => {
 			shutdown: () => new Promise(() => undefined),
 			process: target,
 			log: vi.fn(),
-			pauseTimeoutMs: 100,
-			closeTimeoutMs: 100,
+			pauseTimeout: duration.of('100ms'),
+			closeTimeout: duration.of('100ms'),
 		})
 
 		// Act

@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import {
 	answerFile,
 	mailboxEnvironmentVariable,
@@ -10,7 +11,7 @@ import {
 	type RunStart,
 } from '@mesh-flow/protocol'
 import { temporaryFileOf, type Command, type Sandbox } from '@mesh-flow/sandbox'
-import { pollIntervalSeconds, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
+import { pollInterval, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */
 export type Delivery =
@@ -25,7 +26,7 @@ export interface StartRuntimeOptions {
 }
 
 /** How long one poll waits for news, so a poll is a short call and not an open connection. */
-const pollSeconds = 20
+const longestPoll = duration.of('20s')
 
 /** How many lines of the runtime's log go into an error message. */
 export const tailLines = 20
@@ -72,11 +73,11 @@ export class SandboxChannel {
 	}
 
 	/**
-	 * Waits up to {@link pollSeconds} for messages after the first `cursor` lines. A line still
+	 * Waits up to {@link longestPoll} for messages after the first `cursor` lines. A line still
 	 * being written is left for the next poll.
 	 */
 	async poll(cursor: number, signal: AbortSignal): Promise<Delivery> {
-		const tries = String(pollSeconds / pollIntervalSeconds)
+		const tries = String(longestPoll.to('ms') / pollInterval.to('ms'))
 		const { outbox, pidFile, polls } = this.#layout
 		const command: Command = ['sh', '-c', pollScript, 'sh', outbox, pidFile, String(cursor), tries, polls]
 		const result = await this.#sandbox.exec(command, { signal })

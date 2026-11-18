@@ -16,6 +16,7 @@ import {
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node'
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node'
 import { CodingTools } from '@earendil-works/pi-durable/tools'
+import type { Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 import { settledWithin } from '../run/settled-within.mts'
 import type { ModelSource } from './model-source.mts'
@@ -39,8 +40,8 @@ export interface AgentHarness {
 	uninstall(extension: Extension): void
 	/** A Pi context that stops waiting when `abortSignal` aborts. */
 	context(abortSignal: AbortSignal): Context
-	/** Closes the store. Gives up after `timeoutMs` when running work doesn't stop. */
-	close(timeoutMs: number): Promise<void>
+	/** Closes the store. Gives up after `timeout` when running work doesn't stop. */
+	close(timeout: Duration): Promise<void>
 }
 
 /** A loop's result as the store keeps it: its value as JSON, or the loop's workspace folder. */
@@ -119,8 +120,8 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 			registry.uninstall(extension)
 		},
 		context,
-		async close(timeoutMs) {
-			await settledWithin(harness.close(BACKGROUND_CONTEXT), timeoutMs)
+		async close(timeout) {
+			await settledWithin(harness.close(BACKGROUND_CONTEXT), timeout)
 		},
 	}
 }

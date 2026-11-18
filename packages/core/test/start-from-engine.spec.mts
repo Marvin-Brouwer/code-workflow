@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { duration } from '@mesh-flow/duration'
 import { tokensPerEndpoint, tokensPerPackageEndpoint } from '@mesh-flow/gateway'
 import {
 	answerFile,
@@ -22,12 +23,12 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const core = pathToFileURL(path.join(import.meta.dirname, '../src/_module/core.mts')).href
 const zod = import.meta.resolve('zod')
 /** How long a started workflow may take to ask for its input: node starting and loading the sources. */
-const requestTimeoutMs = 10_000
+const requestTimeout = duration.of('10s')
 
 /** What the entry file's never-settling webhook schema writes to stderr once it's reached. */
 const schemaReached = 'schema reached'
 // A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
-const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
+const loader = new URL('support/workspace-from-source.mts', import.meta.url).href
 
 /**
  * Starts an entry file the way the engine does: `node <file>`, the mailbox in the environment and
@@ -61,7 +62,9 @@ async function startLikeTheEngine(source: string, start: unknown, grant?: RunGra
 			.filter(Boolean)
 			.map((line) => RuntimeMessage.parse(JSON.parse(line)))
 	const untilRequested = () =>
-		expect.poll(async () => (await messages()).some((message) => message.type === 'request'), { timeout: requestTimeoutMs }).toBe(true)
+		expect
+			.poll(async () => (await messages()).some((message) => message.type === 'request'), { timeout: requestTimeout.to('ms') })
+			.toBe(true)
 	return { child, exited, messages, layout, untilRequested, stderr: () => stderr }
 }
 
@@ -291,7 +294,7 @@ describe('an entry file started by the engine', () => {
 			trigger: { kind: 'webhook', id: 'stuck' },
 			input: { label: 'ai-fix', issue: { number: 12 } },
 		})
-		await expect.poll(() => run.stderr().includes(schemaReached), { timeout: 10_000 }).toBe(true)
+		await expect.poll(() => run.stderr().includes(schemaReached), { timeout: duration.of('10s').to('ms') }).toBe(true)
 
 		// Act
 		run.child.kill('SIGTERM')
@@ -314,7 +317,7 @@ describe('an entry file started by the engine', () => {
 			{ endpoint: 'run', tokens, packages: { endpoint: 'packages', tokens: fetchTokens } },
 		)
 		await expect
-			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
+			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeout.to('ms') })
 			.toBe(true)
 		const call = (await run.messages()).find((message) => message.type === 'call')
 

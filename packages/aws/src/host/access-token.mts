@@ -5,6 +5,7 @@ import {
 	InvalidGrantException,
 	UnauthorizedClientException,
 } from '@aws-sdk/client-sso-oidc'
+import { duration } from '@mesh-flow/duration'
 import { untilAborted, type CredentialStore } from '@mesh-flow/gateway'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import type { AwsSettings } from './aws-settings.mts'
@@ -19,7 +20,7 @@ import { readSession, renewSession, type StoredSession } from './stored-session.
  * a new refresh token the old one no longer works, so a renewal that one caller stops halfway would
  * lose the session for every run.
  */
-const renewalTimeoutMs = 60_000
+const renewalTimeout = duration.of('1m')
 
 /** Identity Center's answers that mean its session is over: a new sign-in is the only way on. */
 function endsSession(error: unknown): boolean {
@@ -57,7 +58,7 @@ export function sessionAccessTokens({ credentials, endpoints, now }: SessionAcce
 
 	/** The access token that is kept once the session is renewed: the renewed one, unless a sign-in came between. */
 	const keptAccessToken = async (settings: AwsSettings, session: StoredSession, renewed: StoredSession): Promise<string> => {
-		const keepAbortSignal = AbortSignal.timeout(renewalTimeoutMs)
+		const keepAbortSignal = renewalTimeout.toAbortSignal()
 		if (await renewSession(credentials, session, renewed, keepAbortSignal)) return renewed.accessToken
 		// The user signed in again meanwhile: that session counts.
 		const current = await readSession(credentials, settings, keepAbortSignal)
@@ -67,7 +68,7 @@ export function sessionAccessTokens({ credentials, endpoints, now }: SessionAcce
 
 	/** The access token of a session a sign-in stored since `session` was read, if there is one. */
 	const signedInSince = async (settings: AwsSettings, session: StoredSession): Promise<string | undefined> => {
-		const current = await readSession(credentials, settings, AbortSignal.timeout(renewalTimeoutMs))
+		const current = await readSession(credentials, settings, renewalTimeout.toAbortSignal())
 		return current !== undefined && current.refreshToken !== session.refreshToken ? current.accessToken : undefined
 	}
 
@@ -84,7 +85,7 @@ export function sessionAccessTokens({ credentials, endpoints, now }: SessionAcce
 					grantType: refreshTokenGrant,
 					refreshToken: session.refreshToken,
 				}),
-				{ abortSignal: AbortSignal.timeout(renewalTimeoutMs) },
+				{ abortSignal: renewalTimeout.toAbortSignal() },
 			)
 			// Identity Center may hand out a new refresh token, and then the old one no longer works.
 			renewed = sessionOf({ ...token, refreshToken: token.refreshToken ?? session.refreshToken }, settings, session, now())

@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { answerFile, mailboxLayout, stagedFile } from '../src/mailbox-layout.mts'
 import { RuntimeMailbox } from '../src/runtime-mailbox.mts'
@@ -8,7 +9,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
 /** Past the mailbox's first look for an answer and well before its next one (it looks every 250 ms). */
-const pastFirstLookMs = 50
+const pastFirstLook = duration.of('50ms')
 
 describe('RuntimeMailbox', () => {
 	test('imports nothing but Node and the mailbox layout, since it runs in the sandbox without dependencies', async () => {
@@ -136,7 +137,7 @@ describe('RuntimeMailbox', () => {
 		await mkdir(mailboxLayout(directory).inbox)
 		const controller = new AbortController()
 		const waiting = new RuntimeMailbox(directory).answer('story', controller.signal)
-		await new Promise((resolve) => setTimeout(resolve, pastFirstLookMs))
+		await new Promise((resolve) => setTimeout(resolve, pastFirstLook.to('ms')))
 
 		// Act
 		controller.abort(new Error('The run was stopped (SIGTERM).'))

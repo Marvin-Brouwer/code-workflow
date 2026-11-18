@@ -1,5 +1,6 @@
 import { branchHeadOf, untilCompleted } from '@mesh-flow/code-repository'
-import { check, type Check, type WaitSpec } from '@mesh-flow/core'
+import { check, type Check } from '@mesh-flow/core'
+import type { Duration } from '@mesh-flow/duration'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { PullRequestRef } from '../tools/pull-request-tools.mts'
@@ -7,17 +8,17 @@ import type { PullRequestRef } from '../tools/pull-request-tools.mts'
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {
 	/** How long to wait between looks while checks run. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/**
 	 * How long to wait for the first check to appear on a fresh commit before taking a repository
 	 * without checks for one where every check passed. Default: 10 minutes.
 	 */
-	readonly appearWithin?: WaitSpec
+	readonly appearWithin?: Duration
 	/**
 	 * How long looks at GitHub may keep failing, say while the network is down, before the check
 	 * fails with the last error. Counted in looks, as in `review`. Default: 10 minutes.
 	 */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 	/**
 	 * The checkout whose branch the pull request is of. With it, the commit looked at is the one last
 	 * pushed from it, rather than the head GitHub shows, which can lag a few seconds behind a push: a

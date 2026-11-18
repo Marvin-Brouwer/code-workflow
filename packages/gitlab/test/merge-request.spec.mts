@@ -9,7 +9,7 @@ import {
 	connectedGitlab,
 	firstMergeRequest,
 	projectPath,
-	promptlyMs,
+	promptly,
 	sameSite,
 	story,
 } from './support/connected-gitlab.mts'
@@ -176,7 +176,7 @@ describe('openMergeRequest', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 

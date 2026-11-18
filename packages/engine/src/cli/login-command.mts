@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import type { CredentialStore } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
@@ -7,10 +8,10 @@ import { signInFailedLine, signInPromptMessage } from '../engine/sign-in-lines.m
 import { shownSignInPrompt } from '../engine/sign-in-state.mts'
 
 /** How long `mesh-flow login` waits for the approval: longer than a device code lasts. */
-const loginTimeoutMs = 15 * 60 * 1000
+const loginTimeout = duration.of('15m')
 
 /** How often `mesh-flow login` looks for the code of the engine's sign-in. */
-const promptPollMs = 500
+const promptPoll = duration.of('500ms')
 
 /** What `mesh-flow login` uses of the engine: its sign-ins come first, so the runs that wait for one go on. */
 export type EngineSignIns = Pick<ControlClient, 'signIns' | 'waitForSignIn'>
@@ -53,7 +54,7 @@ export function addLoginCommand(program: Command, options: LoginCommandOptions):
 			}
 			process.once('SIGINT', interrupt)
 			try {
-				const abortSignal = AbortSignal.any([stop.signal, AbortSignal.timeout(loginTimeoutMs)])
+				const abortSignal = AbortSignal.any([stop.signal, loginTimeout.toAbortSignal()])
 				const joined = await signInThroughEngine(options.engine(), name, log, abortSignal)
 				if (!joined) await signInHere(options, name, log, abortSignal)
 				log(`Signed in to ${name}.`)
@@ -99,7 +100,7 @@ async function signInThroughEngine(
 	let shownCode: string | undefined
 	let shownError: string | undefined
 	for (;;) {
-		const looked = delay<typeof notYet>(promptPollMs, notYet, { signal: abortSignal })
+		const looked = delay<typeof notYet>(promptPoll.to('ms'), notYet, { signal: abortSignal })
 		looked.catch(() => undefined)
 		const settled = await Promise.race([signedIn, looked])
 		if (settled !== notYet) return settled

@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { createServer, type RequestListener, type Server } from 'node:http'
 import path from 'node:path'
 import { getRequestListener } from '@hono/node-server'
+import { duration } from '@mesh-flow/duration'
 import { openGateway, type CredentialStore, type GatewayHome } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { openAppStore, type AppStore } from '../apps/app-store.mts'
@@ -25,7 +26,7 @@ import { lockHome } from './home-lock.mts'
 export const defaultWebhookHost = '127.0.0.1'
 
 /** How long each step of closing may take when serving webhooks fails at the start. */
-const closeStepMs = 10_000
+const closeStep = duration.of('10s')
 
 /** What to serve an engine on. */
 export interface ServeEngineOptions {
@@ -145,7 +146,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			scheduler.close()
 			await closeServer(server)
 			await apps.close()
-			await engine.close({ pause: AbortSignal.timeout(closeStepMs), backend: AbortSignal.timeout(closeStepMs) })
+			await engine.close({ pause: closeStep.toAbortSignal(), backend: closeStep.toAbortSignal() })
 			await unlock()
 			throw error
 		}

@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
@@ -29,7 +30,7 @@ function stubBackend(parts: {
 			if (parts.unpack && command[2]?.includes('tar -xzf')) return parts.unpack()
 			if (command[2] !== pollScript) return { exitCode: 0, stdout: '', stderr: '' }
 			if (parts.poll) return parts.poll()
-			await delay(50)
+			await delay(duration.of('50ms').to('ms'))
 			return { exitCode: 0, stdout: '', stderr: '' }
 		},
 		startInBackground: () => Promise.resolve(),
@@ -55,26 +56,26 @@ function stubBackend(parts: {
  * at once took longer than a second to get through the pauses and the flush, which made `close`
  * reject on a deadline that had passed before it closed the backend.
  */
-const shortBackendMs = 1_500
+const shortBackend = duration.of('1500ms')
 
-/** How long a close on {@link shortDeadlines} may take: its backend deadline, and the time to see that it passed. */
-const promptlyMs = shortBackendMs + 1_000
+/** How long a close on {@link shortDeadlines} may take: its backend deadline, and a second to see that it passed. */
+const promptly = duration.of('2500ms')
 
 /**
  * Deadlines short enough that a hang shows as a slow test. Both start together, so a pause that
  * never settles leaves flushing and closing the backend only the gap between them: that gap has
  * to hold up on a busy CI runner.
  */
-const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(shortBackendMs) })
+const shortDeadlines = () => ({ pause: duration.of('200ms').toAbortSignal(), backend: shortBackend.toAbortSignal() })
 
 /** A backend deadline a busy runner can't run out of. */
-const ampleBackendMs = 20_000
+const ampleBackend = duration.of('20s')
 
 /** A short pause deadline, so work that never settles doesn't hold the close up, and an ample backend deadline. */
-const shortPauseDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(ampleBackendMs) })
+const shortPauseDeadlines = () => ({ pause: duration.of('200ms').toAbortSignal(), backend: ampleBackend.toAbortSignal() })
 
 /** Deadlines for a test about what a shutdown leads to, not how long it takes: a busy runner can't run out of them. */
-const ampleDeadlines = () => ({ pause: AbortSignal.timeout(10_000), backend: AbortSignal.timeout(ampleBackendMs) })
+const ampleDeadlines = () => ({ pause: duration.of('10s').toAbortSignal(), backend: ampleBackend.toAbortSignal() })
 
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
@@ -105,7 +106,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
 		expect(close).toHaveBeenCalledOnce()
 	})
@@ -120,7 +121,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
 		expect(close).toHaveBeenCalledOnce()
 	})
@@ -134,7 +135,7 @@ describe('Engine.close', () => {
 
 		// Act
 		created.resolve(await stubBackend({}).backend.create(spec, signal))
-		await delay(100)
+		await delay(duration.of('100ms').to('ms'))
 
 		// Assert
 		expect(engine.get(id)).toMatchObject({ status: 'restartable' })
@@ -154,7 +155,7 @@ describe('Engine.close', () => {
 		await engine.close(shortDeadlines())
 
 		// Assert
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 		expect(engine.get(id).status).toBe('restartable')
 		expect(engine.get(id).error).toContain('Pausing on shutdown failed')
 		expect(close).toHaveBeenCalledOnce()

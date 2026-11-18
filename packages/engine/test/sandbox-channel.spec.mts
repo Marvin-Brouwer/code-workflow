@@ -1,5 +1,6 @@
 import { appendFile, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { RuntimeMailbox } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { SandboxChannel } from '../src/mailbox/sandbox-channel.mts'
@@ -53,7 +54,7 @@ describe.skipIf(process.platform !== 'linux')('SandboxChannel', () => {
 		const { channel, mailbox } = await channelOnHost()
 		setTimeout(() => {
 			new RuntimeMailbox(mailbox).send({ type: 'succeeded' })
-		}, 500)
+		}, duration.of('500ms').to('ms'))
 
 		// Act
 		const delivery = await channel.poll(0, signal)
