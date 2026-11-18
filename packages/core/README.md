@@ -253,6 +253,13 @@ const StoryLabeled = z.object({
 	story: z.object({ key: z.string() }),
 })
 
+// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
+const storyLabeled = webhook(
+	develop,
+	StoryLabeled.transform((event) => ({ story: event.story.key })),
+	{ deliveryHeader: 'x-delivery-id' },
+)
+
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
@@ -262,12 +269,8 @@ export default defineMeshFlow({
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),
-		// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
-		webhook(
-			develop,
-			StoryLabeled.transform((event) => ({ story: event.story.key })),
-			{ deliveryHeader: 'x-delivery-id' },
-		),
+		// A story labelled `ai-develop` in the tracker.
+		storyLabeled,
 		// Every Monday at midnight.
 		schedule(weeklyReport, 'weekly'),
 	],
@@ -311,13 +314,11 @@ import { z } from 'zod'
 const PackageVersions = z.object({ versions: z.array(z.string()) })
 
 export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
-	const index = await fetchPackage(
-		{
-			registry: nugetOrg,
-			path: '/v3-flatcontainer/newtonsoft.json/index.json',
-		},
-		abortSignal,
-	)
+	const request = {
+		registry: nugetOrg,
+		path: '/v3-flatcontainer/newtonsoft.json/index.json',
+	}
+	const index = await fetchPackage(request, abortSignal)
 	const { versions } = PackageVersions.parse(JSON.parse(index.body.toString('utf8')))
 	return versions
 })

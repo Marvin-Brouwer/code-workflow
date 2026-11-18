@@ -32,13 +32,11 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * restores from:
  *
  * ```ts
- * const index = await fetchPackage(
- * 	{
- * 		registry: privateRegistry,
- * 		path: '/nuget/packages/v3/index.json',
- * 	},
- * 	abortSignal,
- * )
+ * const request = {
+ * 	registry: privateRegistry,
+ * 	path: '/nuget/packages/v3/index.json',
+ * }
+ * const index = await fetchPackage(request, abortSignal)
  * ```
  *
  * @throws When a field isn't a CodeArtifact name, account or region.

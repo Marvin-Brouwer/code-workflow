@@ -82,14 +82,11 @@ const gateway = openGateway({
 	providers,
 	registries: { cloud },
 })
-const grant = await gateway.openRun(
-	'run-1',
-	{
-		tools: [],
-		registries: [npm, packages],
-	},
-	abortSignal,
-)
+const access = {
+	tools: [],
+	registries: [npm, packages],
+}
+const grant = await gateway.openRun('run-1', access, abortSignal)
 ```
 
 `missingRegistries(registries)` says which registries' connectors aren't loaded, for a trigger to report before a run starts.

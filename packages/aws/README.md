@@ -50,13 +50,11 @@ const privateRegistry = codeArtifact({
 })
 
 export const packageIndex = workflow('package-index', async ({ abortSignal }) => {
-	const index = await fetchPackage(
-		{
-			registry: privateRegistry,
-			path: '/nuget/packages/v3/index.json',
-		},
-		abortSignal,
-	)
+	const request = {
+		registry: privateRegistry,
+		path: '/nuget/packages/v3/index.json',
+	}
+	const index = await fetchPackage(request, abortSignal)
 	return index.body.toString('utf8')
 })
 ```
@@ -107,14 +105,12 @@ const abortSignal = AbortSignal.timeout(30_000)
 const session = openAwsSession({ credentials })
 
 const { accessKeyId, secretAccessKey, sessionToken } = await session.roleCredentials(abortSignal)
-const { token } = await session.codeArtifactToken(
-	{
-		domain: 'example',
-		owner: '123456789012',
-		region: 'eu-west-1',
-	},
-	abortSignal,
-)
+const domain = {
+	domain: 'example',
+	owner: '123456789012',
+	region: 'eu-west-1',
+}
+const { token } = await session.codeArtifactToken(domain, abortSignal)
 ```
 
 - Role credentials come from the access portal for the account and role in the settings. They are kept in memory only, fetched again when they near their end, and at once when the settings change.

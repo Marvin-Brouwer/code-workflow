@@ -22,13 +22,11 @@ export interface FetchedPackage {
  * ```ts
  * const PackageVersions = z.object({ versions: z.array(z.string()) })
  *
- * const index = await fetchPackage(
- * 	{
- * 		registry: nugetOrg,
- * 		path: '/v3-flatcontainer/newtonsoft.json/index.json',
- * 	},
- * 	abortSignal,
- * )
+ * const request = {
+ * 	registry: nugetOrg,
+ * 	path: '/v3-flatcontainer/newtonsoft.json/index.json',
+ * }
+ * const index = await fetchPackage(request, abortSignal)
  * const { versions } = PackageVersions.parse(JSON.parse(index.body.toString('utf8')))
  * ```
  *

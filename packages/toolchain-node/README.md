@@ -38,14 +38,12 @@ import { z } from 'zod'
 const PackageDocument = z.object({ versions: z.record(z.string(), z.unknown()) })
 
 export const zodVersions = workflow('zod-versions', async ({ abortSignal }) => {
-	const document = await fetchPackage(
-		{
-			registry: npmRegistry,
-			path: '/zod',
-			accept: 'application/vnd.npm.install-v1+json',
-		},
-		abortSignal,
-	)
+	const request = {
+		registry: npmRegistry,
+		path: '/zod',
+		accept: 'application/vnd.npm.install-v1+json',
+	}
+	const document = await fetchPackage(request, abortSignal)
 	const { versions } = PackageDocument.parse(JSON.parse(document.body.toString('utf8')))
 	return Object.keys(versions)
 })

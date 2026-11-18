@@ -34,10 +34,7 @@ export interface MeshFlowApp {
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),
- * 		webhook(
- * 			fixIssue,
- * 			IssueLabeled.transform((event) => ({ issue: event.issue.number })),
- * 		),
+ * 		webhook(fixIssue, IssueLabeled.transform((event) => ({ issue: event.issue.number }))),
  * 		schedule(weeklyReport, 'weekly'),
  * 	],
  * })
