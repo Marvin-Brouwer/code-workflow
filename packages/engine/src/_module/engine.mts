@@ -7,7 +7,7 @@
  */
 export { openAppStore, type AppStore, type AppVersion } from '../apps/app-store.mts'
 export { controlClient, ControlError, DeployedApp, DeployOutcome, type ControlClient } from '../control/control-client.mts'
-export { AnswerBody, controlApi, StartRunBody } from '../control/control-api.mts'
+export { AnswerBody, controlApi, ShownConnector, StartRunBody } from '../control/control-api.mts'
 export {
 	connectorSettingsFileName,
 	ConnectorSetting,

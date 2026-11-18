@@ -3,6 +3,7 @@ import { MissingSetting } from '@mesh-flow/gateway'
 import { AppManifest, RuntimeEvent, type TriggerRef } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { SignInState } from '../engine/sign-in-state.mts'
+import { ShownConnector } from './control-api.mts'
 import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
 
@@ -43,6 +44,8 @@ export interface ControlClient {
 	stop(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	/** The connectors the engine loaded, and whether each signs in. */
+	connectors(abortSignal: AbortSignal): Promise<ShownConnector[]>
 	/** The sign-ins under way, with where to sign in. */
 	signIns(abortSignal: AbortSignal): Promise<SignInState[]>
 	/** Waits until the user signed in to `connector`, joining the sign-in runs wait for. */
@@ -75,6 +78,7 @@ export function controlClient(socketPath: string): ControlClient {
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
+		connectors: (abortSignal) => call(socketPath, z.array(ShownConnector), 'GET', '/connectors', undefined, abortSignal),
 		signIns: (abortSignal) => call(socketPath, z.array(SignInState), 'GET', '/sign-ins', undefined, abortSignal),
 		waitForSignIn: async (connector, abortSignal) => {
 			await call(socketPath, z.object({ signedIn: z.string() }), 'POST', `/sign-ins/${encodeURIComponent(connector)}`, {}, abortSignal)

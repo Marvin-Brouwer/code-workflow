@@ -3,6 +3,7 @@ import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { main } from '../src/cli/main.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
+import type { LoadedConnector } from '../src/connectors/load-connectors.mts'
 import { controlClient, type ControlClient } from '../src/control/control-client.mts'
 import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
@@ -11,10 +12,11 @@ import { builtApp, deployThroughApi, runtimeScript, testAppName, userRun } from 
 
 const signal = new AbortController().signal
 
-async function serve() {
+async function serve(connectors: readonly LoadedConnector[] = []) {
 	const home = await temporaryDirectory()
 	const served = await serveEngine({
 		keychain: false,
+		connectors: () => Promise.resolve(connectors),
 		home,
 		backend: hostBackend(path.join(home, 'sandboxes')),
 		layout: hostSandboxLayout,
@@ -76,6 +78,23 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		expect(stillMissing).toEqual([])
 		expect(deployed.manifest.description.triggers).toEqual([{ kind: 'user', id: 'ask', workflow: 'ask' }])
 		expect(await client.apps(signal)).toEqual([])
+	})
+
+	test('lists the connectors it loaded, and which of them sign in', async () => {
+		// Arrange
+		const { client } = await serve([
+			{ package: '@team/cloud', name: 'cloud', tools: [], signIn: () => Promise.resolve() },
+			{ package: 'tracker', name: 'tracker', tools: [] },
+		])
+
+		// Act
+		const connectors = await client.connectors(signal)
+
+		// Assert
+		expect(connectors).toEqual([
+			{ name: 'cloud', package: '@team/cloud', signsIn: true },
+			{ name: 'tracker', package: 'tracker', signsIn: false },
+		])
 	})
 
 	test.each([
