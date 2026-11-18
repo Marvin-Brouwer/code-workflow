@@ -33,8 +33,8 @@ export interface ReviewOptions {
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before `review`
 	 * gives up with the last error: once failed looks in a row, `every` apart, have covered
-	 * `toleratedOutage`. Only
-	 * failures that may pass count; a bad token or a missing permission fails at once. Default: 10 minutes.
+	 * `toleratedOutage`. Only failures that may pass count; a bad token or a missing permission
+	 * fails at once. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: Duration
 }

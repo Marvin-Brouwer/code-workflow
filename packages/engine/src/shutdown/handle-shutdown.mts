@@ -112,6 +112,7 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 
 /** Settles once `abortSignal` aborts, without keeping the process alive itself. */
 function aborted(abortSignal: AbortSignal): Promise<void> {
+	if (abortSignal.aborted) return Promise.resolve()
 	return new Promise((resolve) => {
 		abortSignal.addEventListener(
 			'abort',

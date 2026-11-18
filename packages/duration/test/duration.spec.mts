@@ -166,7 +166,7 @@ describe('toAbortSignal', () => {
 		expect(abortSignal.aborted).toBe(true)
 	})
 
-	test('aborts no sooner than a later tick for no time at all, as AbortSignal.timeout does', () => {
+	test("doesn't abort at once for no time at all, as AbortSignal.timeout doesn't", () => {
 		// Act
 		const abortSignal = duration({}).toAbortSignal()
 

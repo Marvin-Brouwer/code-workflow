@@ -34,13 +34,12 @@ describe('loop clocks', () => {
 		onTestFinished(() => {
 			clock.stop()
 		})
-		await clock.whileWaiting(() => sleep(signIn, neverAborted))
 
 		// Act
-		const rightAfterTheWait = exceeded.mock.calls.length
+		await clock.whileWaiting(() => sleep(signIn, neverAborted))
 
 		// Assert
-		expect(rightAfterTheWait).toBe(0)
+		expect(exceeded).not.toHaveBeenCalled()
 		await vi.waitFor(() => {
 			expect(exceeded).toHaveBeenCalledWith(budget)
 		})

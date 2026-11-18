@@ -1,6 +1,9 @@
 import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 
+/** For a request sent without a signal: nothing stops its latency. */
+const neverAborted = new AbortController().signal
+
 /** A request the fake was sent. */
 export interface FakeRequest {
 	readonly method: string
@@ -249,7 +252,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			body,
 			abortSignal: init?.signal ?? undefined,
 		})
-		await sleep(state.latency, init?.signal ?? new AbortController().signal)
+		await sleep(state.latency, init?.signal ?? neverAborted)
 		if (hanging.has(url.pathname))
 			return new Promise<Response>((_resolve, reject) => {
 				init?.signal?.addEventListener('abort', () => {

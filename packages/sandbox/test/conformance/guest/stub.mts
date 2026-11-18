@@ -15,10 +15,10 @@ import { setTimeout as sleep } from 'node:timers/promises'
 const stateDir = process.env.STATE_DIR ?? '/var/tmp/conformance'
 const memoryMb = Number(process.env.STUB_MEMORY_MB ?? '128')
 
-// State that only survives if memory does.
 /** How often to look for the state file again: in milliseconds, since this runs in the sandbox without the workspace's packages. */
 const lookAgainEvery = 200
 
+// State that only survives if memory does.
 const token = randomUUID()
 const ballast = Buffer.alloc(memoryMb * 1024 * 1024)
 for (let offset = 0; offset < ballast.length; offset += 4096) ballast.writeUInt32LE(offset % 0xffffffff, offset)

@@ -13,8 +13,8 @@ const millisecondsPer = {
 	ms: 1,
 } as const satisfies Record<DurationUnit, number>
 
-/** The longest duration, in milliseconds: as far as a `Date` reaches from the epoch, 100 million days. */
-const longestDuration = 8.64e15
+/** The longest duration, in milliseconds: as far as a `Date` reaches from the epoch. */
+const longestMilliseconds = 100_000_000 * millisecondsPer.d
 
 /** The key `@mesh-flow/core` renders a value in a prompt by, so a duration reads as `1h15m` there. */
 const toPrompt = Symbol.for('mesh-flow.to-prompt')
@@ -45,7 +45,7 @@ export interface Duration extends Required<DurationParts> {
 /**
  * A duration from its parts. Missing parts are zero, so `duration({})` is no time at all, and a
  * duration itself can be passed as parts. Throws a `RangeError` for a part that isn't a finite
- * number of zero or more, or a total longer than a date can be moved, 100 million days.
+ * number of zero or more, or a total longer than a date can be moved from the epoch, 100 million days.
  *
  * ```ts
  * const reviewWindow = duration({
@@ -99,8 +99,8 @@ function partOf(parts: DurationParts, name: keyof DurationParts): number {
 }
 
 function fromMilliseconds(total: number): Duration {
-	if (total > longestDuration) {
-		throw new RangeError(`A duration can be at most ${String(longestDuration / millisecondsPer.d)} days, as far as a date can be moved.`)
+	if (total > longestMilliseconds) {
+		throw new RangeError('A duration can be at most 100 million days, as far as a date can be moved from the epoch.')
 	}
 	const days = Math.floor(total / millisecondsPer.d)
 	const hours = Math.floor((total % millisecondsPer.d) / millisecondsPer.h)

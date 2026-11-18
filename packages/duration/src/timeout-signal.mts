@@ -19,7 +19,7 @@ export function timeoutSignal(time: Duration): AbortSignal {
 		}
 		setTimeout(step, Math.min(left, longestTimer)).unref()
 	}
-	// Never at once, even for no time at all, as `AbortSignal.timeout`.
+	// Never at once, even for no time at all, as `AbortSignal.timeout` does.
 	setTimeout(step, Math.min(total, longestTimer)).unref()
 	return controller.signal
 }

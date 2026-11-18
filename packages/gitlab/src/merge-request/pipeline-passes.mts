@@ -17,8 +17,7 @@ export interface PipelinePassesOptions {
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before the check
 	 * fails with the last error: once failed looks in a row, `every` apart, have covered
-	 * `toleratedOutage`.
-	 * Default: 10 minutes.
+	 * `toleratedOutage`. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: Duration
 	/**

@@ -31,8 +31,8 @@ export interface ReviewOptions {
 	/**
 	 * How long looks at GitHub may keep failing, say while the network is down, before `review`
 	 * gives up with the last error: once failed looks in a row, `every` apart, have covered
-	 * `toleratedOutage`, so the time the failing calls take comes on top. Only failures that may pass count; a bad token or a missing
-	 * permission fails at once. Default: 10 minutes.
+	 * `toleratedOutage`, so the time the failing calls take comes on top. Only failures that may
+	 * pass count; a bad token or a missing permission fails at once. Default: 10 minutes.
 	 */
 	readonly toleratedOutage?: Duration
 }
