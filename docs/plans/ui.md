@@ -34,7 +34,9 @@ once.
   an `HttpOnly`, `SameSite=Strict` cookie and redirects to drop it from the address bar. Every API
   call needs the cookie, and the `Host` header must be the address it listens on, so another site
   in the browser (DNS rebinding included) and another user on the machine can't use it. The same
-  rule as the control socket: the user who started it.
+  rule as the control socket: the user who started it. This is only the local way in: access is
+  one middleware in front of `/api`, and hosted (roadmap step 7) swaps it for a real sign-in per
+  user. The UI itself only knows it talks to `/api` with a cookie, so it doesn't change for that.
 - **Runs and apps** go to the running engine over its control socket, the same routes the CLI uses.
   When no engine runs, those pages say so and how to start it; settings still work.
 - **Settings** use the gateway home directly, through the same functions the CLI commands call
