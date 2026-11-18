@@ -1,0 +1,21 @@
+.menu {
+	display: flex;
+	gap: var(--space-m);
+	margin-bottom: var(--space-m);
+	padding-bottom: var(--space-s);
+	border-bottom: var(--line);
+}
+
+.section {
+	margin-bottom: var(--space-l);
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-xs);
+}
+
+.muted {
+	color: var(--color-muted);
+}

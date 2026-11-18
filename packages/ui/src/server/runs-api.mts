@@ -21,6 +21,7 @@ export function runsApi(client: ControlClient): Hono {
 	api.post('/runs/:run/stop', async (c) => c.json(await client.stop(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/resume', async (c) => c.json(await client.resume(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/restart', async (c) => c.json(await client.restart(c.req.param('run'), c.req.raw.signal)))
+	api.get('/connectors', async (c) => c.json(await client.connectors(c.req.raw.signal)))
 	api.get('/sign-ins', async (c) => c.json(await client.signIns(c.req.raw.signal)))
 	api.post('/sign-ins/:connector', async (c) => {
 		const connector = c.req.param('connector')
