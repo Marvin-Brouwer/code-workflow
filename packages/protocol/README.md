@@ -24,6 +24,9 @@ const { value } = await mailbox.answer('story', abortSignal)
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'tomorrow', at: '2026-11-08T09:00:00Z' } })
 await mailbox.answer('tomorrow', abortSignal)
 
+mailbox.send({ type: 'request', request: { kind: 'login', id: 'aws-1', connector: 'aws' } })
+await mailbox.answer('aws-1', abortSignal) // check its value with LoginAnswer
+
 mailbox.send({ type: 'succeeded' })
 ```
 
@@ -57,14 +60,15 @@ The runtime appends one message per line to `outbox.jsonl`:
 | `{ type: 'call', id, endpoint, token, call }` | a call to the gateway on the host, answered in the inbox under `id` (see [Calls](#calls)) |
 | `{ type: 'cancel', id }` | the runtime stopped waiting for call `id`; the host stops it and still answers |
 
-There are two kinds of request:
+There are three kinds of request:
 
 | Request | Answered |
 |---|---|
 | `{ kind: 'input', id, question, fields }` | by a human. `fields` holds JSON Schema per field, and the runtime validates the answer |
 | `{ kind: 'wake', id, at }` | by the engine's clock at `at`. Timers inside a sandbox disagree across a pause, so the engine keeps the time |
+| `{ kind: 'login', id, connector }` | by the engine, once the user signed in to the connector's service, or with `{ resumed: true }` when the run was resumed instead (`LoginAnswer`); the runtime then calls the host tool again |
 
-The engine writes each answer to `inbox/<request id>.json`, as `{ value }`, or `{}` for a wake. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters. An answer stays in the inbox, so an id is used once per run attempt: a workflow that waits in a loop gives each wait its own id, such as `poll-ci-3`. `RuntimeMailbox` throws when a request id comes again.
+The engine writes each answer to `inbox/<request id>.json`, as `{ value }`: `{}` for a wake, a `LoginAnswer` as the value for a login. Request ids end up as file names, so they are limited to letters, digits, `-` and `_`, up to 64 characters. An answer stays in the inbox, so an id is used once per run attempt: a workflow that waits in a loop gives each wait its own id, such as `poll-ci-3`. `RuntimeMailbox` throws when a request id comes again.
 
 ## Calls
 
@@ -90,7 +94,7 @@ const answer = CallAnswer.parse((await mailbox.take('call-1', abortSignal)).valu
 | `{ type: 'close', endpoint }` | nothing: the loop's endpoint is closed. Only on the run's endpoint |
 | `{ type: 'resolve-model', model }` | a `ResolvedModel`: the first of the user's providers that offers the model |
 | `{ type: 'model', request }` | a `ModelResponse`: what the provider answered, with the credential added on the host |
-| `{ type: 'package', request }` | a `PackageResponse`: what one of the app's package registries answered a `PackageRequest`, the body base64. Only on the run's endpoint |
+| `{ type: 'package', request }` | a `PackageResponse`: what one of the app's package registries answered a `PackageRequest`. The body isn't in it: the engine writes it to the mailbox's `staged` folder first, and the answer names the file (`RuntimeMailbox.staged(name)` says where it is); whoever reads it removes it. Only on the run's package endpoint, a `RunGrant`'s `packages` |
 
 A token is good for one call. One that comes again, or one the endpoint never handed out, closes the endpoint and fails the run: someone else had it. Tokens live only in the runtime's memory, which is why `takeGrant` and `take` remove the files they read.
 

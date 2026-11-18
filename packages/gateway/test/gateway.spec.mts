@@ -1,7 +1,17 @@
-import { EndpointGrant, type CallAnswer, ModelResponse, type PackageRegistry, ResolvedModel } from '@mesh-flow/protocol'
+import {
+	EndpointGrant,
+	type CallAnswer,
+	type RunGrant,
+	type ConnectorRegistry,
+	ModelResponse,
+	type PackageRegistry,
+	ResolvedModel,
+} from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
-import { fetchPackage, maxPackageBytes } from '../src/packages/fetch-package.mts'
+import { tokensPerPackageEndpoint, type GatewayOptions } from '../src/gateway.mts'
+import type { ResolveRegistryTarget } from '../src/packages/connector-registry.mts'
+import { fetchFromPublicRegistry, maxPackageBytes } from '../src/packages/fetch-from-public-registry.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
 import { SignInNeededError } from '../src/tools/sign-in-needed.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
@@ -20,6 +30,12 @@ function tokenOf(grant: EndpointGrant, index = 0): string {
 	const token = grant.tokens[index]
 	if (token === undefined) throw new Error(`The grant has no token ${String(index)}.`)
 	return token
+}
+
+/** The run's package endpoint, which a test knows was opened. */
+function packagesOf(grant: RunGrant): EndpointGrant {
+	if (grant.packages === undefined) throw new Error('The run has no package endpoint.')
+	return grant.packages
 }
 
 function errorOf(answer: CallAnswer | undefined): string {
@@ -297,7 +313,7 @@ describe('openGateway', () => {
 
 		// Assert
 		expect(readAgain.compromised).toBeUndefined()
-		expect(errorOf(await readAgain.answer(abortSignal))).toContain('engine stopped')
+		expect(errorOf((await readAgain.answer(abortSignal)).answer)).toContain('engine stopped')
 		expect(readAfterForgetting.compromised).toBeDefined()
 	})
 
@@ -318,7 +334,7 @@ describe('openGateway', () => {
 		controller.abort(new Error('cancelled'))
 
 		// Assert
-		const answer = await answering
+		const { answer } = await answering
 		expect(errorOf(answer)).toBe('The call was stopped: cancelled')
 		expect(answer.next).toBeDefined()
 	})
@@ -505,15 +521,23 @@ describe('model calls', () => {
 	})
 })
 
-/** A run that restores from `registry`, on a gateway that fetches with `sent`, and a call that fetches a path there. */
-async function packageRun(sent: typeof fetch, registry: PackageRegistry = 'npm') {
-	const { gateway } = await testGateway({ fetch: sent })
+/**
+ * A run that restores from `registry`, on a gateway that fetches with `sent`, and a call that
+ * fetches a path there, each on the next of the grant's tokens.
+ */
+async function packageRun(
+	sent: typeof fetch,
+	registry: PackageRegistry = 'npm',
+	options: Partial<Pick<GatewayOptions, 'registries'>> & { readonly home?: string } = {},
+) {
+	const { gateway } = await testGateway({ fetch: sent, ...options })
 	const grant = await gateway.openRun(runId, { tools: [], registries: [registry] }, abortSignal)
+	let used = 0
 	const fetchPath = (path: string, accept?: string) =>
 		callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, tokenOf(grant), {
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant), used++), {
 				type: 'package',
 				request: { registry, path, ...(accept === undefined ? {} : { accept }) },
 			}),
@@ -521,8 +545,25 @@ async function packageRun(sent: typeof fetch, registry: PackageRegistry = 'npm')
 	return { gateway, grant, fetchPath }
 }
 
+/** A fetch or a connector stuck on the network, which ignores its signal. */
+const never = () => new Promise<never>(() => undefined)
+
+/** A connector's registry, as `@mesh-flow/aws` describes a CodeArtifact repository. */
+const cloudRegistry: ConnectorRegistry = {
+	connector: 'cloud',
+	name: 'cloud packages',
+	host: 'packages.cloud.example',
+	paths: ['/npm/packages/'],
+	settings: { repository: 'packages' },
+}
+
+/** Resolves fetches on {@link cloudRegistry} to its host, with a bearer token. */
+const cloudResolve = vi.fn<ResolveRegistryTarget>(({ path }) =>
+	Promise.resolve({ url: `https://packages.cloud.example${path}`, headers: { authorization: 'Bearer cloud-token' } }),
+)
+
 describe('package calls', () => {
-	test('fetches a package from the registry and answers with its body, base64', async () => {
+	test('fetches a package from the registry and answers with the file its body is staged in', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() =>
 			Promise.resolve(new Response('tarball', { headers: { 'content-type': 'application/octet-stream', 'set-cookie': 'a=b' } })),
@@ -530,14 +571,16 @@ describe('package calls', () => {
 		const { fetchPath } = await packageRun(sent)
 
 		// Act
-		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
+		const { answer, staged } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
 
 		// Assert
 		expect(resultOf(answer)).toEqual({
 			status: 200,
 			headers: { 'content-type': 'application/octet-stream' },
-			body: Buffer.from('tarball').toString('base64'),
+			body: expect.stringMatching(/^call-\d+\.body$/) as unknown,
+			size: 'tarball'.length,
 		})
+		expect(staged?.toString('utf8')).toBe('tarball')
 		const [url, init] = sent.mock.calls[0] ?? []
 		expect(url).toBe('https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz')
 		expect(init?.headers).toMatchObject({ accept: 'application/octet-stream' })
@@ -625,7 +668,7 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 
 		// Act
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
 
 		// Assert
 		await expect(fetching).rejects.toThrow('the most a package fetch takes')
@@ -636,7 +679,7 @@ describe('package calls', () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
 		const stop = new AbortController()
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -653,7 +696,7 @@ describe('package calls', () => {
 		const body = new ReadableStream<Uint8Array>()
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 		const stop = new AbortController()
-		const fetching = fetchPackage({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -725,7 +768,10 @@ describe('package calls', () => {
 		const { answer } = await callGateway(
 			gateway,
 			runId,
-			callOf(grant.endpoint, tokenOf(grant), { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }),
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: 'nuget', path: '/v3/index.json' },
+			}),
 		)
 
 		// Assert
@@ -733,22 +779,249 @@ describe('package calls', () => {
 		expect(sent).not.toHaveBeenCalled()
 	})
 
-	test("refuses package calls on a loop's endpoint", async () => {
+	test("refuses package calls on the run's and a loop's endpoint: they go on the package endpoint", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
 		const { gateway, grant } = await packageRun(sent)
 		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
 		const loop = EndpointGrant.parse(resultOf(opened))
+		const request = { registry: 'npm', path: '/left-pad' } as const
+
+		// Act
+		const onRun = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 1), { type: 'package', request }))
+		const onLoop = await callGateway(gateway, runId, callOf(loop.endpoint, tokenOf(loop), { type: 'package', request }))
+
+		// Assert
+		expect([errorOf(onRun.answer), errorOf(onLoop.answer)]).toEqual([
+			'Package fetches go on the package endpoint.',
+			'Package fetches go on the package endpoint.',
+		])
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test('opens a package endpoint with tokens of its own, which takes package fetches only', async () => {
+		// Arrange
+		const { gateway, grant } = await packageRun(vi.fn<typeof fetch>())
+		const packages = packagesOf(grant)
+
+		// Act
+		const opening = await callGateway(gateway, runId, callOf(packages.endpoint, tokenOf(packages), { type: 'open', tools: [] }))
+
+		// Assert
+		expect(packages.tokens).toHaveLength(tokensPerPackageEndpoint)
+		expect(packages.tokens.some((token) => grant.tokens.includes(token))).toBe(false)
+		expect(errorOf(opening.answer)).toBe('The package endpoint only takes package fetches.')
+	})
+
+	test('opens no package endpoint for a run whose app restores from no registry', async () => {
+		// Arrange
+		const { gateway } = await testGateway()
+
+		// Act
+		const grant = await gateway.openRun(runId, { tools: [] }, abortSignal)
+
+		// Assert
+		expect(grant.packages).toBeUndefined()
+	})
+	test('keeps a package it fetched whole, also for a gateway opened later, and fetches it only once', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball', { headers: { etag: '"1"' } })))
+		const { home } = await testGateway()
+		const first = await packageRun(sent, 'npm', { home })
+		await first.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+		const later = await packageRun(sent, 'npm', { home })
+
+		// Act
+		const { answer, staged } = await later.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 200, headers: { etag: '"1"' } })
+		expect(staged?.toString('utf8')).toBe('tarball')
+		expect(sent).toHaveBeenCalledOnce()
+	})
+
+	test.each([
+		['a version list, which changes', '/left-pad', 200],
+		['a package that was not found', '/left-pad/-/left-pad-9.9.9.tgz', 404],
+	])('fetches %s again each time', async (_what, path, status) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status })))
+		const { fetchPath } = await packageRun(sent)
+		await fetchPath(path)
+
+		// Act
+		await fetchPath(path)
+
+		// Assert
+		expect(sent).toHaveBeenCalledTimes(2)
+	})
+
+	test("serves a cached package of a connector's registry only while the connector is loaded", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball')))
+		const { home } = await testGateway()
+		const first = await packageRun(sent, cloudRegistry, { home, registries: { cloud: cloudResolve } })
+		await first.fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+		const withoutConnector = await packageRun(sent, cloudRegistry, { home })
+
+		// Act
+		const { answer } = await withoutConnector.fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(errorOf(answer)).toContain("needs connector cloud, which isn't loaded")
+		expect(sent).toHaveBeenCalledOnce()
+	})
+
+	test("fetches from a connector's registry where its connector says, with its credential", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { headers: { 'content-type': 'application/json' } })))
+		const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: cloudResolve } })
+
+		// Act
+		const { answer } = await fetchPath('/npm/packages/left-pad', 'application/json')
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 200 })
+		const [url, init] = sent.mock.calls[0] ?? []
+		expect(url).toBe('https://packages.cloud.example/npm/packages/left-pad')
+		expect(init?.headers).toMatchObject({ authorization: 'Bearer cloud-token', accept: 'application/json' })
+	})
+
+	test("takes a connector's registry with its fields in another order as the same one", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
+		const { gateway } = await testGateway({ fetch: sent, registries: { cloud: cloudResolve } })
+		const reordered: ConnectorRegistry = {
+			settings: { repository: 'packages' },
+			paths: ['/npm/packages/'],
+			host: cloudRegistry.host,
+			name: cloudRegistry.name,
+			connector: 'cloud',
+		}
+		const grant = await gateway.openRun(runId, { tools: [], registries: [reordered] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(
 			gateway,
 			runId,
-			callOf(loop.endpoint, tokenOf(loop), { type: 'package', request: { registry: 'npm', path: '/left-pad' } }),
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: cloudRegistry, path: '/npm/packages/left-pad' },
+			}),
 		)
 
 		// Assert
-		expect(errorOf(answer)).toContain('only takes its tools')
+		expect(resultOf(answer)).toMatchObject({ status: 200 })
+	})
+
+	test.each(['/npm/other/left-pad', '/npm/packages/../other/left-pad', '/npm/packages//left-pad', '/pypi/packages/left-pad'])(
+		"refuses %s, which isn't on the connector's registry, and asks the connector nothing",
+		async (path) => {
+			// Arrange
+			const sent = vi.fn<typeof fetch>()
+			const resolve = vi.fn<ResolveRegistryTarget>()
+			const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
+
+			// Act
+			const { answer } = await fetchPath(path)
+
+			// Assert
+			expect(errorOf(answer)).toContain("isn't a package fetch on cloud packages")
+			expect(resolve).not.toHaveBeenCalled()
+			expect(sent).not.toHaveBeenCalled()
+		},
+	)
+
+	test("follows a connector registry's redirect to a signed download, without its credential", async () => {
+		// Arrange
+		const signed = 'https://downloads.cloud.example/left-pad.tgz?signature=abc'
+		const sent = vi.fn<typeof fetch>((url) =>
+			Promise.resolve(url === signed ? new Response('tarball') : new Response(null, { status: 302, headers: { location: signed } })),
+		)
+		const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: cloudResolve } })
+
+		// Act
+		const { answer, staged } = await fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(resultOf(answer)).toMatchObject({ status: 200, headers: {} })
+		expect(staged?.toString('utf8')).toBe('tarball')
+		expect(sent.mock.calls.map(([url]) => url)).toEqual([
+			'https://packages.cloud.example/npm/packages/left-pad/-/left-pad-1.3.0.tgz',
+			signed,
+		])
+		expect(sent.mock.calls[1]?.[1]?.headers).not.toHaveProperty('authorization')
+	})
+
+	test.each([
+		['to plain HTTP', () => 'http://downloads.cloud.example/left-pad.tgz', 'instead of HTTPS'],
+		['in a loop', (url: string) => url, 'more than 3 times'],
+	])("refuses a connector registry's redirect %s", async (_what, next, error) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>((url) =>
+			Promise.resolve(new Response(null, { status: 302, headers: { location: next(url instanceof Request ? url.url : url.toString()) } })),
+		)
+		const { fetchPath } = await packageRun(sent, cloudRegistry, { registries: { cloud: cloudResolve } })
+
+		// Act
+		const { answer } = await fetchPath('/npm/packages/left-pad/-/left-pad-1.3.0.tgz')
+
+		// Assert
+		expect(errorOf(answer)).toContain(error)
+	})
+
+	test("says which registries' connectors aren't loaded, and fails a fetch on one", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, fetchPath } = await packageRun(sent, cloudRegistry)
+
+		// Act
+		const missing = gateway.missingRegistries(['npm', cloudRegistry])
+		const { answer } = await fetchPath('/npm/packages/left-pad')
+
+		// Assert
+		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud')])
+		expect(errorOf(answer)).toContain("needs connector cloud, which isn't loaded")
 		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		['the connector', 'resolve'],
+		['the registry', 'fetch'],
+	])('settles a package call promptly when it is stopped, even if %s never answers', async (_who, stuck) => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(stuck === 'fetch' ? never : () => Promise.resolve(new Response('{}')))
+		const resolve = vi.fn<ResolveRegistryTarget>(stuck === 'resolve' ? never : cloudResolve)
+		const { gateway, grant } = await packageRun(sent, cloudRegistry, { registries: { cloud: resolve } })
+		const accepted = await gateway.accept(
+			runId,
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: cloudRegistry, path: '/npm/packages/left-pad' },
+			}),
+			abortSignal,
+		)
+		const controller = new AbortController()
+
+		// Act
+		const answering = accepted.answer(controller.signal)
+		controller.abort(new Error('cancelled'))
+
+		// Assert
+		const { answer, staged } = await answering
+		expect(answer.outcome.ok).toBe(false)
+		expect(staged).toBeUndefined()
+	})
+
+	test('passes on the sign-in a connector needs to fetch from its registry', async () => {
+		// Arrange
+		const resolve = vi.fn<ResolveRegistryTarget>(() => Promise.reject(new SignInNeededError('cloud', 'Sign in to cloud first.')))
+		const { fetchPath } = await packageRun(vi.fn<typeof fetch>(), cloudRegistry, { registries: { cloud: resolve } })
+
+		// Act
+		const { answer } = await fetchPath('/npm/packages/left-pad')
+
+		// Assert
+		expect(answer.outcome).toMatchObject({ ok: false, signInTo: 'cloud' })
 	})
 })

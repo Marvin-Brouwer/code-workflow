@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { ConnectorLoginContext } from '@mesh-flow/gateway'
+import type { ConnectorSignInContext } from '@mesh-flow/gateway'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import { readAwsSettings } from './aws-settings.mts'
 import { approvedSession, startDeviceAuthorization, type Wait } from './device-authorization.mts'
@@ -27,7 +27,7 @@ const timerWait: Wait = (ms, abortSignal) => sleep(ms, undefined, { signal: abor
  * @throws When the AWS settings are missing, and when the sign-in ended or was denied before it
  * was approved.
  */
-export async function signIn(context: ConnectorLoginContext, options: SignInOptions = {}): Promise<void> {
+export async function signIn(context: ConnectorSignInContext, options: SignInOptions = {}): Promise<void> {
 	const { credentials, show, abortSignal } = context
 	const now = options.now ?? (() => new Date())
 	const settings = await readAwsSettings(credentials, abortSignal)

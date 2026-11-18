@@ -1,17 +1,19 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { tokensPerEndpoint } from '@mesh-flow/gateway'
+import { tokensPerEndpoint, tokensPerPackageEndpoint } from '@mesh-flow/gateway'
 import {
 	answerFile,
-	type CallAnswer,
-	type EndpointGrant,
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	minTokenLength,
 	runIdEnvironmentVariable,
 	RuntimeMessage,
+	stagedFile,
+	stagedFileName,
+	type CallAnswer,
+	type RunGrant,
 } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -30,7 +32,7 @@ const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
  * Starts an entry file the way the engine does: `node <file>`, the mailbox in the environment and
  * the start file in it, and the gateway's grant when there is one.
  */
-async function startLikeTheEngine(source: string, start: unknown, grant?: EndpointGrant) {
+async function startLikeTheEngine(source: string, start: unknown, grant?: RunGrant) {
 	const directory = await temporaryDirectory()
 	const mailbox = path.join(directory, 'mailbox')
 	const layout = mailboxLayout(mailbox)
@@ -302,31 +304,40 @@ describe('an entry file started by the engine', () => {
 	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
 		// Arrange
 		const tokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(index))
-		const run = await startLikeTheEngine(proxiedEntry, { mode: 'run', workflow: 'fetch' }, { endpoint: 'run', tokens })
+		// After the run's tokens and the next one its answer hands out.
+		const firstPackageTokenIndex = tokensPerEndpoint + 1
+		const fetchTokens = Array.from({ length: tokensPerPackageEndpoint }, (_, index) => testToken(firstPackageTokenIndex + index))
+		const run = await startLikeTheEngine(
+			proxiedEntry,
+			{ mode: 'run', workflow: 'fetch' },
+			{ endpoint: 'run', tokens, packages: { endpoint: 'packages', tokens: fetchTokens } },
+		)
 		await expect
 			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
 			.toBe(true)
 		const call = (await run.messages()).find((message) => message.type === 'call')
 
 		// Act
+		const callId = call?.type === 'call' ? call.id : ''
+		const body = '{"name":"left-pad"}'
 		const answer: CallAnswer = {
 			next: testToken(tokensPerEndpoint),
 			outcome: {
 				ok: true,
-				result: {
-					status: 200,
-					headers: { 'content-type': 'application/json' },
-					body: Buffer.from('{"name":"left-pad"}').toString('base64'),
-				},
+				result: { status: 200, headers: { 'content-type': 'application/json' }, body: stagedFileName(callId), size: body.length },
 			},
 		}
-		await writeFile(answerFile(run.layout, call?.type === 'call' ? call.id : ''), JSON.stringify({ value: answer }))
+		await mkdir(run.layout.staged, { recursive: true })
+		await writeFile(stagedFile(run.layout, stagedFileName(callId)), body)
+		await writeFile(answerFile(run.layout, callId), JSON.stringify({ value: answer }))
 
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(0)
+		expect(await readdir(run.layout.staged)).toEqual([])
+		expect(fetchTokens).toContain(call?.type === 'call' ? call.token : undefined)
 		expect(call).toMatchObject({
 			type: 'call',
-			endpoint: 'run',
+			endpoint: 'packages',
 			call: { type: 'package', request: { registry: 'npm', path: '/left-pad' } },
 		})
 	})

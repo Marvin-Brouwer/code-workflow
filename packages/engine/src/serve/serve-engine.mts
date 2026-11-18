@@ -8,6 +8,7 @@ import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
+import { connectorSettingsOf } from '../engine/connector-settings-check.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
 import type { SandboxLayout } from '../engine/sandbox-layout.mts'
 import { settleWithin } from '../engine/settle-within.mts'
@@ -100,6 +101,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			credentials: gatewayHome.credentials,
 			providers: gatewayHome.providers,
 			tools: connectors.flatMap((connector) => connector.tools),
+			registries: Object.fromEntries(connectors.flatMap(({ name, registries }) => (registries === undefined ? [] : [[name, registries]]))),
 		})
 		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal, log)
 		engine = await Engine.open(
@@ -109,6 +111,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 				apps,
 				gateway,
 				signIns: openSignIns({ connectors, log }),
+				connectorSettings: connectorSettingsOf(connectors),
 				...(options.layout ? { layout: options.layout } : {}),
 				log,
 			},

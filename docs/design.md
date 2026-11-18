@@ -374,7 +374,7 @@ No credential ever enters the sandbox. Full rules in
 |---|---|
 | **Host-side tools** called over the host↔sandbox channel (JSON-RPC) | everything that needs a credential: Jira, GitLab, GitHub, AWS operations; git clone/fetch/push as functions for workflow code only |
 | **Model calls** over the same channel, native request and response passed through | model providers |
-| **Package proxy** in the sandbox turning package fetches into read-only calls | every package registry: public ones (nuget.org, npm) now, private ones (CodeArtifact NuGet/npm) next ([plan](plans/aws-codeartifact.md)) |
+| **Package proxy** in the sandbox turning package fetches into read-only calls | every package registry: public ones (nuget.org, npm) and connectors' private ones (CodeArtifact NuGet/npm, [plan](plans/aws-codeartifact.md)) |
 
 The sandbox has no network at all (2026-11-16): not even public package sources are reachable
 directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
@@ -428,7 +428,8 @@ directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
 
 ## 8. Connectors
 
-A connector has a settings schema, a gateway half and a sandbox half:
+Once the settings UI is there (section 9), a connector has a settings schema, a gateway half and a
+sandbox half. This is that later shape; what is built now is below.
 
 ```ts
 export const aws = connector({
@@ -445,19 +446,24 @@ export const aws = connector({
 });
 ```
 
-- Every connector with a session gets `checkSession()` automatically, as a function and as a
-  tool: returns immediately when the session is valid beyond the threshold, refreshes when
-  possible, otherwise raises an input request and waits. An agent that hits expired credentials
-  can call it itself.
+- A host tool that needs a sign-in throws `SignInNeededError`: the runtime raises a `login`
+  request, the run waits until the user signed in (`mesh-flow login <connector>`, or the code
+  `mesh-flow show` points to), and the tool is called again. A connector may also bring a
+  `checkSession` for code that wants to make sure up front: `aws.checkSession` is written by hand,
+  one for every connector with a session comes later.
 - A connector's credentialed tools have their implementation in the gateway half and a stub in
   the sandbox half (section 7).
 - Workflows import the connectors they use, so the build's description tells the engine each workflow's
   requirements.
-- What ships in the MVP is the host half only: `connectorHost(name, tools)` from `@mesh-flow/gateway`,
-  which the engine loads from its own connector list (`mesh-flow connector add <package>`) and
-  points at a directory of its own. The settings schema, sessions and `checkSession` come with the
-  settings UI (section 9); until then a connector's credential is a named entry in the credential
-  store, such as `github/token`.
+- What is built is the host half: `connectorHost(name, tools, { signIn, registries, missingSettings })`
+  from `@mesh-flow/gateway`, which the engine loads from its own connector list
+  (`mesh-flow connector add <package>`) and points at a directory of its own. `signIn` signs the
+  user in to the connector's service and keeps the session in the store (the AWS one follows
+  Identity Center's session, with no timer of its own), `registries` says how the gateway reaches
+  its package registries, and `missingSettings` which settings `mesh-flow deploy` and a trigger
+  report as missing. The settings schema comes with the settings UI (section 9); until then a
+  connector's settings and credentials are named entries in the credential store, such as
+  `github/token` or `aws/start-url`.
 - Connectors with webhooks may export a zod schema per event with its signature scheme filled in
   (`github.issueLabeled(label)`) and ready-made triggers built on them
   (`github.onIssueLabeled(workflow, label)`), as shortcuts for `webhook` triggers and for events
@@ -566,12 +572,13 @@ Out of scope for now: token and cost budgets.
    `limit` on Pi Durable, `input`, the sandbox backends, gateway for model providers, a GitHub
    connector, triggers (user, webhook, schedule); first a minimal GitHub issue workflow (issue → fix → pull request → review comments),
    then the big-repo app's `develop` workflow, both end to end from a CLI. Done: `develop` delivers
-   independent repositories side by side (`inDependencyOrder`); a dependent one needs the
-   registry shim to restore what its upstream published, which isn't built yet.
+   independent repositories side by side (`inDependencyOrder`); a dependent one needs a
+   CodeArtifact publish to restore what its upstream published, which isn't built yet.
 3. Snapshots on wait (engine-side only; workflow code doesn't change).
 4. Done with the MVP: `inDependencyOrder` with concurrency, and GitLab review watching.
-5. No direct egress, package fetches through the gateway (built); AWS and CodeArtifact through the
-   gateway; `checkSession` ([plan](plans/aws-codeartifact.md)); package managers beyond npm and
+5. No direct egress, package fetches through the gateway, AWS sign-in and CodeArtifact restores
+   through the gateway, `aws.checkSession` ([plan](plans/aws-codeartifact.md), built); CodeArtifact
+   publishing; package managers beyond npm and
    NuGet, each with a test that installs through the package proxy, one per way of trusting
    certificates and proxies: pip (its own certifi bundle), Maven and Gradle (the JVM's keystore,
    and proxy settings as system properties instead of `HTTPS_PROXY`), Go and Cargo.

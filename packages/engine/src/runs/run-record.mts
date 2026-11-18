@@ -35,7 +35,7 @@ export const RunApp = z.object({
 	sandbox: SandboxSpec,
 	/** The host tools the app calls through the gateway. Runs from before the gateway list none. */
 	tools: z.array(z.string()).default([]),
-	/** The public package registries the app restores from, through the gateway. */
+	/** The package registries the app restores from, through the gateway: public ones and connectors'. */
 	registries: z.array(PackageRegistry).default([]),
 })
 export type RunApp = z.infer<typeof RunApp>

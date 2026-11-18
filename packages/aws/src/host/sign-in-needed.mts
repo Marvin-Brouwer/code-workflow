@@ -1,7 +1,8 @@
-import { SignInNeededError } from '@mesh-flow/gateway'
+import { loginCommand, SignInNeededError } from '@mesh-flow/gateway'
+import { awsConnector } from '../connector-name.mts'
 
 /** What to run to sign in to AWS. */
-const signInCommand = '`mesh-flow login aws`'
+const signInCommand = `\`${loginCommand(awsConnector)}\``
 
 /**
  * AWS can't be reached until the user signs in again: there was no session, or Identity Center
@@ -12,7 +13,7 @@ export class AwsSignInNeededError extends SignInNeededError {
 	override readonly name = 'AwsSignInNeededError'
 
 	constructor(message = `Sign in to AWS: ${signInCommand}.`) {
-		super('aws', message)
+		super(awsConnector, message)
 	}
 }
 

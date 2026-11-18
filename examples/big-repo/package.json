@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@mesh-flow/atlassian": "workspace:*",
+		"@mesh-flow/aws": "workspace:*",
 		"@mesh-flow/core": "workspace:*",
 		"@mesh-flow/gitlab": "workspace:*",
 		"@mesh-flow/preset-development": "workspace:*",

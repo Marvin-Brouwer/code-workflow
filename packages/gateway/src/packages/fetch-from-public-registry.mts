@@ -1,4 +1,4 @@
-import type { PackageRequest, PackageResponse } from '@mesh-flow/protocol'
+import { registryName, type PackageRequest } from '@mesh-flow/protocol'
 import { messageOf } from '../errors.mts'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { HostToolTransientError } from '../tools/host-tool.mts'
@@ -7,31 +7,39 @@ import { publicRegistries } from './public-registries.mts'
 
 /**
  * The headers of a registry's answer that a package manager uses: what the body is, what version of
- * it, and where a redirect goes. A redirect goes back to the package manager: one to another host
- * fails at the proxy's `CONNECT`, and one on the same registry is checked here again.
+ * it, and where a redirect goes. A redirect from a public registry goes back to the package
+ * manager: one to another host fails at the proxy's `CONNECT`, and one on the same registry is
+ * checked here again.
  */
 const keptHeaders = ['content-type', 'etag', 'last-modified', 'location']
 
 /** What a fetch accepts when the package manager didn't say. */
-const anyMediaType = '*/*'
+export const anyMediaType = '*/*'
 
 /** How the gateway names itself to the registries. */
-const userAgent = 'mesh-flow'
+export const userAgent = 'mesh-flow'
 
 const bytesPerMb = 1024 * 1024
 
 /**
- * The largest body a fetch takes, in bytes. It goes to the sandbox as base64 in one answer, which the
- * runtime holds in memory a few times over; the largest packages on nuget.org are below this.
+ * The largest body a fetch takes, in bytes. The engine writes it into the sandbox as a file; the
+ * largest packages on nuget.org are below this.
  */
 export const maxPackageBytes = 256 * bytesPerMb
 
-/** How {@link fetchPackage} fetches. */
-export interface PackageFetchOptions {
+/** How {@link fetchFromPublicRegistry} and `fetchFromConnectorRegistry` fetch. */
+export interface RegistryFetchOptions {
 	/** The host's `fetch`. */
 	readonly fetchFromHost: typeof fetch
 	/** The largest body it takes. Default: {@link maxPackageBytes}. */
 	readonly maxBytes?: number
+}
+
+/** What a registry answered, with the body as the registry sent it. */
+export interface RegistryAnswer {
+	readonly status: number
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Buffer
 }
 
 /**
@@ -44,44 +52,53 @@ export interface PackageFetchOptions {
  * @throws When the path isn't a package fetch on that registry, and when the body is larger than
  * `maxBytes`.
  */
-export async function fetchPackage(
+export async function fetchFromPublicRegistry(
 	request: PackageRequest,
-	options: PackageFetchOptions,
+	options: RegistryFetchOptions,
 	abortSignal: AbortSignal,
-): Promise<PackageResponse> {
-	const { fetchFromHost, maxBytes = maxPackageBytes } = options
+): Promise<RegistryAnswer> {
+	if (typeof request.registry !== 'string') throw new Error(`${registryName(request.registry)} isn't a public registry.`)
 	const registry = publicRegistries[request.registry]
 	const url = new URL(request.path, registry.origin)
 	if (url.origin !== registry.origin || `${url.pathname}${url.search}` !== request.path || !registry.fetches(url.pathname))
 		throw new Error(`${request.path} isn't a package fetch on ${request.registry}.`)
-	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
-	return untilAborted(fetchedFrom(url, request, { fetchFromHost, maxBytes }, abortSignal), abortSignal)
-}
-
-/** Fetches `url` and reads the answer, capped at `maxBytes`. A body that comes after an abort is cancelled. */
-async function fetchedFrom(
-	url: URL,
-	request: PackageRequest,
-	{ fetchFromHost, maxBytes }: Required<PackageFetchOptions>,
-	abortSignal: AbortSignal,
-): Promise<PackageResponse> {
+	const { fetchFromHost, maxBytes = maxPackageBytes } = options
 	const fetched = `${request.registry} ${request.path}`
-	const response = await asTransientOnNetworkFailure(
-		retryingFetch(fetchFromHost, defaultFetchRetry)(url.href, {
-			headers: { accept: request.accept ?? anyMediaType, 'user-agent': userAgent },
-			redirect: 'manual',
-			signal: abortSignal,
-		}),
-		fetched,
+	const send = retryingFetch(fetchFromHost, defaultFetchRetry)
+	const headers = { accept: request.accept ?? anyMediaType, 'user-agent': userAgent }
+	// Settles once the signal aborts, also when the host's fetch or its body doesn't.
+	return untilAborted(
+		(async () => {
+			const response = await sent(send(url.href, { headers, redirect: 'manual', signal: abortSignal }), fetched, abortSignal)
+			return fetchedOf(response, maxBytes, fetched, abortSignal)
+		})(),
 		abortSignal,
 	)
+}
+
+/** The host's answer to a fetch, once it came: a body that comes after an abort is cancelled. */
+export async function sent(sending: Promise<Response>, fetched: string, abortSignal: AbortSignal): Promise<Response> {
+	const response = await asTransientOnNetworkFailure(sending, fetched, abortSignal)
 	if (abortSignal.aborted) {
 		await response.body?.cancel()
 		abortSignal.throwIfAborted()
 	}
-	const body = (await cappedBody(response, maxBytes, fetched, abortSignal)).toString('base64')
+	return response
+}
+
+/** The answer as the sandbox gets it: the status, the headers it needs, and the body, capped. */
+export async function fetchedOf(
+	response: Response,
+	maxBytes: number,
+	fetched: string,
+	abortSignal: AbortSignal,
+	leftOut: readonly string[] = [],
+): Promise<RegistryAnswer> {
+	const body = await cappedBody(response, maxBytes, fetched, abortSignal)
 	const headers = Object.fromEntries(
-		keptHeaders.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),
+		keptHeaders
+			.filter((name) => !leftOut.includes(name))
+			.flatMap((name) => (response.headers.has(name) ? [[name, response.headers.get(name) ?? '']] : [])),
 	)
 	return { status: response.status, headers, body }
 }

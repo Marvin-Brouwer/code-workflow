@@ -24,6 +24,8 @@ const abortSignal = new AbortController().signal
 const runId = 'run-1'
 /** How long a stopped run may take to settle while a host tool never does. */
 const promptlyMs = 3_000
+/** How often the engine restarts, and answers a resumed run's sign-in, before the user signs in. */
+const resumesBeforeSignIn = 2
 
 const echoDefinition = {
 	name: 'echo',
@@ -62,10 +64,13 @@ const hostTools: readonly HostTool[] = [
 async function withGateway({
 	signIn,
 	signInCancelled,
+	resumes,
 	...options
 }: {
 	readonly fetch?: typeof fetch
 	readonly signIn?: (connector: string) => Promise<void>
+	/** How many sign-ins the engine answers as a resume first. */
+	readonly resumes?: number
 	readonly signInCancelled?: (connector: string) => void
 } = {}) {
 	onTestFinished(() => {
@@ -91,6 +96,7 @@ async function withGateway({
 			gatewayChannel(gateway, runId, lifetime, {
 				...(signIn === undefined ? {} : { signIn }),
 				...(signInCancelled === undefined ? {} : { signInCancelled }),
+				...(resumes === undefined ? {} : { resumes }),
 			}),
 			grant,
 			'test',
@@ -200,6 +206,23 @@ describe('gateway', () => {
 		await expect(run.result).rejects.toThrow(GatewayCallError)
 		expect(signIn).toHaveBeenCalledTimes(2)
 		expect(cloud.calls).toBe(3)
+	})
+
+	test('calls again after a resume answered its sign-in, without using up its sign-ins', async () => {
+		// Arrange
+		const signIn = vi.fn((_connector: string) => {
+			cloud.signedIn = true
+			return Promise.resolve()
+		})
+		const { client } = await withGateway({ signIn, resumes: resumesBeforeSignIn })
+
+		// Act
+		const run = await runBody(() => cloudSession({}), { gateway: client })
+
+		// Assert
+		expect(await run.result).toEqual({ session: 'live' })
+		expect(signIn).toHaveBeenCalledOnce()
+		expect(cloud.calls).toBe(resumesBeforeSignIn + 2)
 	})
 
 	test('cancels the sign-in once no call waits for it any more', async () => {

@@ -6,17 +6,18 @@
  * @module
  */
 export { type AwsEndpoints } from '../host/aws-endpoints.mts'
-export { awsHostTools, type AwsHostToolsOptions } from '../host/aws-host-tools.mts'
+export { awsHostTools } from '../host/aws-host-tools.mts'
 export {
 	openAwsSession,
 	type AwsSession,
 	type AwsSessionOptions,
 	type AwsSessionStatus,
-	type CodeArtifactDomain,
 	type CodeArtifactToken,
 	type RoleCredentials,
 } from '../host/aws-session.mts'
 export { awsCredentialNames, readAwsSettings, type AwsSettings } from '../host/aws-settings.mts'
-export { connector } from '../host/connector.mts'
+export { codeArtifactFetch } from '../host/code-artifact-fetch.mts'
+export { awsConnectorHost, connector, type AwsConnectorOptions } from '../host/connector.mts'
 export { signIn, type SignInOptions } from '../host/sign-in.mts'
 export { AwsSignInNeededError } from '../host/sign-in-needed.mts'
+export type { CodeArtifactDomain } from '../registries/code-artifact-repository.mts'

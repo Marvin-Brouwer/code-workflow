@@ -2,7 +2,9 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		// The runtime's side runs in the sandbox, where Node runs it without a build.
-		"erasableSyntaxOnly": true
+		"erasableSyntaxOnly": true,
+		// Node 26 has all of ES2024, such as `toSorted`.
+		"lib": ["ES2024"]
 	},
 	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]
 }

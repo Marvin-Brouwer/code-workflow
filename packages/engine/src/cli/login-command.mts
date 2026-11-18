@@ -3,8 +3,8 @@ import type { CredentialStore } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { ControlError, type ControlClient } from '../control/control-client.mts'
-import { signInFailedLine } from '../engine/sign-in-state.mts'
-import { formatLoginPrompt } from './format-login-prompt.mts'
+import { signInFailedLine, signInPromptMessage } from '../engine/sign-in-lines.mts'
+import { shownSignInPrompt } from '../engine/sign-in-state.mts'
 
 /** How long `mesh-flow login` waits for the approval: longer than a device code lasts. */
 const loginTimeoutMs = 15 * 60 * 1000
@@ -13,7 +13,7 @@ const loginTimeoutMs = 15 * 60 * 1000
 const promptPollMs = 500
 
 /** What `mesh-flow login` uses of the engine: its sign-ins come first, so the runs that wait for one go on. */
-export type EngineSignIns = Pick<ControlClient, 'signIns' | 'signIn'>
+export type EngineSignIns = Pick<ControlClient, 'signIns' | 'waitForSignIn'>
 
 /** What `mesh-flow login` needs from the rest of the command line. */
 export interface LoginCommandOptions {
@@ -86,7 +86,7 @@ async function signInThroughEngine(
 		if (error instanceof ControlError && error.status === undefined) return false
 		throw error
 	}
-	const signedIn = engine.signIn(name, abortSignal).then(
+	const signedIn = engine.waitForSignIn(name, abortSignal).then(
 		() => true,
 		(error: unknown) => {
 			if (!(error instanceof ControlError) || error.status !== notFoundStatus) throw error
@@ -107,7 +107,7 @@ async function signInThroughEngine(
 		const prompt = signIn?.prompt
 		if (prompt !== undefined && prompt.code !== shownCode) {
 			shownCode = prompt.code
-			log(formatLoginPrompt(name, { url: prompt.url, code: prompt.code, expiresAt: new Date(prompt.expiresAt) }))
+			log(signInPromptMessage(name, prompt))
 		}
 		if (signIn?.error !== undefined && signIn.error !== shownError) log(signInFailedLine(name, signIn.error))
 		shownError = signIn?.error
@@ -128,10 +128,10 @@ async function signInHere(
 		const known = connectors.map((candidate) => candidate.name).join(', ') || 'none'
 		throw new Error(`There is no connector ${name}. Added connectors: ${known}. Add one with \`mesh-flow connector add\`.`)
 	}
-	if (connector.login === undefined) throw new Error(`Connector ${name} has nothing to sign in to.`)
-	await connector.login({
+	if (connector.signIn === undefined) throw new Error(`Connector ${name} has nothing to sign in to.`)
+	await connector.signIn({
 		show: (prompt) => {
-			log(formatLoginPrompt(name, prompt))
+			log(signInPromptMessage(name, shownSignInPrompt(prompt)))
 		},
 		abortSignal,
 	})

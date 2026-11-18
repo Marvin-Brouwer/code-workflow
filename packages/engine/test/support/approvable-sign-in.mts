@@ -1,11 +1,11 @@
 import { vi } from 'vitest'
-import type { LoginContext } from '../../src/connectors/load-connectors.mts'
+import type { SignInContext } from '../../src/connectors/load-connectors.mts'
 
-/** Where the sign-ins of {@link approvableLogin} say to sign in. */
+/** Where the sign-ins of {@link approvableSignIn} say to sign in. */
 export const prompt = { url: 'https://device.example/?user_code=ABCD', code: 'ABCD', expiresAt: new Date('2026-11-16T09:10:00Z') }
 
-/** What {@link approvableLogin} takes. */
-export interface ApprovableLoginOptions {
+/** What {@link approvableSignIn} takes. */
+export interface ApprovableSignInOptions {
 	/** Whether a try rejects once its signal aborts. `false` is a sign-in stuck on the network, which ignores it. Default: true. */
 	readonly honoursAbort?: boolean
 }
@@ -14,10 +14,10 @@ export interface ApprovableLoginOptions {
  * A connector's sign-in that shows {@link prompt} and waits until `approve` is called, for its
  * latest try. The contexts of its tries are kept, to see whether their signals aborted.
  */
-export function approvableLogin({ honoursAbort = true }: ApprovableLoginOptions = {}) {
-	const contexts: LoginContext[] = []
+export function approvableSignIn({ honoursAbort = true }: ApprovableSignInOptions = {}) {
+	const contexts: SignInContext[] = []
 	const approvals: (() => void)[] = []
-	const login = vi.fn((context: LoginContext) => {
+	const signIn = vi.fn((context: SignInContext) => {
 		contexts.push(context)
 		context.show(prompt)
 		const { promise, resolve, reject } = Promise.withResolvers<undefined>()
@@ -33,5 +33,5 @@ export function approvableLogin({ honoursAbort = true }: ApprovableLoginOptions 
 	const approve = () => {
 		approvals.at(-1)?.()
 	}
-	return { login, contexts, approve }
+	return { signIn, contexts, approve }
 }

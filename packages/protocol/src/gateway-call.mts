@@ -64,7 +64,7 @@ export type ResolvedModel = z.infer<typeof ResolvedModel>
  * - `close`: close a loop's endpoint once the loop has settled. Only on the run's endpoint;
  * - `resolve-model`: which provider serves a model, model first;
  * - `model`: send a model request with the provider's credential;
- * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's endpoint.
+ * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's package endpoint, a `RunGrant`'s `packages`.
  */
 export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('tool'), tool: ToolName, input: z.unknown() }),
@@ -122,3 +122,11 @@ export type CallAnswer = z.infer<typeof CallAnswer>
 /** An endpoint and its tokens, one per call that may run at the same time. */
 export const EndpointGrant = z.object({ endpoint: EndpointId, tokens: z.array(EndpointToken).min(1) })
 export type EndpointGrant = z.infer<typeof EndpointGrant>
+
+/**
+ * The run's own endpoint, for workflow code, tools and model calls, and, when its app restores
+ * packages, an endpoint for package fetches only, with tokens of its own: a restore that fetches
+ * many packages at once doesn't hold up the run's other calls.
+ */
+export const RunGrant = EndpointGrant.extend({ packages: EndpointGrant.optional() })
+export type RunGrant = z.infer<typeof RunGrant>

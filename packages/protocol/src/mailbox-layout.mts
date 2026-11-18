@@ -22,10 +22,15 @@ export interface MailboxLayout {
 	/** The runtime's stdout and stderr. */
 	readonly logFile: string
 	/**
-	 * The run's gateway endpoint and its tokens, an `EndpointGrant`, written by the engine before it
+	 * The run's gateway endpoints and their tokens, a `RunGrant`, written by the engine before it
 	 * starts the runtime. The runtime removes it once it has read it.
 	 */
 	readonly grantFile: string
+	/**
+	 * Where the engine stages what a call fetched for the runtime, such as a package, as a file of
+	 * its own: see {@link stagedFile}. The call's answer names the file, so it stays small.
+	 */
+	readonly staged: string
 }
 
 /** The layout of a mailbox in `directory`. */
@@ -39,12 +44,30 @@ export function mailboxLayout(directory: string): MailboxLayout {
 		pidFile: path.posix.join(directory, 'runtime.pid'),
 		logFile: path.posix.join(directory, 'runtime.log'),
 		grantFile: path.posix.join(directory, 'gateway.json'),
+		staged: path.posix.join(directory, 'staged'),
 	})
 }
 
 /** The file that holds the answer to one request. */
 export function answerFile(layout: MailboxLayout, requestId: string): string {
 	return path.posix.join(layout.inbox, `${requestId}.json`)
+}
+
+/**
+ * What the name of a staged file looks like: the call's id and `.body`. A pattern, not a schema,
+ * since the runtime's mailbox runs in the sandbox without dependencies.
+ */
+export const stagedFileNamePattern = /^[\w-]{1,64}\.body$/
+
+/** The name of the file the body a call fetched is staged in. */
+export function stagedFileName(callId: string): string {
+	return `${callId}.body`
+}
+
+/** The file a staged body is in, by the name a `PackageResponse` gives it. Refuses any other name. */
+export function stagedFile(layout: MailboxLayout, name: string): string {
+	if (!stagedFileNamePattern.test(name)) throw new Error(`${name} isn't the name of a staged file.`)
+	return path.posix.join(layout.staged, name)
 }
 
 /** The default mailbox directory in a sandbox. */

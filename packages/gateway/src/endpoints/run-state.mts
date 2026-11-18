@@ -8,8 +8,10 @@ import { RunUsage } from '../providers/usage.mts'
 
 /** One endpoint of a run: the tools it takes and the hashes of the tokens that work on it now. */
 const EndpointState = z.object({
-	/** A loop's endpoint takes only its tools; the run's takes everything the app may call. */
+	/** A loop's endpoint takes only its tools; the run's takes everything the app may call but package fetches. */
 	loop: z.boolean(),
+	/** The run's package endpoint takes package fetches only. */
+	packages: z.boolean().default(false),
 	tools: z.array(z.string()),
 	tokens: z.array(z.string()),
 })
@@ -39,7 +41,7 @@ export type InFlightCall = z.infer<typeof InFlightCall>
 export const RunState = z.object({
 	/** The host tools the run's app may call. */
 	tools: z.array(z.string()),
-	/** The public package registries the run's app restores from. */
+	/** The package registries the run's app restores from: public ones and connectors'. */
 	registries: z.array(PackageRegistry).default([]),
 	endpoints: z.record(z.string(), EndpointState),
 	inFlight: z.record(z.string(), InFlightCall),

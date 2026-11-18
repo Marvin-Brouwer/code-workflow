@@ -1,7 +1,7 @@
-import { packageRegistryHosts, type PackageRegistry } from '@mesh-flow/protocol'
+import { publicRegistryHosts, type PublicRegistry } from '@mesh-flow/protocol'
 
 /** Where a public registry is, and the paths on it that are package fetches. */
-export interface PublicRegistry {
+export interface PublicRegistryEndpoint {
 	/** The registry's origin, which is also the host package managers in the sandbox ask for. */
 	readonly origin: string
 	/** Whether a path, already normalized, fetches a package or its metadata. */
@@ -19,13 +19,13 @@ const nugetPathPrefixes = ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/',
  * tarballs are below the package's name; `/-/` is the registry's own API (search, audit, users),
  * which restore doesn't need.
  */
-export const publicRegistries: Readonly<Record<PackageRegistry, PublicRegistry>> = Object.freeze({
+export const publicRegistries: Readonly<Record<PublicRegistry, PublicRegistryEndpoint>> = Object.freeze({
 	nuget: {
-		origin: `https://${packageRegistryHosts.nuget}`,
+		origin: `https://${publicRegistryHosts.nuget}`,
 		fetches: (pathname) => nugetPathPrefixes.some((prefix) => pathname.startsWith(prefix)),
 	},
 	npm: {
-		origin: `https://${packageRegistryHosts.npm}`,
+		origin: `https://${publicRegistryHosts.npm}`,
 		fetches: (pathname) => pathname.length > 1 && !pathname.startsWith('/-/'),
 	},
 })

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { keyFile, openCredentialStore, type CredentialStore, type LoginPrompt } from '@mesh-flow/gateway'
+import { keyFile, openCredentialStore, type CredentialStore, type SignInPrompt } from '@mesh-flow/gateway'
 import { openAwsSession } from '../../src/host/aws-session.mts'
 import { awsCredentialNames } from '../../src/host/aws-settings.mts'
 import { refreshTokenGrant } from '../../src/host/oidc.mts'
@@ -48,9 +48,9 @@ export async function setUp(options: SetUpOptions = {}) {
 	if (options.settings ?? true) for (const [name, value] of Object.entries(settings)) await credentials.set(name, value, abortSignal)
 	const clock = testClock()
 	const aws = await fakeAws(clock.now, options.fake)
-	const shown: LoginPrompt[] = []
+	const shown: SignInPrompt[] = []
 	const waited: number[] = []
-	const login = () =>
+	const signInUser = () =>
 		signIn(
 			{ credentials, show: (prompt) => shown.push(prompt), abortSignal },
 			{
@@ -63,7 +63,7 @@ export async function setUp(options: SetUpOptions = {}) {
 			},
 		)
 	const session = () => openAwsSession({ credentials, endpoints: aws.endpoints, now: clock.now })
-	return { credentials, clock, aws, shown, waited, login, session }
+	return { credentials, clock, aws, shown, waited, signInUser, session }
 }
 
 /** The session as the credential store keeps it. */

@@ -3,7 +3,7 @@ import { keyFile, openCredentialStore, type CredentialStore } from '@mesh-flow/g
 import { Command } from 'commander'
 import { describe, expect, test, vi } from 'vitest'
 import { addLoginCommand, type EngineSignIns } from '../src/cli/login-command.mts'
-import type { LoadedConnector, LoginContext } from '../src/connectors/load-connectors.mts'
+import type { LoadedConnector, SignInContext } from '../src/connectors/load-connectors.mts'
 import { ControlError } from '../src/control/control-client.mts'
 import type { SignInState } from '../src/engine/sign-in-state.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -24,7 +24,7 @@ const prompt = { url: 'https://device.example/?user_code=ABCD-EFGH', code: 'ABCD
 /** No engine serves: every call says so, as the control client does. */
 const noEngine: EngineSignIns = {
 	signIns: () => Promise.reject(new ControlError('No engine is running. Start one with `mesh-flow serve`.')),
-	signIn: () => Promise.reject(new ControlError('No engine is running. Start one with `mesh-flow serve`.')),
+	waitForSignIn: () => Promise.reject(new ControlError('No engine is running. Start one with `mesh-flow serve`.')),
 }
 
 /** The command line with only `login`, over `connectors` and `engine`, and what it logged. */
@@ -50,7 +50,7 @@ describe('mesh-flow login', () => {
 				package: '@team/cloud',
 				name: 'cloud',
 				tools: [],
-				login: (context: LoginContext) => {
+				signIn: (context: SignInContext) => {
 					context.show(prompt)
 					return store.set('cloud/session', 'token', context.abortSignal)
 				},
@@ -72,9 +72,9 @@ describe('mesh-flow login', () => {
 		const shown: SignInState = { connector: 'cloud', prompt: { ...prompt, expiresAt: prompt.expiresAt.toISOString() } }
 		const { promise: approved, resolve: approve } = Promise.withResolvers<undefined>()
 		const signIns = vi.fn(() => Promise.resolve([shown]))
-		const engine: EngineSignIns = { signIns, signIn: () => approved }
+		const engine: EngineSignIns = { signIns, waitForSignIn: () => approved }
 		const login = vi.fn(() => Promise.resolve())
-		const { program, lines } = await loginProgram(() => [{ package: '@team/cloud', name: 'cloud', tools: [], login }], engine)
+		const { program, lines } = await loginProgram(() => [{ package: '@team/cloud', name: 'cloud', tools: [], signIn: login }], engine)
 
 		// Act
 		const loggingIn = program.parseAsync(['login', 'cloud'], { from: 'user' })
@@ -98,7 +98,7 @@ describe('mesh-flow login', () => {
 		const failed: SignInState = { connector: 'cloud', error: 'The AWS settings are missing.' }
 		const { promise: approved, resolve: approve } = Promise.withResolvers<undefined>()
 		const signIns = vi.fn(() => Promise.resolve([failed]))
-		const engine: EngineSignIns = { signIns, signIn: () => approved }
+		const engine: EngineSignIns = { signIns, waitForSignIn: () => approved }
 		const { program, lines } = await loginProgram(() => [], engine)
 
 		// Act
@@ -122,7 +122,7 @@ describe('mesh-flow login', () => {
 		// Arrange
 		const engine: EngineSignIns = {
 			signIns: () => Promise.resolve([]),
-			signIn: () => Promise.reject(new ControlError('There is no connector cloud that signs in.', 404)),
+			waitForSignIn: () => Promise.reject(new ControlError('There is no connector cloud that signs in.', 404)),
 		}
 		const { program, lines, credentials } = await loginProgram(
 			(store) => [
@@ -130,7 +130,7 @@ describe('mesh-flow login', () => {
 					package: '@team/cloud',
 					name: 'cloud',
 					tools: [],
-					login: (context: LoginContext) => store.set('cloud/session', 'token', context.abortSignal),
+					signIn: (context: SignInContext) => store.set('cloud/session', 'token', context.abortSignal),
 				},
 			],
 			engine,
@@ -170,7 +170,7 @@ describe('mesh-flow login', () => {
 	test('stops waiting on Ctrl+C while the sign-in never settles, and lets go of Ctrl+C', async () => {
 		// Arrange
 		const started = vi.fn<() => void>()
-		const login = (context: LoginContext) =>
+		const login = (context: SignInContext) =>
 			new Promise<void>((_resolve, reject) => {
 				context.abortSignal.addEventListener('abort', () => {
 					reject(context.abortSignal.reason)
@@ -178,7 +178,7 @@ describe('mesh-flow login', () => {
 				started()
 			})
 		const listeners = process.listenerCount('SIGINT')
-		const { program } = await loginProgram(() => [{ package: '@team/cloud', name: 'cloud', tools: [], login }])
+		const { program } = await loginProgram(() => [{ package: '@team/cloud', name: 'cloud', tools: [], signIn: login }])
 		const loggingIn = program.parseAsync(['login', 'cloud'], { from: 'user' })
 		loggingIn.catch(() => undefined)
 		await vi.waitFor(() => {

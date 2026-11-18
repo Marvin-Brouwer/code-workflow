@@ -1,15 +1,15 @@
 import { execFile, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
-import type { PackageRegistry, PackageResponse } from '@mesh-flow/protocol'
+import type { ConnectorRegistry, PackageRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
-import { gatewayPackages, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
+import { packageFetchThroughGateway, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
 import { gatewayChannel } from './support/gateway-channel.mts'
 import { storedZip } from './support/stored-zip.mts'
@@ -38,8 +38,28 @@ const restoreTimeoutMs = 120_000
 /** How long a stopped proxy may take to settle while a fetch never does. */
 const promptlyMs = 3_000
 
-function answer(status: number, body: string | Buffer, contentType = 'application/json'): PackageResponse {
-	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body).toString('base64') }
+/** What the gateway answers in these tests, before the engine stages its body. */
+interface Answered {
+	readonly status: number
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Buffer
+}
+
+type Fetch = (request: PackageRequest, abortSignal: AbortSignal) => Promise<Answered>
+
+function answer(status: number, body: string | Buffer, contentType = 'application/json'): Answered {
+	return { status, headers: { 'content-type': contentType }, body: Buffer.from(body) }
+}
+
+/** A connector's registry with two repositories on one host, as CodeArtifact has them. */
+function connectorRegistry(repository: string): ConnectorRegistry {
+	return {
+		connector: 'cloud',
+		name: `cloud ${repository}`,
+		host: 'packages.example.com',
+		paths: [`/npm/${repository}/`],
+		settings: { repository },
+	}
 }
 
 /**
@@ -59,19 +79,36 @@ async function throughGateway(registries: readonly PackageRegistry[], fetchFromH
 		lifetime.abort()
 	})
 	const grant = await gateway.openRun('run-1', { tools: [], registries }, lifetime.signal)
-	return gatewayPackages(gatewayClient(gatewayChannel(gateway, 'run-1', lifetime.signal), grant, 'test', lifetime.signal))
+	return packageFetchThroughGateway(gatewayClient(gatewayChannel(gateway, 'run-1', lifetime.signal), grant, 'test', lifetime.signal))
 }
 
-/** Starts the proxy with `fetch` behind it, stopped when the test ends. */
-async function proxyWith(fetch: GatewayFetch): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
+/**
+ * Starts the proxy with `fetch` behind it, stopped when the test ends. Each answer's body is staged
+ * in `staging` first, as the engine does.
+ */
+async function proxyWith(
+	fetch: Fetch,
+	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
+): Promise<{ environment: PackageEnvironment; stop: AbortController; staging: string }> {
+	const staging = await temporaryDirectory()
+	let staged = 0
+	const fetchStaged: GatewayFetch = async (asked, abortSignal) => {
+		const answered = await fetch(asked, abortSignal)
+		const file = path.join(staging, `call-${String(++staged)}.body`)
+		await writeFile(file, answered.body)
+		return { status: answered.status, headers: answered.headers, file, size: answered.body.length }
+	}
+	return { ...(await proxyOver(fetchStaged, registries)), staging }
+}
+
+/** Starts the proxy with `fetchStaged` behind it, stopped when the test ends. */
+async function proxyOver(
+	fetchStaged: GatewayFetch,
+	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
+): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
-	const { proxy, environment } = await startPackageAccess({
-		registries: ['npm', 'nuget'],
-		fetchThroughGateway: fetch,
-		directory,
-		abortSignal: stop.signal,
-	})
+	const { proxy, environment } = await startPackageAccess({ registries, fetchStaged, directory, abortSignal: stop.signal })
 	onTestFinished(() => proxy.close())
 	return { environment, stop }
 }
@@ -124,7 +161,7 @@ const tooLongPath = `/left-pad?${'a'.repeat(4096)}`
 /** Where the fake feed's vulnerability data is: below `/v3-vulnerabilities/`, as on nuget.org. */
 const vulnerabilityData = 'https://api.nuget.org/v3-vulnerabilities/2026.11.16.00.00.00/vulnerability.base.json'
 
-function fakeNuGetFeed(): Record<string, PackageResponse> {
+function fakeNuGetFeed(): Record<string, Answered> {
 	const { id, version } = fakeNuGetPackage
 	const lowerId = id.toLowerCase()
 	const nuspec = `<?xml version="1.0" encoding="utf-8"?>
@@ -217,7 +254,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 	test('npm installs a package through it, from what the gateway fetched', { timeout: 60_000 }, async () => {
 		// Arrange
 		const { packument, tarball, tarballPath } = await fakeRegistry()
-		const fetch = vi.fn<GatewayFetch>((asked) => {
+		const fetch = vi.fn<Fetch>((asked) => {
 			if (asked.path === `/${fakeNpmPackage.name}`) return Promise.resolve(answer(200, packument))
 			if (asked.path === tarballPath) return Promise.resolve(answer(200, tarball, 'application/octet-stream'))
 			return Promise.resolve(answer(404, '{}'))
@@ -250,10 +287,10 @@ describe.skipIf(onWindows)('package proxy', () => {
 				return Promise.resolve(
 					asked === undefined
 						? new Response('{}', { status: 404 })
-						: new Response(Buffer.from(asked.body, 'base64'), { status: asked.status, headers: asked.headers }),
+						: new Response(asked.body, { status: asked.status, headers: asked.headers }),
 				)
 			})
-			const { environment } = await proxyWith(await throughGateway(['nuget'], fromNuGet))
+			const { environment } = await proxyOver(await throughGateway(['nuget'], fromNuGet))
 			const project = await restoringProject()
 			const packages = path.join(project, 'packages')
 
@@ -286,7 +323,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('curl, which trusts what OpenSSL trusts, as .NET does, gets the feed through it', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{"version":"3.0.0"}')))
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{"version":"3.0.0"}')))
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -302,7 +339,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses hosts that are not the registries', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>()
+		const fetch = vi.fn<Fetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -316,7 +353,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses plain HTTP, reads and writes alike', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>()
+		const fetch = vi.fn<Fetch>()
 		const { environment } = await proxyWith(fetch)
 
 		// Act
@@ -330,7 +367,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('refuses a write over HTTPS, and anything but a read', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>()
+		const fetch = vi.fn<Fetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -348,7 +385,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 		['502 to a fetch that failed for now', new GatewayCallError('npm is down.', { transient: true }), '502'],
 	])('answers %s', async (_what, error, status) => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>(() => Promise.reject(error))
+		const fetch = vi.fn<Fetch>(() => Promise.reject(error))
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -362,7 +399,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 	test('answers 403 to a path the gateway refuses, and 502 when the host cannot reach the registry', async () => {
 		// Arrange
 		const unreachable = vi.fn<typeof globalThis.fetch>(() => Promise.reject(new TypeError('fetch failed')))
-		const { environment } = await proxyWith(await throughGateway(['npm'], unreachable))
+		const { environment } = await proxyOver(await throughGateway(['npm'], unreachable))
 		const home = await temporaryDirectory()
 
 		// Act
@@ -375,7 +412,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test("answers 400 to a fetch the gateway couldn't take, and sends nothing", async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>()
+		const fetch = vi.fn<Fetch>()
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -389,7 +426,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('takes a registry host in any case, and with a trailing dot', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{}')))
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
 		const { environment } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
 
@@ -403,7 +440,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 	test('keeps serving when a client resets a refused tunnel', async () => {
 		// Arrange
-		const fetch = vi.fn<GatewayFetch>(() => Promise.resolve(answer(200, '{}')))
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
 		const { environment } = await proxyWith(fetch)
 		const proxy = new URL(environment.HTTPS_PROXY)
 		const home = await temporaryDirectory()
@@ -420,12 +457,61 @@ describe.skipIf(onWindows)('package proxy', () => {
 		expect(status).toBe('200')
 	})
 
+	test('sends a fetch on a shared host to the registry whose path it is on, and refuses other paths', async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, '{}')))
+		const { environment } = await proxyWith(fetch, [connectorRegistry('one'), connectorRegistry('two')])
+		const home = await temporaryDirectory()
+
+		// Act
+		const two = await curlStatus(environment, home, ['https://packages.example.com/npm/two/left-pad'])
+		const elsewhere = await curlStatus(environment, home, ['https://packages.example.com/npm/three/left-pad'])
+
+		// Assert
+		expect([two, elsewhere]).toEqual(['200', '403'])
+		expect(fetch.mock.calls.map(([asked]) => [asked.registry, asked.path])).toEqual([[connectorRegistry('two'), '/npm/two/left-pad']])
+	})
+
+	test('serves the staged body as it is and removes it once it sent it', async () => {
+		// Arrange
+		const body = Buffer.from(Array.from({ length: 256 }, (_, byte) => byte))
+		const fetch = vi.fn<Fetch>(() => Promise.resolve(answer(200, body, 'application/octet-stream')))
+		const { environment, staging } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+		const saved = path.join(home, 'saved.tgz')
+
+		// Act
+		await run('curl', ['--fail', '--silent', '--output', saved, 'https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz'], {
+			env: childEnvironment(environment, home),
+		})
+
+		// Assert
+		expect(await readFile(saved)).toEqual(body)
+		await vi.waitFor(async () => {
+			expect(await readdir(staging)).toEqual([])
+		})
+	})
+
+	test('answers 502 when the staged body is gone before it was sent, so the package manager tries again', async () => {
+		// Arrange
+		const staging = await temporaryDirectory()
+		const gone = path.join(staging, 'gone.body')
+		const { environment } = await proxyOver(() => Promise.resolve({ status: 200, headers: {}, file: gone, size: 1 }))
+		const home = await temporaryDirectory()
+
+		// Act
+		const answered = await curlStatus(environment, home, ['https://registry.npmjs.org/left-pad'])
+
+		// Assert
+		expect(answered).toBe('502')
+	})
+
 	test('stops promptly while a fetch never settles', async () => {
 		// Arrange
 		let fetchSignal: AbortSignal | undefined
-		const fetch = vi.fn<GatewayFetch>((_request, abortSignal) => {
+		const fetch = vi.fn<Fetch>((_request, abortSignal) => {
 			fetchSignal = abortSignal
-			return new Promise<PackageResponse>(() => undefined)
+			return new Promise<Answered>(() => undefined)
 		})
 		const { environment, stop } = await proxyWith(fetch)
 		const home = await temporaryDirectory()
@@ -455,7 +541,7 @@ describe('package access', () => {
 		// Act
 		const { proxy, environment } = await startPackageAccess({
 			registries: ['npm'],
-			fetchThroughGateway: vi.fn<GatewayFetch>(),
+			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: stop.signal,
 		})
@@ -475,7 +561,7 @@ describe('package access', () => {
 		// Act
 		const starting = startPackageAccess({
 			registries: ['npm'],
-			fetchThroughGateway: vi.fn<GatewayFetch>(),
+			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: AbortSignal.abort(reason),
 		})

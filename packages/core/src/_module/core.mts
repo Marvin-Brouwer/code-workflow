@@ -21,7 +21,7 @@ export { gatewayClient, GatewayCallError, type GatewayChannel, type GatewayClien
 export { definedHostTools, hostToolStub, type HostToolDefinition } from '../gateway/host-tool-stub.mts'
 export { limit, type Limit, type LimitSpec } from '../limit/limit.mts'
 export { AgentGaveUp, ChecksFailed, ExitNotCalled, LoopFailed, LoopLimitExceeded } from '../loop/loop-errors.mts'
-export { fetchPackage, type FetchedPackage, type PackageFetch } from '../packages/fetch-package.mts'
+export { fetchPackage, type FetchedPackage, type PackageRequest } from '../packages/fetch-package.mts'
 export { toPrompt, type RendersInPrompt } from '../render/to-prompt.mts'
 export type { RunChannel } from '../run/run-channel.mts'
 export { untilAborted } from '../run/until-aborted.mts'

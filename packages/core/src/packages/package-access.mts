@@ -10,7 +10,7 @@ import { startPackageProxy, type PackageProxy } from './package-proxy.mts'
 export interface PackageAccessOptions {
 	readonly registries: readonly PackageRegistry[]
 	/** Fetches a package, through the gateway. */
-	readonly fetchThroughGateway: GatewayFetch
+	readonly fetchStaged: GatewayFetch
 	/** Where the authority's certificate goes. */
 	readonly directory: string
 	readonly abortSignal: AbortSignal
@@ -46,7 +46,7 @@ export async function startPackageAccess(options: PackageAccessOptions): Promise
 	await writeFile(certificate, authority.certificatePem, { signal: options.abortSignal })
 	const proxy = await startPackageProxy({
 		registries: options.registries,
-		fetchThroughGateway: options.fetchThroughGateway,
+		fetchStaged: options.fetchStaged,
 		authority,
 		abortSignal: options.abortSignal,
 	})

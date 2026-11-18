@@ -15,10 +15,15 @@ export class SignInNeededError extends Error {
 	/** The connector to sign in to, as `mesh-flow login` names it. */
 	readonly signInTo: ConnectorName
 
-	constructor(connector: string, message = `Sign in to ${connector}: \`mesh-flow login ${connector}\`.`) {
+	constructor(connector: string, message = `Sign in to ${connector}: \`${loginCommand(connector)}\`.`) {
 		super(message)
 		this.signInTo = ConnectorName.parse(connector)
 	}
+}
+
+/** What the user runs to sign in to `connector`. */
+export function loginCommand(connector: string): string {
+	return `mesh-flow login ${connector}`
 }
 
 /**

@@ -12,10 +12,10 @@ const lookIntervalMs = lookIntervalSeconds * msPerSecond
 describe('signing in', () => {
 	test('shows where to approve, waits for the approval, and keeps the session', async () => {
 		// Arrange
-		const { credentials, aws, shown, login } = await setUp({ fake: { pendingLooks: 2 } })
+		const { credentials, aws, shown, signInUser } = await setUp({ fake: { pendingLooks: 2 } })
 
 		// Act
-		await login()
+		await signInUser()
 
 		// Assert
 		expect(shown.map(({ url, code }) => ({ url, code }))).toEqual([
@@ -27,11 +27,11 @@ describe('signing in', () => {
 
 	test('registers the engine at each sign-in, so the session keeps the client it was signed in with', async () => {
 		// Arrange
-		const { aws, credentials, login } = await setUp()
-		await login()
+		const { aws, credentials, signInUser } = await setUp()
+		await signInUser()
 
 		// Act
-		await login()
+		await signInUser()
 
 		// Assert
 		expect(aws.requests.filter((request) => request === 'POST /client/register')).toHaveLength(2)
@@ -40,10 +40,10 @@ describe('signing in', () => {
 
 	test('looks less often each time Identity Center says to slow down', async () => {
 		// Arrange
-		const { waited, login } = await setUp({ fake: { slowDowns: 2, pendingLooks: 1 } })
+		const { waited, signInUser } = await setUp({ fake: { slowDowns: 2, pendingLooks: 1 } })
 
 		// Act
-		await login()
+		await signInUser()
 
 		// Assert
 		expect(waited).toEqual([lookIntervalMs + slowDownStepMs, lookIntervalMs + 2 * slowDownStepMs, lookIntervalMs + 2 * slowDownStepMs])
@@ -51,10 +51,10 @@ describe('signing in', () => {
 
 	test('says which settings are missing, with the commands that set them', async () => {
 		// Arrange
-		const { aws, login } = await setUp({ settings: false })
+		const { aws, signInUser } = await setUp({ settings: false })
 
 		// Act
-		const signingIn = login()
+		const signingIn = signInUser()
 
 		// Assert
 		await expect(signingIn).rejects.toThrow('mesh-flow credential set aws/start-url')
@@ -63,10 +63,10 @@ describe('signing in', () => {
 
 	test('fails when the user denies the sign-in, and keeps no session', async () => {
 		// Arrange
-		const { credentials, login } = await setUp({ fake: { denied: true } })
+		const { credentials, signInUser } = await setUp({ fake: { denied: true } })
 
 		// Act
-		const signingIn = login()
+		const signingIn = signInUser()
 
 		// Assert
 		await expect(signingIn).rejects.toThrow('The AWS sign-in was denied.')
@@ -75,10 +75,10 @@ describe('signing in', () => {
 
 	test('says the sign-in ended when Identity Center ends the code before it was approved', async () => {
 		// Arrange
-		const { login } = await setUp({ fake: { deviceCodeExpired: true } })
+		const { signInUser } = await setUp({ fake: { deviceCodeExpired: true } })
 
 		// Act
-		const signingIn = login()
+		const signingIn = signInUser()
 
 		// Assert
 		await expect(signingIn).rejects.toThrow('The AWS sign-in ended before it was approved.')

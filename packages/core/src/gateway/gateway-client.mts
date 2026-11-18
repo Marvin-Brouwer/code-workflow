@@ -1,6 +1,16 @@
-import { CallAnswer, EndpointGrant, GatewayCall, type Answer, type RuntimeMessage } from '@mesh-flow/protocol'
+import { rm } from 'node:fs/promises'
+import {
+	CallAnswer,
+	EndpointGrant,
+	GatewayCall,
+	LoginAnswer,
+	PackageResponse,
+	type Answer,
+	type RunGrant,
+	type RuntimeMessage,
+} from '@mesh-flow/protocol'
 import { z } from 'zod'
-import { waitingOnHuman } from '../loop/loop-clock.mts'
+import { waitingOnSignIn } from '../loop/loop-clock.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import { TokenPool } from './token-pool.mts'
 
@@ -9,6 +19,8 @@ export interface GatewayChannel {
 	send(message: RuntimeMessage): void
 	/** Waits for the answer to a call, then removes it, since it holds a token. */
 	take(requestId: string, abortSignal: AbortSignal): Promise<Answer>
+	/** Where a body a call's answer names was staged, such as a package's. Whoever reads it removes it. */
+	staged(name: string): string
 }
 
 /** An endpoint on the gateway: its id and the host tools it takes. Its tokens stay in the client. */
@@ -46,6 +58,8 @@ export class GatewayCallError extends Error {
 export interface GatewayClient {
 	/** The run's own endpoint, for calls from workflow code and for model calls. */
 	readonly run: Endpoint
+	/** The run's package endpoint, for package fetches only, when the app restores packages. */
+	readonly packages: Endpoint | undefined
 	/**
 	 * Calls the gateway on `endpoint` and resolves to the result. Throws a {@link GatewayCallError}
 	 * when the host says no. When the host says the user has to sign in to a connector first, it
@@ -56,6 +70,8 @@ export interface GatewayClient {
 	openLoop(tools: readonly string[], abortSignal: AbortSignal): Promise<Endpoint>
 	/** Closes a loop's endpoint once the loop has settled. */
 	closeLoop(endpoint: Endpoint, abortSignal: AbortSignal): Promise<void>
+	/** Where a body a call's answer names was staged, such as a package's. Whoever reads it removes it. */
+	staged(name: string): string
 }
 
 /**
@@ -66,9 +82,9 @@ const maxSignInRoundsPerCall = 2
 
 /** A sign-in the runtime asked the engine for, and the calls that wait for it. */
 interface SignIn {
-	/** Settles when the engine answered that the user signed in. */
-	readonly answered: Promise<void>
-	/** How many calls wait for it now. At 0 it is stopped. */
+	/** Settles with the engine's answer: once the user signed in, or once the run was resumed. */
+	readonly settled: Promise<LoginAnswer>
+	/** How many wait for it now. At 0 it is stopped. */
 	waiters: number
 	/** Stops waiting for the answer, and tells the engine nothing waits for it any more. */
 	readonly stop: () => void
@@ -82,7 +98,7 @@ type CallOutcome = CallAnswer['outcome']
  * call the caller stopped waiting for is cancelled on the host, and its answer, with the next
  * token, is still picked up until the run ends.
  */
-export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
+export function gatewayClient(channel: GatewayChannel, grant: RunGrant, idPrefix: string, runAbortSignal: AbortSignal): GatewayClient {
 	let callCount = 0
 	let loginCount = 0
 	/** The sign-ins asked for and not answered yet, by connector, so calls that need the same one share it. */
@@ -90,7 +106,10 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 	/** How many sign-ins were answered, so a call that was sent before one was answered tries again without asking. */
 	let answeredSignIns = 0
 	const pools = new Map<string, TokenPool>([[grant.endpoint, new TokenPool(grant.tokens)]])
+	if (grant.packages !== undefined) pools.set(grant.packages.endpoint, new TokenPool(grant.packages.tokens))
 	const run: Endpoint = Object.freeze({ id: grant.endpoint, tools: undefined })
+	const packages: Endpoint | undefined =
+		grant.packages === undefined ? undefined : Object.freeze({ id: grant.packages.endpoint, tools: new Set<string>() })
 	const poolOf = (endpoint: Endpoint) => {
 		const pool = pools.get(endpoint.id)
 		if (pool === undefined) throw new GatewayCallError(`Endpoint ${endpoint.id} is closed.`)
@@ -116,9 +135,13 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			if (progress.taken || !abortSignal.aborted || runAbortSignal.aborted) throw error
 			channel.send({ type: 'cancel', id })
 			// The answer still comes, with the next token: the rest of the run needs it.
-			const recovered = channel.take(id, runAbortSignal).then((answer) => {
+			const recovered = channel.take(id, runAbortSignal).then(async (answer) => {
 				const next = CallAnswer.safeParse(answer.value)
-				if (next.success && next.data.next !== undefined) pool.give(next.data.next)
+				if (!next.success) return
+				if (next.data.next !== undefined) pool.give(next.data.next)
+				// Nothing reads the body a package fetch staged any more.
+				const fetched = checked.type === 'package' && next.data.outcome.ok ? PackageResponse.safeParse(next.data.outcome.result) : undefined
+				if (fetched?.success === true) await rm(channel.staged(fetched.data.body), { force: true })
 			})
 			recovered.catch(() => undefined)
 			throw error
@@ -128,13 +151,14 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 	/**
 	 * Asks the engine for a sign-in to `connector` and waits for it, as for a human: it doesn't count
 	 * toward a loop's `limit`. Calls that need the same sign-in share it, and once none of them waits
-	 * any more, the request is cancelled, so the engine stops asking the user for it.
+	 * any more, the request is cancelled, so the engine stops asking the user for it. Resolves to
+	 * the engine's answer.
 	 */
-	const waitForSignIn = async (connector: string, abortSignal: AbortSignal): Promise<void> => {
+	const waitForSignIn = async (connector: string, abortSignal: AbortSignal): Promise<LoginAnswer> => {
 		const signIn = signIns.get(connector) ?? askForSignIn(connector)
 		signIn.waiters++
 		try {
-			await waitingOnHuman(() => untilAborted(signIn.answered, abortSignal))
+			return await waitingOnSignIn(() => untilAborted(signIn.settled, abortSignal))
 		} finally {
 			signIn.waiters--
 			if (signIn.waiters === 0 && signIns.get(connector) === signIn) {
@@ -148,12 +172,14 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		const id = `login-${idPrefix}-${String(++loginCount)}`
 		const stopped = new AbortController()
 		channel.send({ type: 'request', request: { kind: 'login', id, connector } })
-		const answered = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then(() => {
-			answeredSignIns++
+		const settled = channel.take(id, AbortSignal.any([runAbortSignal, stopped.signal])).then((answer) => {
+			const login = LoginAnswer.safeParse(answer.value ?? {}).data ?? {}
+			if (login.resumed !== true) answeredSignIns++
+			return login
 		})
-		answered.catch(() => undefined)
+		settled.catch(() => undefined)
 		const signIn: SignIn = {
-			answered,
+			settled,
 			waiters: 0,
 			stop: () => {
 				stopped.abort(new Error(`Nothing waits for the sign-in to ${connector} any more.`))
@@ -163,7 +189,7 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 		const forget = () => {
 			if (signIns.get(connector) === signIn) signIns.delete(connector)
 		}
-		void answered.then(forget, forget)
+		void settled.then(forget, forget)
 		signIns.set(connector, signIn)
 		return signIn
 	}
@@ -180,14 +206,16 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			if (outcome.signInTo === undefined) throw new GatewayCallError(outcome.error, { transient: outcome.transient === true })
 			// A tool that still asks after the user signed in won't stop asking: the run gets why.
 			if (signInRounds >= maxSignInRoundsPerCall) throw new GatewayCallError(outcome.error)
-			signInRounds++
 			// A sign-in answered while the call was on its way may be the one it needs.
-			if (answeredSignIns === answeredBefore) await waitForSignIn(outcome.signInTo, abortSignal)
+			const { resumed } = answeredSignIns === answeredBefore ? await waitForSignIn(outcome.signInTo, abortSignal) : {}
+			// A resume answers without a sign-in: the call goes again without using up a round.
+			if (resumed !== true) signInRounds++
 		}
 	}
 
 	return Object.freeze<GatewayClient>({
 		run,
+		packages,
 		call,
 		async openLoop(tools, abortSignal) {
 			const opened = EndpointGrant.parse(await call(run, { type: 'open', tools: [...tools] }, abortSignal))
@@ -198,5 +226,6 @@ export function gatewayClient(channel: GatewayChannel, grant: EndpointGrant, idP
 			pools.delete(endpoint.id)
 			await call(run, { type: 'close', endpoint: endpoint.id }, abortSignal)
 		},
+		staged: (name) => channel.staged(name),
 	})
 }

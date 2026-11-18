@@ -1,9 +1,11 @@
 import { mergeUsage, type AcceptedCall, type Gateway, type RunUsage } from '@mesh-flow/gateway'
 import {
 	runIdEnvironmentVariable,
+	stagedFileName,
 	type Answer,
 	type CallAnswer,
 	type CallMessage,
+	type LoginAnswer,
 	type LoginRequest,
 	type RunStart,
 	type RuntimeEvent,
@@ -21,6 +23,7 @@ import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunApp, type RunRecord, type RunStatus } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
+import type { ConnectorSettingsCheck } from './connector-settings-check.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
 import { defaultSandboxLayout, type SandboxLayout } from './sandbox-layout.mts'
@@ -29,6 +32,12 @@ import { settleWithin } from './settle-within.mts'
 import type { SignInState } from './sign-in-state.mts'
 import { noSignInError, type SignIns } from './sign-ins.mts'
 import { wakeAt } from './wake-at.mts'
+
+/** The answer to a run's `login` once the user signed in. */
+const signedInLogin: LoginAnswer = {}
+
+/** The answer to a resumed run's `login`: the call goes again, and asks again if it still needs a sign-in. */
+const resumedLogin: LoginAnswer = { resumed: true }
 
 /** What an engine runs on. */
 export interface EngineOptions {
@@ -54,6 +63,11 @@ export interface EngineOptions {
 	 * the user has to sign in to. Without it, a run that asks for a sign-in fails.
 	 */
 	readonly signIns?: SignIns
+	/**
+	 * The settings the loaded connectors an app uses still need, each as a line that says how to set
+	 * it, such as the AWS start URL for an app that restores from CodeArtifact. Default: none missing.
+	 */
+	readonly connectorSettings?: ConnectorSettingsCheck
 }
 
 /** Which trigger of which app starts a run, and with what. */
@@ -129,6 +143,7 @@ export class Engine {
 	readonly #now: () => Date
 	readonly #gateway: Gateway | undefined
 	readonly #signIns: SignIns | undefined
+	readonly #connectorSettings: ConnectorSettingsCheck | undefined
 	readonly #records = new Map<RunId, RunRecord>()
 	readonly #active = new Map<RunId, ActiveRun>()
 	readonly #lifetime = new AbortController()
@@ -147,6 +162,7 @@ export class Engine {
 		this.#now = options.now ?? (() => new Date())
 		this.#gateway = options.gateway
 		this.#signIns = options.signIns
+		this.#connectorSettings = options.connectorSettings
 	}
 
 	/** Loads the run records and reconciles them with the backend. Resumes nothing. */
@@ -193,7 +209,7 @@ export class Engine {
 	 * Waits until the user signed in to `connector`, joining the sign-in runs wait for, if one is under
 	 * way, so `mesh-flow login` and the runs share one code. Aborting `abortSignal` stops waiting.
 	 */
-	async signIn(connector: string, abortSignal: AbortSignal): Promise<void> {
+	async waitForSignIn(connector: string, abortSignal: AbortSignal): Promise<void> {
 		this.#assertOpen()
 		if (this.#signIns === undefined) throw noSignInError(connector)
 		await this.#signIns.waitFor(connector, this.#withLifetime(abortSignal))
@@ -238,10 +254,17 @@ export class Engine {
 		if (this.#gateway === undefined) return []
 		const models = await this.#gateway.unavailableModels(description.models, abortSignal)
 		const tools = this.#gateway.missingTools(description.tools)
-		if (tools.length === 0) return models
+		const { registries } = description.sandbox
+		const settings = (await this.#connectorSettings?.({ tools: description.tools, registries }, abortSignal)) ?? []
 		return [
 			...models,
-			`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+			...(tools.length === 0
+				? []
+				: [
+						`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+					]),
+			...this.#gateway.missingRegistries(registries),
+			...settings,
 		]
 	}
 
@@ -368,7 +391,12 @@ export class Engine {
 				if (!channel) return
 				const resumed = this.get(record.id)
 				resolve(resumed)
-				for (const request of resumed.pending) this.#schedule(record.id, channel, request, runSignal)
+				for (const request of resumed.pending) {
+					// The user may have signed in while the run was paused: the runtime calls its host tool
+					// again, which asks for a new sign-in if it still needs one.
+					if (request.kind === 'login') void this.#answerLogin(record.id, channel, request, resumedLogin, runSignal)
+					else this.#schedule(record.id, channel, request, runSignal)
+				}
 				await this.#pump(record.id, channel, runSignal)
 			})
 		})
@@ -416,6 +444,7 @@ export class Engine {
 
 	async #close({ pause, backend }: CloseDeadlines): Promise<void> {
 		this.#lifetime.abort(new EngineError('conflict', 'The engine is shutting down.'))
+		this.#signIns?.close()
 		const active = [...this.#active.entries()]
 		// Driving stops at once on the abort; work that ignores it doesn't get to hold up the pauses.
 		await settleWithin(Promise.allSettled(active.map(([, run]) => run.work)), pause)
@@ -552,7 +581,7 @@ export class Engine {
 	async #accept(id: RunId, call: CallMessage, abortSignal: AbortSignal): Promise<AcceptedCall> {
 		if (this.#gateway === undefined) {
 			const answer: CallAnswer = { outcome: { ok: false, error: 'This engine has no gateway.' } }
-			return { answer: () => Promise.resolve(answer) }
+			return { answer: () => Promise.resolve({ answer }) }
 		}
 		return this.#gateway.accept(id, call, abortSignal)
 	}
@@ -578,8 +607,10 @@ export class Engine {
 		calls?.set(call.id, cancel)
 		void accepted
 			.answer(AbortSignal.any([abortSignal, cancel.signal]))
-			.then(async (answer) => {
+			.then(async ({ answer, staged }) => {
 				abortSignal.throwIfAborted()
+				// What the answer names, such as a package, is in the sandbox before the answer.
+				if (staged !== undefined) await channel.stage(stagedFileName(call.id), staged, abortSignal)
 				await this.#answerFromGateway(id, channel, call.id, answer, abortSignal)
 			})
 			.catch(async (error: unknown) => {
@@ -618,7 +649,15 @@ export class Engine {
 	 * saved gets the same answer, and lists those not answered yet again on the next resume.
 	 */
 	async #answerInterrupted(id: RunId, channel: SandboxChannel, abortSignal: AbortSignal): Promise<void> {
-		for (const call of (await this.#gateway?.interrupted(id, abortSignal)) ?? []) {
+		const interrupted = (await this.#gateway?.interrupted(id, abortSignal)) ?? []
+		// A body staged for a call that was cut short is never named by an answer. After a crash
+		// between answering a call and settling it, the runtime may have the answer but not have
+		// opened the body yet: the package proxy then answers 502 and the package manager tries again.
+		await channel.unstage(
+			interrupted.map((call) => stagedFileName(call.id)),
+			abortSignal,
+		)
+		for (const call of interrupted) {
 			await this.#answerFromGateway(id, channel, call.id, call.answer, abortSignal)
 		}
 	}
@@ -674,10 +713,21 @@ export class Engine {
 		} finally {
 			logins?.delete(request.id)
 		}
+		await this.#answerLogin(id, channel, request, signedInLogin, abortSignal)
+	}
+
+	/** Answers a run's `login`, so the runtime calls its host tool again. A failure fails the run. */
+	async #answerLogin(
+		id: RunId,
+		channel: SandboxChannel,
+		request: LoginRequest,
+		answer: LoginAnswer,
+		abortSignal: AbortSignal,
+	): Promise<void> {
 		// A sign-in an attempt that ended waited for isn't for the next one.
 		if (this.#active.get(id)?.channel !== channel) return
 		try {
-			await this.#deliver(id, request.id, {}, abortSignal)
+			await this.#deliver(id, request.id, { value: answer }, abortSignal)
 		} catch (error) {
 			if (abortSignal.aborted) return
 			// The runtime would wait for the answer until the run ends, although the user signed in.

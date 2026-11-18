@@ -5,6 +5,7 @@ import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
 import { startInOwnSession } from '../start-in-own-session.mts'
+import { temporaryFileOf } from '../temporary-file.mts'
 import { snapshotName, snapshotsOf } from './snapshots.mts'
 import { removeSandbox, removeSandboxAndSnapshots, removeSnapshot } from './vms.mts'
 
@@ -63,10 +64,11 @@ export class MicrosandboxSandbox implements Sandbox {
 		return abortable(this.#sandbox.fs().readToString(path), this.#lifetime.bind(signal))
 	}
 
-	async writeFile(path: string, content: string, signal: AbortSignal): Promise<void> {
-		const bound = this.#lifetime.bind(signal)
-		await abortable(this.#sandbox.fs().write(`${path}.tmp`, content), bound)
-		await abortable(this.#sandbox.fs().rename(`${path}.tmp`, path), bound)
+	async writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		const bound = this.#lifetime.bind(abortSignal)
+		const temporary = temporaryFileOf(path)
+		await abortable(this.#sandbox.fs().write(temporary, content), bound)
+		await abortable(this.#sandbox.fs().rename(temporary, path), bound)
 	}
 
 	/**

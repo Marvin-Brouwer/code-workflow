@@ -113,6 +113,25 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			expect(result.stdout.trim()).toBe('present too')
 		})
 
+		test('writes bytes as they are, every byte value, such as a package the engine staged', async () => {
+			// Arrange
+			const sandbox = await backend.create(spec, timeout())
+			cleanUp(sandbox.id)
+			const bytes = Uint8Array.from({ length: 256 }, (_value, index) => index)
+
+			// Act
+			await sandbox.writeFile('/var/tmp/bytes.bin', bytes, timeout())
+			const result = await sandbox.exec(
+				['node', '-e', "process.stdout.write(require('fs').readFileSync('/var/tmp/bytes.bin').toString('hex'))"],
+				{
+					signal: timeout(),
+				},
+			)
+
+			// Assert
+			expect(result.stdout).toBe(Buffer.from(bytes).toString('hex'))
+		})
+
 		test('reaches no host, but loopback works', async () => {
 			// Arrange
 			const sandbox = await backend.create(spec, timeout())

@@ -4,10 +4,11 @@
  * file says how it gets started and where it runs.
  *
  * The sandbox is meant to be the image the Dockerfile next to this file builds; see `sandboxImage`.
- * It reaches NuGet, so restores work, and nothing else: Jira, Confluence and GitLab are only
- * spoken to from the host, through the gateway.
+ * It reaches nuget.org and the team's CodeArtifact repository, so restores work, and nothing else:
+ * Jira, Confluence, GitLab and AWS are only spoken to from the host, through the gateway.
  */
 import { jira } from '@mesh-flow/atlassian/hooks'
+import { codeArtifact } from '@mesh-flow/aws'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { develop } from './workflows/develop.mts'
 
@@ -21,8 +22,14 @@ const startLabel = 'ai-develop'
  */
 const sandboxImage = 'node:26-bookworm'
 
+/**
+ * The team's private NuGet packages, which a repository's `nuget.config` names by their CodeArtifact
+ * URL. Placeholder values: name the team's own domain, account, region and repository here.
+ */
+const teamPackages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
+
 export default defineMeshFlow({
-	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: ['nuget'] }),
+	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: ['nuget', teamPackages] }),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

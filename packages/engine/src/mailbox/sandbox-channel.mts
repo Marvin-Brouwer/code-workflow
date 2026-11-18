@@ -3,12 +3,13 @@ import {
 	mailboxEnvironmentVariable,
 	mailboxLayout,
 	RuntimeMessage,
+	stagedFile,
 	type Answer,
-	type EndpointGrant,
 	type MailboxLayout,
+	type RunGrant,
 	type RunStart,
 } from '@mesh-flow/protocol'
-import type { Command, Sandbox } from '@mesh-flow/sandbox'
+import { temporaryFileOf, type Command, type Sandbox } from '@mesh-flow/sandbox'
 import { pollIntervalSeconds, pollScript, runtimeGoneExitCode, stopPollsScript } from './poll-script.mts'
 
 /** What one poll of the outbox found. */
@@ -44,9 +45,9 @@ export class SandboxChannel {
 	}
 
 	/** Makes the mailbox, readable for the runtime's user only. */
-	async prepare(signal: AbortSignal): Promise<void> {
-		await this.#run(['mkdir', '-p', this.#layout.inbox], signal)
-		await this.#run(['chmod', '700', this.#layout.directory], signal)
+	async prepare(abortSignal: AbortSignal): Promise<void> {
+		await this.#run(['mkdir', '-p', this.#layout.inbox, this.#layout.staged], abortSignal)
+		await this.#run(['chmod', '700', this.#layout.directory], abortSignal)
 	}
 
 	/** Tells the runtime what to do. Written before it starts, and never again. */
@@ -55,7 +56,7 @@ export class SandboxChannel {
 	}
 
 	/** Hands the runtime the run's gateway endpoint. Written before it starts; the runtime removes it once read. */
-	async writeGrant(grant: EndpointGrant, abortSignal: AbortSignal): Promise<void> {
+	async writeGrant(grant: RunGrant, abortSignal: AbortSignal): Promise<void> {
 		await this.#sandbox.writeFile(this.#layout.grantFile, JSON.stringify(grant), abortSignal)
 	}
 
@@ -92,6 +93,21 @@ export class SandboxChannel {
 	 */
 	async stopPolls(signal: AbortSignal): Promise<void> {
 		await this.#run(['sh', '-c', stopPollsScript, 'sh', this.#layout.polls], signal)
+	}
+
+	/** Stages a body a call fetched, such as a package, where its answer tells the runtime to look. */
+	async stage(name: string, body: Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		await this.#sandbox.writeFile(stagedFile(this.#layout, name), body, abortSignal)
+	}
+
+	/**
+	 * Removes what was staged under `names`, also a write of it that was cut short, for calls whose
+	 * answer will never name it: nothing in the sandbox would read it.
+	 */
+	async unstage(names: readonly string[], abortSignal: AbortSignal): Promise<void> {
+		if (names.length === 0) return
+		const files = names.map((name) => stagedFile(this.#layout, name))
+		await this.#run(['rm', '-f', '--', ...files.flatMap((file) => [file, temporaryFileOf(file)])], abortSignal)
 	}
 
 	/** Writes the answer to a request where the runtime looks for it. */

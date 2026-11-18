@@ -1,8 +1,8 @@
 import { appendFileSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
+import { answerFile, mailboxEnvironmentVariable, mailboxLayout, stagedFile, type MailboxLayout } from './mailbox-layout.mts'
 import type { Answer, RuntimeMessage } from './runtime-message.mts'
-import { answerFile, mailboxEnvironmentVariable, mailboxLayout, type MailboxLayout } from './mailbox-layout.mts'
 
 /** How often the runtime looks for an answer. Only a polling interval, never a wall-clock wait. */
 const answerPollMs = 250
@@ -56,7 +56,7 @@ export class RuntimeMailbox {
 	}
 
 	/**
-	 * The run's gateway endpoint and its tokens, as JSON: check it with `EndpointGrant`. Removed once
+	 * The run's gateway endpoints and their tokens, as JSON: check it with `RunGrant`. Removed once
 	 * it's read, so the tokens are only in the runtime's memory. `undefined` when the engine wrote
 	 * none, because it has no gateway.
 	 */
@@ -79,6 +79,14 @@ export class RuntimeMailbox {
 		const answer = await this.answer(requestId, abortSignal)
 		await rm(answerFile(this.#layout, requestId), { force: true })
 		return answer
+	}
+
+	/**
+	 * Where the engine staged a body a call fetched, such as a package, by the name the call's
+	 * answer gives it. Whoever reads it removes it.
+	 */
+	staged(name: string): string {
+		return stagedFile(this.#layout, name)
 	}
 
 	/** Waits until the engine has answered the request with this id. */

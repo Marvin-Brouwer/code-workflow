@@ -41,8 +41,8 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `GET /runs/:run/events` | the run's event tree so far |
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
- * | `GET /logins` | the sign-ins under way, with where to sign in |
- * | `POST /logins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
+ * | `GET /sign-ins` | the sign-ins under way, with where to sign in |
+ * | `POST /sign-ins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
  * | `GET /apps` | every deployed app's current version and what it declares |
  * | `PUT /apps/:name` | deploys a built app as the new current version: `{ tarball }`; answers with the settings it still needs in `missing` |
  * | `DELETE /apps/:name` | removes an app; runs on it keep their copy |
@@ -66,10 +66,10 @@ export function controlApi(engine: Engine, apps?: ControlApps): Hono {
 	api.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
-	api.get('/logins', (c) => c.json(engine.signIns()))
-	api.post('/logins/:connector', async (c) => {
+	api.get('/sign-ins', (c) => c.json(engine.signIns()))
+	api.post('/sign-ins/:connector', async (c) => {
 		const connector = c.req.param('connector')
-		await engine.signIn(connector, c.req.raw.signal)
+		await engine.waitForSignIn(connector, c.req.raw.signal)
 		return c.json({ signedIn: connector })
 	})
 

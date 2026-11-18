@@ -40,20 +40,23 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 		answers.set(id, created)
 		return created
 	}
-	const answer = async (message: CallMessage) => {
+	const answerCall = async (message: CallMessage) => {
 		const stop = new AbortController()
 		running.set(message.id, stop)
 		const accepted = await gateway.accept(runId, message, lifetime)
-		const value = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
+		const { answer } = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
 		await gateway.settle(runId, message.id, lifetime)
 		running.delete(message.id)
-		slot(message.id).resolve({ value })
+		slot(message.id).resolve({ value: answer })
 	}
 	return {
+		staged(name) {
+			throw new Error(`These tests fetch no packages, so nothing is staged as ${name}.`)
+		},
 		send(message) {
 			if (message.type === 'cancel') running.get(message.id)?.abort(new Error('The runtime cancelled the call.'))
 			if (message.type !== 'call') return
-			answer(message).catch((error: unknown) => {
+			answerCall(message).catch((error: unknown) => {
 				slot(message.id).reject(error)
 			})
 		},

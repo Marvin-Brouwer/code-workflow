@@ -26,6 +26,9 @@ importers:
       '@mesh-flow/atlassian':
         specifier: workspace:*
         version: link:../../packages/atlassian
+      '@mesh-flow/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -137,6 +140,9 @@ importers:
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
+      '@mesh-flow/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: ^4.6.7
         version: 4.6.7

@@ -1,3 +1,4 @@
+import { signInCommandLine, signInPromptLine } from '../engine/sign-in-lines.mts'
 import type { SignInState } from '../engine/sign-in-state.mts'
 import type { RunRecord } from '../runs/run-record.mts'
 
@@ -24,11 +25,9 @@ function field(label: string, value: string): string {
 function signInLines(connector: string, signIns: readonly SignInState[]): string[] {
 	const signIn = signIns.find((candidate) => candidate.connector === connector)
 	const lines: string[] = []
-	if (signIn?.prompt)
-		lines.push(`    open ${signIn.prompt.url} and check that it shows ${signIn.prompt.code}, until ${signIn.prompt.expiresAt}`)
-	else lines.push('    waiting for a code from the service')
+	lines.push(`    ${signIn?.prompt ? signInPromptLine(signIn.prompt) : 'waiting for a code from the service'}`)
 	if (signIn?.error) lines.push(`    the last try failed: ${signIn.error}`)
-	lines.push(`    or: mesh-flow login ${connector}`)
+	lines.push(`    ${signInCommandLine(connector)}`)
 	return lines
 }
 

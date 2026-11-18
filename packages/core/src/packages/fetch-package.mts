@@ -1,12 +1,10 @@
+import { readFile, rm } from 'node:fs/promises'
 import type { PackageRequest } from '@mesh-flow/protocol'
-import { gatewayPackages } from '../gateway/gateway-packages.mts'
+import { packageFetchThroughGateway } from '../gateway/gateway-packages.mts'
 import { findScope } from '../run/run-scope.mts'
 
-/**
- * What {@link fetchPackage} fetches: a path on one of the app's registries, with the `accept`
- * header to send, such as npm's `application/vnd.npm.install-v1+json`.
- */
-export type PackageFetch = PackageRequest
+/** What {@link fetchPackage} fetches: a path on one of the app's registries, with the `accept` header to send. */
+export type { PackageRequest }
 
 /** What the registry answered. */
 export interface FetchedPackage {
@@ -29,9 +27,13 @@ export interface FetchedPackage {
  * @throws Outside a run with a gateway, when the app doesn't list the registry, and when the path
  * isn't a package fetch.
  */
-export async function fetchPackage(request: PackageFetch, abortSignal: AbortSignal): Promise<FetchedPackage> {
+export async function fetchPackage(request: PackageRequest, abortSignal: AbortSignal): Promise<FetchedPackage> {
 	const gateway = findScope()?.run.gateway
 	if (gateway === undefined) throw new Error('Packages come through the gateway, and this run has none.')
-	const answer = await gatewayPackages(gateway)(request, abortSignal)
-	return { status: answer.status, headers: answer.headers, body: Buffer.from(answer.body, 'base64') }
+	const answer = await packageFetchThroughGateway(gateway)(request, abortSignal)
+	try {
+		return { status: answer.status, headers: answer.headers, body: await readFile(answer.file, { signal: abortSignal }) }
+	} finally {
+		await rm(answer.file, { force: true })
+	}
 }

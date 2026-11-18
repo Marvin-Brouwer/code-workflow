@@ -1,4 +1,4 @@
-import type { EndpointGrant, RunStart } from '@mesh-flow/protocol'
+import type { RunGrant, RunStart } from '@mesh-flow/protocol'
 import type { Sandbox } from '@mesh-flow/sandbox'
 import { uploadApp } from '../apps/upload-app.mts'
 import type { SandboxChannel } from '../mailbox/sandbox-channel.mts'
@@ -16,7 +16,7 @@ export interface RuntimeSetup {
 	/** Extra environment for the runtime, such as the run id. */
 	readonly env: Readonly<Record<string, string>>
 	/** The grant of the run's gateway endpoint, when the engine has a gateway. */
-	readonly grant: EndpointGrant | undefined
+	readonly grant: RunGrant | undefined
 }
 
 /**

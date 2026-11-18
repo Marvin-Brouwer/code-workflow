@@ -12,8 +12,10 @@ export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, typ
 export {
 	openGateway,
 	tokensPerEndpoint,
+	tokensPerPackageEndpoint,
 	type AcceptedCall,
 	type Gateway,
+	type GatewayAnswer,
 	type GatewayOptions,
 	type InterruptedCall,
 	type RunAccess,
@@ -28,7 +30,9 @@ export {
 	type FetchRetryOptions,
 	type OutgoingRequest,
 } from '../http/retrying-fetch.mts'
-export { maxPackageBytes } from '../packages/fetch-package.mts'
+export type { ConnectorRegistryRequest, RegistryTarget, ResolveRegistryTarget } from '../packages/connector-registry.mts'
+export { maxPackageBytes, type RegistryAnswer } from '../packages/fetch-from-public-registry.mts'
+export { openPackageCache, type PackageCache } from '../packages/package-cache.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'
@@ -41,7 +45,7 @@ export {
 } from '../providers/provider-settings.mts'
 export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
-export type { ConnectorLogin, ConnectorLoginContext, LoginPrompt } from '../tools/connector-login.mts'
+export type { ConnectorSignIn, ConnectorSignInContext, SignInPrompt } from '../tools/connector-sign-in.mts'
 export {
 	connectorHost,
 	hostTool,
@@ -55,5 +59,5 @@ export {
 	type HostToolContext,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
-export { SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
+export { loginCommand, SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
 export { untilAborted } from '../until-aborted.mts'

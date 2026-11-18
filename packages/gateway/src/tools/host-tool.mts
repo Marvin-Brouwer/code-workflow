@@ -1,7 +1,8 @@
 import { ConnectorName, ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
-import type { ConnectorLogin } from './connector-login.mts'
+import type { ResolveRegistryTarget } from '../packages/connector-registry.mts'
+import type { ConnectorSignIn } from './connector-sign-in.mts'
 
 /** What a host tool's action gets besides its input. */
 export interface HostToolContext {
@@ -100,7 +101,7 @@ export interface ConnectorHostOptions {
 
 /**
  * The host half of a connector package, as its `host` entry point exports it: a name, the host
- * tools it brings, and, for a service with sessions, a `login`. The engine loads the connectors
+ * tools it brings, and, for a service with sessions, a `signIn`. The engine loads the connectors
  * the user added and gives every run the tools of them its app lists.
  *
  * ```ts
@@ -109,14 +110,24 @@ export interface ConnectorHostOptions {
  */
 export interface ConnectorHost {
 	/** Names the connector, as a directory name: lowercase letters, digits and dashes. */
-	readonly name: string
+	readonly name: ConnectorName
 	readonly tools: (options: ConnectorHostOptions) => readonly HostTool[]
 	/** Signs the user in to the connector's service, for `mesh-flow login <name>`. Only for a service with sessions to sign in to. */
-	readonly login?: ConnectorLogin
+	readonly signIn?: ConnectorSignIn
+	/**
+	 * How the gateway reaches the connector's package registries, such as CodeArtifact
+	 * repositories, made with the same options as its tools. Only for a connector with registries.
+	 */
+	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryTarget
+	/**
+	 * The settings the connector still needs, each as a line that says how to set it, from its own
+	 * credentials, made with the same options as its tools. `mesh-flow deploy` and a trigger report them for an app that uses the connector.
+	 */
+	readonly missingSettings?: (options: ConnectorHostOptions, abortSignal: AbortSignal) => Promise<string[]>
 }
 
 /** What else a connector's host half brings besides its tools. */
-export type ConnectorHostExtras = Pick<ConnectorHost, 'login'>
+export type ConnectorHostExtras = Pick<ConnectorHost, 'signIn' | 'registries' | 'missingSettings'>
 
 /** Defines the host half of a connector, checked. */
 export function connectorHost(name: string, tools: ConnectorHost['tools'], extras: ConnectorHostExtras = {}): ConnectorHost {

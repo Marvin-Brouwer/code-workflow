@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 import type { SandboxSpec } from '../sandbox-spec.mts'
+import { temporaryFileOf } from '../temporary-file.mts'
 import { newCheckpointName, partialCheckpoint, removeEarlierCheckpoints } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
 import { jobDirectory, jobScript, submitJobCommand } from './init.mts'
@@ -46,10 +47,10 @@ export class GvisorSandbox implements Sandbox {
 		return result.stdout
 	}
 
-	async writeFile(path: string, content: string, signal: AbortSignal): Promise<void> {
-		const script = 'cat > "$1.tmp" && mv -- "$1.tmp" "$1"'
-		await runscOrThrow(this.#context.runsc, ['exec', this.id, 'sh', '-c', script, 'sh', path], {
-			signal: this.#context.lifetime.bind(signal),
+	async writeFile(path: string, content: string | Uint8Array, abortSignal: AbortSignal): Promise<void> {
+		const script = 'cat > "$2" && mv -- "$2" "$1"'
+		await runscOrThrow(this.#context.runsc, ['exec', this.id, 'sh', '-c', script, 'sh', path, temporaryFileOf(path)], {
+			signal: this.#context.lifetime.bind(abortSignal),
 			input: content,
 		})
 	}

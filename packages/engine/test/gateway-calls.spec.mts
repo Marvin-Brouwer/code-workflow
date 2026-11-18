@@ -8,10 +8,13 @@ import {
 	openProviderSettings,
 	SignInNeededError,
 	type HostTool,
+	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
+import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
 import { openAppStore } from '../src/apps/app-store.mts'
+import type { ConnectorSettingsCheck } from '../src/engine/connector-settings-check.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns, type SignIns } from '../src/engine/sign-ins.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
@@ -22,6 +25,9 @@ import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const abortSignal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
+
+/** How long a shutdown may take while a part of a run never settles: shorter than its deadlines. */
+const promptlyMs = 5_000
 
 const echo = hostTool({ name: 'echo', input: z.object({ text: z.string() }) }, ({ text }) => Promise.resolve(`echo: ${text}`))
 
@@ -37,11 +43,19 @@ async function openEngine({
 	home,
 	tools = [echo, never],
 	fetch,
+	connectorSettings,
 	signIns,
+	sandboxes,
+	registries,
 }: {
 	readonly home?: string
+	/** How the gateway reaches each connector's package registries. */
+	readonly registries?: Readonly<Record<string, ResolveRegistryTarget>>
+	/** Changes the sandboxes the host backend makes, such as to make one of their parts hang. */
+	readonly sandboxes?: (sandbox: Sandbox) => Sandbox
 	readonly tools?: readonly HostTool[]
 	readonly fetch?: typeof globalThis.fetch
+	readonly connectorSettings?: ConnectorSettingsCheck
 	readonly signIns?: SignIns
 } = {}) {
 	onTestFinished(() => {
@@ -55,8 +69,11 @@ async function openEngine({
 		providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 		tools,
 		...(fetch === undefined ? {} : { fetch }),
+		...(registries === undefined ? {} : { registries }),
 	})
-	const backend = hostBackend(path.join(directory, 'sandboxes'))
+	const host = hostBackend(path.join(directory, 'sandboxes'))
+	const backend: SandboxBackend =
+		sandboxes === undefined ? host : { ...host, create: async (...args) => sandboxes(await host.create(...args)) }
 	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(
@@ -67,6 +84,7 @@ async function openEngine({
 			gateway,
 			layout: hostSandboxLayout,
 			log,
+			...(connectorSettings === undefined ? {} : { connectorSettings }),
 			...(signIns === undefined ? {} : { signIns }),
 		},
 		abortSignal,
@@ -86,12 +104,12 @@ async function untilStatus(engine: Engine, id: string, status: RunStatus): Promi
 	)
 }
 
-/** A runtime that takes its grant and calls the gateway with `call(id, call, token)`, which resolves to the answer's value. */
+/** A runtime that takes its grant and calls the gateway with `call(id, call, token, endpoint?)` (the run's endpoint by default), which resolves to the answer's value. */
 function callingScript(body: string): string {
 	return runtimeScript(`
 const grant = await mailbox.takeGrant(signal)
-const call = async (id, gatewayCall, token) => {
-	mailbox.send({ type: 'call', id, endpoint: grant.endpoint, token, call: gatewayCall })
+const call = async (id, gatewayCall, token, endpoint = grant.endpoint) => {
+	mailbox.send({ type: 'call', id, endpoint, token, call: gatewayCall })
 	return (await mailbox.take(id, signal)).value
 }
 ${body}
@@ -140,7 +158,7 @@ mailbox.send({ type: 'succeeded' })
 		expect(existsSync(path.join(gatewayHome, 'runs', `${run.id}.json`))).toBe(false)
 	})
 
-	test('fetches packages from the registries the app restores from, and no other', async () => {
+	test('fetches packages from the registries the app restores from, staging each body for the sandbox, and no other', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
 		const { engine, apps } = await openEngine({ fetch: sent })
@@ -148,9 +166,11 @@ mailbox.send({ type: 'succeeded' })
 			apps,
 			{
 				calls: callingScript(`
-const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.tokens[0])
-const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next)
-event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome })
+const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.packages.tokens[0], grant.packages.endpoint)
+const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next, grant.packages.endpoint)
+const { readFile } = await import('node:fs/promises')
+const staged = await readFile(mailbox.staged(npm.outcome.result.body), 'utf8')
+event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome, staged })
 mailbox.send({ type: 'succeeded' })
 `),
 			},
@@ -164,11 +184,53 @@ mailbox.send({ type: 'succeeded' })
 		// Assert
 		const [done] = await engine.events(run.id)
 		expect(done).toMatchObject({
-			npm: { ok: true, result: { status: 200, body: Buffer.from('{"name":"left-pad"}').toString('base64') } },
+			npm: { ok: true, result: { status: 200, body: 'call-1.body', size: '{"name":"left-pad"}'.length } },
 			nuget: { ok: false },
+			staged: '{"name":"left-pad"}',
 		})
 		expect(JSON.stringify(done)).toContain("doesn't restore from nuget")
 		expect(sent).toHaveBeenCalledOnce()
+	})
+
+	test('shuts down promptly while staging a fetched body in the sandbox never settles', async () => {
+		// Arrange
+		const staging = vi.fn()
+		const hangsOnStaging = (sandbox: Sandbox): Sandbox => ({
+			id: sandbox.id,
+			exec: (command, options) => sandbox.exec(command, options),
+			startInBackground: (command, options) => sandbox.startInBackground(command, options),
+			readFile: (file, readAbortSignal) => sandbox.readFile(file, readAbortSignal),
+			writeFile: (file, content, writeAbortSignal) => {
+				if (!file.endsWith('.body')) return sandbox.writeFile(file, content, writeAbortSignal)
+				staging()
+				return new Promise<never>(() => undefined)
+			},
+			pause: (pauseAbortSignal) => sandbox.pause(pauseAbortSignal),
+			destroy: (destroyAbortSignal) => sandbox.destroy(destroyAbortSignal),
+		})
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball')))
+		const { engine, apps } = await openEngine({ fetch: sent, sandboxes: hangsOnStaging })
+		await deployTestApp(
+			apps,
+			{
+				calls: callingScript(`
+await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad/-/left-pad-1.3.0.tgz' } }, grant.packages.tokens[0], grant.packages.endpoint)
+`),
+			},
+			{ registries: ['npm'] },
+		)
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await vi.waitFor(() => {
+			expect(staging).toHaveBeenCalled()
+		})
+
+		// Act
+		const startedAt = Date.now()
+		await engine.close(deadlines())
+
+		// Assert
+		expect(Date.now() - startedAt).toBeLessThan(promptlyMs)
+		expect(engine.get(run.id).status).not.toBe('running')
 	})
 
 	test('answers a call that needs a sign-in with the connector, signs in for the login the runtime asks for, and runs the tool again', async () => {
@@ -182,7 +244,7 @@ mailbox.send({ type: 'succeeded' })
 			cloud.signedIn = true
 			return Promise.resolve()
 		})
-		const signIns = openSignIns({ connectors: [{ name: 'cloud', login }] })
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
 		const { engine, apps } = await openEngine({ tools: [session], signIns })
 		await deployTestApp(
 			apps,
@@ -207,6 +269,52 @@ mailbox.send({ type: 'succeeded' })
 		const [done] = await engine.events(run.id)
 		expect(done).toMatchObject({ first: { ok: false, signInTo: 'cloud' }, second: { ok: true, result: 'live' } })
 		expect(login).toHaveBeenCalledOnce()
+	})
+
+	test("signs in for a fetch from a connector's registry, and fetches it again, staged for the sandbox", async () => {
+		// Arrange
+		const cloud = { signedIn: false }
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/packages/'], settings: {} }
+		const resolveTarget = vi.fn<ResolveRegistryTarget>(({ path: fetched }) => {
+			if (!cloud.signedIn) return Promise.reject(new SignInNeededError('cloud'))
+			return Promise.resolve({ url: `https://packages.cloud.example${fetched}`, headers: { authorization: 'Bearer from-the-session' } })
+		})
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
+		const login = vi.fn(() => {
+			cloud.signedIn = true
+			return Promise.resolve()
+		})
+		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
+		const { engine, apps } = await openEngine({ fetch: sent, signIns, registries: { cloud: resolveTarget } })
+		await deployTestApp(
+			apps,
+			{
+				calls: callingScript(`
+const request = { registry: ${JSON.stringify(registry)}, path: '/npm/packages/left-pad' }
+const first = await call('call-1', { type: 'package', request }, grant.packages.tokens[0], grant.packages.endpoint)
+mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: first.outcome.signInTo } })
+await mailbox.answer('login-1', signal)
+const second = await call('call-2', { type: 'package', request }, first.next, grant.packages.endpoint)
+const { readFile } = await import('node:fs/promises')
+const staged = await readFile(mailbox.staged(second.outcome.result.body), 'utf8')
+event('done', 'called', { first: first.outcome, staged })
+mailbox.send({ type: 'succeeded' })
+`),
+			},
+			{ registries: [registry] },
+		)
+
+		// Act
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		const [done] = await engine.events(run.id)
+		expect(done).toMatchObject({ first: { ok: false, signInTo: 'cloud' }, staged: '{"name":"left-pad"}' })
+		expect(login).toHaveBeenCalledOnce()
+		const [url, init] = sent.mock.calls[0] ?? []
+		expect(url).toBe('https://packages.cloud.example/npm/packages/left-pad')
+		expect(init?.headers).toMatchObject({ authorization: 'Bearer from-the-session' })
 	})
 
 	test("refuses a tool the app doesn't list", async () => {
@@ -318,16 +426,21 @@ await new Promise(() => {})
 		expect(log).toHaveBeenCalledWith(expect.stringContaining('Someone else has the run'))
 	})
 
-	test('shuts down while a host tool never settles, and answers the call as interrupted after a resume', async () => {
+	test('shuts down while a host tool never settles, and answers the call as interrupted after a resume, with nothing staged for it', async () => {
 		// Arrange
 		const first = await openEngine()
 		await deployTestApp(
 			first.apps,
 			{
 				calls: callingScript(`
+const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+// As if the engine had staged a body for the call, and been stopped before it answered.
+const staged = process.env.MESH_FLOW_MAILBOX + '/staged/call-1.body.tmp'
+mkdirSync(process.env.MESH_FLOW_MAILBOX + '/staged', { recursive: true })
+writeFileSync(staged, 'cut short')
 const answer = await call('call-1', { type: 'tool', tool: 'never', input: {} }, grant.tokens[0])
 const next = await call('call-2', { type: 'tool', tool: 'echo', input: { text: 'after' } }, answer.next)
-event('done', 'called', { first: answer.outcome, second: next.outcome })
+event('done', 'called', { first: answer.outcome, second: next.outcome, staged: existsSync(staged) })
 mailbox.send({ type: 'succeeded' })
 `),
 			},
@@ -346,7 +459,7 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		const [done] = await second.engine.events(run.id)
-		expect(done).toMatchObject({ first: { ok: false }, second: { ok: true, result: 'echo: after' } })
+		expect(done).toMatchObject({ first: { ok: false }, second: { ok: true, result: 'echo: after' }, staged: false })
 		expect(JSON.stringify(done)).toContain('engine stopped')
 	})
 
@@ -380,6 +493,27 @@ mailbox.send({ type: 'succeeded' })
 		expect(missing).toHaveLength(2)
 		expect(missing[0]).toContain('No model providers are set up')
 		expect(missing[1]).toContain('host tools githubComment')
+	})
+
+	test("lists what the connectors behind the app's registries still need, and a registry whose connector isn't loaded", async () => {
+		// Arrange
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/packages/'], settings: {} }
+		const connectorSettings = vi.fn<ConnectorSettingsCheck>(() =>
+			Promise.resolve(['Set the cloud start URL: `mesh-flow credential set cloud/start-url`.']),
+		)
+		const { engine, apps } = await openEngine({ connectorSettings })
+		const deployed = await deployTestApp(
+			apps,
+			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
+			{ tools: ['echo'], registries: ['npm', registry] },
+		)
+
+		// Act
+		const missing = await engine.missingSettings(deployed.manifest.description, abortSignal)
+
+		// Assert
+		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud'), expect.stringContaining('cloud start URL')])
+		expect(connectorSettings).toHaveBeenCalledWith({ tools: ['echo'], registries: ['npm', registry] }, abortSignal)
 	})
 
 	test('refuses a run before its sandbox when no loaded connector brings a host tool the app lists', async () => {

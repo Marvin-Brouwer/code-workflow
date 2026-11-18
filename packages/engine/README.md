@@ -198,7 +198,7 @@ The engine makes every call. To read the outbox it runs a short POSIX shell loop
 
 ### Gateway calls
 
-Calls that need a credential go through the same mailbox: the runtime appends a `call` message with its endpoint and a token, and the engine writes the answer to the inbox ([protocol: Calls](../protocol/README.md#calls)). Before the runtime starts, the engine opens the run's endpoint on the gateway, for the host tools the app's build lists, and writes its tokens to `gateway.json`, which the runtime removes once it has read it.
+Calls that need a credential go through the same mailbox: the runtime appends a `call` message with its endpoint and a token, and the engine writes the answer to the inbox ([protocol: Calls](../protocol/README.md#calls)). Before the runtime starts, the engine opens the run's endpoint on the gateway, for the host tools the app's build lists, and, when the app restores packages, its package endpoint, and writes their tokens to `gateway.json` (a `RunGrant`), which the runtime removes once it has read it.
 
 - **A call is taken before the engine saves that it read it.** The gateway spends the token and keeps the call as in flight on disk first. A call that was taken but not answered when the engine stopped is answered as interrupted when the run is resumed, with its next token: whether it took effect is unknown, so it isn't run again.
 - **A `cancel` message stops a call.** It is still answered, so the runtime gets its next token.
@@ -264,7 +264,6 @@ CI runs it on gVisor and microsandbox on Linux, and microsandbox on Windows ([`e
 - **Old versions stay** in the engine's home until their app is removed. There is no clean-up of versions no run uses yet.
 - **Webhook payload schemas** are compiled with [Ajv](https://ajv.js.org). A pattern in a schema runs on the host, so a slow regular expression slows the ingress down.
 - **Gateway calls go through the mailbox**, so each one waits on a poll on both sides, up to a quarter of a second each way, and a model response comes back whole instead of streamed. That is little next to a model call. A channel of their own, low latency and both ways ([gateway-tool-calls.md](../../docs/plans/gateway-tool-calls.md)), can replace it behind the same `call` messages.
-- **Host tools of connectors** are given to `serveEngine` as `tools`; `serve` has none yet. Which connector packages an engine loads them from is decided with the first connector.
 - **The agent's shell as a separate user.** The mailbox is `chmod 700` for the runtime's user. That only keeps an agent out once agent shell commands run as another user ([gateway rule 5](../../docs/plans/gateway-tool-calls.md#rules)).
 - **Events arrive at least once.** When the engine dies after keeping events but before saving how far it read, it reads those events again after a resume.
 - **Answers aren't checked on the host.** The runtime validates an answer against its fields and asks again when it doesn't fit.

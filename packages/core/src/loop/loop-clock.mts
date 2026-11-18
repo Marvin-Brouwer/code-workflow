@@ -15,6 +15,9 @@ export interface LoopClock {
 
 const maxTimerMs = 2 ** 31 - 1
 
+/** The clocks of the loops running in this process, which is one run's runtime. */
+const runningClocks = new Set<LoopClock>()
+
 /** Starts a loop's clock. `onExceeded` runs once when `minutes` of runtime are up. */
 export function startLoopClock(minutes: number | undefined, onExceeded: () => void): LoopClock {
 	const budgetMs = minutes === undefined ? undefined : minutes * 60_000
@@ -47,7 +50,7 @@ export function startLoopClock(minutes: number | undefined, onExceeded: () => vo
 	}
 	arm()
 
-	return {
+	const clock: LoopClock = {
 		async whileWaiting(body) {
 			if (waits++ === 0) pause()
 			try {
@@ -59,8 +62,11 @@ export function startLoopClock(minutes: number | undefined, onExceeded: () => vo
 		stop() {
 			stopped = true
 			clearTimeout(timer)
+			runningClocks.delete(clock)
 		},
 	}
+	runningClocks.add(clock)
+	return clock
 }
 
 /**
@@ -69,6 +75,21 @@ export function startLoopClock(minutes: number | undefined, onExceeded: () => vo
  * it just runs it.
  */
 export function waitingOnHuman<T>(body: () => Promise<T>): Promise<T> {
-	const clocks = findScope()?.loop?.clocks ?? []
+	return whileClocksWait(findScope()?.loop?.clocks ?? [], body)
+}
+
+/**
+ * Runs `body`, a wait for the user to sign in, with the clocks of the loops it runs in stopped, as
+ * {@link waitingOnHuman}. Out of the run's scope altogether, such as a package manager's fetch
+ * through the package proxy, it stops the clock of every loop that runs when the wait starts: the
+ * package manager runs in a loop's shell, and the sign-in holds that loop up.
+ */
+export function waitingOnSignIn<T>(body: () => Promise<T>): Promise<T> {
+	const scope = findScope()
+	return whileClocksWait(scope === undefined ? [...runningClocks] : (scope.loop?.clocks ?? []), body)
+}
+
+/** Runs `body` with each of `clocks` stopped while it runs, by nesting their `whileWaiting`. */
+function whileClocksWait<T>(clocks: readonly LoopClock[], body: () => Promise<T>): Promise<T> {
 	return clocks.reduce<() => Promise<T>>((inner, clock) => () => clock.whileWaiting(inner), body)()
 }

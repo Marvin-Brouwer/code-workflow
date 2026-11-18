@@ -1,8 +1,10 @@
+import { open, rm } from 'node:fs/promises'
 import { createServer, STATUS_CODES, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { TLSSocket } from 'node:tls'
-import { packageRegistryHosts, PackageRequest, type PackageRegistry } from '@mesh-flow/protocol'
+import { PackageRequest, registryHost, registryPaths, type PackageRegistry } from '@mesh-flow/protocol'
 import { GatewayCallError } from '../gateway/gateway-client.mts'
 import type { GatewayFetch } from '../gateway/gateway-packages.mts'
 import { describeError } from '../run/describe-error.mts'
@@ -15,7 +17,7 @@ export interface PackageProxyOptions {
 	/** Signs the certificates the proxy shows for the registries' hosts. */
 	readonly authority: CertificateAuthority
 	/** Fetches a package, through the gateway. */
-	readonly fetchThroughGateway: GatewayFetch
+	readonly fetchStaged: GatewayFetch
 	/** Stops the proxy, as {@link PackageProxy.close} does: every request it still serves is aborted. */
 	readonly abortSignal: AbortSignal
 }
@@ -54,6 +56,20 @@ function normalizedHost(host: string): string {
 }
 
 /**
+ * The registry on `host` that `path` is on: the one with the longest of its paths that `path` starts
+ * with, so two repositories on one host each get their own fetches.
+ */
+function registryOfPath(registries: readonly PackageRegistry[], path: string): PackageRegistry | undefined {
+	let found: { registry: PackageRegistry; length: number } | undefined
+	for (const registry of registries) {
+		for (const prefix of registryPaths(registry)) {
+			if (path.startsWith(prefix) && prefix.length > (found?.length ?? -1)) found = { registry, length: prefix.length }
+		}
+	}
+	return found?.registry
+}
+
+/**
  * The proxy package managers in the sandbox reach on `HTTPS_PROXY`, such as `npm ci` and
  * `dotnet restore`. The sandbox has no network, so nothing it tunnels goes out: for the hosts of
  * the app's registries it ends TLS itself, with a certificate from the sandbox's own authority, and
@@ -62,13 +78,15 @@ function normalizedHost(host: string): string {
  */
 export async function startPackageProxy(options: PackageProxyOptions): Promise<PackageProxy> {
 	options.abortSignal.throwIfAborted()
-	const registryOfHost = new Map(options.registries.map((registry) => [packageRegistryHosts[registry], registry]))
-	const registryOfSocket = new WeakMap<Socket, PackageRegistry>()
+	const registriesOfHost = Map.groupBy(options.registries, registryHost)
+	const registriesOfSocket = new WeakMap<Socket, readonly PackageRegistry[]>()
 	const connections = new Set<Duplex>()
 
 	const serve = async (request: IncomingMessage, response: ServerResponse) => {
-		const registry = registryOfSocket.get(request.socket)
-		if (registry === undefined || request.url === undefined) {
+		const registries = registriesOfSocket.get(request.socket) ?? []
+		const { url } = request
+		const registry = url === undefined ? undefined : registryOfPath(registries, url)
+		if (url === undefined || registry === undefined) {
 			answerPlainly(response, forbidden, 'Not a registry this run restores from.')
 			return
 		}
@@ -77,9 +95,9 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			return
 		}
 		const accept = request.headers.accept
-		const asked = PackageRequest.safeParse({ registry, path: request.url, ...(accept === undefined ? {} : { accept }) })
+		const asked = PackageRequest.safeParse({ registry, path: url, ...(accept === undefined ? {} : { accept }) })
 		if (!asked.success) {
-			answerPlainly(response, badRequest, `Not a package fetch: ${request.url.slice(0, maxEchoedLength)}`)
+			answerPlainly(response, badRequest, `Not a package fetch: ${url.slice(0, maxEchoedLength)}`)
 			return
 		}
 		const stopped = new AbortController()
@@ -87,10 +105,21 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 			stopped.abort(new Error('The package manager went away.'))
 		})
 		try {
-			const answer = await options.fetchThroughGateway(asked.data, AbortSignal.any([stopped.signal, options.abortSignal]))
-			const body = Buffer.from(answer.body, 'base64')
-			response.writeHead(answer.status, { ...answer.headers, 'content-length': String(body.length) })
-			response.end(body)
+			const fetchAbortSignal = AbortSignal.any([stopped.signal, options.abortSignal])
+			const answer = await options.fetchStaged(asked.data, fetchAbortSignal)
+			try {
+				// Opened before the head goes out, so a body that is gone is a 502 the package manager
+				// tries again, not a cut-off response.
+				const body = (await open(answer.file)).createReadStream()
+				try {
+					response.writeHead(answer.status, { ...answer.headers, 'content-length': String(answer.size) })
+					await pipeline(body, response, { signal: fetchAbortSignal })
+				} finally {
+					body.destroy()
+				}
+			} finally {
+				await rm(answer.file, { force: true })
+			}
 		} catch (error) {
 			// A refusal won't pass on another try, and package managers try a 5xx again.
 			const refused = error instanceof GatewayCallError && !error.transient
@@ -112,8 +141,8 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		client.on('error', () => client.destroy())
 		const [requestedHost = '', port] = (request.url ?? '').split(':')
 		const host = normalizedHost(requestedHost)
-		const registry = registryOfHost.get(host)
-		if (registry === undefined || port !== httpsPort) {
+		const registries = registriesOfHost.get(host)
+		if (registries === undefined || port !== httpsPort) {
 			client.end(statusLine(forbidden))
 			return
 		}
@@ -122,7 +151,7 @@ export async function startPackageProxy(options: PackageProxyOptions): Promise<P
 		const secure = new TLSSocket(client, { isServer: true, secureContext: options.authority.contextFor(host) })
 		secure.on('error', () => secure.destroy())
 		track(connections, secure)
-		registryOfSocket.set(secure, registry)
+		registriesOfSocket.set(secure, registries)
 		inner.emit('connection', secure)
 	})
 

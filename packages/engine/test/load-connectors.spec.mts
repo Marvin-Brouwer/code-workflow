@@ -69,7 +69,7 @@ describe('loadConnectors', () => {
 		const withLogin = `export const connector = {
 	name: 'cloud',
 	tools: () => [],
-	login: async ({ credentials, abortSignal }) => {
+	signIn: async ({ credentials, abortSignal }) => {
 		await credentials.set('cloud/session', 'token', abortSignal)
 		await credentials.get('provider/work', abortSignal)
 	},
@@ -82,15 +82,43 @@ describe('loadConnectors', () => {
 
 		// Act
 		const loaded = await loadConnectors({ connectors: [{ package: 'cloud' }, { package: 'tracker' }], from, directory, credentials })
-		const signingIn = loaded[0]?.login?.({ show: () => undefined, abortSignal })
+		const signingIn = loaded[0]?.signIn?.({ show: () => undefined, abortSignal })
 
 		// Assert
-		expect(loaded.map((connector) => [connector.name, typeof connector.login])).toEqual([
+		expect(loaded.map((connector) => [connector.name, typeof connector.signIn])).toEqual([
 			['cloud', 'function'],
 			['tracker', 'undefined'],
 		])
 		await expect(signingIn).rejects.toThrow('only has the credentials named cloud/')
 		expect(await credentials.get('cloud/session', abortSignal)).toBe('token')
+	})
+
+	test("carries a connector's registries and settings check, each with the connector's own credentials", async () => {
+		// Arrange
+		const withRegistries = `export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: ({ credentials }) => async ({ path }, abortSignal) => ({
+		url: 'https://packages.cloud.example' + path,
+		headers: { authorization: 'Bearer ' + (await credentials.get('cloud/token', abortSignal)) },
+	}),
+	missingSettings: async ({ credentials }, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? ['Set cloud/start-url.'] : []),
+}
+`
+		const from = await installed({ cloud: withRegistries })
+		const directory = await temporaryDirectory()
+		const credentials = await credentialStore()
+		await credentials.set('cloud/token', 'cloud-token', abortSignal)
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const [cloud] = await loadConnectors({ connectors: [{ package: 'cloud' }], from, directory, credentials })
+		const where = await cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+		const missing = await cloud?.missingSettings?.(abortSignal)
+
+		// Assert
+		expect(where).toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: { authorization: 'Bearer cloud-token' } })
+		expect(missing).toEqual(['Set cloud/start-url.'])
 	})
 
 	test("runs a tool once more when its connector's sign-in finished while it ran", async () => {
@@ -110,7 +138,7 @@ export const connector = {
 			return signedIn ? runs : 'no session'
 		},
 	}],
-	login: async () => {
+	signIn: async () => {
 		signedIn = true
 	},
 }
@@ -131,11 +159,55 @@ export const connector = {
 
 		// Act
 		const fetching = cloud?.tools[0]?.run({}, context)
-		await cloud?.login?.({ show: () => undefined, abortSignal })
+		await cloud?.signIn?.({ show: () => undefined, abortSignal })
 		finishLogin(undefined)
 
 		// Assert
 		await expect(fetching).resolves.toBe(2)
+	})
+
+	test("resolves a registry once more when its connector's sign-in finished while it resolved", async () => {
+		// Arrange
+		const signingIn = `let signedIn = false
+let resolves = 0
+export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: () => async ({ path }) => {
+		resolves++
+		if (resolves === 1) {
+			await globalThis.cloudRegistrySignInFinished
+			throw Object.assign(new Error('Sign in to cloud.'), { signInTo: 'cloud' })
+		}
+		if (!signedIn) throw new Error('No session.')
+		return { url: \`https://packages.cloud.example\${path}\`, headers: {} }
+	},
+	signIn: async () => {
+		signedIn = true
+	},
+}
+`
+		const from = await installed({ cloud: signingIn })
+		const { promise: signInFinished, resolve: finishSignIn } = Promise.withResolvers<undefined>()
+		Object.assign(globalThis, { cloudRegistrySignInFinished: signInFinished })
+		onTestFinished(() => {
+			Reflect.deleteProperty(globalThis, 'cloudRegistrySignInFinished')
+		})
+		const [cloud] = await loadConnectors({
+			connectors: [{ package: 'cloud' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const resolving = cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+		await cloud?.signIn?.({ show: () => undefined, abortSignal })
+		finishSignIn(undefined)
+
+		// Assert
+		await expect(resolving).resolves.toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: {} })
 	})
 
 	test("turns a tool's ask for another connector's sign-in into a plain failure", async () => {
@@ -160,6 +232,31 @@ export const connector = {
 		// Assert
 		await expect(searching).rejects.toThrow('search asked for a sign-in to aws, not to its own connector tracker')
 		expect(signInOf(await searching?.catch((rejected: unknown) => rejected))).toBeUndefined()
+	})
+
+	test("turns a registry's ask for another connector's sign-in into a plain failure", async () => {
+		// Arrange
+		const foreign = `export const connector = {
+	name: 'cloud',
+	tools: () => [],
+	registries: () => async () => { throw Object.assign(new Error('Sign in.'), { signInTo: 'aws' }) },
+}
+`
+		const from = await installed({ cloud: foreign })
+		const [cloud] = await loadConnectors({
+			connectors: [{ package: 'cloud' }],
+			from,
+			directory: await temporaryDirectory(),
+			credentials: await credentialStore(),
+		})
+		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/'], settings: {} }
+
+		// Act
+		const resolving = cloud?.registries?.({ registry, path: '/npm/left-pad' }, abortSignal)
+
+		// Assert
+		await expect(resolving).rejects.toThrow('cloud packages asked for a sign-in to aws, not to its own connector cloud')
+		expect(signInOf(await resolving?.catch((rejected: unknown) => rejected))).toBeUndefined()
 	})
 
 	test('names the package that is not installed or has no host entry point', async () => {
