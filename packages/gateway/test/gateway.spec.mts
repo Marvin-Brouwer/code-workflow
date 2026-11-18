@@ -604,6 +604,9 @@ describe('package calls', () => {
 	test.each<[keyof typeof publicRegistries, string]>([
 		['npm', '/-/npm/v1/security/advisories/bulk'],
 		['npm', '/-/'],
+		['npm', '/%2D/whoami'],
+		['npm', '/-%2Fwhoami'],
+		['npm', '/left-pad/..%2F-%2Fwhoami'],
 		['npm', '/left-pad/../-/whoami'],
 		['npm', '/left-pad/%2e%2e/-/whoami'],
 		['npm', '//evil.example/left-pad'],

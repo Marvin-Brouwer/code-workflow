@@ -50,17 +50,12 @@ A run whose app restores from npm and from a connector's registry opens its endp
 
 ```ts
 import { openGateway, openGatewayHome, type ResolveRegistryTarget } from '@mesh-flow/gateway'
-import type { ConnectorRegistry, PublicRegistry } from '@mesh-flow/protocol'
+import type { ConnectorRegistry } from '@mesh-flow/protocol'
+import { npmRegistry } from '@mesh-flow/toolchain-node'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const { directory, credentials, providers } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
 
-const npm: PublicRegistry = {
-	name: 'npm',
-	host: 'registry.npmjs.org',
-	paths: ['/'],
-	excludedPaths: ['/-/'],
-}
 const packages: ConnectorRegistry = {
 	connector: 'cloud',
 	name: 'cloud packages',
@@ -84,7 +79,7 @@ const gateway = openGateway({
 })
 const access = {
 	tools: [],
-	registries: [npm, packages],
+	registries: [npmRegistry, packages],
 }
 const grant = await gateway.openRun('run-1', access, abortSignal)
 ```

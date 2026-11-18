@@ -44,7 +44,7 @@ export interface RegistryAnswer {
 
 /**
  * Fetches a package or its metadata from a public registry, for a package manager in a sandbox that
- * has no network. Only reads: a path that isn't one of the registry's package fetches, or one that isn't
+ * has no network. Only reads: a path the registry doesn't serve packages on, or one that isn't
  * already normalized (`..`, `//`), is turned down before anything is sent. Whatever the registry
  * answers is the answer, a 404 too; package managers ask for what may not exist. A redirect isn't
  * followed here: it's handed back, so the next fetch goes through the same checks.

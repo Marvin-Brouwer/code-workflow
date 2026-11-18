@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { npmRegistry } from '../src/npm-registry.mts'
 
 describe('npmRegistry', () => {
-	test('is a public registry the build description takes', () => {
+	test('parses as a PublicRegistry, as `mesh-flow build` writes it down', () => {
 		// Act
 		const parsed = PublicRegistry.safeParse(npmRegistry)
 

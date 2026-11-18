@@ -20,6 +20,9 @@ export interface FetchedPackage {
  * that wants a package itself. A 404 is an answer, not an error.
  *
  * ```ts
+ * import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
+ * import { z } from 'zod'
+ *
  * const PackageVersions = z.object({ versions: z.array(z.string()) })
  *
  * const request = {

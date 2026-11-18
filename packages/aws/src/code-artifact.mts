@@ -10,6 +10,9 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * through it.
  *
  * ```ts
+ * import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+ * import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
+ *
  * const privateRegistry = codeArtifact({
  * 	domain: 'example',
  * 	owner: '123456789012',
@@ -32,6 +35,8 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * restores from:
  *
  * ```ts
+ * import { fetchPackage } from '@mesh-flow/core'
+ *
  * const request = {
  * 	registry: privateRegistry,
  * 	path: '/nuget/packages/v3/index.json',

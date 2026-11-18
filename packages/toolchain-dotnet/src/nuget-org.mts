@@ -9,7 +9,6 @@ import type { PublicRegistry } from '@mesh-flow/core'
  *
  * ```ts
  * import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
- * import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
  *
  * export default defineMeshFlow({
  * 	sandbox: image({
@@ -25,5 +24,5 @@ import type { PublicRegistry } from '@mesh-flow/core'
 export const nugetOrg: PublicRegistry = Object.freeze({
 	name: 'nuget.org',
 	host: 'api.nuget.org',
-	paths: ['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/', '/v3-index/'],
+	paths: Object.freeze(['/v3/', '/v3-flatcontainer/', '/v3-vulnerabilities/', '/v3-index/']),
 })

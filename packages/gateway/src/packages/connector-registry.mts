@@ -28,9 +28,10 @@ export interface RegistryTarget {
  * 	const isOnRegistry = registry.paths.some((prefix) => path.startsWith(prefix))
  * 	if (!isOnRegistry) throw new Error(`${path} isn't on ${registry.name}.`)
  *
+ * 	const bearer = await token(abortSignal)
  * 	return {
  * 		url: `https://${registry.host}${path}`,
- * 		headers: { authorization: `Bearer ${await token(abortSignal)}` },
+ * 		headers: { authorization: `Bearer ${bearer}` },
  * 	}
  * }
  * ```

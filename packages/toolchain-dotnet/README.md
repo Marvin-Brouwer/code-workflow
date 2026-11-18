@@ -51,6 +51,29 @@ await developer.loop`
 
 `dotnet.updatePackages(repository, packages)` moves each project that references one of `packages` directly to its version, with `dotnet add package`, which writes `Directory.Packages.props` under central package management. A reference already at the version is left alone, so a rerun changes nothing; it resolves to what it changed, `{ project, name, from, to }` each. It takes what `gitlab.publishedPackages` resolves to, and `{ target }` as the checks do.
 
+### Restoring from nuget.org
+
+List `nugetOrg` in the sandbox's `registries`, so `dotnet restore` in the sandbox, which has no network of its own, restores from nuget.org's v3 feed:
+
+```ts
+// main.mts
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
+import { develop } from './workflows/develop.mts'
+
+export default defineMeshFlow({
+	sandbox: image({
+		name: 'node:26-slim',
+		registries: [nugetOrg],
+	}),
+	workflows: [
+		userTrigger(develop),
+	],
+})
+```
+
+Restore reads below `/v3/`, `/v3-flatcontainer/`, `/v3-vulnerabilities/` and `/v3-index/`; nothing else on `api.nuget.org` is reachable.
+
 ### Notes
 
 - Build servers and MSBuild node reuse are off: a server that outlives the call holds its output open. Stopping the run kills `dotnet` and everything it started, outright after two seconds, and on Linux and macOS also what outlives `dotnet` itself.

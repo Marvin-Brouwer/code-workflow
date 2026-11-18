@@ -1,6 +1,6 @@
 # `@mesh-flow/toolchain-node`
 
-The Node.js toolchain for mesh-flow: the npm registry for the sandbox's `registries`, so `npm ci`, `pnpm install`, `yarn install` and `bun install` restore in a sandbox that has no network of its own. The package ships no agents.
+The Node.js toolchain for mesh-flow: the npm registry for the sandbox's `registries`, so `npm ci`, `pnpm install` and `bun install` restore in a sandbox that has no network of its own. The package ships no agents.
 
 ## Usage
 
@@ -26,6 +26,7 @@ export default defineMeshFlow({
 - Every fetch goes through the run's package proxy and the gateway, which fetches it on the host (see [`@mesh-flow/core`](../core/README.md#packages)). Nothing in a checkout changes: the package managers ask for `registry.npmjs.org` as they always do.
 - Package documents and tarballs are reachable. `/-/`, the registry's own API (search, audit, users), isn't: restore doesn't need it, so `npm audit` doesn't work in the sandbox.
 - Only reads go through: the proxy refuses anything but a `GET`, so nothing can publish.
+- Yarn asks for `registry.yarnpkg.com` by default, and its lockfiles name it, so it isn't served by `npmRegistry`.
 
 Code fetches from it with `fetchPackage` from `@mesh-flow/core`:
 

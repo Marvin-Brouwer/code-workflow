@@ -1,7 +1,6 @@
 import type { ConnectorRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { ownEntry } from '../own-entry.mts'
-import { isRegistryPath } from './registry-path.mts'
 import { untilAborted } from '../until-aborted.mts'
 import type { ConnectorRegistryRequest, RegistryTarget, ResolveRegistryTarget } from './connector-registry.mts'
 import {
@@ -13,6 +12,7 @@ import {
 	type RegistryAnswer,
 	type RegistryFetchOptions,
 } from './fetch-from-public-registry.mts'
+import { isRegistryPath } from './registry-path.mts'
 
 /** How many redirects a fetch on a connector's registry follows, as to a signed download URL. */
 const maxRedirects = 3
@@ -31,9 +31,9 @@ export function connectorRegistryFetch(
 	const { registry, path, accept } = request
 	const resolve = ownEntry(resolvers, registry.connector)
 	if (resolve === undefined) throw new Error(`${registry.name} needs connector ${registry.connector}, which isn't loaded.`)
-	const checked: ConnectorRegistryRequest = { registry, path, ...(accept === undefined ? {} : { accept }) }
 	if (!isRegistryPath(registry, path)) throw new Error(`${path} isn't a package fetch on ${registry.name}.`)
-	return { request: checked, resolve }
+	const connectorRequest: ConnectorRegistryRequest = { registry, path, ...(accept === undefined ? {} : { accept }) }
+	return { request: connectorRequest, resolve }
 }
 
 /**

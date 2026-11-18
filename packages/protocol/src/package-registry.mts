@@ -14,8 +14,11 @@ const Hostname = z
 	.max(maxHostnameLength)
 	.regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/, 'Use a host name in lower case, such as example.com.')
 
-/** Where a registry serves packages on its host: a path that starts and ends with `/`, `/` itself too. */
-const PathPrefix = z.string().regex(/^\/(?:[\w.~-]+\/)*$/, 'Use a path that starts and ends with /, such as /npm/packages/.')
+/**
+ * Where a registry serves packages on its host: a path that starts and ends with `/`, `/` itself
+ * too. No `.` or `..` segment: no fetch is ever below one, so it would match nothing.
+ */
+const PathPrefix = z.string().regex(/^\/(?:(?!\.{1,2}\/)[\w.~-]+\/)*$/, 'Use a path that starts and ends with /, such as /npm/packages/.')
 
 /** What every registry is: where package managers ask for it, and which paths on that host are package fetches. */
 const registryFields = {
@@ -24,9 +27,9 @@ const registryFields = {
 	/** The host package managers ask for, as their config names it. */
 	host: Hostname,
 	/** The paths on `host` that are this registry's package fetches, each ending in `/`. */
-	paths: z.array(PathPrefix).min(1),
+	paths: z.array(PathPrefix).min(1).readonly(),
 	/** Paths below `paths` that aren't package fetches, such as the npm registry's own API below `/-/`. */
-	excludedPaths: z.array(PathPrefix).optional(),
+	excludedPaths: z.array(PathPrefix).readonly().optional(),
 }
 
 /**
@@ -52,7 +55,7 @@ export const ConnectorRegistry = z.strictObject({
 export type ConnectorRegistry = z.infer<typeof ConnectorRegistry>
 
 /** A registry a run restores from: a public one or a connector's own. */
-export const PackageRegistry = z.union([ConnectorRegistry, PublicRegistry])
+export const PackageRegistry = z.union([PublicRegistry, ConnectorRegistry])
 export type PackageRegistry = z.infer<typeof PackageRegistry>
 
 /** Whether `registry` is a connector's own, which the connector fetches from with its credential. */
@@ -65,11 +68,10 @@ export function isConnectorRegistry(registry: PackageRegistry): registry is Conn
  * that says what it reaches is in it, so a registry with other paths is another registry.
  */
 export function registryKey(registry: PackageRegistry): string {
-	const settings = isConnectorRegistry(registry)
-		? Object.entries(registry.settings).toSorted(([one], [other]) => one.localeCompare(other))
-		: []
+	const connector = isConnectorRegistry(registry) ? registry : undefined
+	const settings = Object.entries(connector?.settings ?? {}).toSorted(([one], [other]) => byCodeUnits(one, other))
 	return JSON.stringify([
-		isConnectorRegistry(registry) ? registry.connector : null,
+		connector?.connector ?? null,
 		registry.host,
 		registry.paths.toSorted(),
 		(registry.excludedPaths ?? []).toSorted(),
@@ -77,19 +79,55 @@ export function registryKey(registry: PackageRegistry): string {
 	])
 }
 
-/** `registries` with each registry once, by {@link registryKey}, in the order they first come. */
+/** Orders two strings by their UTF-16 code units, so equal keys are only ever the same string. */
+function byCodeUnits(one: string, other: string): number {
+	if (one === other) return 0
+	return one < other ? -1 : 1
+}
+
+/** `registries` with each registry once, by {@link registryKey}: the first of each, in the order they first come. */
 export function uniqueRegistries<Registry extends PackageRegistry>(registries: readonly Registry[]): Registry[] {
-	return [...new Map(registries.map((registry) => [registryKey(registry), registry])).values()]
+	const unique = new Map<string, Registry>()
+	for (const registry of registries) {
+		const key = registryKey(registry)
+		if (!unique.has(key)) unique.set(key, registry)
+	}
+	return [...unique.values()]
+}
+
+/** A character a path may hold escaped that servers may read as the character itself: unreserved ones, `/` and `\`. */
+const decodableCharacter = /^[\w.~/\\-]$/
+
+/**
+ * `path` as a server that decodes escapes may read it: `%2D` as `-`, `%2F` as `/`. Other escapes,
+ * such as `%40`, stay as they are.
+ */
+function decodedPath(path: string): string {
+	return path.replaceAll(/%([\da-f]{2})/gi, (escape, hex: string) => {
+		const character = String.fromCharCode(Number.parseInt(hex, 16))
+		return decodableCharacter.test(character) ? character : escape
+	})
+}
+
+/** Whether a decoded path has a segment a server could resolve elsewhere: `.`, `..`, an empty one, or a `\`. */
+function resolvesElsewhere(path: string): boolean {
+	return path.includes('\\') || path.includes('//') || /\/\.{1,2}(?:\/|$)/.test(path)
 }
 
 /**
- * The length of the longest of the registry's paths that `pathname` is below, or `undefined` when
- * it isn't a package fetch on the registry: below none of its paths, or below an excluded one. A
- * path itself, such as `/` of the npm registry, isn't below it.
+ * The length of the longest of the registry's paths that `path` is below, or `undefined` when it
+ * isn't a package fetch on the registry: below none of its paths, or below an excluded one. A path
+ * itself, such as `/` of the npm registry, isn't below it. The query doesn't count. The path is
+ * read as a server that decodes escapes would, so `/%2D/whoami` is below `/-/`, and excluded paths
+ * are compared in any case, so an excluded path can't be reached on a server that ignores case.
  */
-export function servedPrefixLength(registry: PackageRegistry, pathname: string): number | undefined {
+export function servedPrefixLength(registry: PackageRegistry, path: string): number | undefined {
+	const [rawPathname = ''] = path.split('?', 1)
+	const pathname = decodedPath(rawPathname)
+	if (resolvesElsewhere(pathname)) return undefined
+	const lowerPathname = pathname.toLowerCase()
+	if ((registry.excludedPaths ?? []).some((prefix) => lowerPathname.startsWith(prefix.toLowerCase()))) return undefined
 	const isBelow = (prefix: string) => pathname.length > prefix.length && pathname.startsWith(prefix)
-	if ((registry.excludedPaths ?? []).some(isBelow) || (registry.excludedPaths ?? []).includes(pathname)) return undefined
 	const lengths = registry.paths.filter(isBelow).map((prefix) => prefix.length)
 	return lengths.length === 0 ? undefined : Math.max(...lengths)
 }

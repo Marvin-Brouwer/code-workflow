@@ -26,6 +26,8 @@ export interface MeshFlowApp {
  * sandbox its runs get, and everything that can start a run, in one place.
  *
  * ```ts
+ * import { npmRegistry } from '@mesh-flow/toolchain-node'
+ *
  * export default defineMeshFlow({
  * 	sandbox: image({
  * 		name: 'node:26-slim',

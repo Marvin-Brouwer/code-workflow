@@ -1,7 +1,7 @@
 import path from 'node:path'
 import {
-	registryKey,
 	isConnectorRegistry,
+	registryKey,
 	stagedFileName,
 	uniqueRegistries,
 	type CallAnswer,
