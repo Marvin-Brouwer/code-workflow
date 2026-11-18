@@ -2,6 +2,9 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import { duration } from '../duration/src/_module/duration.mts'
 
+/** How long a test, or a hook, may take. */
+const testTimeout = duration.of('30s')
+
 export default defineConfig({
 	resolve: {
 		// The duration package resolves to its sources, so nothing has to be built first.
@@ -9,7 +12,7 @@ export default defineConfig({
 	},
 	test: {
 		include: ['test/**/*.{test,spec}.mts'],
-		testTimeout: duration.of('30s').to('ms'),
-		hookTimeout: duration.of('30s').to('ms'),
+		testTimeout: testTimeout.to('ms'),
+		hookTimeout: testTimeout.to('ms'),
 	},
 })

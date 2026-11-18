@@ -83,7 +83,7 @@ describe('handleShutdown', () => {
 		expect(shutdown).toHaveBeenCalledOnce()
 	})
 
-	test('cuts off a shutdown that never settles', () => {
+	test('cuts off a shutdown that never settles', async () => {
 		// Arrange
 		vi.useFakeTimers()
 		const { events, exit, target } = fakeProcess()
@@ -97,7 +97,7 @@ describe('handleShutdown', () => {
 
 		// Act
 		events.emit('SIGINT')
-		vi.advanceTimersByTime(10_000)
+		await vi.advanceTimersByTimeAsync(duration.of('10s').to('ms'))
 
 		// Assert
 		expect(exit).toHaveBeenCalledWith(1)

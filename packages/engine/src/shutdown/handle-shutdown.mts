@@ -61,21 +61,16 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 	const begin = (exitCode: number) => {
 		if (started) return
 		started = true
-		// Each deadline starts when the one before it is up, so they follow each other.
 		const pausesUp = pauseTimeout.toAbortSignal()
 		const backend = new AbortController()
-		const cutOff = new AbortController()
-		pausesUp.addEventListener('abort', () => {
-			closeTimeout.toAbortSignal().addEventListener('abort', () => {
-				backend.abort(new DOMException('The backend took too long to close.', 'TimeoutError'))
-				cutOffGrace.toAbortSignal().addEventListener('abort', () => {
-					cutOff.abort()
-				})
-			})
-		})
-		cutOff.signal.addEventListener('abort', () => {
+		// Each deadline starts when the one before it is up, so they follow each other.
+		void (async () => {
+			await aborted(pausesUp)
+			await aborted(closeTimeout.toAbortSignal())
+			backend.abort(new DOMException('The backend took too long to close.', 'TimeoutError'))
+			await aborted(cutOffGrace.toAbortSignal())
 			target.exit(exitCode || 1)
-		})
+		})()
 		const deadlines: CloseDeadlines = {
 			pause: AbortSignal.any([skipPauses.signal, pausesUp]),
 			backend: backend.signal,
@@ -113,4 +108,17 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 	target.on('SIGHUP', onSignal)
 	target.on('uncaughtException', onError)
 	target.on('unhandledRejection', onError)
+}
+
+/** Settles once `abortSignal` aborts, without keeping the process alive itself. */
+function aborted(abortSignal: AbortSignal): Promise<void> {
+	return new Promise((resolve) => {
+		abortSignal.addEventListener(
+			'abort',
+			() => {
+				resolve()
+			},
+			{ once: true },
+		)
+	})
 }

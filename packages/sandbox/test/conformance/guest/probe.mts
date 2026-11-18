@@ -13,9 +13,12 @@ const unreachable = '000'
 /** The loopback address, which the proxy listens on. */
 const loopbackHost = '127.0.0.1'
 
+/** How long a probe waits for an answer: in milliseconds, since this runs in the sandbox without the workspace's packages. */
+const answerWithin = 10_000
+
 async function status(host: string): Promise<string> {
 	try {
-		const response = await fetch(`https://${host}/`, { signal: AbortSignal.timeout(10_000) })
+		const response = await fetch(`https://${host}/`, { signal: AbortSignal.timeout(answerWithin) })
 		return String(response.status)
 	} catch {
 		return unreachable

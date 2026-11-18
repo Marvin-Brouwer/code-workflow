@@ -236,6 +236,18 @@ describe('retryingFetch', () => {
 		expect(long).toHaveBeenCalledTimes(1)
 	})
 
+	test('hands back a retry-after of more seconds than a date can hold', async () => {
+		// Arrange
+		const send = vi.fn<typeof fetch>(async () => answer(503, { 'retry-after': '99999999999999' }))
+
+		// Act
+		const handedBack = await retryingFetch(send, quickRetry)(url)
+
+		// Assert
+		expect(handedBack.status).toBe(503)
+		expect(send).toHaveBeenCalledTimes(1)
+	})
+
 	test('stops waiting for the next attempt as soon as the request is aborted', async () => {
 		// Arrange
 		const controller = new AbortController()

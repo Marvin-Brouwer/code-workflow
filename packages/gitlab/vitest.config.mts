@@ -4,6 +4,12 @@ import { duration } from '../duration/src/_module/duration.mts'
 
 const source = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
 
+/** How long a test may take. */
+const testTimeout = duration.of('1m')
+
+/** How long a hook may take. */
+const hookTimeout = duration.of('30s')
+
 export default defineConfig({
 	resolve: {
 		// Workspace packages resolve to their sources, so nothing has to be built first. Not through the
@@ -22,7 +28,7 @@ export default defineConfig({
 		include: ['test/**/*.{test,spec}.mts'],
 		// Each test pushes and opens merge requests through a gateway with real git, which takes over
 		// 30 seconds for the longest ones on a busy Windows runner, where every git process is slow to start.
-		testTimeout: duration.of('1m').to('ms'),
-		hookTimeout: duration.of('30s').to('ms'),
+		testTimeout: testTimeout.to('ms'),
+		hookTimeout: hookTimeout.to('ms'),
 	},
 })

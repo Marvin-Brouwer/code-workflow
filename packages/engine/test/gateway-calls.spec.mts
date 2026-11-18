@@ -26,6 +26,9 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const abortSignal = new AbortController().signal
+
+/** How long the runtime script waits before it cancels its call: long enough for the call to start. */
+const cancelAfter = duration.of('300ms')
 const deadlines = () => ({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
 
 /** How long a shutdown may take while a part of a run never settles: shorter than its deadlines. */
@@ -353,7 +356,7 @@ mailbox.send({ type: 'succeeded' })
 			{
 				calls: callingScript(`
 mailbox.send({ type: 'call', id: 'call-1', endpoint: grant.endpoint, token: grant.tokens[0], call: { type: 'tool', tool: 'never', input: {} } })
-await new Promise((resolve) => setTimeout(resolve, 300))
+await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfter.to('ms'))}))
 mailbox.send({ type: 'cancel', id: 'call-1' })
 const answer = (await mailbox.take('call-1', signal)).value
 const next = await call('call-2', { type: 'tool', tool: 'echo', input: { text: 'after' } }, answer.next)

@@ -1,9 +1,12 @@
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { duration, sleep } from '../src/_module/duration.mts'
 import { partsOf } from '../src/duration-text.mts'
 
+/** For waits in tests that nothing stops. */
+const neverAborted = new AbortController().signal
+
 describe('duration', () => {
-	it('reads text with every unit, largest first', () => {
+	test('reads text with every unit, largest first', () => {
 		// Act
 		const read = duration.of('1d2h3m4s5ms')
 
@@ -12,7 +15,7 @@ describe('duration', () => {
 		expect(read.to('ms')).toBe(93_784_005)
 	})
 
-	it('tells minutes from milliseconds', () => {
+	test('tells minutes from milliseconds', () => {
 		// Act
 		const read = [duration.of('15m'), duration.of('15ms'), duration.of('15m15ms')]
 
@@ -20,7 +23,7 @@ describe('duration', () => {
 		expect(read.map((each) => each.to('ms'))).toEqual([900_000, 15, 900_015])
 	})
 
-	it('spreads parts out from the largest down', () => {
+	test('spreads parts out from the largest down', () => {
 		// Act
 		const spread = duration({ minutes: 90, seconds: 0.5 })
 
@@ -29,7 +32,7 @@ describe('duration', () => {
 		expect(String(spread)).toBe('1h30m500ms')
 	})
 
-	it('is no time at all without parts', () => {
+	test('is no time at all without parts', () => {
 		// Act
 		const none = duration({})
 
@@ -38,7 +41,7 @@ describe('duration', () => {
 		expect(none.toString()).toBe('0ms')
 	})
 
-	it('reads as text in JSON', () => {
+	test('reads as text in JSON', () => {
 		// Act
 		const json = JSON.stringify({ every: duration.of('1.5h') })
 
@@ -46,7 +49,7 @@ describe('duration', () => {
 		expect(json).toBe('{"every":"1h30m"}')
 	})
 
-	it('converts to any unit', () => {
+	test('converts to any unit', () => {
 		// Arrange
 		const time = duration.of('1h30m')
 
@@ -57,7 +60,7 @@ describe('duration', () => {
 		expect(units).toEqual([1.5, 90, 5400, 1 / 16])
 	})
 
-	it.each([['15m1h'], ['1w'], ['-1h'], [''], ['1h '], ['1.h']])('refuses %j at runtime too', (text) => {
+	test.each([['15m1h'], ['1w'], ['-1h'], [''], ['1h '], ['1.h']])('refuses %j at runtime too', (text) => {
 		// Act
 		const read = () => partsOf(text)
 
@@ -65,7 +68,7 @@ describe('duration', () => {
 		expect(read).toThrow(RangeError)
 	})
 
-	it.each([[{ hours: -1 }], [{ minutes: Number.NaN }], [{ seconds: Number.POSITIVE_INFINITY }]])('refuses parts %j', (parts) => {
+	test.each([[{ hours: -1 }], [{ minutes: Number.NaN }], [{ seconds: Number.POSITIVE_INFINITY }]])('refuses parts %j', (parts) => {
 		// Act
 		const make = () => duration(parts)
 
@@ -73,7 +76,29 @@ describe('duration', () => {
 		expect(make).toThrow(RangeError)
 	})
 
-	it('moves dates', () => {
+	test('takes a duration as its parts', () => {
+		// Arrange
+		const time = duration.of('1h15m')
+
+		// Act
+		const copied = [duration(time), duration({ ...time, minutes: 30 })]
+
+		// Assert
+		expect(copied.map(String)).toEqual(['1h15m', '1h30m'])
+	})
+
+	test('refuses a duration longer than a date can be moved', () => {
+		// Arrange
+		const tooLong = { seconds: 1e26 }
+
+		// Act
+		const make = () => duration(tooLong)
+
+		// Assert
+		expect(make).toThrow(RangeError)
+	})
+
+	test('moves dates', () => {
 		// Arrange
 		const date = new Date('2026-11-18T12:00:00Z')
 		const time = duration.of('1h15m')
@@ -85,50 +110,111 @@ describe('duration', () => {
 		expect(moved).toEqual(['2026-11-18T13:15:00.000Z', '2026-11-18T10:45:00.000Z'])
 	})
 
-	it('measures the time between two dates', () => {
+	test('measures the time between two dates', () => {
+		// Arrange
+		const start = new Date('2026-11-18T12:00:00Z')
+		const end = new Date('2026-11-19T13:00:01Z')
+
 		// Act
-		const between = duration.between(new Date('2026-11-18T12:00:00Z'), new Date('2026-11-19T13:00:01Z'))
+		const between = duration.between(start, end)
 
 		// Assert
 		expect(between.toString()).toBe('1d1h1s')
-		expect(() => duration.between(new Date(1), new Date(0))).toThrow(RangeError)
+	})
+
+	test.each([[new Date(0)], [new Date(Number.NaN)]])('refuses an end before the start, or an invalid one: %s', (end) => {
+		// Arrange
+		const start = new Date(1)
+
+		// Act
+		const measure = () => duration.between(start, end)
+
+		// Assert
+		expect(measure).toThrow(RangeError)
 	})
 })
 
 describe('toAbortSignal', () => {
-	it('aborts with a TimeoutError once the time has passed', async () => {
+	test('aborts with a TimeoutError once the time has passed', async () => {
 		// Act
-		const signal = duration.of('20ms').toAbortSignal()
+		const abortSignal = duration.of('20ms').toAbortSignal()
 		await new Promise((resolve) => {
-			signal.addEventListener('abort', resolve, { once: true })
+			abortSignal.addEventListener('abort', resolve, { once: true })
 		})
 
 		// Assert
-		expect(signal.reason).toMatchObject({ name: 'TimeoutError' })
+		expect(abortSignal.reason).toMatchObject({ name: 'TimeoutError' })
 	})
 
-	it('waits out a duration longer than setTimeout keeps', () => {
+	test('waits out a duration longer than setTimeout keeps, in steps', () => {
+		// Arrange
+		vi.useFakeTimers()
+		onTestFinished(() => {
+			vi.useRealTimers()
+		})
+		const time = duration.of('30d')
+		const almost = duration.of('29d23h59m59s')
+		const abortSignal = time.toAbortSignal()
+
 		// Act
-		const signal = duration.of('30d').toAbortSignal()
+		vi.advanceTimersByTime(almost.to('ms'))
+		const abortedEarly = abortSignal.aborted
+		vi.advanceTimersByTime(duration.of('1s').to('ms'))
 
 		// Assert
-		expect(signal.aborted).toBe(false)
+		expect(abortedEarly).toBe(false)
+		expect(abortSignal.aborted).toBe(true)
+	})
+
+	test('aborts no sooner than a later tick for no time at all, as AbortSignal.timeout does', () => {
+		// Act
+		const abortSignal = duration({}).toAbortSignal()
+
+		// Assert
+		expect(abortSignal.aborted).toBe(false)
 	})
 })
 
 describe('sleep', () => {
-	it('settles after the time has passed', async () => {
+	test('settles after the time has passed', async () => {
 		// Arrange
+		const time = duration.of('20ms')
+		const timerSlack = duration.of('5ms')
+		const controller = new AbortController()
+		onTestFinished(() => {
+			controller.abort()
+		})
 		const started = performance.now()
 
 		// Act
-		await sleep(duration.of('20ms'), duration.of('5s').toAbortSignal())
+		await sleep(time, controller.signal)
 
 		// Assert
-		expect(performance.now() - started).toBeGreaterThanOrEqual(15)
+		expect(performance.now() - started).toBeGreaterThanOrEqual(time.to('ms') - timerSlack.to('ms'))
 	})
 
-	it('settles promptly when aborted during a wait that never ends on its own', async () => {
+	test('waits out a duration longer than setTimeout keeps, in steps', async () => {
+		// Arrange
+		vi.useFakeTimers()
+		onTestFinished(() => {
+			vi.useRealTimers()
+		})
+		const time = duration.of('30d')
+		const almost = duration.of('29d23h59m59s')
+		const settled = vi.fn()
+		void sleep(time, neverAborted).then(settled)
+
+		// Act
+		await vi.advanceTimersByTimeAsync(almost.to('ms'))
+		const settledEarly = settled.mock.calls.length
+		await vi.advanceTimersByTimeAsync(duration.of('1s').to('ms'))
+
+		// Assert
+		expect(settledEarly).toBe(0)
+		expect(settled).toHaveBeenCalled()
+	})
+
+	test('settles promptly when aborted during a wait that never ends on its own', async () => {
 		// Arrange
 		const controller = new AbortController()
 		onTestFinished(() => {

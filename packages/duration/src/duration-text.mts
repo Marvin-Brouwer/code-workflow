@@ -1,11 +1,4 @@
-/** The parts of a duration, as {@link duration} takes them. Missing parts are zero; all of them add up. */
-export interface DurationParts {
-	readonly days?: number
-	readonly hours?: number
-	readonly minutes?: number
-	readonly seconds?: number
-	readonly milliseconds?: number
-}
+import type { DurationParts } from './duration-parts.mts'
 
 type Part<Unit extends string> = '' | `${number}${Unit}`
 
@@ -21,8 +14,14 @@ export type DurationText = Exclude<`${Part<'d'>}${Part<'h'>}${Part<'m'>}${Part<'
  */
 type NotInDuration = '-' | '+' | 'e' | 'E' | 'x' | 'X' | 'o' | 'O' | 'b' | 'B' | 'I' | ' '
 
+/** A unit's first letter. */
+type UnitLetter = 'd' | 'h' | 'm' | 's'
+
+/** Decimals `${number}` allows that a duration doesn't: `.5h`, `1.h`, or a point right after a unit. */
+type LooseDecimal = `.${string}` | `${string}.${UnitLetter}${string}` | `${string}${UnitLetter}.${string}`
+
 /** `Text` when it is a duration that can be parsed, `never` otherwise. */
-export type CheckedDurationText<Text extends DurationText> = Text extends `${string}${NotInDuration}${string}` ? never : Text
+export type CheckedDurationText<Text extends DurationText> = Text extends `${string}${NotInDuration}${string}` | LooseDecimal ? never : Text
 
 const amount = String.raw`(\d+(?:\.\d+)?)`
 const durationPattern = new RegExp(String.raw`^(?:${amount}d)?(?:${amount}h)?(?:${amount}m(?!s))?(?:${amount}s)?(?:${amount}ms)?$`)

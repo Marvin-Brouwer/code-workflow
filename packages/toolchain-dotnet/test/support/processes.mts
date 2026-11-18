@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { duration } from '@mesh-flow/duration'
+import { duration, sleep } from '@mesh-flow/duration'
 
 /** How often `written` looks again. */
 const pollInterval = duration.of('50ms')
+
+/** For waits in tests that nothing stops. */
+const neverAborted = new AbortController().signal
 
 /** Whether a process still runs. */
 export async function isRunning(pid: number): Promise<boolean> {
@@ -21,6 +24,6 @@ export async function written(file: string): Promise<string> {
 	for (;;) {
 		const text = await readFile(file, 'utf8').catch(() => '')
 		if (text !== '') return text
-		await new Promise((resolve) => setTimeout(resolve, pollInterval.to('ms')))
+		await sleep(pollInterval, neverAborted)
 	}
 }

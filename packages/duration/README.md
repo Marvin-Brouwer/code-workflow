@@ -29,10 +29,17 @@ A duration spreads its parts out from the largest down, and is itself the parts 
 ### Durations and dates
 
 ```ts
-const renewAhead = duration.of('5m')
-const renewAt = renewAhead.before(expiresAt)
+import { duration } from '@mesh-flow/duration'
 
-const deadline = reviewWindow.after(new Date())
+declare const tokenExpiresAt: Date
+declare const startedAt: Date
+
+const renewAhead = duration.of('5m')
+const renewAt = renewAhead.before(tokenExpiresAt)
+
+const reviewWindow = duration.of('1h15m')
+const reviewDeadline = reviewWindow.after(new Date())
+
 const waited = duration.between(startedAt, new Date())
 ```
 
@@ -41,9 +48,15 @@ const waited = duration.between(startedAt, new Date())
 ```ts
 import { duration, sleep } from '@mesh-flow/duration'
 
-await sleep(duration.of('2s'), abortSignal)
+declare const abortSignal: AbortSignal
 
-const response = await fetch(url, { signal: duration.of('30s').toAbortSignal() })
+const backoff = duration.of('2s')
+await sleep(backoff, abortSignal)
+
+const answerWithin = duration.of('30s')
+const response = await fetch('https://example.com/status', {
+	signal: answerWithin.toAbortSignal(),
+})
 ```
 
 Both also wait out durations longer than the 24.8 days `setTimeout` keeps.
@@ -51,7 +64,14 @@ Both also wait out durations longer than the 24.8 days `setTimeout` keeps.
 ### Handing it to an API that takes a number
 
 ```ts
-const timer = setTimeout(retry, lookEvery.to('ms'))
+import { duration } from '@mesh-flow/duration'
+
+declare function lookAgain(): void
+
+const lookEvery = duration.of('30s')
+const timer = setTimeout(lookAgain, lookEvery.to('ms'))
+
+const tokenLifetime = duration.of('8h30m')
 const expiresIn = tokenLifetime.to('s')
 ```
 

@@ -1,6 +1,6 @@
 import { GatewayCallError, wait } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
-import { lookBudget } from './look-interval.mts'
+import { lookBudget } from './look-budget.mts'
 
 /** What `patientLook` takes. */
 export interface PatientLookOptions {

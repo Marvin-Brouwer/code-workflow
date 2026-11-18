@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { runCheck } from '@mesh-flow/core'
-import { duration, type Duration } from '@mesh-flow/duration'
+import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { build } from '../src/build/build.mts'
 import { updatePackages } from '../src/packages/update-packages.mts'
@@ -43,8 +43,11 @@ const hold = duration.of('500ms')
 /** Longer than `runDotnet` waits after a stop before it kills outright. */
 const afterForceKill = duration.of('3s')
 
+/** For waits in tests that nothing stops. */
+const neverAborted = new AbortController().signal
+
 /** Waits long enough for the fake `dotnet` to have started, on a runner that isn't busy. */
-const untilStartedTimePassed = () => new Promise((resolve) => setTimeout(resolve, startedTime.to('ms')))
+const untilStartedTimePassed = () => sleep(startedTime, neverAborted)
 
 /**
  * Starts the work, stops it once the fake `dotnet` started, and resolves to how long the work took
@@ -467,7 +470,7 @@ describe('runDotnet', () => {
 			// Act
 			controller.abort(new Error('The run stopped.'))
 			await expect(running).rejects.toThrow('The run stopped.')
-			await new Promise((resolve) => setTimeout(resolve, afterForceKill.to('ms')))
+			await sleep(afterForceKill, neverAborted)
 
 			// Assert
 			expect(await isRunning(child)).toBe(false)

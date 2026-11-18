@@ -68,9 +68,9 @@ export function retryingFetch(send: typeof fetch, options: FetchRetryOptions, re
 					send(input, { ...init, signal: attemptAbortSignal }),
 				)
 				if (backoff === undefined || !unavailable(response.status)) return response
-				const retryAt = retryAfterOf(response)
-				if (retryAt !== undefined && retryAt > options.longestRetryAfter.after(new Date())) return response
-				wait = retryAt === undefined ? backoff : untilThen(retryAt)
+				const retryAfter = retryAfterOf(response, options.longestRetryAfter)
+				if (retryAfter === 'too long') return response
+				wait = retryAfter ?? backoff
 				await response.body?.cancel()
 			} catch (error) {
 				if (backoff === undefined || abortSignal?.aborted === true) throw error
@@ -121,18 +121,26 @@ function resendable(body: RequestInit['body']): boolean {
 	return body === undefined || body === null || typeof body === 'string'
 }
 
-/** When the `retry-after` header says to try again, from a number of seconds or a date. */
-function retryAfterOf(response: Response): Date | undefined {
+/**
+ * How long the `retry-after` header says to wait, from a number of seconds or a date: `'too long'`
+ * when that is past `longest`, so the answer is handed back rather than waited for.
+ */
+function retryAfterOf(response: Response, longest: Duration): Duration | 'too long' | undefined {
 	const header = response.headers.get('retry-after')
 	if (header === null || header.trim() === '') return undefined
 	const seconds = Number(header)
-	if (Number.isFinite(seconds)) return seconds >= 0 ? duration({ seconds }).after(new Date()) : undefined
+	if (Number.isFinite(seconds)) {
+		if (seconds < 0) return undefined
+		// Compared as a number first: a service can send more seconds than a duration holds.
+		return seconds > longest.to('s') ? 'too long' : duration({ seconds })
+	}
 	const at = new Date(header)
-	return Number.isNaN(at.getTime()) ? undefined : at
+	if (Number.isNaN(at.getTime())) return undefined
+	return at > longest.after(new Date()) ? 'too long' : timeUntil(at)
 }
 
 /** The time from now until `at`, or none when it has passed. */
-function untilThen(at: Date): Duration {
+function timeUntil(at: Date): Duration {
 	const now = new Date()
 	return at > now ? duration.between(now, at) : duration({})
 }

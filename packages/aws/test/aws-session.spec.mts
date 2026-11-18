@@ -1,5 +1,4 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-import { duration } from '@mesh-flow/duration'
+import { duration, sleep } from '@mesh-flow/duration'
 import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
 import { AwsSignInNeededError } from '../src/host/sign-in-needed.mts'
@@ -140,7 +139,7 @@ describe('the AWS session', () => {
 
 		// Act
 		const next = opened.roleCredentials(abortSignal)
-		await sleep(callReaches.to('ms'))
+		await sleep(callReaches, abortSignal)
 		const pending = aws.requests.filter((request) => request === 'POST /token').length
 		refreshes.release()
 		const fetched = await next

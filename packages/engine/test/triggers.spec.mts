@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import path from 'node:path'
-import { duration } from '@mesh-flow/duration'
+import { duration, sleep } from '@mesh-flow/duration'
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -344,7 +344,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		// Act
 		await client.removeApp(testAppName, signal)
 		const afterRemoving = (await client.list(signal)).length
-		await new Promise((resolve) => setTimeout(resolve, moreThanTwoTicks.to('ms')))
+		await sleep(moreThanTwoTicks, signal)
 
 		// Assert
 		expect((await client.list(signal)).length).toBe(afterRemoving)

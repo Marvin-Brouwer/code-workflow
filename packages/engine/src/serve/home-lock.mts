@@ -5,16 +5,13 @@ import { engineAnswers } from '../control/control-socket.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 
 /** A lock that hasn't been refreshed for this long belongs to an engine that died. */
-const stale = duration.of('5s')
+const staleAfter = duration.of('5s')
 
 /** How often a running engine refreshes its lock. */
-const refresh = duration.of('1s')
+const refreshEvery = duration.of('1s')
 
 /** How often a start looks again at a lock that may be going stale. */
-const retry = duration.of('1s')
-
-/** Long enough for a dead engine's lock to go stale (`stale`), and two more looks (`retry`). */
-const giveUpAfter = duration.of('7s')
+const retryEvery = duration.of('1s')
 
 /** The lock of an engine home. */
 export function homeLockPath(home: string): string {
@@ -35,17 +32,18 @@ export async function lockHome(
 	home: string,
 	socketPath: string,
 	log: (message: string) => void,
-	signal: AbortSignal,
+	abortSignal: AbortSignal,
 ): Promise<() => Promise<void>> {
 	const lockfilePath = homeLockPath(home)
-	const giveUpAt = giveUpAfter.after(new Date())
+	// Long enough for a dead engine's lock to go stale, and two more looks.
+	const giveUpAt = retryEvery.after(retryEvery.after(staleAfter.after(new Date())))
 	for (;;) {
-		signal.throwIfAborted()
+		abortSignal.throwIfAborted()
 		try {
 			const release = await lock(home, {
 				lockfilePath,
-				stale: stale.to('ms'),
-				update: refresh.to('ms'),
+				stale: staleAfter.to('ms'),
+				update: refreshEvery.to('ms'),
 				onCompromised: (error) => {
 					log(`The engine's lock on ${home} was lost: ${messageOf(error)}`)
 				},
@@ -59,7 +57,7 @@ export async function lockHome(
 			if ((await engineAnswers(socketPath)) || new Date() > giveUpAt) {
 				throw new Error(`An engine is already running on ${home}.`, { cause: error })
 			}
-			await sleep(retry, signal)
+			await sleep(retryEvery, abortSignal)
 		}
 	}
 }

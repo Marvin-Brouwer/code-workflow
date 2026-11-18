@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { FauxResponseStep } from '@earendil-works/pi-ai/providers/faux'
-import { duration } from '@mesh-flow/duration'
+import { duration, sleep } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -19,6 +19,9 @@ import { tool } from '../src/tool/tool.mts'
 import { workspace } from '../src/workspace/workspace.mts'
 import { runBody } from './support/run-body.mts'
 import { asInRequest, callsTool, neverAnswers, says, scriptedModel, textOf } from './support/scripted-model.mts'
+
+/** For waits in tests that nothing stops. */
+const neverAborted = new AbortController().signal
 
 const Answer = z.object({ answer: z.number() })
 
@@ -379,7 +382,7 @@ describe('loop', () => {
 		// Act
 		const run = await runBody(() => helper.loop`Ask with ${requestUserInput}. ${succeed()} ${limit({ time: budget })}`, model)
 		const asked = await run.channel.nextInput()
-		await new Promise((resolve) => setTimeout(resolve, humanWait.to('ms')))
+		await sleep(humanWait, neverAborted)
 		run.channel.reply(asked.id, { answer: 'yes' })
 
 		// Assert
@@ -403,7 +406,7 @@ describe('loop', () => {
 			model,
 		)
 		const asked = await run.channel.nextInput()
-		await new Promise((resolve) => setTimeout(resolve, humanWait.to('ms')))
+		await sleep(humanWait, neverAborted)
 		run.channel.reply(asked.id, { answer: 'the first one' })
 
 		// Assert

@@ -1,4 +1,5 @@
-import { isDurationText, partsOf, type CheckedDurationText, type DurationParts, type DurationText } from './duration-text.mts'
+import type { DurationParts } from './duration-parts.mts'
+import { isDurationText, partsOf, type CheckedDurationText, type DurationText } from './duration-text.mts'
 import { timeoutSignal } from './timeout-signal.mts'
 
 /** The units a duration is written and read in. */
@@ -11,6 +12,12 @@ const millisecondsPer = {
 	s: 1_000,
 	ms: 1,
 } as const satisfies Record<DurationUnit, number>
+
+/** The longest duration, in milliseconds: as far as a `Date` reaches from the epoch, 100 million days. */
+const longestDuration = 8.64e15
+
+/** The key `@mesh-flow/core` renders a value in a prompt by, so a duration reads as `1h15m` there. */
+const toPrompt = Symbol.for('mesh-flow.to-prompt')
 
 /**
  * A length of time. Its parts are spread out from the largest down, so `duration({ minutes: 90 })`
@@ -36,8 +43,9 @@ export interface Duration extends Required<DurationParts> {
 }
 
 /**
- * A duration from its parts. Missing parts are zero, so `duration({})` is no time at all. Throws a
- * `RangeError` for a part that isn't a finite number of zero or more.
+ * A duration from its parts. Missing parts are zero, so `duration({})` is no time at all, and a
+ * duration itself can be passed as parts. Throws a `RangeError` for a part that isn't a finite
+ * number of zero or more, or a total longer than a date can be moved, 100 million days.
  *
  * ```ts
  * const reviewWindow = duration({
@@ -47,20 +55,14 @@ export interface Duration extends Required<DurationParts> {
  * ```
  */
 export function duration(parts: DurationParts): Duration {
-	for (const [name, value] of Object.entries(parts)) {
-		if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-			throw new RangeError(`A duration's ${name} is ${String(value)}: use a number of zero or more.`)
-		}
-	}
-	return fromMilliseconds(
-		Math.round(
-			(parts.days ?? 0) * millisecondsPer.d +
-				(parts.hours ?? 0) * millisecondsPer.h +
-				(parts.minutes ?? 0) * millisecondsPer.m +
-				(parts.seconds ?? 0) * millisecondsPer.s +
-				(parts.milliseconds ?? 0),
-		),
+	const total = Math.round(
+		partOf(parts, 'days') * millisecondsPer.d +
+			partOf(parts, 'hours') * millisecondsPer.h +
+			partOf(parts, 'minutes') * millisecondsPer.m +
+			partOf(parts, 'seconds') * millisecondsPer.s +
+			partOf(parts, 'milliseconds'),
 	)
+	return fromMilliseconds(total)
 }
 
 /**
@@ -75,24 +77,38 @@ function of<const Text extends DurationText>(text: CheckedDurationText<Text>): D
 	return duration(partsOf(text))
 }
 
-/** The time from `start` to `end`. Throws a `RangeError` when `end` is before `start`. */
+/** The time from `start` to `end`. Throws a `RangeError` when `end` is before `start`, or either is an invalid date. */
 function between(start: Date, end: Date): Duration {
+	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
+		throw new RangeError('There is no time between an invalid date and another.')
 	const milliseconds = end.getTime() - start.getTime()
-	if (!(milliseconds >= 0)) throw new RangeError(`${end.toISOString()} is before ${start.toISOString()}.`)
+	if (milliseconds < 0) throw new RangeError(`${end.toISOString()} is before ${start.toISOString()}.`)
 	return fromMilliseconds(milliseconds)
 }
 
 duration.of = of
 duration.between = between
 
+/** One part of `parts`, zero when it's missing. Throws a `RangeError` when it isn't a finite number of zero or more. */
+function partOf(parts: DurationParts, name: keyof DurationParts): number {
+	const value = parts[name] ?? 0
+	if (!Number.isFinite(value) || value < 0) {
+		throw new RangeError(`A duration's ${name} is ${String(value)}: use a number of zero or more.`)
+	}
+	return value
+}
+
 function fromMilliseconds(total: number): Duration {
+	if (total > longestDuration) {
+		throw new RangeError(`A duration can be at most ${String(longestDuration / millisecondsPer.d)} days, as far as a date can be moved.`)
+	}
 	const days = Math.floor(total / millisecondsPer.d)
 	const hours = Math.floor((total % millisecondsPer.d) / millisecondsPer.h)
 	const minutes = Math.floor((total % millisecondsPer.h) / millisecondsPer.m)
 	const seconds = Math.floor((total % millisecondsPer.m) / millisecondsPer.s)
 	const milliseconds = total % millisecondsPer.s
 	const text = textOf({ days, hours, minutes, seconds, milliseconds })
-	return Object.freeze<Duration>({
+	const time: Duration = {
 		days,
 		hours,
 		minutes,
@@ -100,11 +116,14 @@ function fromMilliseconds(total: number): Duration {
 		milliseconds,
 		after: (date) => new Date(date.getTime() + total),
 		before: (date) => new Date(date.getTime() - total),
-		toAbortSignal: () => timeoutSignal(total),
+		toAbortSignal: () => timeoutSignal(time),
 		to: (unit) => total / millisecondsPer[unit],
 		toString: () => text,
 		toJSON: () => text,
-	})
+	}
+	// Not enumerable, so it stays out of spreads, comparisons and JSON.
+	Object.defineProperty(time, toPrompt, { value: () => text })
+	return Object.freeze(time)
 }
 
 function textOf(parts: Required<DurationParts>): DurationText {

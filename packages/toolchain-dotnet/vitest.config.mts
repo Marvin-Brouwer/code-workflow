@@ -4,6 +4,9 @@ import { duration } from '../duration/src/_module/duration.mts'
 
 const source = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
 
+/** How long a test, or a hook, may take. */
+const testTimeout = duration.of('30s')
+
 export default defineConfig({
 	resolve: {
 		// Workspace packages resolve to their sources, so nothing has to be built first. Not through the
@@ -17,7 +20,7 @@ export default defineConfig({
 	test: {
 		include: ['test/**/*.{test,spec}.mts'],
 		unstubEnvs: true,
-		testTimeout: duration.of('30s').to('ms'),
-		hookTimeout: duration.of('30s').to('ms'),
+		testTimeout: testTimeout.to('ms'),
+		hookTimeout: testTimeout.to('ms'),
 	},
 })

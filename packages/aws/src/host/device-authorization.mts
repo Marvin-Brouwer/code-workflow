@@ -31,7 +31,10 @@ export const slowDownStep = duration.of('5s')
 /** Waits between looks for the approval. */
 export type Wait = (time: Duration, abortSignal: AbortSignal) => Promise<void>
 
-/** The interval after Identity Center said to slow down: longer by {@link slowDownStep}. */
+/**
+ * The interval after Identity Center said to slow down: longer by {@link slowDownStep}. The one sum
+ * of durations in the repository, in seconds as RFC 8628 counts them (see docs/decisions.md).
+ */
 function slowedDown(interval: Duration): Duration {
 	return duration({ seconds: interval.to('s') + slowDownStep.to('s') })
 }

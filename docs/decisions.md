@@ -97,7 +97,8 @@ Full sketches of all three exist; option C was chosen.
 - **Arithmetic on durations (`add`, `times`, `dividedBy`, `min`).** Every case in the repository
   read better without it: backoff as an explicit list of waits, deadlines as dates moved with
   `after` and `before`, patience counted in looks with a clock of its own. Add it only when a
-  case shows up that doesn't.
+  case shows up that doesn't. The one sum left is RFC 8628's `slow_down`, which adds 5 seconds to the
+  interval a server gave; `slowedDown` in `@mesh-flow/aws` does it in seconds, as the protocol counts.
 
 ## Agent loops
 

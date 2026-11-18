@@ -11,7 +11,7 @@ import { shownSignInPrompt } from '../engine/sign-in-state.mts'
 const loginTimeout = duration.of('15m')
 
 /** How often `mesh-flow login` looks for the code of the engine's sign-in. */
-const promptPoll = duration.of('500ms')
+const lookForPromptEvery = duration.of('500ms')
 
 /** What `mesh-flow login` uses of the engine: its sign-ins come first, so the runs that wait for one go on. */
 export type EngineSignIns = Pick<ControlClient, 'signIns' | 'waitForSignIn'>
@@ -100,7 +100,7 @@ async function signInThroughEngine(
 	let shownCode: string | undefined
 	let shownError: string | undefined
 	for (;;) {
-		const looked = delay<typeof notYet>(promptPoll.to('ms'), notYet, { signal: abortSignal })
+		const looked = delay<typeof notYet>(lookForPromptEvery.to('ms'), notYet, { signal: abortSignal })
 		looked.catch(() => undefined)
 		const settled = await Promise.race([signedIn, looked])
 		if (settled !== notYet) return settled

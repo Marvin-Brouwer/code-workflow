@@ -20,6 +20,12 @@ duration.of('0x10s')
 duration.of(' 1s')
 // @ts-expect-error infinity
 duration.of('Infinitys')
+// @ts-expect-error no digit before the point
+duration.of('.5h')
+// @ts-expect-error no digit after the point
+duration.of('1.h')
+// @ts-expect-error point after a unit
+duration.of('1h.5m')
 declare const text: string
 // @ts-expect-error not a literal
 duration.of(text)

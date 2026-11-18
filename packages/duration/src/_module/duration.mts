@@ -5,5 +5,6 @@
  * @module
  */
 export { duration, type Duration, type DurationUnit } from '../duration.mts'
-export type { CheckedDurationText, DurationParts, DurationText } from '../duration-text.mts'
+export type { DurationParts } from '../duration-parts.mts'
+export type { CheckedDurationText, DurationText } from '../duration-text.mts'
 export { sleep } from '../sleep.mts'

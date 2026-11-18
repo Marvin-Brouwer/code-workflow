@@ -2,7 +2,8 @@ import type { Duration } from './duration.mts'
 import { longestTimer } from './longest-timer.mts'
 
 /**
- * Waits for `time` on this process's clock, also when that is longer than `setTimeout` keeps.
+ * Waits for `time` on this process's own clock, which a change of the system time doesn't move,
+ * also when that is longer than `setTimeout` keeps.
  * Aborting `abortSignal` clears the timer and rejects at once with the signal's reason.
  *
  * ```ts
@@ -11,7 +12,7 @@ import { longestTimer } from './longest-timer.mts'
  */
 export async function sleep(time: Duration, abortSignal: AbortSignal): Promise<void> {
 	abortSignal.throwIfAborted()
-	const due = time.after(new Date()).getTime()
+	const due = performance.now() + time.to('ms')
 	await new Promise<void>((resolve, reject) => {
 		let timer: NodeJS.Timeout | undefined
 		const stop = () => {
@@ -19,7 +20,7 @@ export async function sleep(time: Duration, abortSignal: AbortSignal): Promise<v
 			reject(abortSignal.reason)
 		}
 		const step = () => {
-			const left = due - Date.now()
+			const left = due - performance.now()
 			if (left <= 0) {
 				abortSignal.removeEventListener('abort', stop)
 				resolve()

@@ -25,6 +25,9 @@ const zod = import.meta.resolve('zod')
 /** How long a started workflow may take to ask for its input: node starting and loading the sources. */
 const requestTimeout = duration.of('10s')
 
+/** How often an interval that only keeps a process alive fires. */
+const keepAliveEvery = duration.of('1m')
+
 /** What the entry file's never-settling webhook schema writes to stderr once it's reached. */
 const schemaReached = 'schema reached'
 // A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
@@ -89,7 +92,7 @@ const onlyAiFix = IssueLabeled.refine((event) => event.label === 'ai-fix', 'Only
 /** Says it was reached, then keeps the process alive without ever settling. */
 function neverSettles(): Promise<boolean> {
 	console.error(${JSON.stringify(schemaReached)})
-	setInterval(() => undefined, 60_000)
+	setInterval(() => undefined, ${String(keepAliveEvery.to('ms'))})
 	return new Promise(() => undefined)
 }
 
@@ -156,7 +159,7 @@ describe('an entry file started by the engine', () => {
 
 	test('exits once it has described itself, also when a module keeps a handle open', async () => {
 		// Arrange
-		const keepsAHandle = `${entry}\nsetInterval(() => undefined, 60_000)\n`
+		const keepsAHandle = `${entry}\nsetInterval(() => undefined, ${String(keepAliveEvery.to('ms'))})\n`
 
 		// Act
 		const run = await startLikeTheEngine(keepsAHandle, { mode: 'describe' })

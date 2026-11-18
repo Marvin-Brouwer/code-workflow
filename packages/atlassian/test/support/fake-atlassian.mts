@@ -1,4 +1,4 @@
-import { duration, type Duration } from '@mesh-flow/duration'
+import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 
 /** A request the fake was sent. */
@@ -249,7 +249,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			body,
 			abortSignal: init?.signal ?? undefined,
 		})
-		if (state.latency.to('ms') > 0) await new Promise((resolve) => setTimeout(resolve, state.latency.to('ms')))
+		await sleep(state.latency, init?.signal ?? new AbortController().signal)
 		if (hanging.has(url.pathname))
 			return new Promise<Response>((_resolve, reject) => {
 				init?.signal?.addEventListener('abort', () => {

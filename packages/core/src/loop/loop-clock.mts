@@ -44,7 +44,10 @@ export function startLoopClock(budget: Duration | undefined, onExceeded: (budget
 		looking?.abort()
 	}
 	const resume = () => {
-		if (deadline !== undefined && waitingSince !== undefined) deadline = duration.between(waitingSince, new Date()).after(deadline)
+		const now = new Date()
+		// A clock set back during the wait leaves the deadline where it was.
+		if (deadline !== undefined && waitingSince !== undefined && now > waitingSince)
+			deadline = duration.between(waitingSince, now).after(deadline)
 		waitingSince = undefined
 		arm()
 	}

@@ -1,6 +1,7 @@
 import { wait } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
-import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, lookBudget } from './look-interval.mts'
+import { lookBudget } from './look-budget.mts'
+import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage } from './look-interval.mts'
 import { patientLook } from './patient-look.mts'
 import type { CommitChecks } from './watch-review.mts'
 

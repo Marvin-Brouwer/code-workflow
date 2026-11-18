@@ -564,13 +564,13 @@ importers:
 
   packages/protocol:
     dependencies:
-      '@mesh-flow/duration':
-        specifier: workspace:*
-        version: link:../duration
       zod:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
