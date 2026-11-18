@@ -89,6 +89,17 @@ Full sketches of all three exist; option C was chosen.
 - **`mesh-flow run <workflow>` for any workflow the modules define.** A second way in that no
   trigger lists. Replaced by `mesh-flow trigger <kind> <id> -p <parameters>`, which goes through
   the triggers the deployed version lists, with the parameters always given.
+- **Durations as numbers with a unit in the name (`timeoutMs`), or as `WaitSpec` objects
+  (`{ minutes: 10 }`)** (superseded by `@mesh-flow/duration`). Units in names kept spreading and
+  were easy to mix up (seconds from AWS, milliseconds for timers). `duration.of('1h15m')` is checked
+  at compile time; a tagged template (``duration.of`1h` ``) can't be, since TypeScript doesn't type a
+  tag's strings as literals.
+- **Arithmetic on durations (`add`, `times`, `dividedBy`, `min`).** Rejected because, currently,
+  every case in the repository reads better without it: backoff as an explicit list of waits,
+  deadlines as dates moved with `after` and `before`, patience counted in looks with a clock of its
+  own. The one sum left is RFC 8628's `slow_down`, which adds 5 seconds to the interval a server
+  gave; `slowedDown` in `@mesh-flow/aws` does it in seconds, as the protocol counts. When more use
+  cases for arithmetic come up, add it.
 
 ## Agent loops
 

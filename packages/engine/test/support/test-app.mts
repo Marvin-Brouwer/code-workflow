@@ -1,6 +1,7 @@
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { duration } from '@mesh-flow/duration'
 import {
 	type AppManifest,
 	appManifestFile,
@@ -27,10 +28,10 @@ export const hostMailbox = pathToFileURL(path.join(sources, 'runtime-mailbox.mts
 export const copiedMailbox = '../mesh-flow/runtime-mailbox.mts'
 
 /** How long a test gives a deploy. */
-const deployTimeoutMs = 10_000
+const deployTimeout = duration.of('10s')
 
 function deploySignal(): AbortSignal {
-	return AbortSignal.timeout(deployTimeoutMs)
+	return deployTimeout.toAbortSignal()
 }
 
 /** The app tests deploy, unless they name another. */

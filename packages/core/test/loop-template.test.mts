@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { prompt } from '../src/agent/prompt.mts'
@@ -51,11 +52,12 @@ describe('readTemplate', () => {
 
 	test('renders the limit as a line and keeps it', async () => {
 		// Act
-		const template = await readTemplate(parts`Work. ${limit({ turns: 4, minutes: 20 })}`, 'loop')
+		const template = await readTemplate(parts`Work. ${limit({ turns: 4, time: duration.of('20m') })}`, 'loop')
 
 		// Assert
-		expect(template.text).toBe('Work. You have at most 4 model turns and 20 minutes of work for this task.')
-		expect(template.limit).toEqual({ turns: 4, minutes: 20 })
+		expect(template.text).toBe('Work. You have at most 4 model turns and 20m of work for this task.')
+		expect(template.limit?.turns).toBe(4)
+		expect(template.limit?.time?.toString()).toBe('20m')
 	})
 
 	test.each([

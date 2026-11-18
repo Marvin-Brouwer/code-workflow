@@ -1,11 +1,13 @@
+import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { findScope } from '../run/run-scope.mts'
 
 /**
- * A loop's own runtime, for `limit({ minutes })`. It stands still while the loop waits on a human,
- * so a slow approval never uses up the agent's budget.
+ * A loop's own runtime, for `limit({ time })`. It stands still while the loop waits on a human, so
+ * a slow approval never uses up the agent's budget: after each wait, the loop's deadline moves on
+ * by as long as the wait took.
  *
- * Time is read from `Date.now()`, which is right after a sandbox resumes on every backend. The
- * timer only says when to look again.
+ * Time is read from the clock, which is right after a sandbox resumes on every backend. The timer
+ * only says when to look again.
  */
 export interface LoopClock {
 	/** Stops the clock while `body` waits on a human. Waits can overlap. */
@@ -13,39 +15,40 @@ export interface LoopClock {
 	stop(): void
 }
 
-const maxTimerMs = 2 ** 31 - 1
-
 /** The clocks of the loops running in this process, which is one run's runtime. */
 const runningClocks = new Set<LoopClock>()
 
-/** Starts a loop's clock. `onExceeded` runs once when `minutes` of runtime are up. */
-export function startLoopClock(minutes: number | undefined, onExceeded: () => void): LoopClock {
-	const budgetMs = minutes === undefined ? undefined : minutes * 60_000
-	let usedMs = 0
-	let runningSince: number | undefined = Date.now()
+/** Starts a loop's clock. `onExceeded` runs once, with the budget, when `budget` of runtime is up. */
+export function startLoopClock(budget: Duration | undefined, onExceeded: (budget: Duration) => void): LoopClock {
+	let deadline = budget?.after(new Date())
+	let waitingSince: Date | undefined
 	let waits = 0
-	let timer: NodeJS.Timeout | undefined
+	let looking: AbortController | undefined
 	let stopped = false
 
 	const arm = () => {
-		clearTimeout(timer)
-		if (budgetMs === undefined || runningSince === undefined || stopped) return
-		const leftMs = budgetMs - usedMs - (Date.now() - runningSince)
-		if (leftMs <= 0) {
+		looking?.abort()
+		if (budget === undefined || deadline === undefined || waitingSince !== undefined || stopped) return
+		const now = new Date()
+		if (now >= deadline) {
 			stopped = true
-			onExceeded()
+			onExceeded(budget)
 			return
 		}
-		// Timers take at most about 24 days; a longer budget just looks again then.
-		timer = setTimeout(arm, Math.min(leftMs, maxTimerMs))
+		looking = new AbortController()
+		// Stopped by aborting `looking`, which is not a failure.
+		void sleep(duration.between(now, deadline), looking.signal).then(arm, () => undefined)
 	}
 	const pause = () => {
-		if (runningSince !== undefined) usedMs += Date.now() - runningSince
-		runningSince = undefined
-		clearTimeout(timer)
+		waitingSince = new Date()
+		looking?.abort()
 	}
 	const resume = () => {
-		runningSince = Date.now()
+		const now = new Date()
+		// A clock set back during the wait leaves the deadline where it was.
+		if (deadline !== undefined && waitingSince !== undefined && now > waitingSince)
+			deadline = duration.between(waitingSince, now).after(deadline)
+		waitingSince = undefined
 		arm()
 	}
 	arm()
@@ -61,7 +64,7 @@ export function startLoopClock(minutes: number | undefined, onExceeded: () => vo
 		},
 		stop() {
 			stopped = true
-			clearTimeout(timer)
+			looking?.abort()
 			runningClocks.delete(clock)
 		},
 	}

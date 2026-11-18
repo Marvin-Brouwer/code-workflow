@@ -59,6 +59,7 @@
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
+		"@mesh-flow/duration": "workspace:*",
 		"e2b": "^2.63.0",
 		"microsandbox": "0.7.13",
 		"shell-quote": "^1.12.0",

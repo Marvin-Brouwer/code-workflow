@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { Models } from '@earendil-works/pi-ai'
+import { duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 import type { GatewayClient } from '../gateway/gateway-client.mts'
 import { gatewayModels } from '../gateway/gateway-models.mts'
@@ -48,7 +49,7 @@ export interface RunOptions<Parameters = unknown> {
 export type RunOutcome = { readonly status: 'succeeded' } | { readonly status: 'failed'; readonly error: unknown }
 
 /** How long a stopped body and closing the agents' store may take, when some work never stops. */
-const closeMs = 2_000
+const closeTimeout = duration.of('2s')
 
 /**
  * Runs a workflow: its body in a run scope, as the root of the event tree, then `succeeded` or
@@ -123,7 +124,7 @@ export async function runAnyWorkflow(definition: AnyWorkflow, options: RunOption
 		outcome = { status: 'failed', error }
 	}
 	// The agents' store is flushed before the engine hears the run is over, and may remove the sandbox.
-	if (agents !== undefined) await (await agents.catch(() => undefined))?.close(closeMs)
+	if (agents !== undefined) await (await agents.catch(() => undefined))?.close(closeTimeout)
 	options.channel.send(outcome.status === 'succeeded' ? { type: 'succeeded' } : { type: 'failed', error: describeError(outcome.error) })
 	return outcome
 }
@@ -150,7 +151,7 @@ async function settle(body: Promise<void>, abortSignal: AbortSignal): Promise<vo
 	try {
 		await untilAborted(body, abortSignal)
 	} catch (error) {
-		await settledWithin(body, closeMs)
+		await settledWithin(body, closeTimeout)
 		throw error
 	}
 }

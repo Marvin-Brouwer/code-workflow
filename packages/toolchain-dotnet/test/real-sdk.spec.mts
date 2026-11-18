@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { runCheck } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { execa } from 'execa'
 import { describe, expect, test } from 'vitest'
 import { build } from '../src/build/build.mts'
@@ -14,7 +15,7 @@ import { toolContext } from './support/tool-context.mts'
 const hasSdk = await execa('dotnet', ['--version'], { reject: false }).then((result) => result.exitCode === 0)
 
 /** Long enough for a first restore from nuget.org. */
-const sdkTimeoutMs = 180_000
+const sdkTimeout = duration.of('3m')
 
 /** A new project from one of the SDK's templates, in a directory of its own. */
 async function newProject(template: string): Promise<string> {
@@ -40,7 +41,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			expect(result.succeeded).toBe(false)
 			expect(result.errors).toMatchObject([{ code: 'CS1002', line: 1, file: expect.stringContaining('Program.cs') as unknown }])
 		},
-		sdkTimeoutMs,
+		sdkTimeout.to('ms'),
 	)
 
 	test(
@@ -59,7 +60,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			// Assert
 			expect(findings).toMatchObject([{ source: 'test: App.UnitTest1.Adds' }])
 		},
-		sdkTimeoutMs,
+		sdkTimeout.to('ms'),
 	)
 
 	test(
@@ -78,7 +79,7 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			// Assert
 			expect(new Set(findings.map((finding) => finding.source))).toEqual(new Set(['build']))
 		},
-		sdkTimeoutMs,
+		sdkTimeout.to('ms'),
 	)
 
 	test(
@@ -93,6 +94,6 @@ describe.runIf(hasSdk)('the real SDK', () => {
 			// Assert
 			expect(findings).toEqual([])
 		},
-		sdkTimeoutMs,
+		sdkTimeout.to('ms'),
 	)
 })

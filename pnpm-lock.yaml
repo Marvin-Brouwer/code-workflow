@@ -104,6 +104,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -140,6 +143,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -175,6 +181,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -193,6 +202,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -233,6 +245,9 @@ importers:
       '@earendil-works/pi-durable':
         specifier: ^1.5.0
         version: 1.5.0(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(esbuild@0.28.2)(undici@8.12.4)(zod@4.6.7)
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -262,6 +277,21 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/duration:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      tsdown:
+        specifier: ^0.23.4
+        version: 0.23.7(tsx@4.23.15)(typescript@6.0.3)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/engine:
     dependencies:
       '@hono/node-server':
@@ -270,6 +300,9 @@ importers:
       '@mesh-flow/build':
         specifier: workspace:*
         version: link:../build
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -340,6 +373,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^1.5.0
         version: 1.5.0(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(undici@8.12.4)(ws@8.22.1)(zod@4.6.7)
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -377,6 +413,9 @@ importers:
 
   packages/git:
     dependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       execa:
         specifier: ^10.2.1
         version: 10.2.1
@@ -402,6 +441,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -448,6 +490,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -498,6 +543,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^1.5.0
         version: 1.5.0(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(undici@8.12.4)(ws@8.22.1)(zod@4.6.7)
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -520,6 +568,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -535,6 +586,9 @@ importers:
 
   packages/sandbox:
     dependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       e2b:
         specifier: ^2.63.0
         version: 2.63.0
@@ -569,6 +623,9 @@ importers:
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../core
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@nodable/entities':
         specifier: ^3.1.0
         version: 3.1.0
@@ -604,6 +661,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@mesh-flow/duration':
+        specifier: workspace:*
+        version: link:../duration
       '@mesh-flow/protocol':
         specifier: workspace:*
         version: link:../protocol

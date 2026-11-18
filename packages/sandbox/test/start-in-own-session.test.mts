@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import type { Command, ExecOptions, ExecResult, Sandbox } from '../src/sandbox.mts'
 import { startInOwnSession } from '../src/start-in-own-session.mts'
@@ -20,7 +21,7 @@ describe('startInOwnSession', () => {
 
 		// Act
 		await startInOwnSession(sandbox, ['node', 'runtime.mjs', '--name', "it's"], {
-			signal: AbortSignal.timeout(1000),
+			signal: duration.of('1s').toAbortSignal(),
 			logFile: '/var/log/runtime.log',
 		})
 
@@ -45,7 +46,7 @@ describe('startInOwnSession', () => {
 		const { sandbox } = recordingSandbox({ exitCode: 127, stdout: '', stderr: 'setsid: not found\n' })
 
 		// Act
-		const starting = startInOwnSession(sandbox, ['node'], { signal: AbortSignal.timeout(1000) })
+		const starting = startInOwnSession(sandbox, ['node'], { signal: duration.of('1s').toAbortSignal() })
 
 		// Assert
 		await expect(starting).rejects.toThrow('Starting node failed with exit code 127: setsid: not found')

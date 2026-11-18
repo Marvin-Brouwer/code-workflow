@@ -1,5 +1,6 @@
 import { chmod, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { runscOrThrow } from '../../src/gvisor/runsc.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
@@ -13,7 +14,7 @@ async function failingRunsc(directory: string, lines = 1): Promise<string[]> {
 }
 
 function timeout(): AbortSignal {
-	return AbortSignal.timeout(5000)
+	return duration.of('5s').toAbortSignal()
 }
 
 describe('runscOrThrow', () => {

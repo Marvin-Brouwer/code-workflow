@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { lstat, mkdir, readdir, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { applyLayer } from '../../src/gvisor/layer.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
@@ -10,7 +11,7 @@ import { temporaryDirectory } from '../support/temporary-directory.mts'
 const execFileAsync = promisify(execFile)
 
 function timeout(): AbortSignal {
-	return AbortSignal.timeout(5000)
+	return duration.of('5s').toAbortSignal()
 }
 
 /** A layer archive with these files, by path inside the layer. */

@@ -6,10 +6,19 @@
  * right away, and what asks for a change gets a plan as its reply before the work is done.
  * Plain async TypeScript: every `await` is real, and the agent is a call inside it.
  */
-import { limit, succeed, workflow } from '@mesh-flow/core'
+import { duration, limit, succeed, workflow } from '@mesh-flow/core'
 import { github, IssueParameters } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
 import { installDependencies } from '../utils/npm/install-dependencies.mts'
+
+/** How long the developer may work on the fix itself. */
+const fixTime = duration.of('30m')
+
+/** How long the developer may work on one round of review changes. */
+const reviewChangesTime = duration.of('30m')
+
+/** How long the developer may work on fixing failed checks. */
+const checkFixTime = duration.of('20m')
 
 export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)
@@ -26,7 +35,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 	await developer.loop`
 		Fix ${issue} in ${repository}. Push your changes with ${github.push(repository)}, then ${succeed()}.
 		${dependencies}
-		${limit({ minutes: 30 })}
+		${limit({ time: fixTime })}
 	`
 
 	const pullRequest = await github.openPullRequest(repository, await github.describe(writer, repository, { issue }))
@@ -47,7 +56,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 				Make these changes in ${repository}, as you planned them: ${changes}.
 				Push with ${github.push(repository)}, then reply to every item with what you did, using ${github.reply(pullRequest)}.
 				When every item is done, ${succeed()}.
-				${limit({ minutes: 30 })}
+				${limit({ time: reviewChangesTime })}
 			`
 			// What the agent changed after its last push goes up too, so the text describes what reviewers see.
 			await github.push(repository)({ message: `Review changes for #${String(issue.number)}` })
@@ -58,7 +67,7 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 			await developer.loop`
 				The checks on ${pullRequest} failed: ${failed.failures}.
 				Fix the cause in ${repository}, push with ${github.push(repository)}, then ${succeed()}.
-				${limit({ minutes: 20 })}
+				${limit({ time: checkFixTime })}
 			`
 			await github.push(repository)({ message: `Check fix for #${String(issue.number)}` })
 			// `describe` runs no writer loop when the pushed commit is already described.

@@ -1,4 +1,5 @@
-import { wait, type WaitSpec } from '@mesh-flow/core'
+import { wait } from '@mesh-flow/core'
+import type { Duration } from '@mesh-flow/duration'
 import { defaultLookEvery, defaultToleratedOutage } from './look-interval.mts'
 import { patientLook } from './patient-look.mts'
 
@@ -42,9 +43,9 @@ export interface WatchHandlers<Request, Item, Failure> {
 /** How often `watchReview` looks, and how long looks may keep failing. */
 export interface WatchOptions {
 	/** How long to wait between looks. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/** How long looks may keep failing with errors that may pass. Default: 10 minutes. */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 }
 
 /** How a watched review ended. */

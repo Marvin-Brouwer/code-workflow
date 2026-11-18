@@ -1,15 +1,17 @@
+import { duration } from '@mesh-flow/duration'
+
 /** The exit code of {@link pollScript} when the runtime is gone. */
 export const runtimeGoneExitCode = 3
 
 /** How long {@link pollScript} sleeps between looks at the outbox. */
-export const pollIntervalSeconds = 0.25
+export const pollInterval = duration.of('250ms')
 
 /**
  * Waits inside the sandbox until the outbox has more lines than the engine has read, then prints
  * the new ones. Plain POSIX shell, so nothing has to be copied into the sandbox for it.
  *
  * Arguments: the outbox, the runtime's pid file, the number of lines already read, how many
- * intervals of {@link pollIntervalSeconds} to wait at most, and a directory where it keeps its own pid while it runs, so
+ * intervals of {@link pollInterval} to wait at most, and a directory where it keeps its own pid while it runs, so
  * {@link stopPollsScript} can find it. Exits 0 with the new lines (or none, when the wait ran out),
  * and {@link runtimeGoneExitCode} when the runtime is gone and has nothing more to say.
  *
@@ -36,7 +38,7 @@ while [ "$(lines)" -le "$after" ]; do
 		break
 	fi
 	[ "$i" -ge "$tries" ] && exit 0
-	sleep ${String(pollIntervalSeconds)}
+	sleep ${String(pollInterval.to('s'))}
 	i=$((i + 1))
 done
 tail -n "+$((after + 1))" "$outbox"
@@ -60,5 +62,5 @@ for file in "$1"/*; do
 	esac
 	rm -f "$file"
 done
-sleep ${String(pollIntervalSeconds * 2)}
+sleep ${String(pollInterval.to('s') * 2)}
 `

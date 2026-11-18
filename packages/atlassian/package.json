@@ -64,6 +64,7 @@
 	},
 	"devDependencies": {
 		"@hono/node-server": "^2.1.6",
+		"@mesh-flow/duration": "workspace:*",
 		"@mesh-flow/protocol": "workspace:*",
 		"@types/node": "^26.6.6",
 		"@types/turndown": "^5.0.6",

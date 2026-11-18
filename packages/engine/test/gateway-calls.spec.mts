@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import {
 	hostTool,
 	keyFile,
@@ -25,10 +26,13 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const abortSignal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
+
+/** How long the runtime script waits before it cancels its call: long enough for the call to start. */
+const cancelAfter = duration.of('300ms')
+const deadlines = () => ({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
 
 /** How long a shutdown may take while a part of a run never settles: shorter than its deadlines. */
-const promptlyMs = 5_000
+const promptly = duration.of('5s')
 
 const echo = hostTool({ name: 'echo', input: z.object({ text: z.string() }) }, ({ text }) => Promise.resolve(`echo: ${text}`))
 
@@ -101,7 +105,7 @@ async function untilStatus(engine: Engine, id: string, status: RunStatus): Promi
 			if (record.status !== status) throw new Error(`Run is ${record.status}${record.error ? `: ${record.error}` : ''}`)
 			return record
 		},
-		{ timeout: 20_000, interval: 50 },
+		{ timeout: duration.of('20s').to('ms'), interval: 50 },
 	)
 }
 
@@ -230,7 +234,7 @@ await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(np
 		await engine.close(deadlines())
 
 		// Assert
-		expect(Date.now() - startedAt).toBeLessThan(promptlyMs)
+		expect(Date.now() - startedAt).toBeLessThan(promptly.to('ms'))
 		expect(engine.get(run.id).status).not.toBe('running')
 	})
 
@@ -352,7 +356,7 @@ mailbox.send({ type: 'succeeded' })
 			{
 				calls: callingScript(`
 mailbox.send({ type: 'call', id: 'call-1', endpoint: grant.endpoint, token: grant.tokens[0], call: { type: 'tool', tool: 'never', input: {} } })
-await new Promise((resolve) => setTimeout(resolve, 300))
+await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfter.to('ms'))}))
 mailbox.send({ type: 'cancel', id: 'call-1' })
 const answer = (await mailbox.take('call-1', signal)).value
 const next = await call('call-2', { type: 'tool', tool: 'echo', input: { text: 'after' } }, answer.next)

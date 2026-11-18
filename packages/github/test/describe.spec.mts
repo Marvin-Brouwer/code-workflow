@@ -13,7 +13,7 @@ import {
 	connectedGithub,
 	firstPullRequest,
 	issueRef,
-	promptlyMs,
+	promptly,
 	repositoryName,
 	sameSite,
 } from './support/connected-github.mts'
@@ -362,7 +362,7 @@ describe('describe', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('settles promptly when the run stops while GitHub never answers the read of the pull request', async () => {
@@ -389,6 +389,6 @@ describe('describe', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

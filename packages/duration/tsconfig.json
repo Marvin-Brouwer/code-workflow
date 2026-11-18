@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// Used by the runtime in a sandbox too, which Node may run without a build.
+		"erasableSyntaxOnly": true,
+		"lib": ["ES2024"]
+	},
+	"include": ["src", "test", "tsdown.config.mts", "vitest.config.mts"]
+}

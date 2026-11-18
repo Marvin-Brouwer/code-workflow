@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { controlClient } from '../src/control/control-client.mts'
 import { controlSocketPath } from '../src/control/control-socket.mts'
@@ -9,7 +10,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployThroughApi, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
+const deadlines = () => ({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
 
 const ask = runtimeScript(`
 mailbox.send({ type: 'request', request: { kind: 'input', id: 'story', question: 'Which story?', fields: {} } })
@@ -41,7 +42,7 @@ async function startWaitingRun(home: string) {
 			if (current.pending.length === 0) throw new Error(`Run is ${current.status}`)
 			return current
 		},
-		{ timeout: 20_000, interval: 100 },
+		{ timeout: duration.of('20s').to('ms'), interval: 100 },
 	)
 	const sandbox = record.sandbox?.id ?? ''
 	const [runtime = 0] = await pidsOf(path.join(home, 'sandboxes'), sandbox)
@@ -88,7 +89,7 @@ describe.skipIf(process.platform !== 'linux')('the engine as a process', () => {
 		expect(paused.status).toBe('paused')
 		await vi.waitFor(() => {
 			expect(served.engine.get(run.id).status).toBe('succeeded')
-		}, 20_000)
+		}, duration.of('20s').to('ms'))
 	})
 
 	test('refuses to start a second engine on the same home', async () => {

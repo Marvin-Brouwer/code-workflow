@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import { afterAll, describe, expect, onTestFinished, test } from 'vitest'
 import ts from 'typescript'
 import { z } from 'zod'
@@ -27,12 +28,8 @@ export function conformanceEnabled(backend: BackendName): boolean {
 	return (process.env.MESH_FLOW_SANDBOX_TESTS ?? '').split(',').includes(backend)
 }
 
-function msFromSeconds(seconds: number): number {
-	return seconds * 1000
-}
-
-function timeout(seconds = 60): AbortSignal {
-	return AbortSignal.timeout(msFromSeconds(seconds))
+function timeout(time = duration.of('1m')): AbortSignal {
+	return time.toAbortSignal()
 }
 
 /** Reads a JSON file in the sandbox, again and again until it is there and valid, for a minute. */
@@ -43,7 +40,7 @@ async function pollJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string)
 			return schema.parse(JSON.parse(await sandbox.readFile(file, timeout())))
 		} catch (error) {
 			if (Date.now() > deadline) throw error
-			await sleep(500)
+			await sleep(duration.of('500ms').to('ms'))
 		}
 	}
 }
@@ -87,8 +84,8 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			const waiting = await pollJson(Waiting, sandbox, `${stateDir}/waiting.json`)
 
 			// Act
-			const paused = await sandbox.pause(timeout(120))
-			const resumed = await backend.resume(paused, timeout(120))
+			const paused = await sandbox.pause(timeout(duration.of('2m')))
+			const resumed = await backend.resume(paused, timeout(duration.of('2m')))
 			await resumed.writeFile(`${stateDir}/answer.json`, JSON.stringify({ approved: true }), timeout())
 			const done = await pollJson(Done, resumed, `${stateDir}/done.json`).catch(async (error: unknown) => {
 				throw new Error(`The stub didn't finish. ${await stubState(resumed, waiting.pid)}`, { cause: error })
@@ -149,7 +146,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 		test('list shows a paused sandbox until it is removed', async () => {
 			// Arrange
 			const sandbox = await backend.create(spec, timeout())
-			await sandbox.pause(timeout(120))
+			await sandbox.pause(timeout(duration.of('2m')))
 
 			// Act
 			const before = await backend.list(timeout())

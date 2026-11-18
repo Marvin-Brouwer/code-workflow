@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 
@@ -51,11 +52,11 @@ describe('microsandbox backend, on a fake SDK', () => {
 
 		// Act
 		let closed = false
-		const closing = backend.close(AbortSignal.timeout(5000)).then(() => {
+		const closing = backend.close(duration.of('5s').toAbortSignal()).then(() => {
 			closed = true
 		})
 		// A macrotask, so a close that doesn't wait would have finished by now.
-		await new Promise((resolve) => setTimeout(resolve, 20))
+		await new Promise((resolve) => setTimeout(resolve, duration.of('20ms').to('ms')))
 		const closedBeforeTheVmCame = closed
 		sdk.state.resolveCreate(vm)
 		await closing
@@ -70,11 +71,11 @@ describe('microsandbox backend, on a fake SDK', () => {
 	test('a create after close is refused before the SDK makes a VM', async () => {
 		// Arrange
 		const backend = microsandboxBackend()
-		await backend.close(AbortSignal.timeout(1000))
+		await backend.close(duration.of('1s').toAbortSignal())
 		const builder = vi.spyOn(sdk.Sandbox, 'builder')
 
 		// Act
-		const creating = backend.create(spec, AbortSignal.timeout(1000))
+		const creating = backend.create(spec, duration.of('1s').toAbortSignal())
 
 		// Assert
 		await expect(creating).rejects.toThrow('closed')
@@ -88,7 +89,7 @@ describe('microsandbox backend, on a fake SDK', () => {
 		creating.catch(() => undefined)
 
 		// Act
-		const closing = backend.close(AbortSignal.timeout(100))
+		const closing = backend.close(duration.of('100ms').toAbortSignal())
 
 		// Assert
 		await expect(closing).resolves.toBeUndefined()

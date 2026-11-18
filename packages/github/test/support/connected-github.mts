@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { githubHostTools } from '../../src/host/connector.mts'
 import type { Repository } from '../../src/repository/repository.mts'
 import { fakeGithub } from './fake-github.mts'
@@ -23,7 +24,7 @@ export const sameSite = Object.freeze({ title: 'Keep the session on Safari', des
 export const firstPullRequest = 1
 
 /** How soon a run that stopped has to settle. */
-export const promptlyMs = 1000
+export const promptly = duration.of('1s')
 
 /** A fake GitHub with issue #7, a local remote standing in for its git side, and a gateway with the connector's host tools on them. */
 export async function connectedGithub() {

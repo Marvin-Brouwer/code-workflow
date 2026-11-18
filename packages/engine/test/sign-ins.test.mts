@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import type { SignInContext } from '../src/connectors/load-connectors.mts'
 import { openSignIns, type SignIns, type SignInsOptions } from '../src/engine/sign-ins.mts'
@@ -6,7 +7,7 @@ import { approvableSignIn, prompt } from './support/approvable-sign-in.mts'
 const abortSignal = new AbortController().signal
 
 /** How long a sign-in nobody waits for goes on in these tests. */
-const shortIdleMs = 50
+const shortIdle = duration.of('50ms')
 
 /** Sign-ins over `options`, closed when the test ends, so a sign-in a test left idle doesn't go on. */
 function testSignIns(options: SignInsOptions): SignIns {
@@ -44,7 +45,7 @@ describe('sign-ins', () => {
 			.fn<(context: SignInContext) => Promise<void>>()
 			.mockRejectedValueOnce(new Error('The code ran out.'))
 			.mockImplementation(approvable)
-		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryMs: 100 })
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryWaits: [duration.of('100ms')] })
 
 		// Act
 		const waiting = signIns.waitFor('cloud', abortSignal)
@@ -65,9 +66,9 @@ describe('sign-ins', () => {
 
 	test('waits longer after each try that fails before a code, and starts over once a try got one', async () => {
 		// Arrange
-		const retryMs = 50
+		const retryWaits = [duration.of('50ms'), duration.of('100ms'), duration.of('200ms')] as const
 		/** Timers may fire up to a millisecond early. */
-		const timerSlackMs = 1
+		const timerSlack = duration.of('1ms')
 		const triesBeforeCode = 3
 		const triedAt: number[] = []
 		const signIn = vi.fn((context: SignInContext) => {
@@ -76,23 +77,23 @@ describe('sign-ins', () => {
 			if (triedAt.length === triesBeforeCode + 1) context.show(prompt)
 			return triedAt.length === triesBeforeCode + 2 ? Promise.resolve() : Promise.reject(new Error('The service is down.'))
 		})
-		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryMs })
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], retryWaits })
 
 		// Act
 		await signIns.waitFor('cloud', abortSignal)
 
 		// Assert
 		const waited = triedAt.slice(1).map((at, index) => at - (triedAt[index] ?? at))
-		expect(waited[0]).toBeGreaterThanOrEqual(retryMs - timerSlackMs)
-		expect(waited[1]).toBeGreaterThanOrEqual(2 * retryMs - timerSlackMs)
-		expect(waited[2]).toBeGreaterThanOrEqual(4 * retryMs - timerSlackMs)
-		expect(waited[3]).toBeLessThan(4 * retryMs)
+		expect(waited[0]).toBeGreaterThanOrEqual(retryWaits[0].to('ms') - timerSlack.to('ms'))
+		expect(waited[1]).toBeGreaterThanOrEqual(retryWaits[1].to('ms') - timerSlack.to('ms'))
+		expect(waited[2]).toBeGreaterThanOrEqual(retryWaits[2].to('ms') - timerSlack.to('ms'))
+		expect(waited[3]).toBeLessThan(retryWaits[2].to('ms'))
 	})
 
 	test('stops the sign-in a while after nobody waits for it any more', async () => {
 		// Arrange
 		const { signIn, contexts } = approvableSignIn()
-		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], idleMs: shortIdleMs })
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }], idle: shortIdle })
 		const first = new AbortController()
 		const second = new AbortController()
 

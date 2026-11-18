@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test, vi } from 'vitest'
 import { BackendLifetime } from '../src/backend-lifetime.mts'
 
@@ -8,7 +9,7 @@ describe('BackendLifetime', () => {
 		const signal = lifetime.bind(new AbortController().signal)
 
 		// Act
-		await lifetime.close(AbortSignal.timeout(1000))
+		await lifetime.close(duration.of('1s').toAbortSignal())
 
 		// Assert
 		expect(signal.aborted).toBe(true)
@@ -37,7 +38,7 @@ describe('BackendLifetime', () => {
 		lifetime.untrack('paused')
 
 		// Act
-		await lifetime.close(AbortSignal.timeout(1000))
+		await lifetime.close(duration.of('1s').toAbortSignal())
 
 		// Assert
 		expect(removeRunning).toHaveBeenCalledOnce()
@@ -52,7 +53,7 @@ describe('BackendLifetime', () => {
 		lifetime.track('other', removeOther)
 
 		// Act
-		const closing = lifetime.close(AbortSignal.timeout(1000))
+		const closing = lifetime.close(duration.of('1s').toAbortSignal())
 
 		// Assert
 		await expect(closing).rejects.toThrow(AggregateError)
@@ -62,7 +63,7 @@ describe('BackendLifetime', () => {
 	test('refuses new work once closed', async () => {
 		// Arrange
 		const lifetime = new BackendLifetime()
-		await lifetime.close(AbortSignal.timeout(1000))
+		await lifetime.close(duration.of('1s').toAbortSignal())
 
 		// Act
 		const start = () => lifetime.bind(new AbortController().signal)
@@ -80,12 +81,12 @@ describe('BackendLifetime', () => {
 				setTimeout(() => {
 					finished = true
 					resolve()
-				}, 50)
+				}, duration.of('50ms').to('ms'))
 			}),
 		)
 
 		// Act
-		await lifetime.close(AbortSignal.timeout(1000))
+		await lifetime.close(duration.of('1s').toAbortSignal())
 
 		// Assert
 		expect(finished).toBe(true)
@@ -97,7 +98,7 @@ describe('BackendLifetime', () => {
 		void lifetime.keep(new Promise<void>(() => undefined))
 
 		// Act
-		const closing = lifetime.close(AbortSignal.timeout(50))
+		const closing = lifetime.close(duration.of('50ms').toAbortSignal())
 
 		// Assert
 		await expect(closing).resolves.toBeUndefined()
@@ -106,7 +107,7 @@ describe('BackendLifetime', () => {
 	test('removes a sandbox that is tracked after close, and refuses it', async () => {
 		// Arrange
 		const lifetime = new BackendLifetime()
-		await lifetime.close(AbortSignal.timeout(1000))
+		await lifetime.close(duration.of('1s').toAbortSignal())
 		const remove = vi.fn(() => Promise.resolve())
 
 		// Act
@@ -126,7 +127,7 @@ describe('BackendLifetime', () => {
 		lifetime.track('running', remove)
 
 		// Act
-		await lifetime.destroy('running', AbortSignal.timeout(1000))
+		await lifetime.destroy('running', duration.of('1s').toAbortSignal())
 
 		// Assert
 		expect(remove).toHaveBeenCalledOnce()

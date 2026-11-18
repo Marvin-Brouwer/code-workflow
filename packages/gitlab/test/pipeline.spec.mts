@@ -1,16 +1,17 @@
 import { branchHeadOf } from '@mesh-flow/code-repository'
 import { runCheck } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { pipelinePasses } from '../src/merge-request/pipeline-passes.mts'
 import { publishedPackages } from '../src/merge-request/published-packages.mts'
 import { checkout } from '../src/repository/repository.mts'
-import { branch, connectedGitlab, projectPath, promptlyMs, quickRetry } from './support/connected-gitlab.mts'
+import { branch, connectedGitlab, projectPath, promptly, quickRetry } from './support/connected-gitlab.mts'
 import { runOnGateway } from './support/test-run.mts'
 
 const where = { repository: projectPath, number: 3 }
 const head = 'a'.repeat(40)
 const merge = 'b'.repeat(40)
-const quickly = { every: { seconds: 0 }, appearWithin: { seconds: 0 } }
+const quickly = { every: duration.of('0s'), appearWithin: duration.of('0s') }
 
 describe('pipelinePasses', () => {
 	test('reports each failed job of the head commit as a finding, once the pipeline completed', async () => {
@@ -220,7 +221,7 @@ describe('publishedPackages', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, () =>
-			publishedPackages(where, 'nuget', { every: { seconds: 0 }, appearWithin: { seconds: 1 } }),
+			publishedPackages(where, 'nuget', { every: duration.of('0s'), appearWithin: duration.of('1s') }),
 		)
 
 		// Assert
@@ -284,13 +285,13 @@ describe('publishedPackages', () => {
 		}
 
 		// Act
-		const run = await runOnGateway(gateway, () => publishedPackages(where, 'nuget', { every: { seconds: 0 } }))
+		const run = await runOnGateway(gateway, () => publishedPackages(where, 'nuget', { every: duration.of('0s') }))
 		await looked
 		const started = performance.now()
 		run.controller.abort(new Error('The run stopped.'))
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

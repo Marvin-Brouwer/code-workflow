@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { keepAwake, powerRequestReason } from '../src/serve/keep-awake.mts'
 import type { PowerApi } from '../src/serve/windows-power.mts'
@@ -52,12 +53,12 @@ describe('keepAwake', () => {
 		})
 		setTimeout(() => {
 			lifetime.abort(new Error('The engine is shutting down.'))
-		}, 10)
+		}, duration.of('10ms').to('ms'))
 		const releasePower = await kept
 
 		// Assert
 		expect(releasePower).toBeTypeOf('function')
-		expect(performance.now() - started).toBeLessThan(1000)
+		expect(performance.now() - started).toBeLessThan(duration.of('1s').to('ms'))
 	})
 
 	test('does nothing on Linux or macOS', async () => {

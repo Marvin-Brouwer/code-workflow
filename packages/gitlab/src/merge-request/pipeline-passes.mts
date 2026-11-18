@@ -1,5 +1,6 @@
 import { branchHeadOf, untilCompleted } from '@mesh-flow/code-repository'
-import { check, type Check, type WaitSpec } from '@mesh-flow/core'
+import { check, type Check } from '@mesh-flow/core'
+import type { Duration } from '@mesh-flow/duration'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
@@ -7,18 +8,18 @@ import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 /** Options of `pipelinePasses`. */
 export interface PipelinePassesOptions {
 	/** How long to wait between looks while the pipeline runs. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/**
 	 * How long to wait for a pipeline to appear on a fresh commit before taking a project without CI
 	 * for one whose pipeline passed. Default: 10 minutes.
 	 */
-	readonly appearWithin?: WaitSpec
+	readonly appearWithin?: Duration
 	/**
 	 * How long looks at GitLab may keep failing, say while the network is down, before the check
-	 * fails with the last error. Counted in looks, `toleratedOutage / every` of them.
-	 * Default: 10 minutes.
+	 * fails with the last error: once failed looks in a row, `every` apart, have covered
+	 * `toleratedOutage`. Default: 10 minutes.
 	 */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 	/**
 	 * The checkout whose branch the merge request is of. With it, the commit looked at is the one last
 	 * pushed from it, rather than the head GitLab shows, which can lag a few seconds behind a push: a

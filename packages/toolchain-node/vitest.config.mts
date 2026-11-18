@@ -8,6 +8,7 @@ export default defineConfig({
 		// Workspace packages resolve to their sources, so nothing has to be built first. Not through the
 		// `source` condition: core's dependencies declare it too, without shipping their sources.
 		alias: {
+			'@mesh-flow/duration': source('../duration/src/_module/duration.mts'),
 			'@mesh-flow/protocol': source('../protocol/src/_module/protocol.mts'),
 			'@mesh-flow/core': source('../core/src/_module/core.mts'),
 		},

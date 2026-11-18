@@ -8,19 +8,13 @@ import { execFile } from 'node:child_process'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { durationMs, toPrompt, type WaitSpec } from '@mesh-flow/core'
+import { duration, toPrompt, type Duration } from '@mesh-flow/core'
 import type { github } from '@mesh-flow/github'
 
 const execFileAsync = promisify(execFile)
 
 /** How long an install may take when {@link InstallOptions.timeout} is left out. */
-const defaultTimeout: WaitSpec = { hours: 1 }
-
-const msPerSecond = 1_000
-const msPerHour = 60 * 60 * msPerSecond
-
-/** The longest timer Node keeps, about 24.8 days: a longer one fires at once. */
-const maxTimerMs = 2 ** 31 - 1
+const defaultTimeout = duration.of('1h')
 
 /** npm writes more than execFile's 1 MiB default on a large install, which would count as a failure. */
 const maxOutputBytes = 16 * 1024 * 1024
@@ -45,10 +39,9 @@ export interface InstallOptions {
 	readonly abortSignal: AbortSignal
 	/**
 	 * Gives up after this long and reports the install as failed, for a lifecycle script that hangs,
-	 * such as one waiting for input. An hour when left out, and at most 596 hours (about 24.8 days),
-	 * or it throws; `'indefinite'` sets no limit.
+	 * such as one waiting for input. An hour when left out; `'indefinite'` sets no limit.
 	 */
-	readonly timeout?: WaitSpec | 'indefinite'
+	readonly timeout?: Duration | 'indefinite'
 }
 
 /** Lets corepack fetch pnpm from the npm registry without asking first. */
@@ -74,12 +67,13 @@ const notHandled = ['yarn.lock', 'bun.lock', 'bun.lockb'] as const
  * commits every change.
  *
  * ```ts
- * const dependencies = await installDependencies(repository, { abortSignal, timeout: { minutes: 10 } })
+ * const installTimeout = duration.of('10m')
+ * const dependencies = await installDependencies(repository, { abortSignal, timeout: installTimeout })
  * await developer.loop`Fix ${issue} in ${repository}. ${dependencies}`
  * ```
  */
 export async function installDependencies(repository: github.Repository, options: InstallOptions): Promise<InstallResult> {
-	const limitMs = installLimitMs(options.timeout ?? defaultTimeout)
+	const timeout = options.timeout ?? defaultTimeout
 	const { directory } = repository
 	if (!(await exists(directory, 'package.json')))
 		return result('nothing to install', `${directory} has no package.json, so it has no npm dependencies.`)
@@ -97,7 +91,7 @@ export async function installDependencies(repository: github.Repository, options
 	const [program, ...args] = command
 	// The timer runs inside the sandbox, whose clock can jump across a pause; that's fine, since the
 	// engine aborts the run before it pauses.
-	const installTimeouts = limitMs === undefined ? [] : [AbortSignal.timeout(limitMs)]
+	const installTimeouts = timeout === 'indefinite' ? [] : [timeout.toAbortSignal()]
 	try {
 		await execFileAsync(program, args, {
 			cwd: directory,
@@ -111,29 +105,11 @@ export async function installDependencies(repository: github.Repository, options
 		if (options.abortSignal.aborted) throw options.abortSignal.reason
 		const log = path.join(installLogDirectory, `${repository.path.replaceAll('/', '_')}.log`)
 		const stopped =
-			limitMs !== undefined && installTimeouts.some((signal) => signal.aborted)
-				? `Stopped after ${String(limitMs / msPerSecond)} seconds.\n`
-				: ''
+			timeout !== 'indefinite' && installTimeouts.some((signal) => signal.aborted) ? `Stopped after ${timeout.toString()}.\n` : ''
 		await mkdir(installLogDirectory, { recursive: true })
 		await writeFile(log, `${stopped}${outputOf(error)}`)
 		return result('failed', `Installing the npm dependencies of ${directory} failed; the output is in ${log}.`)
 	}
-}
-
-/**
- * The limit in whole milliseconds, or undefined for none. Throws for a timeout Node can't keep, the
- * same for every repository, since it's the workflow's mistake rather than the install's.
- */
-function installLimitMs(timeout: WaitSpec | 'indefinite'): number | undefined {
-	if (timeout === 'indefinite') return undefined
-	const ms = Math.ceil(durationMs(timeout))
-	if (ms > maxTimerMs) {
-		const maxHours = String(Math.floor(maxTimerMs / msPerHour))
-		throw new RangeError(
-			`An install timeout can be at most ${maxHours} hours, not ${JSON.stringify(timeout)}. Use 'indefinite' for no limit.`,
-		)
-	}
-	return ms
 }
 
 function result(state: InstallResult['state'], detail: string): InstallResult {

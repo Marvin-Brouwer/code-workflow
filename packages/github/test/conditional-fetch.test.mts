@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { conditionalFetch, type ConditionalFetchOptions } from '../src/host/conditional-fetch.mts'
 
@@ -8,10 +9,10 @@ const url = 'https://api.github.example/repos/team/app/pulls/3'
 const keepMany: ConditionalFetchOptions = { maxCharacters: 10_000 }
 
 /** How soon a read that stopped has to settle. */
-const promptlyMs = 1000
+const promptly = duration.of('1s')
 
 /** When the abort test stops its read. */
-const abortAfterMs = 10
+const abortAfter = duration.of('10ms')
 
 /** Request options that send `token`, which answers are kept per. */
 const askedWith = (token: string) => ({ headers: { authorization: `token ${token}` } })
@@ -161,13 +162,13 @@ describe('conditionalFetch', () => {
 		const sent = conditionalFetch(github, keepMany)(url, { ...askedWith('a'), signal: controller.signal })
 		const timer = setTimeout(() => {
 			controller.abort(new Error('The run stopped.'))
-		}, abortAfterMs)
+		}, abortAfter.to('ms'))
 		onTestFinished(() => {
 			clearTimeout(timer)
 		})
 
 		// Assert
 		await expect(sent).rejects.toThrow('The run stopped.')
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

@@ -1,13 +1,12 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
-import { slowDownStepMs } from '../src/host/device-authorization.mts'
 import { signIn } from '../src/host/sign-in.mts'
-import { msPerSecond } from '../src/host/time.mts'
-import { abortSignal, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
-import { lookIntervalSeconds } from './support/fake-aws.mts'
+import { abortSignal, promptly, setUp, storedSession } from './support/aws-setup.mts'
 
-/** The fake's interval between looks for the approval. */
-const lookIntervalMs = lookIntervalSeconds * msPerSecond
+/** The fake's interval between looks, once and twice slowed down: RFC 8628 adds a step each time. */
+const slowedDownOnce = duration.of('6s')
+const slowedDownTwice = duration.of('11s')
 
 describe('signing in', () => {
 	test('shows where to approve, waits for the approval, and keeps the session', async () => {
@@ -46,7 +45,7 @@ describe('signing in', () => {
 		await signInUser()
 
 		// Assert
-		expect(waited).toEqual([lookIntervalMs + slowDownStepMs, lookIntervalMs + 2 * slowDownStepMs, lookIntervalMs + 2 * slowDownStepMs])
+		expect(waited.map(String)).toEqual([slowedDownOnce, slowedDownTwice, slowedDownTwice].map(String))
 	})
 
 	test('says which settings are missing, with the commands that set them', async () => {
@@ -100,6 +99,6 @@ describe('signing in', () => {
 
 		// Assert
 		await expect(signingIn).rejects.toThrow('Ctrl+C')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

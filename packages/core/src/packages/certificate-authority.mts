@@ -1,5 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import { createSecureContext, type SecureContext } from 'node:tls'
+import { duration } from '@mesh-flow/duration'
 import forge from 'node-forge'
 
 /** A certificate authority made for one sandbox, and the certificates it signs for the hosts its proxy serves. */
@@ -11,12 +12,10 @@ export interface CertificateAuthority {
 }
 
 /** How long the certificates hold: a paused run can wait for weeks, and the authority goes with the run. */
-const validDays = 365
+const validFor = duration.of('365d')
 
 /** Starts a day early, so a sandbox clock that lags a little still accepts them. */
-const backdateDays = 1
-
-const msPerDay = 24 * 60 * 60 * 1000
+const backdate = duration.of('1d')
 
 /** The size of every key: what browsers and package managers take. */
 const rsaKeyBits = 2048
@@ -46,11 +45,11 @@ function newSerial(): string {
 /** A certificate for `subject` and its key, valid from now on; the caller sets its issuer and extensions, then signs it. */
 function newCertificate(subject: forge.pki.CertificateField[], publicKey: forge.pki.PublicKey): forge.pki.Certificate {
 	const unsigned = forge.pki.createCertificate()
-	const now = Date.now()
+	const now = new Date()
 	unsigned.serialNumber = newSerial()
 	unsigned.publicKey = publicKey
-	unsigned.validity.notBefore = new Date(now - backdateDays * msPerDay)
-	unsigned.validity.notAfter = new Date(now + validDays * msPerDay)
+	unsigned.validity.notBefore = backdate.before(now)
+	unsigned.validity.notAfter = validFor.after(now)
 	unsigned.setSubject(subject)
 	return unsigned
 }

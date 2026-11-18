@@ -1,4 +1,8 @@
+import { duration, sleep, type Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
+
+/** For a request sent without a signal: nothing stops its latency. */
+const neverAborted = new AbortController().signal
 
 /** A request the fake was sent. */
 export interface FakeRequest {
@@ -90,7 +94,7 @@ export interface FakeAtlassian {
 	/** Requests, as `METHOD /path`, that are served but answered 504: an answer a proxy lost. */
 	readonly losesAnswers: Set<string>
 	/** How long each answer takes, in milliseconds: room for calls to interleave. */
-	latencyMs: number
+	latency: Duration
 }
 
 /** The first bytes of a PNG file: enough of an image for the fake to serve. */
@@ -248,7 +252,7 @@ export function fakeAtlassian(): FakeAtlassian {
 			body,
 			abortSignal: init?.signal ?? undefined,
 		})
-		if (state.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, state.latencyMs))
+		await sleep(state.latency, init?.signal ?? neverAborted)
 		if (hanging.has(url.pathname))
 			return new Promise<Response>((_resolve, reject) => {
 				init?.signal?.addEventListener('abort', () => {
@@ -277,7 +281,7 @@ export function fakeAtlassian(): FakeAtlassian {
 		return losesAnswers.has(`${method} ${url.pathname}`) ? json(504, { errorMessages: ['Gateway timeout'] }) : served
 	}
 
-	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, users, hanging, failNext, losesAnswers, latencyMs: 0 }
+	const state: FakeAtlassian = { fetch: fake, requests, issues, pages, users, hanging, failNext, losesAnswers, latency: duration({}) }
 	return state
 }
 

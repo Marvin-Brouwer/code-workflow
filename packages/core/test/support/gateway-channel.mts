@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import type { Gateway } from '@mesh-flow/gateway'
 import { stagedFileName, type Answer, type CallMessage, type LoginAnswer } from '@mesh-flow/protocol'
 
@@ -12,7 +13,7 @@ import type { GatewayChannel } from '../../src/gateway/gateway-client.mts'
 import { untilAborted } from '../../src/run/until-aborted.mts'
 
 /** How long the end of a test waits for the calls still being answered. */
-const settleTimeoutMs = 5_000
+const settleTimeout = duration.of('5s')
 
 /** What else the channel answers besides calls. */
 export interface GatewayChannelOptions {
@@ -40,7 +41,7 @@ export function gatewayChannel(
 	// The gateway writes a call's run state until the call settles, so the test's directories go
 	// only once the calls are done.
 	onTestFinished(async () => {
-		await untilAborted(Promise.allSettled(answering), AbortSignal.timeout(settleTimeoutMs)).catch(() => undefined)
+		await untilAborted(Promise.allSettled(answering), settleTimeout.toAbortSignal()).catch(() => undefined)
 		await rm(staging, { recursive: true, force: true })
 	})
 	const stagedFile = (name: string) => path.join(staging, name)

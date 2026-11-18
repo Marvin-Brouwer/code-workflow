@@ -1,4 +1,4 @@
-import { setTimeout as sleep } from 'node:timers/promises'
+import { sleep } from '@mesh-flow/duration'
 import type { ConnectorSignInContext } from '@mesh-flow/gateway'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import { readAwsSettings } from './aws-settings.mts'
@@ -17,7 +17,7 @@ export interface SignInOptions {
 }
 
 /** Waits on a timer that stops with `abortSignal`. */
-const timerWait: Wait = (ms, abortSignal) => sleep(ms, undefined, { signal: abortSignal })
+const timerWait: Wait = sleep
 
 /**
  * Signs in to IAM Identity Center with the device flow and keeps the session in the credential

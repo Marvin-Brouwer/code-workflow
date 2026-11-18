@@ -1,5 +1,6 @@
 import { mkdir, rm, utimes } from 'node:fs/promises'
 import { createServer } from 'node:net'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { controlSocketPath } from '../src/control/control-socket.mts'
 import { homeLockPath, lockHome } from '../src/serve/home-lock.mts'
@@ -28,7 +29,7 @@ describe('lockHome', () => {
 
 		// Assert
 		await expect(locking).rejects.toThrow('already running')
-		expect(Date.now() - started).toBeLessThan(500)
+		expect(Date.now() - started).toBeLessThan(duration.of('500ms').to('ms'))
 	})
 
 	test('stops waiting for a lock that is going stale when its signal aborts', async () => {
@@ -71,7 +72,7 @@ describe('lockHome', () => {
 		await rm(homeLockPath(home), { recursive: true })
 		await vi.waitFor(() => {
 			expect(lost).toHaveBeenCalledWith(expect.stringContaining('was lost'))
-		}, 10_000)
+		}, duration.of('10s').to('ms'))
 
 		// Act
 		const releasing = unlock()

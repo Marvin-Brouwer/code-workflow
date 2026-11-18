@@ -1,11 +1,12 @@
 import { signed } from '@mesh-flow/code-repository/host'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { reply } from '../src/merge-request/reply.mts'
 import { review } from '../src/merge-request/review.mts'
 import { triage } from '../src/merge-request/triage.mts'
 import { checkout } from '../src/repository/repository.mts'
 import type { ReviewItem } from '../src/tools/merge-request-tools.mts'
-import { branch, connectedGitlab, projectPath, promptlyMs } from './support/connected-gitlab.mts'
+import { branch, connectedGitlab, projectPath, promptly } from './support/connected-gitlab.mts'
 import type { FakeNote } from './support/fake-gitlab.mts'
 import { scriptedWriter } from './support/scripted-writer.mts'
 import { runOnGateway } from './support/test-run.mts'
@@ -35,7 +36,7 @@ describe('review', () => {
 		}
 
 		// Act
-		const run = await runOnGateway(gateway, () => review(where, { comments }, { every: { seconds: 0 } }))
+		const run = await runOnGateway(gateway, () => review(where, { comments }, { every: duration.of('0s') }))
 		const outcome = await run.result
 
 		// Assert
@@ -74,7 +75,7 @@ describe('review', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, () =>
-			review(where, { pipelineFailed: (pipeline) => Promise.resolve(failed.push(pipeline)) }, { every: { seconds: 0 } }),
+			review(where, { pipelineFailed: (pipeline) => Promise.resolve(failed.push(pipeline)) }, { every: duration.of('0s') }),
 		)
 		await run.result
 
@@ -110,7 +111,7 @@ describe('review', () => {
 		}
 
 		// Act
-		const run = await runOnGateway(gateway, () => review(where, handlers, { every: { seconds: 0 } }))
+		const run = await runOnGateway(gateway, () => review(where, handlers, { every: duration.of('0s') }))
 		await run.result
 
 		// Assert
@@ -136,7 +137,7 @@ describe('review', () => {
 		await run.outcome
 
 		// Assert
-		expect(performance.now() - started).toBeLessThan(promptlyMs)
+		expect(performance.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 
@@ -172,7 +173,7 @@ describe('triage and reply', () => {
 						request.state = 'merged'
 					},
 				},
-				{ every: { seconds: 0 } },
+				{ every: duration.of('0s') },
 			)
 			return planned
 		})

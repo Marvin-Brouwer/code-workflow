@@ -5,7 +5,7 @@
  * the answer resumes it and the await resolves in the same stack.
  */
 import { confluence, jira, JiraIssueParameters } from '@mesh-flow/atlassian'
-import { fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
+import { duration, fail, inDependencyOrder, limit, propose, succeed, verify, workflow } from '@mesh-flow/core'
 import { gitlab } from '@mesh-flow/gitlab'
 import { codeReview, deliveryOrder, deviations, Plan, planFile, Research, type Delivery } from '@mesh-flow/preset-development'
 import { dotnet } from '@mesh-flow/toolchain-dotnet'
@@ -14,10 +14,10 @@ import { requireDotnetSdk } from '../utils/dotnet/require-sdk.mts'
 import { moveOn } from '../utils/jira/story-status.mts'
 
 /** How long a developer may take for its part of the plan, waits on a person not counted. */
-const implementationMinutes = 120
+const implementationTime = duration.of('2h')
 
 /** How long a developer may take for one round of review changes or a pipeline fix. */
-const fixRoundMinutes = 45
+const fixRoundTime = duration.of('45m')
 
 /** The one Jira comment the run keeps up to date with how far it got. */
 const progressComment = { key: 'progress' }
@@ -71,7 +71,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 			)}.
 			When it's rejected, fix the findings and hand it in again.
 			Record any deviation from the plan with ${deviations.record}.
-			${limit({ minutes: implementationMinutes })}
+			${limit({ time: implementationTime })}
 		`
 		// Code commits and pushes what was handed in, so `describe` reads the work as it was verified.
 		await gitlab.push(repository)({ message: `${story.key}: ${part.changes}` })
@@ -97,7 +97,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 					When a change goes beyond this merge request, record it with ${deviations.record}.
 					Push with ${gitlab.push(repository)}, then reply to every item with what you did, using ${gitlab.reply(mergeRequest)}.
 					When every item is done, hand in with ${verify(dotnet.testsPass(repository))}.
-					${limit({ minutes: fixRoundMinutes })}
+					${limit({ time: fixRoundTime })}
 				`
 				// What was fixed after the last push, to make the tests pass, goes up too.
 				await gitlab.push(repository)({ message: `${story.key}: review changes` })
@@ -110,7 +110,7 @@ export const develop = workflow('develop', JiraIssueParameters, async ({ paramet
 					Fix the cause in ${repository}, push with ${gitlab.push(repository)}, then hand in with ${verify(
 						gitlab.pipelinePasses(mergeRequest, { checkout: repository }),
 					)}.
-					${limit({ minutes: fixRoundMinutes })}
+					${limit({ time: fixRoundTime })}
 				`
 				await gitlab.push(repository)({ message: `${story.key}: pipeline fix` })
 				await gitlab.updateMergeRequest(mergeRequest, await gitlab.describe(writer, repository, { ...closing, mergeRequest }))

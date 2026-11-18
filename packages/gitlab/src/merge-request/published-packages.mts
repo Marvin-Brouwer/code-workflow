@@ -1,40 +1,48 @@
-import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage, looksWithin, patientLook } from '@mesh-flow/code-repository'
-import { wait, type ToolContext, type WaitSpec } from '@mesh-flow/core'
+import {
+	defaultAppearWithin,
+	defaultLookEvery,
+	defaultToleratedOutage,
+	lookBudget,
+	patientLook,
+	type LookBudget,
+} from '@mesh-flow/code-repository'
+import { wait, type ToolContext } from '@mesh-flow/core'
+import { duration, type Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
 import type { PackageType, PublishedPackage } from '../tools/pipeline-tools.mts'
 
 /** How long GitLab may take to process uploaded packages, when no duration is given. */
-const defaultProcessWithin: WaitSpec = { minutes: 10 }
+const defaultProcessWithin = duration.of('10m')
 
 /** Options of `publishedPackages`. */
 export interface PublishedPackagesOptions {
 	/** How long to wait between looks while the pipeline runs. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/** How long to wait for the pipeline of the merge to appear. Default: 10 minutes. */
-	readonly appearWithin?: WaitSpec
+	readonly appearWithin?: Duration
 	/** How long GitLab may take to process the packages the pipeline uploaded. Default: 10 minutes. */
-	readonly processWithin?: WaitSpec
+	readonly processWithin?: Duration
 	/**
 	 * How long looks at GitLab may keep failing before `publishedPackages` fails with the last error.
 	 * Default: 10 minutes.
 	 */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 }
 
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
- * name and version after the upload, in the background. Fails when that takes more
- * than `looks` looks.
+ * name and version after the upload, in the background. Fails when that takes longer than
+ * `processing` has looks for.
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
-	{ every, looks, url }: { readonly every: WaitSpec; readonly looks: number; readonly url: string },
+	{ every, mayProcess, url }: { readonly every: Duration; readonly mayProcess: LookBudget; readonly url: string },
 ): Promise<readonly PublishedPackage[]> {
-	for (let looksTaken = 0; ; looksTaken++) {
+	for (;;) {
 		const { packages, processing } = await list()
 		if (processing === 0) return packages
-		if (looksTaken >= looks) throw new Error(`GitLab is still processing ${String(processing)} package(s) of ${url}.`)
+		if (!mayProcess()) throw new Error(`GitLab is still processing ${String(processing)} package(s) of ${url}.`)
 		await wait(every)
 	}
 }
@@ -79,13 +87,12 @@ export async function publishedPackages(
 	context?: ToolContext,
 ): Promise<readonly PublishedPackage[]> {
 	const every = options.every ?? defaultLookEvery
-	const looksForPipelineToAppear = looksWithin(options.appearWithin ?? defaultAppearWithin, every)
-	const looksForProcessing = looksWithin(options.processWithin ?? defaultProcessWithin, every)
+	const pipelineMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
+	const mayProcess = lookBudget(options.processWithin ?? defaultProcessWithin, every)
 	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	const merged = await look(() => stubs.getMergeRequest({ repository: on.repository, number: on.number }, context))
 	if (!merged.merged || merged.mergedSha === undefined) throw new Error(`${merged.url} isn't merged, so it published nothing.`)
 	const { mergedSha } = merged
-	let looksWithoutPipeline = 0
 	for (;;) {
 		const pipeline = await look(() => stubs.pipelineOnCommit({ repository: on.repository, sha: mergedSha, ref: merged.base }, context))
 		if (pipeline.status === 'completed' && pipeline.pipeline !== undefined) {
@@ -98,11 +105,11 @@ export async function publishedPackages(
 			const { id, url } = pipeline.pipeline
 			return processedPackages(() => look(() => stubs.pipelinePackages({ repository: on.repository, pipeline: id, type }, context)), {
 				every,
-				looks: looksForProcessing,
+				mayProcess,
 				url,
 			})
 		}
-		if (pipeline.status === 'none' && ++looksWithoutPipeline > looksForPipelineToAppear)
+		if (pipeline.status === 'none' && !pipelineMayAppear())
 			throw new Error(`No pipeline ran on the merge of ${merged.url} (${mergedSha}), so it published nothing.`)
 		await wait(every)
 	}

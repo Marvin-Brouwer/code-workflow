@@ -1,3 +1,4 @@
+import type { Duration } from '@mesh-flow/duration'
 import { findingLines, type Finding } from '../check/check.mts'
 
 /** The agent called `fail`. */
@@ -11,14 +12,14 @@ export class AgentGaveUp extends Error {
 	}
 }
 
-/** The loop went over its `limit`. */
+/** The loop went over its `limit`: its `turns`, a number, or its `time`, a duration. */
 export class LoopLimitExceeded extends Error {
 	override readonly name = 'LoopLimitExceeded'
-	readonly limit: 'turns' | 'minutes'
-	readonly allowed: number
+	readonly limit: 'turns' | 'time'
+	readonly allowed: number | Duration
 
-	constructor(limit: 'turns' | 'minutes', allowed: number) {
-		super(`The loop went over its limit of ${allowed} ${limit}.`)
+	constructor(...[limit, allowed]: readonly ['turns', number] | readonly ['time', Duration]) {
+		super(`The loop went over its limit of ${limit === 'turns' ? `${String(allowed)} turns` : `${allowed.toString()} of time`}.`)
 		this.limit = limit
 		this.allowed = allowed
 	}

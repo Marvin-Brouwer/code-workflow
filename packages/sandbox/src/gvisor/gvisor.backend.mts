@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { z } from 'zod'
 import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
@@ -30,7 +31,7 @@ export interface GvisorBackendOptions {
 const RunscList = z.array(z.object({ id: z.string(), status: z.string() })).nullable()
 
 /** How long cleanup after a failed create or resume may take, once the caller has given up. */
-const cleanupTimeoutMs = 10_000
+const cleanupTimeout = duration.of('10s')
 
 /**
  * The local backend without a hypervisor: gVisor's `runsc`, Linux only, as root. No Docker: images
@@ -63,7 +64,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 
 	/** Cleanup after a failed start, which `close` waits for. */
 	async function cleanUp(work: (signal: AbortSignal) => Promise<void>): Promise<void> {
-		await lifetime.keep(work(AbortSignal.timeout(cleanupTimeoutMs))).catch(() => undefined)
+		await lifetime.keep(work(cleanupTimeout.toAbortSignal())).catch(() => undefined)
 	}
 
 	/** `status` is runsc's, for a container it still has a record of. */

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { execa, ExecaError } from 'execa'
 import { oneAtATime } from './one-at-a-time.mts'
 
@@ -18,7 +19,7 @@ export interface RunDotnetOptions {
 }
 
 /** How long `dotnet` and what it started get after a stop before they're killed outright. */
-const forceKillAfterMs = 2_000
+const forceKillAfter = duration.of('2s')
 
 /** How much of the output is kept, in MiB: more than this fails the call. */
 const maxOutputMiB = 64
@@ -93,7 +94,7 @@ async function spawnDotnet(args: readonly string[], options: RunDotnetOptions): 
 			// would live on. Its id can't be another's group while the group has members; on Windows
 			// the tree was killed outright already, and only `dotnet` itself is checked again.
 			if (hasProcessGroups || !exited) killTree(subprocess.pid, 'SIGKILL')
-		}, forceKillAfterMs).unref()
+		}, forceKillAfter.to('ms')).unref()
 	}
 	abortSignal.addEventListener('abort', stop, { once: true })
 	try {

@@ -11,7 +11,7 @@ const Answer = z.object({
 	exitCode: z.number().optional(),
 	trx: z.array(z.string()).optional(),
 	hang: z.boolean().optional(),
-	holdMs: z.number().optional(),
+	hold: z.object({ milliseconds: z.number() }).optional(),
 	stubbornChildPidFile: z.string().optional(),
 	ignoresStop: z.boolean().optional(),
 	pidFile: z.string().optional(),
@@ -24,11 +24,14 @@ const [command = ''] = args
 appendFileSync(z.string().parse(process.env.FAKE_DOTNET_LOG), `${JSON.stringify(args)}\n`)
 const answers = Answers.parse(JSON.parse(readFileSync(z.string().parse(process.env.FAKE_DOTNET_SCRIPT), 'utf8')))
 const answer = answers[command] ?? { exitCode: 0 }
-/** Any interval keeps the process alive until it is killed. */
-const keepAliveMs = 1000
+/**
+ * Any interval keeps the process alive until it is killed: in milliseconds, since node runs this
+ * script on its own, without the workspace's packages.
+ */
+const keepAliveInterval = 1000
 
 /** A process that ignores SIGTERM, with output of its own, as a test host stuck in its exit handlers. */
-const stubbornChild = `process.on('SIGTERM', () => undefined); setInterval(() => undefined, ${String(keepAliveMs)})`
+const stubbornChild = `process.on('SIGTERM', () => undefined); setInterval(() => undefined, ${String(keepAliveInterval)})`
 
 if (answer.ignoresStop === true) process.on('SIGTERM', () => undefined)
 if (answer.pidFile !== undefined) writeFileSync(answer.pidFile, String(process.pid))
@@ -38,8 +41,8 @@ if (answer.stubbornChildPidFile !== undefined) {
 }
 
 if (answer.killedWith !== undefined) process.kill(process.pid, answer.killedWith)
-else if (answer.hang === true) setInterval(() => undefined, keepAliveMs)
-else if (answer.holdMs !== undefined) setTimeout(() => process.exit(answer.exitCode ?? 0), answer.holdMs)
+else if (answer.hang === true) setInterval(() => undefined, keepAliveInterval)
+else if (answer.hold !== undefined) setTimeout(() => process.exit(answer.exitCode ?? 0), answer.hold.milliseconds)
 else {
 	const results = args[args.indexOf('--results-directory') + 1] ?? '.'
 	for (const [index, trx] of (answer.trx ?? []).entries()) writeFileSync(path.join(results, `run-${String(index)}.trx`), trx)

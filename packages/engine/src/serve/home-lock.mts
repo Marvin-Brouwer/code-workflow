@@ -1,20 +1,17 @@
 import path from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
+import { duration, sleep } from '@mesh-flow/duration'
 import { lock } from 'proper-lockfile'
 import { engineAnswers } from '../control/control-socket.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 
 /** A lock that hasn't been refreshed for this long belongs to an engine that died. */
-const staleMs = 5_000
+const staleAfter = duration.of('5s')
 
 /** How often a running engine refreshes its lock. */
-const refreshMs = 1_000
+const refreshEvery = duration.of('1s')
 
 /** How often a start looks again at a lock that may be going stale. */
-const retryMs = 1_000
-
-/** Long enough for a dead engine's lock to go stale, and two more looks. */
-const giveUpAfterMs = staleMs + 2 * retryMs
+const retryEvery = duration.of('1s')
 
 /** The lock of an engine home. */
 export function homeLockPath(home: string): string {
@@ -35,17 +32,18 @@ export async function lockHome(
 	home: string,
 	socketPath: string,
 	log: (message: string) => void,
-	signal: AbortSignal,
+	abortSignal: AbortSignal,
 ): Promise<() => Promise<void>> {
 	const lockfilePath = homeLockPath(home)
-	const giveUpAt = Date.now() + giveUpAfterMs
+	// Long enough for a dead engine's lock to go stale, and two more looks.
+	const giveUpAt = retryEvery.after(retryEvery.after(staleAfter.after(new Date())))
 	for (;;) {
-		signal.throwIfAborted()
+		abortSignal.throwIfAborted()
 		try {
 			const release = await lock(home, {
 				lockfilePath,
-				stale: staleMs,
-				update: refreshMs,
+				stale: staleAfter.to('ms'),
+				update: refreshEvery.to('ms'),
 				onCompromised: (error) => {
 					log(`The engine's lock on ${home} was lost: ${messageOf(error)}`)
 				},
@@ -56,13 +54,10 @@ export async function lockHome(
 				})
 		} catch (error) {
 			if (!hasErrorCode(error, 'ELOCKED')) throw error
-			if ((await engineAnswers(socketPath)) || Date.now() > giveUpAt) {
+			if ((await engineAnswers(socketPath)) || new Date() > giveUpAt) {
 				throw new Error(`An engine is already running on ${home}.`, { cause: error })
 			}
-			await delay(retryMs, undefined, { signal }).catch((abort: unknown) => {
-				signal.throwIfAborted()
-				throw abort
-			})
+			await sleep(retryEvery, abortSignal)
 		}
 	}
 }

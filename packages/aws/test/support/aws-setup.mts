@@ -1,17 +1,17 @@
 import path from 'node:path'
+import { type Duration, duration } from '@mesh-flow/duration'
 import { keyFile, openCredentialStore, type CredentialStore, type SignInPrompt } from '@mesh-flow/gateway'
 import { openAwsSession } from '../../src/host/aws-session.mts'
 import { awsCredentialNames } from '../../src/host/aws-settings.mts'
 import { refreshTokenGrant } from '../../src/host/oidc.mts'
 import { signIn } from '../../src/host/sign-in.mts'
-import { msPerMinute } from '../../src/host/time.mts'
 import { fakeAws, type FakeAws, type FakeAwsState } from './fake-aws.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 
 export const abortSignal = new AbortController().signal
 
 /** How long a call may take to settle once stopped, while AWS never answers. */
-export const promptlyMs = 3_000
+export const promptly = duration.of('3s')
 
 export const settings = {
 	[awsCredentialNames.startUrl]: 'https://example.awsapps.com/start',
@@ -22,13 +22,13 @@ export const settings = {
 
 export const domain = { domain: 'example', owner: '123456789012', region: 'eu-west-1' }
 
-/** A clock a test moves on by hand, by minutes. */
+/** A clock a test moves on by hand. */
 function testClock() {
 	let current = new Date('2026-11-16T09:00:00.000Z')
 	return {
 		now: () => current,
-		advance: (minutes: number) => {
-			current = new Date(current.getTime() + minutes * msPerMinute)
+		advance: (time: Duration) => {
+			current = time.after(current)
 		},
 	}
 }
@@ -49,15 +49,15 @@ export async function setUp(options: SetUpOptions = {}) {
 	const clock = testClock()
 	const aws = await fakeAws(clock.now, options.fake)
 	const shown: SignInPrompt[] = []
-	const waited: number[] = []
+	const waited: Duration[] = []
 	const signInUser = () =>
 		signIn(
 			{ credentials, show: (prompt) => shown.push(prompt), abortSignal },
 			{
 				endpoints: aws.endpoints,
 				now: clock.now,
-				wait: (ms) => {
-					waited.push(ms)
+				wait: (time) => {
+					waited.push(time)
 					return Promise.resolve()
 				},
 			},

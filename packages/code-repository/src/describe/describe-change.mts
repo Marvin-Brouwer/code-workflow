@@ -1,4 +1,5 @@
 import { limit, prompt, succeed, type Agent, type Limit, type Prompt } from '@mesh-flow/core'
+import { duration } from '@mesh-flow/duration'
 import type { z } from 'zod'
 import type { Checkout } from '../checkout/checkout.mts'
 import { readBrief, type ChangeBrief } from './brief.mts'
@@ -34,7 +35,7 @@ export interface DescribeChangeOptions<Ref, Closes> {
 }
 
 /** How long the loop may take when the caller sets no limit. */
-const defaultLimit = limit({ minutes: 10 })
+const defaultLimit = limit({ time: duration.of('10m') })
 
 /** Git's customary width of a commit subject, for a title when the repository sets none. */
 const customaryTitleCharacters = 72

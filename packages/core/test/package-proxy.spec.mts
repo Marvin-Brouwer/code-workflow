@@ -5,6 +5,7 @@ import { request } from 'node:http'
 import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { duration } from '@mesh-flow/duration'
 import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
 import type { ConnectorRegistry, PackageRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -34,10 +35,10 @@ function dotnetSdkMajor(): string | undefined {
 const dotnetMajor = dotnetSdkMajor()
 
 /** How long a first `dotnet restore` may take: the SDK sets itself up on its first run. */
-const restoreTimeoutMs = 120_000
+const restoreTimeout = duration.of('2m')
 
 /** How long a stopped proxy may take to settle while a fetch never does. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 
 /** What the gateway answers in these tests, before the engine stages its body. */
 interface Answered {
@@ -252,7 +253,7 @@ function plainRequest(proxyUrl: string, target: string, method = 'GET'): Promise
 const onWindows = process.platform === 'win32'
 
 describe.skipIf(onWindows)('package proxy', () => {
-	test('npm installs a package through it, from what the gateway fetched', { timeout: 60_000 }, async () => {
+	test('npm installs a package through it, from what the gateway fetched', { timeout: duration.of('1m').to('ms') }, async () => {
 		// Arrange
 		const { packument, tarball, tarballPath } = await fakeRegistry()
 		const fetch = vi.fn<Fetch>((asked) => {
@@ -279,7 +280,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 	// .NET reads SSL_CERT_FILE on Linux only; on macOS it trusts the keychain. CI's Linux runners have the SDK.
 	test.runIf(process.platform === 'linux' && (dotnetMajor !== undefined || process.env.CI === 'true'))(
 		'dotnet restores a package through it, from what the gateway fetched',
-		{ timeout: restoreTimeoutMs },
+		{ timeout: restoreTimeout.to('ms') },
 		async () => {
 			// Arrange
 			const feed = fakeNuGetFeed()
@@ -543,7 +544,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 		// Assert
 		expect(fetchSignal?.aborted).toBe(true)
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })
 

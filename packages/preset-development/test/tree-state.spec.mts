@@ -1,6 +1,7 @@
 import type * as fsPromises from 'node:fs/promises'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { gitCommand } from '@mesh-flow/git'
 import { describe, expect, test, vi } from 'vitest'
 import { treeState } from '../src/review/tree-state.mts'
@@ -11,7 +12,7 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const fleeting = 'obj.tmp'
 
 /** Long enough for git on a busy runner. */
-const stateTimeoutMs = 10_000
+const stateTimeout = duration.of('10s')
 
 vi.mock('node:fs/promises', async (actual) => {
 	const fs = await actual<typeof fsPromises>()
@@ -28,7 +29,7 @@ describe('treeState', () => {
 	test('takes an untracked file that is gone by the time it is read as not there', async () => {
 		// Arrange
 		const repository = await gitCheckout()
-		const abortSignal = AbortSignal.timeout(stateTimeoutMs)
+		const abortSignal = stateTimeout.toAbortSignal()
 		const without = (await treeState(repository.directory, repository.defaultBranch, { abortSignal })).fingerprint
 		await writeFile(path.join(repository.directory, fleeting), 'made by the build')
 
@@ -42,7 +43,7 @@ describe('treeState', () => {
 	test('stays the same when the default branch moves on after the branch started', async () => {
 		// Arrange
 		const repository = await gitCheckout()
-		const abortSignal = AbortSignal.timeout(stateTimeoutMs)
+		const abortSignal = stateTimeout.toAbortSignal()
 		const git = async (...args: string[]) => gitCommand(args, { cwd: repository.directory, abortSignal })
 		await git('switch', '--quiet', '--create', 'feature/KEY-1')
 		await writeFile(path.join(repository.directory, 'README.md'), '# api\n\nThe change.\n')
@@ -65,7 +66,7 @@ describe('treeState', () => {
 	test('changes with a file outside the checkout that is part of the state', async () => {
 		// Arrange
 		const repository = await gitCheckout()
-		const abortSignal = AbortSignal.timeout(stateTimeoutMs)
+		const abortSignal = stateTimeout.toAbortSignal()
 		const recorded = path.join(await temporaryDirectory(), 'plan-deviations.md')
 		const without = (await treeState(repository.directory, repository.defaultBranch, { abortSignal, files: [recorded] })).fingerprint
 		await writeFile(recorded, '# Deviations from the plan\n')

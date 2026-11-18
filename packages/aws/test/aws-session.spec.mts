@@ -1,34 +1,35 @@
-import { setTimeout as sleep } from 'node:timers/promises'
+import { duration, sleep } from '@mesh-flow/duration'
 import { describe, expect, test, vi } from 'vitest'
 import { awsCredentialNames } from '../src/host/aws-settings.mts'
-import { renewAheadMs, useAheadMs } from '../src/host/renewal.mts'
 import { AwsSignInNeededError } from '../src/host/sign-in-needed.mts'
-import { msPerMinute } from '../src/host/time.mts'
-import { abortSignal, domain, holdRefreshes, promptlyMs, setUp, storedSession } from './support/aws-setup.mts'
+import { abortSignal, domain, holdRefreshes, promptly, setUp, storedSession } from './support/aws-setup.mts'
 
 /** How long role credentials last in these tests. */
-const roleCredentialsMinutes = 60
+const roleCredentials = duration.of('1h')
 
-/** Minutes after which credentials of {@link roleCredentialsMinutes} are inside their renewal window, but not over. */
-const nearTheirEndMinutes = roleCredentialsMinutes - renewAheadMs / msPerMinute + 3
+/** When credentials of {@link roleCredentials} are three minutes into their renewal window (`renewAhead`), but not over. */
+const nearTheirEnd = duration.of('58m')
 
-/** Minutes after {@link nearTheirEndMinutes} at which they are over. */
-const pastTheirEndMinutes = 3
+/** How long after {@link nearTheirEnd} they are over. */
+const pastTheirEnd = duration.of('3m')
 
-/** An access token that is inside its renewal window after {@link accessTokenNearEndMinutes}. */
-const shortAccessTokenSeconds = 600
+/** An access token that is inside its renewal window after {@link accessTokenNearEnd}. */
+const shortAccessToken = duration.of('10m')
 
-/** Minutes after a sign-in at which an access token of {@link shortAccessTokenSeconds} is renewed. */
-const accessTokenNearEndMinutes = 10
+/** How long after a sign-in an access token of {@link shortAccessToken} is renewed. */
+const accessTokenNearEnd = duration.of('10m')
 
 /** Role credentials that run out well before an access token of an hour needs renewing. */
-const shortRoleCredentialsMinutes = 10
+const shortRoleCredentials = duration.of('10m')
 
-/** Minutes after which an access token of an hour, the fake's default, is renewed. */
-const accessTokenOverMinutes = 60
+/** How long after a sign-in an access token of an hour, the fake's default, is renewed. */
+const accessTokenOver = duration.of('1h')
+
+/** When credentials of {@link roleCredentials} hold for less than `useAhead` more: half of it. */
+const almostOverAt = duration.of('59m45s')
 
 /** Long enough for a call to reach what it waits on: a renewal under way, or a request of its own. */
-const waitingMs = 100
+const callReaches = duration.of('100ms')
 
 /** Never settles: a request AWS never answers. */
 const never = () => new Promise<void>(() => undefined)
@@ -48,14 +49,14 @@ describe('the AWS session', () => {
 
 	test('fetches role credentials once, and again when they near their end', async () => {
 		// Arrange
-		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
+		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentials } })
 		await signInUser()
 		const opened = session()
 		const first = await opened.roleCredentials(abortSignal)
 		const again = await opened.roleCredentials(abortSignal)
 
 		// Act
-		clock.advance(nearTheirEndMinutes)
+		clock.advance(nearTheirEnd)
 		const renewed = await opened.roleCredentials(abortSignal)
 
 		// Assert
@@ -82,14 +83,14 @@ describe('the AWS session', () => {
 	test('renews the access token with the refresh token, and keeps the new one', async () => {
 		// Arrange
 		const { credentials, clock, signInUser, session } = await setUp({
-			fake: { roleCredentialsMs: shortRoleCredentialsMinutes * msPerMinute },
+			fake: { roleCredentials: shortRoleCredentials },
 		})
 		await signInUser()
 		const opened = session()
 		await opened.roleCredentials(abortSignal)
 
 		// Act
-		clock.advance(accessTokenOverMinutes)
+		clock.advance(accessTokenOver)
 		await opened.roleCredentials(abortSignal)
 
 		// Assert
@@ -98,9 +99,9 @@ describe('the AWS session', () => {
 
 	test('keeps the renewed session when the caller that started the renewal stops halfway', async () => {
 		// Arrange
-		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessToken: shortAccessToken } })
 		await signInUser()
-		clock.advance(accessTokenNearEndMinutes)
+		clock.advance(accessTokenNearEnd)
 		const refreshes = holdRefreshes(aws)
 		const stop = new AbortController()
 		const fetching = session().roleCredentials(stop.signal)
@@ -122,9 +123,9 @@ describe('the AWS session', () => {
 
 	test("lets a caller that comes during a stopped caller's renewal wait for it, rather than renew again", async () => {
 		// Arrange
-		const { aws, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		const { aws, clock, signInUser, session } = await setUp({ fake: { accessToken: shortAccessToken } })
 		await signInUser()
-		clock.advance(accessTokenNearEndMinutes)
+		clock.advance(accessTokenNearEnd)
 		const refreshes = holdRefreshes(aws)
 		const opened = session()
 		const stop = new AbortController()
@@ -138,7 +139,7 @@ describe('the AWS session', () => {
 
 		// Act
 		const next = opened.roleCredentials(abortSignal)
-		await sleep(waitingMs)
+		await sleep(callReaches, abortSignal)
 		const pending = aws.requests.filter((request) => request === 'POST /token').length
 		refreshes.release()
 		const fetched = await next
@@ -151,9 +152,9 @@ describe('the AWS session', () => {
 
 	test('keeps the session of a sign-in that came between a renewal and its write', async () => {
 		// Arrange
-		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessToken: shortAccessToken } })
 		await signInUser()
-		clock.advance(accessTokenNearEndMinutes)
+		clock.advance(accessTokenNearEnd)
 		const refreshes = holdRefreshes(aws)
 		const fetching = session().roleCredentials(abortSignal)
 		await vi.waitFor(() => {
@@ -171,9 +172,9 @@ describe('the AWS session', () => {
 
 	test('uses the session of a sign-in that came between, when Identity Center refuses the renewal it replaced', async () => {
 		// Arrange
-		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessTokenSeconds: shortAccessTokenSeconds } })
+		const { aws, credentials, clock, signInUser, session } = await setUp({ fake: { accessToken: shortAccessToken } })
 		await signInUser()
-		clock.advance(accessTokenNearEndMinutes)
+		clock.advance(accessTokenNearEnd)
 		const refreshes = holdRefreshes(aws)
 		const fetching = session().roleCredentials(abortSignal)
 		await vi.waitFor(() => {
@@ -221,7 +222,7 @@ describe('the AWS session', () => {
 	test('keeps using the last credentials once the session ended, until they run out', async () => {
 		// Arrange
 		const { aws, clock, signInUser, session } = await setUp({
-			fake: { accessTokenSeconds: shortAccessTokenSeconds, roleCredentialsMs: roleCredentialsMinutes * msPerMinute },
+			fake: { accessToken: shortAccessToken, roleCredentials },
 		})
 		await signInUser()
 		const opened = session()
@@ -229,9 +230,9 @@ describe('the AWS session', () => {
 		aws.state.refreshWorks = false
 
 		// Act
-		clock.advance(nearTheirEndMinutes)
+		clock.advance(nearTheirEnd)
 		const stillUsed = await opened.roleCredentials(abortSignal)
-		clock.advance(pastTheirEndMinutes)
+		clock.advance(pastTheirEnd)
 		const afterwards = opened.roleCredentials(abortSignal)
 
 		// Assert
@@ -243,7 +244,7 @@ describe('the AWS session', () => {
 	test('needs a sign-in once the last credentials are too close to their end for a call', async () => {
 		// Arrange
 		const { aws, clock, signInUser, session } = await setUp({
-			fake: { accessTokenSeconds: shortAccessTokenSeconds, roleCredentialsMs: roleCredentialsMinutes * msPerMinute },
+			fake: { accessToken: shortAccessToken, roleCredentials },
 		})
 		await signInUser()
 		const opened = session()
@@ -251,7 +252,7 @@ describe('the AWS session', () => {
 		aws.state.refreshWorks = false
 
 		// Act
-		clock.advance(roleCredentialsMinutes - useAheadMs / 2 / msPerMinute)
+		clock.advance(almostOverAt)
 		const almostOver = opened.roleCredentials(abortSignal)
 
 		// Assert
@@ -260,7 +261,7 @@ describe('the AWS session', () => {
 
 	test('hands out a CodeArtifact token per domain, renewed together with the role credentials', async () => {
 		// Arrange
-		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentialsMs: roleCredentialsMinutes * msPerMinute } })
+		const { aws, clock, signInUser, session } = await setUp({ fake: { roleCredentials } })
 		await signInUser()
 		const opened = session()
 		const first = await opened.codeArtifactToken(domain, abortSignal)
@@ -268,7 +269,7 @@ describe('the AWS session', () => {
 		const other = await opened.codeArtifactToken({ ...domain, domain: 'other' }, abortSignal)
 
 		// Act
-		clock.advance(nearTheirEndMinutes)
+		clock.advance(nearTheirEnd)
 		const renewed = await opened.codeArtifactToken(domain, abortSignal)
 
 		// Assert
@@ -322,7 +323,7 @@ describe('the AWS session', () => {
 
 		// Assert
 		await expect(calling).rejects.toThrow('stop')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('settles a call waiting its turn behind one AWS never answers, when stopped', async () => {
@@ -346,6 +347,6 @@ describe('the AWS session', () => {
 
 		// Assert
 		await expect(waiting).rejects.toThrow('stop')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 })

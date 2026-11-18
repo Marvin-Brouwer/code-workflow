@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { buildApp } from '@mesh-flow/build'
+import { duration } from '@mesh-flow/duration'
 import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
@@ -25,13 +26,13 @@ import { copiedMailbox, deployTestApp, runtimeScript, testAppName, userRun } fro
  */
 const backendName = process.env.MESH_FLOW_ENGINE_TESTS
 const signal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(60_000), backend: AbortSignal.timeout(60_000) })
+const deadlines = () => ({ pause: duration.of('1m').toAbortSignal(), backend: duration.of('1m').toAbortSignal() })
 
 /** How long the restore test may take, and its parts: pulling the image is most of it. */
-const restoreTimeoutMs = 300_000
-const buildTimeoutMs = 120_000
-const restoredWithinMs = 240_000
-const pollIntervalMs = 500
+const restoreTimeout = duration.of('5m')
+const buildTimeout = duration.of('2m')
+const restoredWithin = duration.of('4m')
+const pollInterval = duration.of('500ms')
 
 /** Loads only the backend under test, so the other's SDK isn't needed. */
 async function openBackend(): Promise<SandboxBackend> {
@@ -84,90 +85,101 @@ mailbox.send({ type: 'succeeded' })
 )
 
 describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, () => {
-	test('runs a workflow across a shutdown and a restart of the engine, in the same process', { timeout: 300_000 }, async () => {
-		// Arrange
-		const home = await temporaryDirectory()
-		const store = () => openRunStore(path.join(home, 'runs'))
-		const apps = await openAppStore(path.join(home, 'apps'), signal)
-		await deployTestApp(apps, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
-		const first = await Engine.open({ backend: await openBackend(), store: store(), apps }, signal)
-		onTestFinished(() => first.close(deadlines()))
-		const { id } = await first.startRun({ ...userRun('ask'), abortSignal: signal })
-		await vi.waitFor(
-			() => {
-				expect(first.get(id).pending).toHaveLength(1)
-			},
-			{ timeout: 240_000, interval: 500 },
-		)
-		await first.answer(id, 'first', 1, signal)
-		await vi.waitFor(
-			() => {
-				expect(first.get(id).pending).toEqual([expect.objectContaining({ id: 'second' })])
-			},
-			{ timeout: 60_000, interval: 500 },
-		)
-		await first.close(deadlines())
+	test(
+		'runs a workflow across a shutdown and a restart of the engine, in the same process',
+		{ timeout: duration.of('5m').to('ms') },
+		async () => {
+			// Arrange
+			const home = await temporaryDirectory()
+			const store = () => openRunStore(path.join(home, 'runs'))
+			const apps = await openAppStore(path.join(home, 'apps'), signal)
+			await deployTestApp(apps, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
+			const first = await Engine.open({ backend: await openBackend(), store: store(), apps }, signal)
+			onTestFinished(() => first.close(deadlines()))
+			const { id } = await first.startRun({ ...userRun('ask'), abortSignal: signal })
+			await vi.waitFor(
+				() => {
+					expect(first.get(id).pending).toHaveLength(1)
+				},
+				{ timeout: duration.of('4m').to('ms'), interval: 500 },
+			)
+			await first.answer(id, 'first', 1, signal)
+			await vi.waitFor(
+				() => {
+					expect(first.get(id).pending).toEqual([expect.objectContaining({ id: 'second' })])
+				},
+				{ timeout: duration.of('1m').to('ms'), interval: 500 },
+			)
+			await first.close(deadlines())
 
-		// Act
-		const backend = await openBackend()
-		const second = await Engine.open({ backend, store: store(), apps }, signal)
-		onTestFinished(() => second.close(deadlines()))
-		await second.resume(id, signal)
-		await second.answer(id, 'second', 2, signal)
-		await vi.waitFor(
-			() => {
-				expect(second.get(id).status).toBe('succeeded')
-			},
-			{ timeout: 60_000, interval: 500 },
-		)
+			// Act
+			const backend = await openBackend()
+			const second = await Engine.open({ backend, store: store(), apps }, signal)
+			onTestFinished(() => second.close(deadlines()))
+			await second.resume(id, signal)
+			await second.answer(id, 'second', 2, signal)
+			await vi.waitFor(
+				() => {
+					expect(second.get(id).status).toBe('succeeded')
+				},
+				{ timeout: duration.of('1m').to('ms'), interval: 500 },
+			)
 
-		// Assert
-		const events = await second.events(id)
-		expect(events.map((event) => event['value'])).toEqual([1, 2])
-		expect(events[0]?.['pid']).toBe(events[1]?.['pid'])
-		// The sandbox goes after the outcome is saved.
-		await vi.waitFor(async () => {
-			expect(await backend.list(signal)).toEqual([])
-		}, 60_000)
-	})
+			// Assert
+			const events = await second.events(id)
+			expect(events.map((event) => event['value'])).toEqual([1, 2])
+			expect(events[0]?.['pid']).toBe(events[1]?.['pid'])
+			// The sandbox goes after the outcome is saved.
+			await vi.waitFor(async () => {
+				expect(await backend.list(signal)).toEqual([])
+			}, duration.of('1m').to('ms'))
+		},
+	)
 
-	test("restores packages with npm through the runtime's proxy, in a sandbox with no network", { timeout: restoreTimeoutMs }, async () => {
-		// Arrange
-		const home = await temporaryDirectory()
-		const served = await fakeRegistry()
-		const fetch = vi.fn<typeof globalThis.fetch>((input) => {
-			const { pathname } = new URL(input instanceof Request ? input.url : input)
-			return Promise.resolve(served[pathname]?.clone() ?? new Response('{}', { status: 404 }))
-		})
-		const gatewayHome = path.join(home, 'gateway')
-		const gateway = openGateway({
-			home: gatewayHome,
-			credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
-			providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
-			tools: [],
-			fetch,
-		})
-		const apps = await openAppStore(path.join(home, 'apps'), signal)
-		const built = path.join(home, 'built')
-		await buildApp({ directory: restoringApp, out: built, abortSignal: AbortSignal.timeout(buildTimeoutMs) })
-		await withPackedApp(built, (tarball) => apps.deploy(testAppName, tarball, signal), signal)
-		const engine = await Engine.open({ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), apps, gateway }, signal)
-		onTestFinished(() => engine.close(deadlines()))
+	test(
+		"restores packages with npm through the runtime's proxy, in a sandbox with no network",
+		{ timeout: restoreTimeout.to('ms') },
+		async () => {
+			// Arrange
+			const home = await temporaryDirectory()
+			const served = await fakeRegistry()
+			const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+				const { pathname } = new URL(input instanceof Request ? input.url : input)
+				return Promise.resolve(served[pathname]?.clone() ?? new Response('{}', { status: 404 }))
+			})
+			const gatewayHome = path.join(home, 'gateway')
+			const gateway = openGateway({
+				home: gatewayHome,
+				credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
+				providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
+				tools: [],
+				fetch,
+			})
+			const apps = await openAppStore(path.join(home, 'apps'), signal)
+			const built = path.join(home, 'built')
+			await buildApp({ directory: restoringApp, out: built, abortSignal: buildTimeout.toAbortSignal() })
+			await withPackedApp(built, (tarball) => apps.deploy(testAppName, tarball, signal), signal)
+			const engine = await Engine.open(
+				{ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), apps, gateway },
+				signal,
+			)
+			onTestFinished(() => engine.close(deadlines()))
 
-		// Act
-		const { id } = await engine.startRun({ ...userRun('restore'), abortSignal: signal })
+			// Act
+			const { id } = await engine.startRun({ ...userRun('restore'), abortSignal: signal })
 
-		// Assert
-		const finished = await vi.waitFor(
-			() => {
-				const record = engine.get(id)
-				if (!finishedStatuses.has(record.status)) throw new Error(`The run is ${record.status}.`)
-				return record
-			},
-			{ timeout: restoredWithinMs, interval: pollIntervalMs },
-		)
-		expect(finished.status, finished.error).toBe('succeeded')
-		const fetched = fetch.mock.calls.map(([input]) => new URL(input instanceof Request ? input.url : input).pathname)
-		expect(fetched).toEqual(expect.arrayContaining(Object.keys(served)))
-	})
+			// Assert
+			const finished = await vi.waitFor(
+				() => {
+					const record = engine.get(id)
+					if (!finishedStatuses.has(record.status)) throw new Error(`The run is ${record.status}.`)
+					return record
+				},
+				{ timeout: restoredWithin.to('ms'), interval: pollInterval.to('ms') },
+			)
+			expect(finished.status, finished.error).toBe('succeeded')
+			const fetched = fetch.mock.calls.map(([input]) => new URL(input instanceof Request ? input.url : input).pathname)
+			expect(fetched).toEqual(expect.arrayContaining(Object.keys(served)))
+		},
+	)
 })

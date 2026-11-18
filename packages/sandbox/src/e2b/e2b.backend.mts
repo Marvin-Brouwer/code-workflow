@@ -1,3 +1,4 @@
+import { duration, type Duration } from '@mesh-flow/duration'
 import { Sandbox as E2bSdkSandbox } from 'e2b'
 import { assertPausedBy } from '../backend-mismatch-error.mts'
 import { BackendLifetime } from '../backend-lifetime.mts'
@@ -9,7 +10,7 @@ import { E2bSandbox } from './e2b.sandbox.mts'
 
 /** Metadata on every sandbox this package creates, so `list` finds only those. */
 const ownerMetadata = { 'mesh-flow': 'true' }
-const defaultTimeoutMs = 24 * 60 * 60 * 1000
+const defaultTimeout = duration.of('1d')
 
 export interface E2bBackendOptions {
 	/** Comes from the engine's credential store. It stays on the host. */
@@ -26,7 +27,7 @@ export interface E2bBackendOptions {
 	 * How long a sandbox may run before E2B pauses it on its own (memory included). That is the
 	 * limit for a sandbox an engine left behind when it died. Default 24 hours.
 	 */
-	readonly timeoutMs?: number
+	readonly timeout?: Duration
 }
 
 /**
@@ -40,7 +41,7 @@ export interface E2bBackendOptions {
  */
 export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 	const lifetime = new BackendLifetime()
-	const timeoutMs = options.timeoutMs ?? defaultTimeoutMs
+	const timeout = options.timeout ?? defaultTimeout
 	const connection = { apiKey: options.apiKey, ...(options.domain === undefined ? {} : { domain: options.domain }) }
 
 	return {
@@ -54,7 +55,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 				...connection,
 				metadata: ownerMetadata,
 				envs: { ...spec.env },
-				timeoutMs,
+				timeoutMs: timeout.to('ms'),
 				lifecycle: { onTimeout: 'pause' },
 				allowInternetAccess: false,
 				signal: lifetime.bind(signal),
@@ -67,7 +68,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 			assertPausedBy(paused, 'e2b')
 			const bound = lifetime.bind(signal)
 			return lifetime.startOnce(paused.id, async () => {
-				const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs, signal: bound })
+				const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs: timeout.to('ms'), signal: bound })
 				return new E2bSandbox(sandbox, paused.spec, lifetime)
 			})
 		},

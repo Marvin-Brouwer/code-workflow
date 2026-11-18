@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import type { HostToolContext } from '@mesh-flow/gateway'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { gitRemote } from '../src/host/git-remote.mts'
@@ -14,10 +15,10 @@ function context(abortSignal = new AbortController().signal): HostToolContext {
 }
 
 /** How long a stopped call may take to settle while git hangs. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 
 /** How long git may take to make the clone and reach the remote: on a Windows runner, a few processes in a row take seconds. */
-const reachesRemoteWithinMs = 15_000
+const reachesRemoteWithin = duration.of('15s')
 
 /** A clone of a bundle, in a fresh directory. */
 async function cloneBundle(bundle: Buffer, branch: string): Promise<string> {
@@ -128,11 +129,11 @@ describe('gitRemote', () => {
 		const fetching = host.fetchBundle('team/app', 'fix/1', context(stop.signal))
 		setTimeout(() => {
 			stop.abort(new Error('The run was stopped.'))
-		}, 200)
+		}, duration.of('200ms').to('ms'))
 
 		// Assert
 		await expect(fetching).rejects.toThrow('The run was stopped.')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('keeps the token out of the arguments and sends it as a header', async () => {
@@ -146,7 +147,7 @@ describe('gitRemote', () => {
 
 		// Act
 		const fetching = host.fetchBundle('team/app', 'fix/1', context(stop.signal)).catch(() => undefined)
-		await expect.poll(() => seen.length, { timeout: reachesRemoteWithinMs }).toBeGreaterThan(0)
+		await expect.poll(() => seen.length, { timeout: reachesRemoteWithin.to('ms') }).toBeGreaterThan(0)
 		stop.abort(new Error('Seen enough.'))
 		await fetching
 

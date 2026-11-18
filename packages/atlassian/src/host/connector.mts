@@ -19,7 +19,7 @@ import { jiraHostTools } from './jira/jira-host-tools.mts'
  * ```ts
  * import { atlassianHostTools, defaultFetchRetry } from '@mesh-flow/atlassian/host'
  *
- * const tools = atlassianHostTools({ fetch: fakeSite.fetch, retry: { ...defaultFetchRetry, attempts: 1 } })
+ * const tools = atlassianHostTools({ fetch: fakeSite.fetch, retry: { ...defaultFetchRetry, waits: [] } })
  * ```
  */
 export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool[] {

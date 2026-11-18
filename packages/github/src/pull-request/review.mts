@@ -1,5 +1,6 @@
 import { watchReview } from '@mesh-flow/code-repository'
-import type { ToolContext, WaitSpec } from '@mesh-flow/core'
+import type { ToolContext } from '@mesh-flow/core'
+import type { Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
 import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'
@@ -26,14 +27,14 @@ export interface ReviewHandlers {
 /** Options of `review`. */
 export interface ReviewOptions {
 	/** How long to wait between looks. Default: 10 seconds. */
-	readonly every?: WaitSpec
+	readonly every?: Duration
 	/**
 	 * How long looks at GitHub may keep failing, say while the network is down, before `review`
-	 * gives up with the last error. Counted in looks, `toleratedOutage / every` of them, so the time
-	 * the failing calls take comes on top. Only failures that may pass count; a bad token or a missing
-	 * permission fails at once. Default: 10 minutes.
+	 * gives up with the last error: once failed looks in a row, `every` apart, have covered
+	 * `toleratedOutage`, so the time the failing calls take comes on top. Only failures that may
+	 * pass count; a bad token or a missing permission fails at once. Default: 10 minutes.
 	 */
-	readonly toleratedOutage?: WaitSpec
+	readonly toleratedOutage?: Duration
 }
 
 /** How a review ended. */

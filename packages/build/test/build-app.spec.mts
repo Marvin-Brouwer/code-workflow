@@ -4,6 +4,7 @@ import { copyFile, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { duration } from '@mesh-flow/duration'
 import { appManifestFile, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { buildApp } from '../src/build-app.mts'
@@ -12,6 +13,9 @@ import { appRepository, describingEntry, protocolModule } from './support/app-re
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
+
+/** How often an interval that only keeps a process alive fires. */
+const keepAliveEvery = duration.of('1m')
 
 const run = promisify(execFile)
 
@@ -126,7 +130,7 @@ describe('buildApp', () => {
 
 	test('stops describing an app that never exits when aborted', async () => {
 		// Arrange
-		const directory = await appRepository({ files: { 'main.mts': `setInterval(() => undefined, 60_000)\n` } })
+		const directory = await appRepository({ files: { 'main.mts': `setInterval(() => undefined, ${String(keepAliveEvery.to('ms'))})\n` } })
 		const controller = new AbortController()
 		const building = buildApp({ directory, out: path.join(directory, 'out'), abortSignal: controller.signal })
 		await expect.poll(() => existsSync(path.join(directory, 'out', 'main.mjs'))).toBe(true)

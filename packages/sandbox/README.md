@@ -159,7 +159,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 ## Where they differ
 
 - **Timers across a pause.** E2B stops the guest's monotonic clock, so a `setTimeout` inside the sandbox doesn't count paused time. gVisor's does. Wall-clock waits belong in the engine. `Date.now()` is right after a resume everywhere.
-- **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeoutMs` (24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
+- **E2B** builds sandboxes from templates, not images: `templates` maps each image to one, and the template fixes CPUs and memory. A sandbox runs at most `timeout` (a `Duration`, 24 hours by default) before E2B pauses it by itself, which limits what an engine that died leaves running.
 - **microsandbox** refuses a full snapshot while it manages a running job, which is why `startInBackground` uses `setsid -f` instead.
 - **gVisor** needs Linux and root (`runsc: ['sudo', 'runsc']` otherwise). A pause writes all memory to disk before it returns: under a second on a fast disk, seconds on a slow one. Processes started with `runsc exec` don't survive a checkpoint, only the container's init and its children, so the init is a small shell that starts each `startInBackground` process as its own child. Its options:
   - `directory`: images, bundles, checkpoints and runsc's state. Keep it across restarts.

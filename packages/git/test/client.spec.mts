@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { basicAuthHeaderEnv } from '../src/auth.mts'
 import { gitClient, rawGit } from '../src/client.mts'
@@ -9,13 +10,13 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 const identity = { 'user.name': 'Test', 'user.email': 'test@example.com' }
 
 /** How long a stopped command may take to settle while git hangs. */
-const promptlyMs = 3_000
+const promptly = duration.of('3s')
 
 /** How long git may take to reach the server: a few processes in a row take seconds on a slow runner. */
-const reachesServerWithinMs = 15_000
+const reachesServerWithin = duration.of('15s')
 
 /** How long the fetch runs before the stop: long enough for git to be on its way to the server. */
-const stopAfterMs = 200
+const stopAfter = duration.of('200ms')
 
 /** A repository with one commit on `main`. */
 async function repository(abortSignal = new AbortController().signal) {
@@ -192,11 +193,11 @@ describe('gitClient', () => {
 		const fetching = git.fetch(`${hanging}/team/app.git`, ['main'])
 		setTimeout(() => {
 			stop.abort(new Error('The run was stopped.'))
-		}, stopAfterMs)
+		}, stopAfter.to('ms'))
 
 		// Assert
 		await expect(fetching).rejects.toThrow('The run was stopped.')
-		expect(Date.now() - started).toBeLessThan(promptlyMs)
+		expect(Date.now() - started).toBeLessThan(promptly.to('ms'))
 	})
 
 	test('sends a credential as a header through the environment, never in the arguments', async () => {
@@ -216,7 +217,7 @@ describe('gitClient', () => {
 		// Act
 		const command = git.fetch(`${server}/team/app.git`, ['main'])
 		const fetching = command.run().catch(() => undefined)
-		await expect.poll(() => seen.length, { timeout: reachesServerWithinMs }).toBeGreaterThan(0)
+		await expect.poll(() => seen.length, { timeout: reachesServerWithin.to('ms') }).toBeGreaterThan(0)
 		stop.abort(new Error('Seen enough.'))
 		await fetching
 

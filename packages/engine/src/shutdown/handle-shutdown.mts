@@ -1,3 +1,4 @@
+import { duration, type Duration } from '@mesh-flow/duration'
 import type { CloseDeadlines } from '../engine/engine.mts'
 import { messageOf } from '../errors.mts'
 
@@ -9,13 +10,13 @@ export interface ShutdownProcess {
 }
 
 /** How long pausing may take by default. */
-const defaultPauseTimeoutMs = 30_000
+const defaultPauseTimeout = duration.of('30s')
 
 /** How long closing the backend may take by default, after the pauses. */
-const defaultCloseTimeoutMs = 60_000
+const defaultCloseTimeout = duration.of('1m')
 
 /** How long past both deadlines a shutdown may run before the process exits anyway. */
-const cutOffGraceMs = 5_000
+const cutOffGrace = duration.of('5s')
 
 /** The exit code after a third Ctrl+C: 128 plus SIGINT's number, as shells report it. */
 const interruptedExitCode = 130
@@ -25,9 +26,9 @@ export interface HandleShutdownOptions {
 	/** Shuts everything down within the deadlines it gets. */
 	readonly shutdown: (deadlines: CloseDeadlines) => Promise<void>
 	/** How long pausing may take. Default 30 seconds. */
-	readonly pauseTimeoutMs?: number
-	/** How long closing the backend may take after that. Default 60 seconds. */
-	readonly closeTimeoutMs?: number
+	readonly pauseTimeout?: Duration
+	/** How long closing the backend may take after that. Default a minute. */
+	readonly closeTimeout?: Duration
 	/** Where progress goes. Default: stderr. */
 	readonly log?: (message: string) => void
 	/** The process to listen to and exit. Default: `process`. */
@@ -51,8 +52,8 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 		((message: string) => {
 			console.error(message)
 		})
-	const pauseTimeoutMs = options.pauseTimeoutMs ?? defaultPauseTimeoutMs
-	const closeTimeoutMs = options.closeTimeoutMs ?? defaultCloseTimeoutMs
+	const pauseTimeout = options.pauseTimeout ?? defaultPauseTimeout
+	const closeTimeout = options.closeTimeout ?? defaultCloseTimeout
 	const skipPauses = new AbortController()
 	let signals = 0
 	let started = false
@@ -60,16 +61,19 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 	const begin = (exitCode: number) => {
 		if (started) return
 		started = true
-		const cutOff = setTimeout(
-			() => {
-				target.exit(exitCode || 1)
-			},
-			pauseTimeoutMs + closeTimeoutMs + cutOffGraceMs,
-		)
-		cutOff.unref()
+		const pausesUp = pauseTimeout.toAbortSignal()
+		const backend = new AbortController()
+		// Each deadline starts when the one before it is up, so they follow each other.
+		void (async () => {
+			await aborted(pausesUp)
+			await aborted(closeTimeout.toAbortSignal())
+			backend.abort(new DOMException('The backend took too long to close.', 'TimeoutError'))
+			await aborted(cutOffGrace.toAbortSignal())
+			target.exit(exitCode || 1)
+		})()
 		const deadlines: CloseDeadlines = {
-			pause: AbortSignal.any([skipPauses.signal, AbortSignal.timeout(pauseTimeoutMs)]),
-			backend: AbortSignal.timeout(pauseTimeoutMs + closeTimeoutMs),
+			pause: AbortSignal.any([skipPauses.signal, pausesUp]),
+			backend: backend.signal,
 		}
 		options.shutdown(deadlines).then(
 			() => {
@@ -104,4 +108,18 @@ export function handleShutdown(options: HandleShutdownOptions): void {
 	target.on('SIGHUP', onSignal)
 	target.on('uncaughtException', onError)
 	target.on('unhandledRejection', onError)
+}
+
+/** Settles once `abortSignal` aborts, without keeping the process alive itself. */
+function aborted(abortSignal: AbortSignal): Promise<void> {
+	if (abortSignal.aborted) return Promise.resolve()
+	return new Promise((resolve) => {
+		abortSignal.addEventListener(
+			'abort',
+			() => {
+				resolve()
+			},
+			{ once: true },
+		)
+	})
 }

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import { duration, sleep } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -10,12 +11,15 @@ import { askedMarker } from './support/crashing-loop-marker.mts'
 import { callsTool, modelId, says, scriptedModel, slowly, textOf } from './support/scripted-model.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
+/** For waits in tests that nothing stops. */
+const neverAborted = new AbortController().signal
+
 const Answer = z.object({ answer: z.number() })
 /** How long the crashing attempt gets to store its running work after its model request went out. */
-const storedWorkMs = 500
+const storedWork = duration.of('500ms')
 /** How long the model takes to answer the rerun's loop. */
-const leftoverWindowMs = 3_000
-const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
+const leftoverWindow = duration.of('3s')
+const loader = new URL('support/workspace-from-source.mts', import.meta.url).href
 const crashingLoop = path.join(import.meta.dirname, 'support/crashing-loop.mts')
 
 /** A workspace and an agent store that several runs share, like the attempts of one run. */
@@ -133,12 +137,12 @@ describe('a run on an agent store an earlier attempt used', () => {
 			})
 		})
 		// Long enough for the attempt to store its running work, as a crash in the middle of a loop would leave it.
-		await new Promise((resolve) => setTimeout(resolve, storedWorkMs))
+		await sleep(storedWork, neverAborted)
 		const exited = new Promise((resolve) => child.once('exit', resolve))
 		child.kill('SIGKILL')
 		await exited
 		// Slow to answer, with a second answer queued: leftover work that runs again would show up as a second call.
-		const model = scriptedModel([slowly(leftoverWindowMs, callsTool('succeed', { answer: 2 })), says('leftover')])
+		const model = scriptedModel([slowly(leftoverWindow, callsTool('succeed', { answer: 2 })), says('leftover')])
 		const helper = agent({ model: model.id })
 
 		// Act

@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto'
 import path from 'node:path'
+import { duration, sleep } from '@mesh-flow/duration'
 import type { WorkflowsDescription } from '@mesh-flow/protocol'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -20,7 +21,7 @@ const signal = new AbortController().signal
  * A backend deadline a busy runner can't run out of, for a shutdown test about the pause deadline:
  * closing the host backend can take longer than a short pause deadline allows.
  */
-const ampleBackendMs = 10_000
+const ampleBackend = duration.of('10s')
 
 const secret = 'correct horse battery staple'
 const payload = { label: 'ai-fix', issue: { number: 12 } }
@@ -62,7 +63,7 @@ const everySecond = {
 }
 
 /** Long enough for an every-second schedule to tick twice. */
-const moreThanTwoTicksMs = 2_500
+const moreThanTwoTicks = duration.of('2500ms')
 
 /** What the ingress answers for a delivery it took. */
 const Accepted = z.object({ run: z.string(), status: z.string() })
@@ -108,8 +109,8 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 		keychain: false,
 		abortSignal: signal,
 	})
-	const close = (pauseMs = 5_000, backendMs = pauseMs * 2) =>
-		served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(backendMs) })
+	const close = (pauseDeadline = duration.of('5s'), backendDeadline = duration.of('10s')) =>
+		served.close({ pause: pauseDeadline.toAbortSignal(), backend: backendDeadline.toAbortSignal() })
 	onTestFinished(() => close())
 	const secrets = openWebhookSecrets(served.gateway.credentials)
 	await secrets.set(testAppName, 'fix-issue', secret, signal)
@@ -132,7 +133,7 @@ async function untilStatus(client: ReturnType<typeof controlClient>, id: string,
 			if (record.status !== status) throw new Error(`Run is ${record.status}${record.error ? `: ${record.error}` : ''}`)
 			return record
 		},
-		{ timeout: 20_000, interval: 50 },
+		{ timeout: duration.of('20s').to('ms'), interval: 50 },
 	)
 }
 
@@ -288,11 +289,11 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 
 		// Act
 		const started = Date.now()
-		await close(200, ampleBackendMs)
+		await close(duration.of('200ms'), ampleBackend)
 
 		// Assert
 		expect(delivery.status).toBe(202)
-		expect(Date.now() - started).toBeLessThan(2_000)
+		expect(Date.now() - started).toBeLessThan(duration.of('2s').to('ms'))
 	})
 })
 
@@ -307,7 +308,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 			() => {
 				expect(log).toHaveBeenCalledWith(expect.stringContaining(`Skipped schedule ${testAppName}/fix-issue * * * * * *`))
 			},
-			{ timeout: 10_000, interval: 100 },
+			{ timeout: duration.of('10s').to('ms'), interval: 100 },
 		)
 
 		// Assert
@@ -326,7 +327,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 				const runs = await client.list(signal)
 				expect(runs.filter((run) => run.status === 'succeeded').length).toBeGreaterThanOrEqual(2)
 			},
-			{ timeout: 10_000, interval: 100 },
+			{ timeout: duration.of('10s').to('ms'), interval: 100 },
 		)
 	})
 
@@ -337,13 +338,13 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 			async () => {
 				expect(await client.list(signal)).not.toEqual([])
 			},
-			{ timeout: 10_000, interval: 100 },
+			{ timeout: duration.of('10s').to('ms'), interval: 100 },
 		)
 
 		// Act
 		await client.removeApp(testAppName, signal)
 		const afterRemoving = (await client.list(signal)).length
-		await new Promise((resolve) => setTimeout(resolve, moreThanTwoTicksMs))
+		await sleep(moreThanTwoTicks, signal)
 
 		// Assert
 		expect((await client.list(signal)).length).toBe(afterRemoving)

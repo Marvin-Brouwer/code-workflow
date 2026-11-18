@@ -111,7 +111,7 @@ const tools = gitlabHostTools({
 	directory: '/tmp/gitlab-host',
 	fetch: (input, init) => fetch(String(input).replace('https://gitlab.com', 'http://127.0.0.1:4010'), init),
 	remoteUrl: (project) => `file:///tmp/remotes/${project}.git`,
-	retry: { ...defaultFetchRetry, attempts: 1 },
+	retry: { ...defaultFetchRetry, waits: [] },
 })
 ```
 

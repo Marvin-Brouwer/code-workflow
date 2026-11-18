@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { initCommand, jobFifo, jobScript, submitJobCommand } from '../../src/gvisor/init.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
@@ -10,7 +11,7 @@ const execFileAsync = promisify(execFile)
 
 /** Runs a command on the host. A command that blocks on the FIFO fails after a few seconds. */
 function run(program: string, args: readonly string[]) {
-	return execFileAsync(program, args, { timeout: 5000 })
+	return execFileAsync(program, args, { timeout: duration.of('5s').to('ms') })
 }
 
 /** What a command that had to fail wrote to stderr. */

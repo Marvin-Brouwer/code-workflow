@@ -1,24 +1,29 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { text } from 'node:stream/consumers'
+import { duration, type Duration } from '@mesh-flow/duration'
 import { onTestFinished } from 'vitest'
 import type { AwsEndpoints } from '../../src/host/aws-endpoints.mts'
 import { refreshTokenGrant } from '../../src/host/oidc.mts'
-import { msPerSecond } from '../../src/host/time.mts'
 
 /** How long a client registration lasts: Identity Center's 90 days. */
-const registrationSeconds = 90 * 24 * 3600
+const registration = duration.of('90d')
 
 /** How long a device code lasts. */
-const deviceCodeSeconds = 600
+const deviceCode = duration.of('10m')
 
 /** How often the device flow may look for the approval. */
-export const lookIntervalSeconds = 1
+export const lookInterval = duration.of('1s')
 
 /** How long an access token lasts unless a test says otherwise. */
-const defaultAccessTokenSeconds = 3600
+const defaultAccessToken = duration.of('1h')
 
 /** How long role credentials last unless a test says otherwise. */
-const defaultRoleCredentialsMs = 3600 * msPerSecond
+const defaultRoleCredentials = duration.of('1h')
+
+/** A moment in whole seconds since 1970, as AWS gives times. */
+function epochSeconds(date: Date): number {
+	return Math.floor(duration.between(new Date(0), date).to('s'))
+}
 
 /** How the fake Identity Center, access portal and CodeArtifact behave, changed as a test goes. */
 export interface FakeAwsState {
@@ -30,12 +35,12 @@ export interface FakeAwsState {
 	denied: boolean
 	/** Identity Center ended the device code before the user approved it. */
 	deviceCodeExpired: boolean
-	/** Seconds an access token lasts. */
-	accessTokenSeconds: number
+	/** How long an access token lasts. */
+	accessToken: Duration
 	/** Whether a refresh token is handed out, and whether it still works: `false` once the session ended. */
 	refreshWorks: boolean
-	/** Milliseconds role credentials last, from when they are fetched. */
-	roleCredentialsMs: number
+	/** How long role credentials last, from when they are fetched. */
+	roleCredentials: Duration
 	/** How many fetches of role credentials the portal turns down next. `Infinity`: every one. */
 	portalRejects: number
 	/** How many token fetches CodeArtifact turns down next, as if the role credentials ended. */
@@ -80,9 +85,9 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 		slowDowns: 0,
 		denied: false,
 		deviceCodeExpired: false,
-		accessTokenSeconds: defaultAccessTokenSeconds,
+		accessToken: defaultAccessToken,
 		refreshWorks: true,
-		roleCredentialsMs: defaultRoleCredentialsMs,
+		roleCredentials: defaultRoleCredentials,
 		portalRejects: 0,
 		codeArtifactRejects: 0,
 		hold: undefined,
@@ -103,7 +108,7 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 		json(response, 200, {
 			accessToken,
 			tokenType: 'Bearer',
-			expiresIn: state.accessTokenSeconds,
+			expiresIn: state.accessToken.to('s'),
 			...(refreshToken === undefined ? {} : { refreshToken }),
 		})
 	}
@@ -129,8 +134,8 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 			json(response, 200, {
 				clientId: `client-${String(registered)}`,
 				clientSecret: `client-secret-${String(registered)}`,
-				clientIdIssuedAt: Math.floor(now().getTime() / msPerSecond),
-				clientSecretExpiresAt: Math.floor(now().getTime() / msPerSecond) + registrationSeconds,
+				clientIdIssuedAt: epochSeconds(now()),
+				clientSecretExpiresAt: epochSeconds(registration.after(now())),
 			})
 			return
 		}
@@ -141,8 +146,8 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 				userCode,
 				verificationUri: verificationUrl,
 				verificationUriComplete: `${verificationUrl}?user_code=${userCode}`,
-				expiresIn: deviceCodeSeconds,
-				interval: lookIntervalSeconds,
+				expiresIn: deviceCode.to('s'),
+				interval: lookInterval.to('s'),
 			})
 			return
 		}
@@ -173,7 +178,7 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 					accessKeyId: nextToken('key'),
 					secretAccessKey: 'secret',
 					sessionToken: 'session',
-					expiration: now().getTime() + state.roleCredentialsMs,
+					expiration: state.roleCredentials.after(now()).getTime(),
 				},
 			})
 			return
@@ -186,7 +191,7 @@ export async function fakeAws(now: () => Date, overrides: Partial<FakeAwsState> 
 			}
 			json(response, 200, {
 				authorizationToken: nextToken(`codeartifact-${url.searchParams.get('domain') ?? ''}`),
-				expiration: Math.floor((now().getTime() + state.roleCredentialsMs) / msPerSecond),
+				expiration: epochSeconds(state.roleCredentials.after(now())),
 			})
 			return
 		}

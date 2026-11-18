@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -70,7 +71,7 @@ describe('runWorkflow', () => {
 		const outcome = await runWorkflow(greet, {
 			parameters: { name: ' Ada ' },
 			channel: memoryChannel(),
-			abortSignal: AbortSignal.timeout(5_000),
+			abortSignal: duration.of('5s').toAbortSignal(),
 		})
 
 		// Assert
@@ -88,7 +89,7 @@ describe('runWorkflow', () => {
 
 		// Act
 		// @ts-expect-error The name is a string.
-		const outcome = await runWorkflow(greet, { parameters: { name: 1 }, channel, abortSignal: AbortSignal.timeout(5_000) })
+		const outcome = await runWorkflow(greet, { parameters: { name: 1 }, channel, abortSignal: duration.of('5s').toAbortSignal() })
 
 		// Assert
 		expect(outcome).toMatchObject({ status: 'failed' })

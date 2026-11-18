@@ -8,6 +8,7 @@ import {
 	type FauxResponseStep,
 } from '@earendil-works/pi-ai/providers/faux'
 import type { AssistantMessage, TranscriptContext as Context } from '@earendil-works/pi-ai'
+import type { Duration } from '@mesh-flow/duration'
 
 /** A model for tests that answers from a script, one step per model turn. */
 export interface ScriptedModel {
@@ -46,11 +47,11 @@ export function says(text: string): AssistantMessage {
 	return fauxAssistantMessage([fauxText(text)])
 }
 
-/** A turn that comes after `ms`. */
-export function slowly(ms: number, message: AssistantMessage): FauxResponseStep {
+/** A turn that comes after `time`. */
+export function slowly(time: Duration, message: AssistantMessage): FauxResponseStep {
 	return () =>
 		new Promise((resolve) => {
-			setTimeout(resolve, ms, message)
+			setTimeout(resolve, time.to('ms'), message)
 		})
 }
 

@@ -157,14 +157,14 @@ the exits:
 ```ts
 await developer.loop`
 	Implement ${plan.path} in ${repository}, then hand in with ${verify(dotnet.testsPass(repository))}.
-	${limit({ turns: 40, minutes: 45 })}
+	${limit({ turns: 40, time: duration.of('45m') })}
 `
 ```
 
 - **Loop-wide only.** There are no limits per tool: a tool doesn't know how often it's reasonable
   to call it in a given task, the loop does.
-- `turns` counts model turns. `minutes` counts the agent's own runtime, tracked by the engine; time
-  spent waiting on a human (`propose`, `requestUserInput`, a login) doesn't count.
+- `turns` counts model turns. `time`, a `Duration`, counts the agent's own runtime, tracked by the
+  engine; time spent waiting on a human (`propose`, `requestUserInput`, a login) doesn't count.
 - The line renders as text, so the agent knows its budget and can plan for it.
 - Without a `limit`, a loop is unconstrained.
 - Exceeding a limit rejects the loop, like any other error (section 6).

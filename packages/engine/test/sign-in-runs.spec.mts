@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
 import type { SignInContext } from '../src/connectors/load-connectors.mts'
@@ -12,9 +13,9 @@ import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const abortSignal = new AbortController().signal
-const deadlines = () => ({ pause: AbortSignal.timeout(5_000), backend: AbortSignal.timeout(10_000) })
+const deadlines = () => ({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
 /** How long a shutdown may take while a sign-in never settles. */
-const promptlyMs = 5_000
+const promptly = duration.of('5s')
 
 /** An engine on the host backend whose connectors are `cloud`, signing in with `signIn`, closed when the test ends. */
 async function openEngine(signIn: (context: SignInContext) => Promise<void>, home?: string) {
@@ -26,7 +27,7 @@ async function openEngine(signIn: (context: SignInContext) => Promise<void>, hom
 			store: openRunStore(path.join(directory, 'runs')),
 			apps,
 			layout: hostSandboxLayout,
-			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn }, { name: 'tracker' }], idleMs: shortIdleMs }),
+			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn }, { name: 'tracker' }], idle: shortIdle }),
 		},
 		abortSignal,
 	)
@@ -35,13 +36,13 @@ async function openEngine(signIn: (context: SignInContext) => Promise<void>, hom
 }
 
 /** How long a sign-in nobody waits for goes on in these tests. */
-const shortIdleMs = 50
+const shortIdle = duration.of('50ms')
 
 /** How long the runtime that cancels its `login` waits before it does, so the sign-in has started. */
-const cancelAfterMs = 1_000
+const cancelAfter = duration.of('1s')
 
 /** How long and how often the tests look for a run to get where they wait for it. */
-const untilOptions = { timeout: 20_000, interval: 50 }
+const untilOptions = { timeout: duration.of('20s').to('ms'), interval: 50 }
 
 /** Until run `id` has `status`, which it then has. */
 async function untilStatus(engine: Engine, id: string, status: RunStatus): Promise<RunRecord> {
@@ -152,7 +153,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		await engine.close(deadlines())
 
 		// Assert
-		expect(Date.now() - startedAt).toBeLessThan(promptlyMs)
+		expect(Date.now() - startedAt).toBeLessThan(promptly.to('ms'))
 		expect(contexts[0]?.abortSignal.aborted).toBe(true)
 		expect(engine.get(id).status).toBe('paused')
 	})
@@ -163,7 +164,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		const { engine, apps } = await openEngine(signIn)
 		const cancelling = runtimeScript(`
 mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: 'cloud' } })
-await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfterMs)}))
+await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfter.to('ms'))}))
 mailbox.send({ type: 'cancel', id: 'login-1' })
 await mailbox.answer('never', signal)
 `)

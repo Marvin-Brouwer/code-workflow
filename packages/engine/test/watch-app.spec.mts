@@ -1,16 +1,17 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { watchApp } from '../src/cli/watch-app.mts'
 import { deferred } from './support/deferred.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 /** Longer than watchApp gathers changes for. */
-const settledMs = 1_000
+const settled = duration.of('1s')
 
-/** How long a test waits for a call. */
-const waitForCallMs = settledMs * 3
+/** How long a test waits for a call: three times {@link settled}. */
+const waitForCall = duration.of('3s')
 
 /** The resource Node holds for each `fs.watch`. */
 const watchResource = 'FSEventWrap'
@@ -45,7 +46,7 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 	})
 
 	test('calls once more for changes while a call is going, and goes on after one fails', async () => {
@@ -62,19 +63,19 @@ describe('watchApp', () => {
 		await writeFile(path.join(directory, 'main.mts'), '1')
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 
 		// Act
 		await writeFile(path.join(directory, 'main.mts'), '2')
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 		await writeFile(path.join(directory, 'main.mts'), '3')
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 		first.resolve(undefined)
 
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledTimes(2)
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 		expect(log).toHaveBeenCalledWith('Rebuilding failed: broken build')
 	})
 
@@ -82,10 +83,10 @@ describe('watchApp', () => {
 		// Arrange
 		const { directory, calls } = await watchedApp()
 		await mkdir(path.join(directory, 'agents'))
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledOnce()
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 
 		// Act
 		await writeFile(path.join(directory, 'agents', 'planner.mts'), '')
@@ -93,19 +94,19 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalledTimes(2)
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 	})
 
 	test('watches a folder again that was removed and made again', async () => {
 		// Arrange
 		const { directory, calls } = await watchedApp()
 		await rm(path.join(directory, 'workflows'), { recursive: true })
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 		await mkdir(path.join(directory, 'workflows'))
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 		await vi.waitFor(() => {
 			expect(calls).toHaveBeenCalled()
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 		const before = calls.mock.calls.length
 
 		// Act
@@ -114,7 +115,7 @@ describe('watchApp', () => {
 		// Assert
 		await vi.waitFor(() => {
 			expect(calls.mock.calls.length).toBeGreaterThan(before)
-		}, waitForCallMs)
+		}, waitForCall.to('ms'))
 	})
 
 	test('stops calling, and holds no timer or watch, once aborted', async () => {
@@ -124,7 +125,7 @@ describe('watchApp', () => {
 
 		// Act
 		controller.abort()
-		await delay(settledMs)
+		await delay(settled.to('ms'))
 
 		// Assert
 		expect(calls).not.toHaveBeenCalled()

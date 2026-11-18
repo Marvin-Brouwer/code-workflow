@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
+import { duration } from '@mesh-flow/duration'
 import type { CredentialStore } from '@mesh-flow/gateway'
 import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
@@ -31,10 +32,10 @@ import { withPackedApp } from './with-packed-app.mts'
 import { watchApp } from './watch-app.mts'
 
 /** How long a CLI command waits for the engine. */
-const requestTimeoutMs = 5 * 60_000
+const requestTimeout = duration.of('5m')
 
 /** How long a build may take, installing native dependencies included. */
-const buildTimeoutMs = 10 * 60_000
+const buildTimeout = duration.of('10m')
 
 /** Where `build` puts the built app, and where `deploy` takes it from, relative to the app. */
 const defaultOut = path.join('.mesh-flow', 'app')
@@ -43,7 +44,7 @@ const defaultOut = path.join('.mesh-flow', 'app')
 const defaultCpu: AppPlatform['cpu'] = 'x64'
 
 /** How long closing the backend may take when the engine fails to start. */
-const closeTimeoutMs = 60_000
+const closeTimeout = duration.of('1m')
 
 /** The highest TCP port number. */
 const maxPort = 65_535
@@ -63,7 +64,7 @@ function log(message: string): void {
 }
 
 function requestSignal(): AbortSignal {
-	return AbortSignal.timeout(requestTimeoutMs)
+	return requestTimeout.toAbortSignal()
 }
 
 /** The sandbox's platform: always Linux, on `cpu`. */
@@ -122,7 +123,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const webhooks = webhookPort === undefined ? {} : { webhooks: { port: webhookPort, host: webhookHost } }
 			served = await serveWithConnectors(home(), { backend, log, keychain: keychain(), abortSignal: startup.signal, ...webhooks }).catch(
 				async (error: unknown) => {
-					await backend.close(AbortSignal.timeout(closeTimeoutMs))
+					await backend.close(closeTimeout.toAbortSignal())
 					throw error
 				},
 			)
@@ -146,7 +147,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				directory,
 				out,
 				platform: sandboxPlatform(options.cpu),
-				abortSignal: AbortSignal.timeout(buildTimeoutMs),
+				abortSignal: buildTimeout.toAbortSignal(),
 			})
 			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
 		})
@@ -187,7 +188,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			})
 			const buildAndDeploy = async () => {
 				try {
-					const abortSignal = AbortSignal.any([stopping.signal, AbortSignal.timeout(buildTimeoutMs)])
+					const abortSignal = AbortSignal.any([stopping.signal, buildTimeout.toAbortSignal()])
 					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
 					const deployed = await withPackedApp(out, (tarball) => client().deploy(name, tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.name} ${deployed.version}.`)

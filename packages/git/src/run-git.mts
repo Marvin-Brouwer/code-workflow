@@ -1,3 +1,4 @@
+import { duration } from '@mesh-flow/duration'
 import { execa, ExecaError } from 'execa'
 
 /** What a git invocation came back with. A non-zero exit is a result, not an error. */
@@ -25,7 +26,7 @@ export interface RunGitOptions {
 }
 
 /** How long git gets after a stop before it's killed outright. */
-const forceKillAfterMs = 2_000
+const forceKillAfter = duration.of('2s')
 
 /** How much of git's output is kept: more than this fails the call. */
 const maxOutputBytes = 16 * 1024 * 1024
@@ -61,7 +62,7 @@ export async function runGit(args: readonly string[], options: RunGitOptions): P
 		killTree(subprocess.pid)
 		forceKill = setTimeout(() => {
 			if (!exited) killTree(subprocess.pid, 'SIGKILL')
-		}, forceKillAfterMs).unref()
+		}, forceKillAfter.to('ms')).unref()
 	}
 	abortSignal.addEventListener('abort', stop, { once: true })
 	try {
