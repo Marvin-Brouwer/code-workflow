@@ -1,0 +1,6 @@
+.banner {
+	margin: 0;
+	padding: var(--space-s) var(--space-m);
+	border-bottom: var(--line);
+	background: var(--color-fill);
+}

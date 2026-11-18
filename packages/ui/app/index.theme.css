@@ -1,0 +1,65 @@
+/* Plain defaults for the elements the pages are built from. */
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-fg);
+	font-family: var(--font);
+	line-height: 1.4;
+}
+
+#app {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+a {
+	color: inherit;
+}
+
+h1,
+h2,
+h3 {
+	margin: 0 0 var(--space-s);
+	font-weight: 600;
+}
+
+code,
+pre,
+textarea {
+	font-family: var(--font-mono);
+}
+
+table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+th,
+td {
+	border: var(--line);
+	padding: var(--space-xs) var(--space-s);
+	text-align: left;
+	vertical-align: top;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+	background: var(--color-bg);
+	border: var(--line);
+	padding: var(--space-xs) var(--space-s);
+}
+
+button {
+	background: var(--color-fill);
+	cursor: pointer;
+}
+
+fieldset {
+	border: var(--line);
+	margin: 0 0 var(--space-m);
+}

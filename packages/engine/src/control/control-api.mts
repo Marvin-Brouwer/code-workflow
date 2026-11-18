@@ -44,6 +44,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `GET /sign-ins` | the sign-ins under way, with where to sign in |
  * | `POST /sign-ins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
  * | `GET /apps` | every deployed app's current version and what it declares |
+ * | `GET /apps/:name/missing` | the settings the app's current version still needs before it can run |
  * | `PUT /apps/:name` | deploys a built app as the new current version: `{ tarball }`; answers with the settings it still needs in `missing` |
  * | `DELETE /apps/:name` | removes an app; runs on it keep their copy |
  *
@@ -76,6 +77,12 @@ export function controlApi(engine: Engine, apps?: ControlApps): Hono {
 	if (apps !== undefined) {
 		const { store, changed } = apps
 		api.get('/apps', (c) => c.json(store.list().map(shownApp)))
+		api.get('/apps/:name/missing', async (c) => {
+			const name = c.req.param('name')
+			const deployed = store.current(name)
+			if (deployed === undefined) throw new EngineError('not-found', `There is no app ${name}.`)
+			return c.json(await engine.missingSettings(deployed.manifest.description, c.req.raw.signal))
+		})
 		api.put('/apps/:name', async (c) => {
 			const { tarball } = DeployBody.parse(await c.req.json())
 			const deployed = await store.deploy(c.req.param('name'), tarball, c.req.raw.signal)

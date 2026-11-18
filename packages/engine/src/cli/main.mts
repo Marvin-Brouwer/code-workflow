@@ -28,6 +28,7 @@ import { formatRun, formatRunLine } from './format-run.mts'
 import { addLoginCommand } from './login-command.mts'
 import { openBackend } from './open-backend.mts'
 import { addProviderCommands } from './provider-commands.mts'
+import { addUiCommand } from './ui-command.mts'
 import { withPackedApp } from './with-packed-app.mts'
 import { watchApp } from './watch-app.mts'
 
@@ -131,6 +132,8 @@ export async function main(argv: readonly string[]): Promise<void> {
 			log(`Engine ready on ${served.socketPath}.`)
 			if (served.webhookUrl) log(`Webhooks go to ${served.webhookUrl}/webhooks/<app>/<webhook>.`)
 		})
+
+	addUiCommand(program, () => ({ home: home(), keychain: keychain() }), parsePort)
 
 	program
 		.command('build')

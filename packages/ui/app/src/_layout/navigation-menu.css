@@ -1,0 +1,12 @@
+.menu {
+	display: flex;
+	gap: var(--space-m);
+	align-items: baseline;
+	padding: var(--space-s) var(--space-m);
+	border-bottom: var(--line);
+}
+
+.brand {
+	font-weight: 600;
+	text-decoration: none;
+}

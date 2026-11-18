@@ -157,6 +157,15 @@ These work on the home's files, so they work without a running engine, and a run
 
 The build lists the models of the app's agents. Every trigger checks them before it makes a sandbox: when no provider offers one, or the one that does has no key, the run isn't started and the error says what to set up. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
 
+### The UI
+
+The UI is a package of its own, [`@mesh-flow/ui`](../ui/README.md), installed where `mesh-flow` runs like a connector. `mesh-flow ui` loads it and serves it on 127.0.0.1, with a token in the address it prints that lets one browser in:
+
+```bash
+pnpm add @mesh-flow/ui
+mesh-flow ui
+```
+
 ### Embed the engine
 
 ```ts
