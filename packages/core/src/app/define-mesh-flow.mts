@@ -26,8 +26,13 @@ export interface MeshFlowApp {
  * sandbox its runs get, and everything that can start a run, in one place.
  *
  * ```ts
+ * import { npmRegistry } from '@mesh-flow/toolchain-node'
+ *
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', registries: ['npm'] }),
+ * 	sandbox: image({
+ * 		name: 'node:26-slim',
+ * 		registries: [npmRegistry],
+ * 	}),
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),

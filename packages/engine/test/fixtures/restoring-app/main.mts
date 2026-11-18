@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { defineMeshFlow, image, userTrigger, workflow } from '@mesh-flow/core'
+import { npmRegistry } from '../../support/registries.mts'
 import { restoredPackage } from './restored-package.mts'
 
 const run = promisify(execFile)
@@ -24,6 +25,6 @@ const restore = workflow('restore', async () => {
 })
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:26-slim', registries: ['npm'] }),
+	sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
 	workflows: [userTrigger(restore)],
 })

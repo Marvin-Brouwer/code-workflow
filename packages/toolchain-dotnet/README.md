@@ -1,6 +1,6 @@
 # `@mesh-flow/toolchain-dotnet`
 
-The .NET toolchain for mesh-flow: tools an agent checks its own work with, checks for `verify` that check it again, and a function for code that moves package references. Everything runs in the sandbox with the `dotnet` of the sandbox's image, so the image needs a .NET SDK; NuGet packages come through the runtime's package proxy, when the app's `image` lists `registries: ['nuget']` (see [`@mesh-flow/core`](../core/README.md#packages)). The package ships no agents.
+The .NET toolchain for mesh-flow: tools an agent checks its own work with, checks for `verify` that check it again, and a function for code that moves package references. Everything runs in the sandbox with the `dotnet` of the sandbox's image, so the image needs a .NET SDK; NuGet packages come through the runtime's package proxy, when the app's `image` lists `registries: [nugetOrg]` (see [`@mesh-flow/core`](../core/README.md#packages)). The package ships no agents.
 
 ## Usage
 
@@ -50,6 +50,29 @@ await developer.loop`
 ### Packages
 
 `dotnet.updatePackages(repository, packages)` moves each project that references one of `packages` directly to its version, with `dotnet add package`, which writes `Directory.Packages.props` under central package management. A reference already at the version is left alone, so a rerun changes nothing; it resolves to what it changed, `{ project, name, from, to }` each. It takes what `gitlab.publishedPackages` resolves to, and `{ target }` as the checks do.
+
+### Restoring from nuget.org
+
+List `nugetOrg` in the sandbox's `registries`, so `dotnet restore` in the sandbox, which has no network of its own, restores from nuget.org's v3 feed:
+
+```ts
+// main.mts
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
+import { develop } from './workflows/develop.mts'
+
+export default defineMeshFlow({
+	sandbox: image({
+		name: 'node:26-slim',
+		registries: [nugetOrg],
+	}),
+	workflows: [
+		userTrigger(develop),
+	],
+})
+```
+
+Restore reads below `/v3/`, `/v3-flatcontainer/`, `/v3-vulnerabilities/` and `/v3-index/`; nothing else on `api.nuget.org` is reachable.
 
 ### Notes
 

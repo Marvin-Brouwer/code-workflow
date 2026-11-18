@@ -3,11 +3,12 @@ import path from 'node:path'
 import type { PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { openPackageCache } from '../src/packages/package-cache.mts'
+import { npmRegistry } from './support/registries.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
 
-const tarball: PackageRequest = { registry: 'npm', path: '/left-pad/-/left-pad-1.3.0.tgz' }
+const tarball: PackageRequest = { registry: npmRegistry, path: '/left-pad/-/left-pad-1.3.0.tgz' }
 const fetched = { status: 200, headers: { 'content-type': 'application/octet-stream' }, body: Buffer.from('tarball') }
 
 /** The files the cache in `directory` holds, wherever they are below it. */
@@ -20,7 +21,7 @@ describe('openPackageCache', () => {
 	test('keeps a package that was fetched whole, and not a version list', async () => {
 		// Arrange
 		const cache = openPackageCache(await temporaryDirectory())
-		const versions: PackageRequest = { registry: 'npm', path: '/left-pad' }
+		const versions: PackageRequest = { registry: npmRegistry, path: '/left-pad' }
 
 		// Act
 		await cache.put(tarball, fetched, abortSignal)

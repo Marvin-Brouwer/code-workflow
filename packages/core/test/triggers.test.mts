@@ -8,6 +8,7 @@ import { schedule } from '../src/triggers/schedule.mts'
 import { userTrigger } from '../src/triggers/user-trigger.mts'
 import { webhook } from '../src/triggers/webhook.mts'
 import { workflow, type NoParameters, type ParametersOf } from '../src/workflow/workflow.mts'
+import { npmRegistry } from './support/registries.mts'
 
 const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ parameters }) => {
 	expectTypeOf(parameters).toEqualTypeOf<{ issue: number }>()
@@ -133,7 +134,7 @@ describe('defineMeshFlow', () => {
 	test('describes its sandbox, and the workflows it is given with their parameters as JSON Schema', () => {
 		// Arrange
 		const app = defineMeshFlow({
-			sandbox: image({ name: 'node:26-slim', registries: ['npm'] }),
+			sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
 			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
 		})
 
@@ -142,7 +143,7 @@ describe('defineMeshFlow', () => {
 
 		// Assert
 		expect(description).toEqual({
-			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, registries: ['npm'] },
+			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, registries: [npmRegistry] },
 			workflows: [
 				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
 				{ name: 'report', parameters: { type: 'object', properties: {} } },

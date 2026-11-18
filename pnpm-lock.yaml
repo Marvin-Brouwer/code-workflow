@@ -60,6 +60,9 @@ importers:
       '@mesh-flow/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@mesh-flow/toolchain-node':
+        specifier: workspace:*
+        version: link:../../packages/toolchain-node
     devDependencies:
       '@mesh-flow/engine':
         specifier: workspace:*
@@ -578,6 +581,28 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+    devDependencies:
+      '@mesh-flow/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      tsdown:
+        specifier: ^0.23.4
+        version: 0.23.7(tsx@4.23.15)(typescript@6.0.3)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/toolchain-node:
+    dependencies:
+      '@mesh-flow/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@mesh-flow/protocol':
         specifier: workspace:*

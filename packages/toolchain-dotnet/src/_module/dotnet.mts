@@ -7,3 +7,4 @@
  * @module
  */
 export * as dotnet from '../dotnet.mts'
+export { nugetOrg } from '../nuget-org.mts'

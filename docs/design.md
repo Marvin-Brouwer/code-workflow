@@ -253,7 +253,7 @@ export const fixIssue = workflow('fix-issue', { issue: z.number() }, async ({ pa
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
-		registries: ['npm'],
+		registries: [npmRegistry],
 	}),
 	workflows: [
 		userTrigger(fixIssue),

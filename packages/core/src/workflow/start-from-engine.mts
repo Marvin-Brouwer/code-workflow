@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { registryName, RunGrant, runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
+import { RunGrant, runIdEnvironmentVariable, RunStart, RuntimeMailbox } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { MeshFlowApp } from '../app/define-mesh-flow.mts'
 import { describeApp } from '../app/describe-app.mts'
@@ -104,7 +104,9 @@ async function servePackages(
 	const { registries } = app.sandbox
 	if (registries.length === 0) return undefined
 	if (gateway === undefined)
-		throw new Error(`The app restores from ${registries.map(registryName).join(', ')}, which takes a gateway, and this run has none.`)
+		throw new Error(
+			`The app restores from ${registries.map((registry) => registry.name).join(', ')}, which takes a gateway, and this run has none.`,
+		)
 	const { proxy, environment } = await startPackageAccess({
 		registries,
 		fetchStaged: packageFetchThroughGateway(gateway),

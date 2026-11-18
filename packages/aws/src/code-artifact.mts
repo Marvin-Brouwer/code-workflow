@@ -10,12 +10,24 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * through it.
  *
  * ```ts
+ * import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+ * import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
+ *
+ * const privateRegistry = codeArtifact({
+ * 	domain: 'example',
+ * 	owner: '123456789012',
+ * 	region: 'eu-west-1',
+ * 	repository: 'packages',
+ * })
+ *
  * export default defineMeshFlow({
  * 	sandbox: image({
  * 		name: 'node:26-slim',
- * 		registries: ['nuget', codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
+ * 		registries: [nugetOrg, privateRegistry],
  * 	}),
- * 	workflows: [userTrigger(develop)],
+ * 	workflows: [
+ * 		userTrigger(develop),
+ * 	],
  * })
  * ```
  *
@@ -23,8 +35,13 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * restores from:
  *
  * ```ts
- * const packages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
- * const index = await fetchPackage({ registry: packages, path: '/nuget/packages/v3/index.json' }, abortSignal)
+ * import { fetchPackage } from '@mesh-flow/core'
+ *
+ * const request = {
+ * 	registry: privateRegistry,
+ * 	path: '/nuget/packages/v3/index.json',
+ * }
+ * const index = await fetchPackage(request, abortSignal)
  * ```
  *
  * @throws When a field isn't a CodeArtifact name, account or region.

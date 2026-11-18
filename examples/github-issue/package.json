@@ -12,7 +12,8 @@
 	},
 	"dependencies": {
 		"@mesh-flow/core": "workspace:*",
-		"@mesh-flow/github": "workspace:*"
+		"@mesh-flow/github": "workspace:*",
+		"@mesh-flow/toolchain-node": "workspace:*"
 	},
 	"devDependencies": {
 		"@mesh-flow/engine": "workspace:*",

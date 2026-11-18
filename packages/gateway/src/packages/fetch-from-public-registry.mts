@@ -1,9 +1,9 @@
-import { registryName, type PackageRequest } from '@mesh-flow/protocol'
+import { isConnectorRegistry, type PackageRequest } from '@mesh-flow/protocol'
 import { messageOf } from '../errors.mts'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { HostToolTransientError } from '../tools/host-tool.mts'
 import { untilAborted } from '../until-aborted.mts'
-import { publicRegistries } from './public-registries.mts'
+import { isRegistryPath } from './registry-path.mts'
 
 /**
  * The headers of a registry's answer that a package manager uses: what the body is, what version of
@@ -57,13 +57,12 @@ export async function fetchFromPublicRegistry(
 	options: RegistryFetchOptions,
 	abortSignal: AbortSignal,
 ): Promise<RegistryAnswer> {
-	if (typeof request.registry !== 'string') throw new Error(`${registryName(request.registry)} isn't a public registry.`)
-	const registry = publicRegistries[request.registry]
-	const url = new URL(request.path, registry.origin)
-	if (url.origin !== registry.origin || `${url.pathname}${url.search}` !== request.path || !registry.fetches(url.pathname))
-		throw new Error(`${request.path} isn't a package fetch on ${request.registry}.`)
+	const { registry } = request
+	if (isConnectorRegistry(registry)) throw new Error(`${registry.name} isn't a public registry.`)
+	if (!isRegistryPath(registry, request.path)) throw new Error(`${request.path} isn't a package fetch on ${registry.name}.`)
+	const url = new URL(request.path, `https://${registry.host}`)
 	const { fetchFromHost, maxBytes = maxPackageBytes } = options
-	const fetched = `${request.registry} ${request.path}`
+	const fetched = `${registry.name} ${request.path}`
 	const send = retryingFetch(fetchFromHost, defaultFetchRetry)
 	const headers = { accept: request.accept ?? anyMediaType, 'user-agent': userAgent }
 	// Settles once the signal aborts, also when the host's fetch or its body doesn't.

@@ -243,6 +243,7 @@ An app is a package whose `main` in `package.json` is its entry file. The entry 
 
 ```ts
 import { defineMeshFlow, image, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { npmRegistry } from '@mesh-flow/toolchain-node'
 import { z } from 'zod'
 import { develop, weeklyReport } from './workflows/develop.mts'
 
@@ -252,17 +253,23 @@ const StoryLabeled = z.object({
 	story: z.object({ key: z.string() }),
 })
 
+/** The parameters `develop` starts with, from a labeled story. */
+const StoryToDevelop = StoryLabeled.transform((event) => ({ story: event.story.key }))
+
+// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
+const onStoryLabeled = webhook(develop, StoryToDevelop, { deliveryHeader: 'x-delivery-id' })
+
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
 		memoryMb: 4096,
-		registries: ['npm'],
+		registries: [npmRegistry],
 	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),
-		// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
-		webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), { deliveryHeader: 'x-delivery-id' }),
+		// A story labeled `ai-develop` in the tracker.
+		onStoryLabeled,
 		// Every Monday at midnight.
 		schedule(weeklyReport, 'weekly'),
 	],
@@ -277,9 +284,14 @@ export default defineMeshFlow({
 import { defineWorkflows, userTrigger, webhook } from '@mesh-flow/core'
 import { fixIssue, IssueLabeled } from './workflows/fix-issue.mts'
 
+/** The parameters `fixIssue` starts with, from a labeled issue. */
+const IssueToFix = IssueLabeled.transform((event) => ({ issue: event.issue.number }))
+
+const onIssueLabeled = webhook(fixIssue, IssueToFix)
+
 export const issueTriggers = defineWorkflows(
 	userTrigger(fixIssue),
-	webhook(fixIssue, IssueLabeled.transform((event) => ({ issue: event.issue.number }))),
+	onIssueLabeled,
 )
 ```
 
@@ -287,7 +299,12 @@ A trigger listed twice, in the app or across its bundles, is an error.
 
 ### Packages
 
-The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org), `npm` (the npm registry) and a connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md), with their own config and no changes to a repository:
+The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, with their own config and no changes to a repository. A registry is one of these:
+
+- A public one, which the package of its ecosystem defines, such as `nugetOrg` from [`@mesh-flow/toolchain-dotnet`](../toolchain-dotnet/README.md) and `npmRegistry` from [`@mesh-flow/toolchain-node`](../toolchain-node/README.md).
+- A connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md).
+
+How a fetch goes:
 
 - Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
 - For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime. Those variables replace the system's trust store for the processes, so HTTPS in the sandbox with any other certificate, such as a local dev server's, doesn't verify; loopback and the sandbox's own host name aren't sent to the proxy.
@@ -299,11 +316,19 @@ Code can make the same call itself, with `fetchPackage`:
 
 ```ts
 import { fetchPackage, workflow } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { z } from 'zod'
 
+/** A NuGet version list, as the flat container serves it. */
+const PackageVersions = z.object({ versions: z.array(z.string()) })
+
 export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
-	const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
-	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+	const request = {
+		registry: nugetOrg,
+		path: '/v3-flatcontainer/newtonsoft.json/index.json',
+	}
+	const index = await fetchPackage(request, abortSignal)
+	const { versions } = PackageVersions.parse(JSON.parse(index.body.toString('utf8')))
 	return versions
 })
 ```

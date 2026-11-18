@@ -34,15 +34,12 @@ export {
 } from '../mailbox-layout.mts'
 export {
 	ConnectorRegistry,
+	isConnectorRegistry,
 	PackageRegistry,
-	publicRegistryHosts,
 	PackageRequest,
 	PackageResponse,
 	PublicRegistry,
-	registryHost,
 	registryKey,
-	registryName,
-	registryPaths,
 	StagedFileName,
 	uniqueRegistries,
 } from '../package-registry.mts'
@@ -51,6 +48,7 @@ export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'
 export { InputRequest, LoginAnswer, LoginRequest, RuntimeRequest, WakeRequest } from '../runtime-request.mts'
 export { RunStart, TriggerRef } from '../run-start.mts'
+export { servedPrefixLength } from '../served-path.mts'
 export {
 	JsonSchema,
 	SandboxDescription,

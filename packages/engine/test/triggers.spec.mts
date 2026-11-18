@@ -15,6 +15,13 @@ import { deployThroughApi, testAppName } from './support/test-app.mts'
 import { triggerEntry } from './support/trigger-entry.mts'
 
 const signal = new AbortController().signal
+
+/**
+ * A backend deadline a busy runner can't run out of, for a shutdown test about the pause deadline:
+ * closing the host backend can take longer than a short pause deadline allows.
+ */
+const ampleBackendMs = 10_000
+
 const secret = 'correct horse battery staple'
 const payload = { label: 'ai-fix', issue: { number: 12 } }
 
@@ -101,7 +108,8 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 		keychain: false,
 		abortSignal: signal,
 	})
-	const close = (pauseMs = 5_000) => served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(pauseMs * 2) })
+	const close = (pauseMs = 5_000, backendMs = pauseMs * 2) =>
+		served.close({ pause: AbortSignal.timeout(pauseMs), backend: AbortSignal.timeout(backendMs) })
 	onTestFinished(() => close())
 	const secrets = openWebhookSecrets(served.gateway.credentials)
 	await secrets.set(testAppName, 'fix-issue', secret, signal)
@@ -280,7 +288,7 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 
 		// Act
 		const started = Date.now()
-		await close(200)
+		await close(200, ampleBackendMs)
 
 		// Assert
 		expect(delivery.status).toBe(202)

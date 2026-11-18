@@ -20,6 +20,7 @@ import { openSignIns, type SignIns } from '../src/engine/sign-ins.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
+import { npmRegistry, nugetOrg } from './support/registries.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
@@ -166,15 +167,15 @@ mailbox.send({ type: 'succeeded' })
 			apps,
 			{
 				calls: callingScript(`
-const npm = await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad' } }, grant.packages.tokens[0], grant.packages.endpoint)
-const nuget = await call('call-2', { type: 'package', request: { registry: 'nuget', path: '/v3/index.json' } }, npm.next, grant.packages.endpoint)
+const npm = await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(npmRegistry)}, path: '/left-pad' } }, grant.packages.tokens[0], grant.packages.endpoint)
+const nuget = await call('call-2', { type: 'package', request: { registry: ${JSON.stringify(nugetOrg)}, path: '/v3/index.json' } }, npm.next, grant.packages.endpoint)
 const { readFile } = await import('node:fs/promises')
 const staged = await readFile(mailbox.staged(npm.outcome.result.body), 'utf8')
 event('done', 'called', { npm: npm.outcome, nuget: nuget.outcome, staged })
 mailbox.send({ type: 'succeeded' })
 `),
 			},
-			{ registries: ['npm'] },
+			{ registries: [npmRegistry] },
 		)
 
 		// Act
@@ -214,10 +215,10 @@ mailbox.send({ type: 'succeeded' })
 			apps,
 			{
 				calls: callingScript(`
-await call('call-1', { type: 'package', request: { registry: 'npm', path: '/left-pad/-/left-pad-1.3.0.tgz' } }, grant.packages.tokens[0], grant.packages.endpoint)
+await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(npmRegistry)}, path: '/left-pad/-/left-pad-1.3.0.tgz' } }, grant.packages.tokens[0], grant.packages.endpoint)
 `),
 			},
-			{ registries: ['npm'] },
+			{ registries: [npmRegistry] },
 		)
 		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
 		await vi.waitFor(() => {
@@ -505,7 +506,7 @@ mailbox.send({ type: 'succeeded' })
 		const deployed = await deployTestApp(
 			apps,
 			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
-			{ tools: ['echo'], registries: ['npm', registry] },
+			{ tools: ['echo'], registries: [npmRegistry, registry] },
 		)
 
 		// Act
@@ -513,7 +514,7 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud'), expect.stringContaining('cloud start URL')])
-		expect(connectorSettings).toHaveBeenCalledWith({ tools: ['echo'], registries: ['npm', registry] }, abortSignal)
+		expect(connectorSettings).toHaveBeenCalledWith({ tools: ['echo'], registries: [npmRegistry, registry] }, abortSignal)
 	})
 
 	test('refuses a run before its sandbox when no loaded connector brings a host tool the app lists', async () => {
