@@ -1,6 +1,6 @@
 import type { PublicRegistry } from '@mesh-flow/protocol'
 
-// Copies of the real definitions: the packages that define them depend on core, so tests here can't import them.
+// Copies of the real definitions, which tests here can't import: they depend on core.
 
 /** The npm registry, as `npmRegistry` of `@mesh-flow/toolchain-node` defines it. */
 export const npmRegistry: PublicRegistry = {
