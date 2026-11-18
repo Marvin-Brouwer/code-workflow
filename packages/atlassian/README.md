@@ -4,26 +4,22 @@ The Atlassian connector for mesh-flow. A connector gives workflows one outside s
 
 ## Setup
 
-Install the package where `mesh-flow serve` runs, add it as a connector and give it each product's site and token. They live in the gateway's credential store, the site too, since connectors have no settings of their own yet.
+Install the package where `mesh-flow serve` runs, add it as a connector and give it the site and token. They live in the gateway's credential store, the site too, since connectors have no settings of their own yet.
 
 ```sh
 pnpm add @mesh-flow/atlassian
 mesh-flow connector add @mesh-flow/atlassian
 ```
 
-On Atlassian Cloud, an API token with the account's email. The same token serves Jira and Confluence, but each product has its own settings:
+On Atlassian Cloud, one site and one API token, with the account's email, for Jira and Confluence both:
 
 ```sh
-echo 'https://example.atlassian.net' | mesh-flow credential set jira/url
-echo 'bot@example.com' | mesh-flow credential set jira/email
-mesh-flow credential set jira/token < api-token.txt
-
-echo 'https://example.atlassian.net' | mesh-flow credential set confluence/url
-echo 'bot@example.com' | mesh-flow credential set confluence/email
-mesh-flow credential set confluence/token < api-token.txt
+echo 'https://example.atlassian.net' | mesh-flow credential set atlassian/url
+echo 'bot@example.com' | mesh-flow credential set atlassian/email
+mesh-flow credential set atlassian/token < api-token.txt
 ```
 
-On Data Center, a personal access token per product, and no email: a product without `<product>/email` is spoken to as Data Center, with the token as a bearer token. The URL is the product's own, with its context path if it has one:
+On Data Center, each product has its own site and personal access token, and no email. A product whose `<product>/url` is set is spoken to as Data Center, with the token as a bearer token; one without uses the Cloud settings. The URL is the product's own, with its context path if it has one:
 
 ```sh
 echo 'https://jira.example.com' | mesh-flow credential set jira/url
@@ -33,7 +29,7 @@ echo 'https://wiki.example.com' | mesh-flow credential set confluence/url
 mesh-flow credential set confluence/token < confluence-pat.txt
 ```
 
-Set only the product a workflow uses. Every call reads the settings again, so a changed token counts at once.
+On Data Center, set only the product a workflow uses. Every call reads the settings again, so a changed token counts at once. `mesh-flow deploy` and a trigger say what's missing: the Cloud settings when no product has a Data Center site, otherwise the token of each product that has one.
 
 ## Usage
 
@@ -111,7 +107,7 @@ On Data Center, a webhook has a secret, and so a signature, only on recent versi
 
 ## The host half
 
-`@mesh-flow/atlassian/host` is what the engine loads: `connector`, with the host halves of every tool, and `atlassianHostTools` for a test that points them at a fake. `credentialNames('jira')` names a product's credentials.
+`@mesh-flow/atlassian/host` is what the engine loads: `connector`, with the host halves of every tool, and `atlassianHostTools` for a test that points them at a fake. `cloudCredentialNames` names the Cloud credentials, `dataCenterCredentialNames('jira')` a product's Data Center ones.
 
 ```ts
 import { atlassianHostTools, defaultFetchRetry } from '@mesh-flow/atlassian/host'

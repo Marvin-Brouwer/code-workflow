@@ -16,12 +16,9 @@ const deployments = [
 	{
 		deployment: 'Cloud',
 		settings: {
-			'jira/url': 'https://example.atlassian.net',
-			'jira/email': 'bot@example.com',
-			'jira/token': 'cloud-token',
-			'confluence/url': 'https://example.atlassian.net',
-			'confluence/email': 'bot@example.com',
-			'confluence/token': 'cloud-token',
+			'atlassian/url': 'https://example.atlassian.net',
+			'atlassian/email': 'bot@example.com',
+			'atlassian/token': 'cloud-token',
 		},
 		jiraUrl: 'https://example.atlassian.net',
 		jiraApi: '/rest/api/3',
@@ -578,12 +575,35 @@ describe('attachments', () => {
 })
 
 describe('settings', () => {
-	test('a missing site says how to set it', async () => {
+	test('a missing site says how to set it, for Cloud and for Data Center', async () => {
 		// Act
-		const outcome = runOnFake({ 'jira/token': 'token' }, {}, () => jira.collect('PROJ-7'))
+		const outcome = runOnFake({ 'atlassian/token': 'token' }, {}, () => jira.collect('PROJ-7'))
 
 		// Assert
-		await expect(outcome).rejects.toThrow('There is no Jira site. Set it with `mesh-flow credential set jira/url`.')
+		await expect(outcome).rejects.toThrow(
+			'There is no Jira site. For Atlassian Cloud, set atlassian/url, atlassian/email and atlassian/token; for Jira Data Center, set jira/url and jira/token',
+		)
+	})
+
+	test('a Data Center site without its token says how to set it', async () => {
+		// Act
+		const outcome = runOnFake({ 'jira/url': 'https://jira.example.com' }, {}, () => jira.collect('PROJ-7'))
+
+		// Assert
+		await expect(outcome).rejects.toThrow('There is no Jira Data Center token. Set it with `mesh-flow credential set jira/token`.')
+	})
+
+	test('one product on Data Center and the other on Cloud each use their own site', async () => {
+		// Arrange
+		const arrangement: Arrangement = { pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<p>Hi</p>', version: 1 }] }
+		const settings = { ...deployments[0].settings, 'jira/url': 'https://jira.example.com', 'jira/token': 'jira-pat' }
+
+		// Act
+		const { fake } = await runOnFake(settings, arrangement, () => confluence.collect('12345'))
+
+		// Assert
+		expect(fake.requests[0]?.path).toBe('/wiki/rest/api/content/12345')
+		expect(fake.requests[0]?.authorization).toBe(deployments[0].authorization)
 	})
 })
 
@@ -670,12 +690,12 @@ describe('Confluence sites', () => {
 	test.each([
 		{
 			site: 'a Cloud site given with /wiki',
-			settings: { 'confluence/url': 'https://example.atlassian.net/wiki', 'confluence/email': 'bot@example.com' },
+			settings: { 'atlassian/url': 'https://example.atlassian.net/wiki', 'atlassian/email': 'bot@example.com', 'atlassian/token': 'token' },
 			path: '/wiki/rest/api/content/12345',
 		},
 		{
 			site: 'a Data Center site under a context path',
-			settings: { 'confluence/url': 'https://example.com/confluence/' },
+			settings: { 'confluence/url': 'https://example.com/confluence/', 'confluence/token': 'token' },
 			path: '/confluence/rest/api/content/12345',
 		},
 	])('$site keeps its path once', async ({ settings, path: expected }) => {
@@ -683,7 +703,7 @@ describe('Confluence sites', () => {
 		const arrangement: Arrangement = { pages: [{ id: '12345', title: 'Guidelines', space: 'TEAM', html: '<p>Hi</p>', version: 1 }] }
 
 		// Act
-		const { fake } = await runOnFake({ ...settings, 'confluence/token': 'token' }, arrangement, () => confluence.collect('12345'))
+		const { fake } = await runOnFake(settings, arrangement, () => confluence.collect('12345'))
 
 		// Assert
 		expect(fake.requests[0]?.path).toBe(expected)

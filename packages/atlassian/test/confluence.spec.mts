@@ -6,9 +6,9 @@ import { rita } from './support/fake-atlassian.mts'
 import { runOnFake, type Arrangement } from './support/run-on-fake.mts'
 
 const settings = {
-	'confluence/url': 'https://example.atlassian.net',
-	'confluence/email': 'bot@example.com',
-	'confluence/token': 'cloud-token',
+	'atlassian/url': 'https://example.atlassian.net',
+	'atlassian/email': 'bot@example.com',
+	'atlassian/token': 'cloud-token',
 }
 
 const html = [

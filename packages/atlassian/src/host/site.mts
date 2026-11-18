@@ -1,40 +1,52 @@
-import { siteUrl, type HostToolContext } from '@mesh-flow/gateway'
+import { missingCredentials, siteUrl, type CredentialReader, type HostToolContext, type MissingSetting } from '@mesh-flow/gateway'
 
-/**
- * The Atlassian products this connector speaks to. Each has its own credentials, since a Data Center
- * install often runs them on different hosts.
- */
+/** The Atlassian products this connector speaks to. */
 export type Product = 'jira' | 'confluence'
 
 /**
- * The names of a product's credentials in the gateway's credential store:
+ * The names of the Atlassian Cloud credentials in the gateway's credential store. One site and one
+ * API token serve Jira and Confluence:
  *
- * - `<product>/url`: the site, such as `https://example.atlassian.net` or `https://jira.example.com`;
- * - `<product>/token`: an API token on Cloud, a personal access token on Data Center;
- * - `<product>/email`: the account's email on Cloud, which goes with the API token. Data Center
- *   has none: without it, the token is sent as a personal access token.
+ * - `atlassian/url`: the site, such as `https://example.atlassian.net`;
+ * - `atlassian/email`: the account's email, which goes with the API token;
+ * - `atlassian/token`: the API token.
+ */
+export const cloudCredentialNames = Object.freeze({ url: 'atlassian/url', email: 'atlassian/email', token: 'atlassian/token' })
+
+/**
+ * The names of a product's Data Center credentials in the gateway's credential store. Each product
+ * has its own, since a Data Center install runs them on their own hosts:
  *
- * Jira and Confluence each have their own, since a Data Center install often runs them on different
- * hosts; on Cloud they are usually the same values.
+ * - `<product>/url`: the product's site, with its context path if it has one, such as
+ *   `https://jira.example.com`;
+ * - `<product>/token`: a personal access token.
+ *
+ * A product whose `<product>/url` is set is spoken to as Data Center; one without, as Cloud.
  *
  * @param product - The product whose credentials to name: `jira` or `confluence`.
- * @returns The three names.
+ * @returns The two names.
  *
  * @example
  * ```ts
- * const names = credentialNames('confluence')
- * // { url: 'confluence/url', token: 'confluence/token', email: 'confluence/email' }
+ * const names = dataCenterCredentialNames('confluence')
+ * // { url: 'confluence/url', token: 'confluence/token' }
  * ```
  */
-export function credentialNames(product: Product): Readonly<{ url: string; token: string; email: string }> {
-	return Object.freeze({ url: `${product}/url`, token: `${product}/token`, email: `${product}/email` })
+export function dataCenterCredentialNames(product: Product): Readonly<{ url: string; token: string }> {
+	return Object.freeze({ url: `${product}/url`, token: `${product}/token` })
 }
 
 /** How a product is named in a message. */
 const productNames: Readonly<Record<Product, string>> = Object.freeze({ jira: 'Jira', confluence: 'Confluence' })
 
-/** What a site's URL looks like, for a message about one that isn't a URL. */
-const exampleSiteUrl = 'https://example.atlassian.net'
+/** What a Cloud site's URL looks like. */
+const exampleCloudUrl = 'https://example.atlassian.net'
+
+/** What a Data Center product's URL looks like. */
+const exampleDataCenterUrls: Readonly<Record<Product, string>> = Object.freeze({
+	jira: 'https://jira.example.com',
+	confluence: 'https://wiki.example.com',
+})
 
 /** Where a product runs, and how to sign in to it. */
 export type Site =
@@ -43,19 +55,58 @@ export type Site =
 
 /**
  * The product's site from the call's credential store, read on every call so a changed credential
- * counts at once, or an error saying how to set what's missing.
+ * counts at once: its Data Center site when `<product>/url` is set, the Cloud site otherwise. An
+ * error says how to set what's missing.
  */
 export async function readSite(product: Product, { credentials, abortSignal }: HostToolContext): Promise<Site> {
-	const names = credentialNames(product)
-	const [url, token, email] = await Promise.all([
+	const dataCenter = dataCenterCredentialNames(product)
+	const dataCenterUrl = await credentials.get(dataCenter.url, abortSignal)
+	if (dataCenterUrl !== undefined) {
+		const token = await credentials.get(dataCenter.token, abortSignal)
+		if (token === undefined)
+			throw new Error(
+				`There is no ${productNames[product]} Data Center token. Set it with \`mesh-flow credential set ${dataCenter.token}\`.`,
+			)
+		return { deployment: 'data-center', url: siteUrl(dataCenterUrl, dataCenter.url, exampleDataCenterUrls[product]), token }
+	}
+	const names = cloudCredentialNames
+	const [url, email, token] = await Promise.all([
 		credentials.get(names.url, abortSignal),
-		credentials.get(names.token, abortSignal),
 		credentials.get(names.email, abortSignal),
+		credentials.get(names.token, abortSignal),
 	])
-	if (url === undefined)
-		throw new Error(`There is no ${productNames[product]} site. Set it with \`mesh-flow credential set ${names.url}\`.`)
-	if (token === undefined)
-		throw new Error(`There is no ${productNames[product]} token. Set it with \`mesh-flow credential set ${names.token}\`.`)
-	const site = siteUrl(url, names.url, exampleSiteUrl)
-	return email === undefined ? { deployment: 'data-center', url: site, token } : { deployment: 'cloud', url: site, email, token }
+	if (url === undefined || email === undefined || token === undefined) {
+		throw new Error(
+			`There is no ${productNames[product]} site. For Atlassian Cloud, set ${names.url}, ${names.email} and ${names.token}; ` +
+				`for ${productNames[product]} Data Center, set ${dataCenter.url} and ${dataCenter.token}, with \`mesh-flow credential set\`.`,
+		)
+	}
+	return { deployment: 'cloud', url: siteUrl(url, names.url, exampleCloudUrl), email, token }
+}
+
+/**
+ * What the connector still needs. A product with a Data Center site needs its token. Without any
+ * Data Center site, the Cloud site is what's used, so its three settings are what's asked for.
+ * With one product on Data Center, the other product's Cloud settings aren't asked for: an app may
+ * not use it, and a call to it says what to set.
+ */
+export async function missingSiteSettings(credentials: CredentialReader, abortSignal: AbortSignal): Promise<MissingSetting[]> {
+	const products: readonly Product[] = ['jira', 'confluence']
+	const urls = await Promise.all(products.map((product) => credentials.get(dataCenterCredentialNames(product).url, abortSignal)))
+	const onDataCenter = products.filter((_product, index) => urls[index] !== undefined)
+	if (onDataCenter.length > 0)
+		return missingCredentials(
+			credentials,
+			onDataCenter.map((product) => ({ name: dataCenterCredentialNames(product).token })),
+			abortSignal,
+		)
+	return missingCredentials(
+		credentials,
+		[
+			{ name: cloudCredentialNames.url, example: exampleCloudUrl },
+			{ name: cloudCredentialNames.email, example: 'bot@example.com' },
+			{ name: cloudCredentialNames.token },
+		],
+		abortSignal,
+	)
 }
