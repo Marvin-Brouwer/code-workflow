@@ -12,7 +12,7 @@ const at = '2026-11-07T12:00:00.000Z'
 /** A channel on a host sandbox, and the mailbox directory as the host sees it. */
 async function channelOnHost() {
 	const root = await temporaryDirectory()
-	const sandbox = await hostBackend(root).create({ image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }, signal)
+	const sandbox = await hostBackend(root).create({ image: 'host', cpus: 1, memoryMb: 256 }, signal)
 	const channel = new SandboxChannel(sandbox, '/sandbox/mailbox')
 	await channel.prepare(signal)
 	// An aborted poll can leave its loop running in the "sandbox", writing next to the files being removed.

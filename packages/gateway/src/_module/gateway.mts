@@ -8,7 +8,15 @@
 export { CredentialName, openCredentialStore, type CredentialReader, type CredentialStore } from '../credentials/credential-store.mts'
 export { siteUrl } from '../credentials/site-url.mts'
 export { defaultStoreKey, keyFile, keychainKey, type DefaultStoreKeyOptions, type StoreKey } from '../credentials/store-key.mts'
-export { openGateway, tokensPerEndpoint, type AcceptedCall, type Gateway, type GatewayOptions, type InterruptedCall } from '../gateway.mts'
+export {
+	openGateway,
+	tokensPerEndpoint,
+	type AcceptedCall,
+	type Gateway,
+	type GatewayOptions,
+	type InterruptedCall,
+	type RunAccess,
+} from '../gateway.mts'
 export { openGatewayHome, type GatewayHome } from '../gateway-home.mts'
 export { gone, notFound, unauthorized, unavailable } from '../http/http-statuses.mts'
 export {
@@ -19,6 +27,7 @@ export {
 	type FetchRetryOptions,
 	type OutgoingRequest,
 } from '../http/retrying-fetch.mts'
+export { maxPackageBytes } from '../packages/fetch-package.mts'
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'

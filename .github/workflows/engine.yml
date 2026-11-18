@@ -61,6 +61,8 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The restore test builds an app with @mesh-flow/core, which bundles what core built.
+      - run: pnpm --filter @mesh-flow/core... build
 
       - name: Install runsc
         if: matrix.backend == 'gvisor'

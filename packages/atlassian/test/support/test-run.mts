@@ -103,7 +103,7 @@ export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortS
 		controller.abort(new Error('The test finished.'))
 	})
 	const runId = `run-${String(Date.now())}`
-	const grant = await gateway.openRun(runId, definedHostTools(), controller.signal)
+	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, controller.signal)
 	const { promise: result, resolve, reject } = Promise.withResolvers<T>()
 	result.catch(() => undefined)
 	const definition = workflow('test', async ({ abortSignal }) => {

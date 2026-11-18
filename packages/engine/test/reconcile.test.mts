@@ -21,12 +21,12 @@ function backendHolding(held: HeldSandbox[]) {
 }
 
 function run(id: string, status: RunStatus, sandbox?: string, backend: BackendName = 'gvisor'): RunRecord {
-	const spec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+	const spec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 	return {
 		id,
 		workflow: 'develop',
 		trigger: { kind: 'user', id: 'develop' },
-		app: { name: 'team', version: '0123456789ab', entry: 'main.mjs', sandbox: spec, tools: [] },
+		app: { name: 'team', version: '0123456789ab', entry: 'main.mjs', sandbox: spec, tools: [], registries: [] },
 		status,
 		cursor: 0,
 		pending: [],

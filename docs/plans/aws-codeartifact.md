@@ -1,10 +1,10 @@
 # Plan: AWS sign-in and CodeArtifact restores
 
-Status: proposed 2026-11-16, not built. Covers the first part of roadmap step 5 of
-[`../design.md`](../design.md#roadmap): an AWS session on the host that the user signs in to
-interactively, `checkSession`, and package restores from a private CodeArtifact repository in the
-sandbox. Publishing to CodeArtifact, other AWS operations and the package managers beyond npm and
-NuGet come later.
+Status: agreed 2026-11-16; delivery step 1 (no direct egress) built, the rest not. Covers the first
+part of roadmap step 5 of [`../design.md`](../design.md#roadmap): an AWS session on the host that
+the user signs in to interactively, `checkSession`, and package restores from a private CodeArtifact
+repository in the sandbox. Publishing to CodeArtifact, other AWS operations and the package managers
+beyond npm and NuGet come later.
 
 ## Goal
 
@@ -116,20 +116,22 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
 
 - **Fetches are tool calls**, so code and a user can make them too, not only a package manager:
   `codeArtifact.fetch({ repository, format, path })` with the CodeArtifact token on the host, and
-  `registry.fetch({ registry, format, path })` for the public registries the app allows (nuget.org,
-  npmjs), without a credential. Both only accept the read paths of the format: for **NuGet v3** the
-  service index, the flat container (version lists and `.nupkg` downloads) and the registration
-  resources restore reads; for **npm** package documents and tarballs. There is no write path, so
-  nothing can publish or delete through them.
-- **The package manager reaches them through a proxy in the sandbox.** The sandbox's
-  `HTTPS_PROXY` points at a proxy served by the runtime, the way gVisor's egress forwarder already
-  is today. Package managers keep their config: a repository's `nuget.config` that names
-  CodeArtifact's own URL works unchanged, nothing has to be rewritten in a checkout, and nothing
-  can end up in a commit. The proxy terminates TLS with a CA made in the sandbox for that run and
-  put in its trust store (and `NODE_EXTRA_CA_CERTS` for npm); the CA's key unlocks nothing outside
-  the sandbox. It answers each request it recognizes with the matching tool call and refuses
-  everything else, so there's no way out but the tools.
-- **Package bytes are staged, not sent back.** The engine writes each fetched package as a file
+  `fetchPackage({ registry, path }, abortSignal)` from `@mesh-flow/core` for the public registries
+  the app allows (nuget.org, npmjs), without a credential. Both only accept the read paths of the
+  format: for **NuGet v3** the service index, the flat container (version lists and `.nupkg`
+  downloads) and the registration resources restore reads; for **npm** package documents and
+  tarballs. There is no write path, so nothing can publish or delete through them.
+- **The package manager reaches them through a proxy in the sandbox.** The sandbox's `HTTPS_PROXY`
+  points at a proxy served by the runtime (built in delivery step 1). Package managers keep their
+  config: a repository's `nuget.config` that names CodeArtifact's own URL works unchanged, nothing
+  has to be rewritten in a checkout, and nothing can end up in a commit. The proxy terminates TLS
+  with a CA made in the sandbox for that run and put in its trust store (and `NODE_EXTRA_CA_CERTS`
+  for npm); the CA's key unlocks nothing outside the sandbox. It answers each request it recognizes
+  with the matching tool call and refuses everything else, so there's no way out but the tools.
+- **Package bytes are staged, not sent back.** Delivery step 1 still sends them back, base64 in
+  the call's answer, up to 256 MB a fetch (`maxPackageBytes` in `@mesh-flow/gateway`), on the
+  run's endpoint, whose four tokens model and tool calls share; staging also takes package fetches
+  off those tokens. The engine writes each fetched package as a file
   into the sandbox (`mailbox/packages/`) and the tool's answer only names it, so the mailbox carries
   small JSON and a 100 MB nupkg is never base64 in memory. The engine already reaches the sandbox
   only by writing files and running commands in it, so this is ingress only: the sandbox never
@@ -140,18 +142,20 @@ package sources stay reachable directly" in the [gateway plan](gateway-tool-call
 - Whether a package comes from CodeArtifact or its upstreams (nuget.org, npmjs) stays
   CodeArtifact's setup, as the repository's config names it.
 
-The app declares where it restores from, since it's non-secret team config that belongs in git:
+The app declares where it restores from, since it's non-secret team config that belongs in git.
+`registries` takes a registry's name today; delivery step 3 widens it to take a CodeArtifact
+repository as well:
 
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
-import { defineMeshFlow, image, registry, userTrigger } from '@mesh-flow/core'
+import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 
 export default defineMeshFlow({
 	sandbox: image({
 		name: sandboxImage,
 		memoryMb: 4096,
 		registries: [
-			registry.nuget(),
+			'nuget',
 			codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' }),
 		],
 	}),
@@ -161,10 +165,10 @@ export default defineMeshFlow({
 
 ## Settled (Marvin, 2026-11-16)
 
-1. **No network on any backend.** gVisor already runs without one. microsandbox and E2B get no
-   egress rules at all, the `egress` option goes away, and the package egress conformance tests of
-   PR #26 become restores through the proxy on every backend. The runtime's proxy replaces gVisor's
-   forwarder. The bigger part of the work, so it's the first PR.
+1. **No network on any backend** (built in delivery step 1). microsandbox and E2B get no egress
+   rules at all, the `egress` option is gone, and so is gVisor's egress forwarder: the runtime's
+   proxy replaces it. The package egress conformance tests of PR #26 became a check that there is
+   no network but loopback, and a restore through the proxy on each real backend.
 2. **The mailbox stays the channel.** It is the one channel that works the same on all three
    backends without a network, and it's ingress only. A socket from the sandbox to the host would
    need a network rule on microsandbox (unverified, design open question 11) and E2B. Its delay is
@@ -190,9 +194,14 @@ export default defineMeshFlow({
 
 Stacked PRs, each on the previous one's branch:
 
-1. No direct egress: the runtime's proxy with its sandbox CA, `registry.fetch` for nuget.org and
-   npmjs, `registries` in `image` replacing `egress`, no network on every backend. Conformance:
-   NuGet and npm restores through the proxy, and any other host refused, on every backend.
+1. No direct egress (built): the runtime's proxy with its sandbox CA, `fetchPackage` for nuget.org
+   and npmjs, `registries` in `image` replacing `egress`, no network on every backend. Tests: npm
+   and curl (OpenSSL's trust, as .NET's) through the proxy on the host, other hosts and writes
+   refused, a run's commands finding the proxy in their environment; the backends' conformance
+   suite checks there is no network but loopback, and the engine's real-backend CI jobs run
+   `npm install` through the proxy in a gVisor and a microsandbox sandbox. `dotnet restore` runs
+   through the proxy on the Linux CI host, which has the SDK; inside a real backend it waits for an
+   image with Node and the .NET SDK (inline Dockerfiles, issue #36).
 2. `@mesh-flow/aws` host half: device flow, session in the credential store, `mesh-flow login aws`,
    role credentials and the CodeArtifact token. Tests against a fake SSO/OIDC endpoint; one manual
    check against your real Identity Center.

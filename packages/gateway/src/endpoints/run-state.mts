@@ -1,6 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import writeFileAtomic from 'write-file-atomic'
+import { PackageRegistry } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { RunUsage } from '../providers/usage.mts'
@@ -38,6 +39,8 @@ export type InFlightCall = z.infer<typeof InFlightCall>
 export const RunState = z.object({
 	/** The host tools the run's app may call. */
 	tools: z.array(z.string()),
+	/** The public package registries the run's app restores from. */
+	registries: z.array(PackageRegistry).default([]),
 	endpoints: z.record(z.string(), EndpointState),
 	inFlight: z.record(z.string(), InFlightCall),
 	usage: RunUsage,

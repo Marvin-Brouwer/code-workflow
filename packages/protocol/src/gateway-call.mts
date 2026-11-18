@@ -1,12 +1,19 @@
 import { z } from 'zod'
+import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
 
 /** Names a gateway endpoint: the run's own, or one loop's. */
 export const EndpointId = z.string().regex(/^[\w-]{1,64}$/)
 export type EndpointId = z.infer<typeof EndpointId>
 
+/** The shortest token an endpoint takes, for code that makes tokens of its own, such as a test of the runtime. */
+export const minTokenLength = 16
+
+/** The longest token an endpoint takes. */
+const maxTokenLength = 128
+
 /** A single-use token for one call on an endpoint. The answer to the call carries the next one. */
-export const EndpointToken = z.string().regex(/^[\w-]{16,128}$/)
+export const EndpointToken = z.string().regex(new RegExp(`^[\\w-]{${String(minTokenLength)},${String(maxTokenLength)}}$`))
 export type EndpointToken = z.infer<typeof EndpointToken>
 
 /** Names a tool that runs on the host, as a model provider takes tool names. */
@@ -55,7 +62,8 @@ export type ResolvedModel = z.infer<typeof ResolvedModel>
  * - `open`: open an endpoint for one loop that takes only these tools. Only on the run's endpoint;
  * - `close`: close a loop's endpoint once the loop has settled. Only on the run's endpoint;
  * - `resolve-model`: which provider serves a model, model first;
- * - `model`: send a model request with the provider's credential.
+ * - `model`: send a model request with the provider's credential;
+ * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's endpoint.
  */
 export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('tool'), tool: ToolName, input: z.unknown() }),
@@ -63,6 +71,7 @@ export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('close'), endpoint: EndpointId }),
 	z.object({ type: z.literal('resolve-model'), model: z.string().min(1) }),
 	z.object({ type: z.literal('model'), request: ModelRequest }),
+	z.object({ type: z.literal('package'), request: PackageRequest }),
 ])
 export type GatewayCall = z.infer<typeof GatewayCall>
 

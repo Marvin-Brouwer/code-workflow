@@ -133,7 +133,7 @@ describe('defineMeshFlow', () => {
 	test('describes its sandbox, and the workflows it is given with their parameters as JSON Schema', () => {
 		// Arrange
 		const app = defineMeshFlow({
-			sandbox: image({ name: 'node:26-slim', egress: ['api.example.com'] }),
+			sandbox: image({ name: 'node:26-slim', registries: ['npm'] }),
 			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
 		})
 
@@ -142,7 +142,7 @@ describe('defineMeshFlow', () => {
 
 		// Assert
 		expect(description).toEqual({
-			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, egress: { allow: ['api.example.com'] } },
+			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, registries: ['npm'] },
 			workflows: [
 				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
 				{ name: 'report', parameters: { type: 'object', properties: {} } },

@@ -35,6 +35,16 @@ The provider's SDK runs in the sandbox, as pi-ai always runs it, and makes the p
 
 The gateway sends the Anthropic Messages, OpenAI Chat Completions and OpenAI Responses APIs, with an API key. Providers on other APIs (Google, Bedrock, Mistral) and subscription logins come later.
 
+## Packages
+
+A sandbox has no network, so its package fetches come here too: a `package` call names one of the public registries the run's app restores from (`nuget` or `npm`, which `openRun` gets in `registries`) and a path on it. The gateway sends it only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. The registry's answer goes back whole, a 404 too, with the body base64 and only `content-type`, `etag`, `last-modified` and `location` of its headers. A redirect isn't followed: it goes back as it is, so the next fetch is checked too. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
+
+With the gateway of the [sample below](#host-tools), a run whose app restores from npm opens its endpoint with the registry:
+
+```ts
+const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm'] }, abortSignal)
+```
+
 ## Host tools
 
 A credentialed tool has a definition that both halves share, a host half that runs here, and a stub in the sandbox from `@mesh-flow/core`. The host half is the only limit on what its credential can do, so it does one thing:
@@ -120,7 +130,7 @@ const gateway = openGateway({ home: home.directory, credentials: home.credential
 
 // Before the runtime starts: the run's own endpoint, for the host tools its app lists. The engine
 // writes the grant to the mailbox's `gateway.json`, where the runtime takes it.
-const grant = await gateway.openRun('run-1', ['githubComment'], abortSignal)
+const grant = await gateway.openRun('run-1', { tools: ['githubComment'] }, abortSignal)
 
 // When the run resumes, before reading the outbox again: answer what the engine left unanswered.
 async function answerInterrupted(writeAnswer: (id: string, answer: CallAnswer) => Promise<void>) {
@@ -143,7 +153,7 @@ async function serveCall(message: CallMessage, writeAnswer: (answer: CallAnswer)
 
 `accept`, `answer` and `settle` are three steps because the call has to survive an engine restart between them: one taken and not settled is answered as interrupted after a restart, so forgetting `settle` makes every call come back that way. After a resume, call `forgetInterrupted` once the outbox was read past where it was.
 
-- **A run's endpoint** takes calls from workflow code, the model calls, and opening and closing loop endpoints.
+- **A run's endpoint** takes calls from workflow code, the model calls, package fetches, and opening and closing loop endpoints.
 - **A loop's endpoint** takes only the tools in that loop's template. The runtime opens it when the loop starts and closes it when the loop settles.
 - **Every token is good for one call**, and the answer carries the next. An endpoint hands out four at a time, so calls can run at the same time. A token that comes again, or one never handed out, closes every endpoint of the run and `accept` says so in `compromised`: the engine fails the run.
 - **Only hashes of tokens are kept on disk**, in `runs/<run>.json`, so a run paused across an engine restart can go on calling. A call that was taken but not answered when the engine stopped is answered as interrupted after the restart, with its next token: whether it took effect is unknown, so it isn't run again.

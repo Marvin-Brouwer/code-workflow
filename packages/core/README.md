@@ -256,7 +256,7 @@ export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
 		memoryMb: 4096,
-		egress: ['api.example.com'],
+		registries: ['npm'],
 	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
@@ -269,7 +269,7 @@ export default defineMeshFlow({
 })
 ```
 
-`image({ name, cpus?, memoryMb?, egress? })` is the sandbox: an image with `node` in it, 2 CPUs and 2048 MB unless you say otherwise, and the hosts it may reach. `mesh-flow build` bundles the entry file with its dependencies and writes down what it declares, so the sandbox has nothing to install and only runs `node` (see [`@mesh-flow/build`](../build/README.md)).
+`image({ name, cpus?, memoryMb?, registries? })` is the sandbox: an image with `node` in it, 2 CPUs and 2048 MB unless you say otherwise, and the package registries it restores from (see [Packages](#packages)). `mesh-flow build` bundles the entry file with its dependencies and writes down what it declares, so the sandbox has nothing to install and only runs `node` (see [`@mesh-flow/build`](../build/README.md)).
 
 `defineWorkflows(...triggers)` bundles triggers, for a package or a module that brings several at once. A bundle goes in `workflows` like a trigger does:
 
@@ -284,6 +284,30 @@ export const issueTriggers = defineWorkflows(
 ```
 
 A trigger listed twice, in the app or across its bundles, is an error.
+
+### Packages
+
+The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org) and `npm` (the npm registry), with their own config and no changes to a repository:
+
+- Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
+- For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime. Those variables replace the system's trust store for the processes, so HTTPS in the sandbox with any other certificate, such as a local dev server's, doesn't verify; loopback and the sandbox's own host name aren't sent to the proxy.
+- Each `GET` it gets is a call to the gateway, which fetches the package on the host. Other hosts, plain HTTP and writes are refused. A fetch the gateway refuses is a 403, so a package manager doesn't try it again; one that failed for now, such as a registry that's down, is a 502. A redirect is handed back to the package manager, not followed, and a fetch takes at most `maxPackageBytes` of `@mesh-flow/gateway` (256 MB). Until packages are staged as files, a fetch goes through the runtime's memory a few times over, so give a sandbox that restores packages near that size `memoryMb` to spare.
+- Package fetches share the run's gateway endpoint, and its `tokensPerEndpoint` (four) tokens, with the workflow's tool and model calls, so at most that many go at once.
+
+Code can make the same call itself, with `fetchPackage`:
+
+```ts
+import { fetchPackage, workflow } from '@mesh-flow/core'
+import { z } from 'zod'
+
+export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
+	const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
+	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+	return versions
+})
+```
+
+It only works inside a run, whose gateway it fetches through.
 
 ### Triggers
 

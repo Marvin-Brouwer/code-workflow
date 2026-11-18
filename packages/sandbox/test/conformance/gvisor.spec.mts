@@ -11,7 +11,6 @@ describeConformance(
 		gvisorBackend({
 			directory: process.env.MESH_FLOW_GVISOR_DIRECTORY ?? path.join(tmpdir(), 'mesh-flow-gvisor-conformance'),
 			runsc: (process.env.RUNSC ?? 'runsc').split(' ').filter(Boolean),
-			...(process.env.HTTPS_PROXY === undefined ? {} : { upstreamProxy: process.env.HTTPS_PROXY }),
 		}),
-	{ node: 'node:26-slim', packageManagers: 'node:26-bookworm' },
+	'node:26-slim',
 )

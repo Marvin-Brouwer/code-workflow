@@ -14,6 +14,7 @@ export {
 	EndpointId,
 	EndpointToken,
 	GatewayCall,
+	minTokenLength,
 	ModelRequest,
 	ModelResponse,
 	ResolvedModel,
@@ -27,6 +28,7 @@ export {
 	runIdEnvironmentVariable,
 	type MailboxLayout,
 } from '../mailbox-layout.mts'
+export { PackageRegistry, packageRegistryHosts, PackageRequest, PackageResponse } from '../package-registry.mts'
 export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'

@@ -10,7 +10,7 @@ import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 import { fakeContainerFile, fakeRunsc, type FakeRunscOptions } from '../support/fake-runsc.mts'
 import { temporaryDirectory } from '../support/temporary-directory.mts'
 
-const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 function timeout(): AbortSignal {
 	return AbortSignal.timeout(5000)
@@ -167,34 +167,6 @@ describe('gVisor backend, on a fake runsc', () => {
 		expect(await sandboxDirectories(directory)).toEqual([])
 	})
 
-	test('closes while a create waits for the egress forwarder, and leaves nothing behind', async () => {
-		// Arrange
-		const { backend, directory, reopen } = await backendOnFakeRunsc({ hangOn: 'exec' })
-		const creating = backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, new AbortController().signal)
-		creating.catch(() => undefined)
-
-		// Act
-		await backend.close(timeout())
-
-		// Assert
-		await expect(creating).rejects.toThrow()
-		expect(await reopen().list(timeout())).toEqual([])
-		expect(await sandboxDirectories(directory)).toEqual([])
-	})
-
-	test('fails a create whose egress forwarder never listens, and leaves nothing behind', async () => {
-		// Arrange
-		const { backend, directory } = await backendOnFakeRunsc({ forwarder: 'never' })
-
-		// Act
-		const creating = backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
-
-		// Assert
-		await expect(creating).rejects.toThrow('runsc exec')
-		expect(await backend.list(timeout())).toEqual([])
-		expect(await sandboxDirectories(directory)).toEqual([])
-	})
-
 	test('keeps paused sandboxes on close, for the next start to find', async () => {
 		// Arrange
 		const { backend, reopen } = await backendOnFakeRunsc()
@@ -230,21 +202,6 @@ describe('gVisor backend, on a fake runsc', () => {
 
 		// Assert
 		await expect(removing).rejects.toThrow("isn't a mesh-flow sandbox id")
-	})
-
-	test('starts the egress proxy with the sandbox and stops it on pause', async () => {
-		// Arrange
-		const { backend, directory } = await backendOnFakeRunsc()
-		const sandbox = await backend.create({ ...spec, egress: { allow: ['registry.npmjs.org'] } }, timeout())
-		const socket = new Layout(directory).sandbox(sandbox.id).egressSocket
-		const listening = existsSync(socket)
-
-		// Act
-		await sandbox.pause(timeout())
-
-		// Assert
-		expect(listening).toBe(true)
-		expect(existsSync(socket)).toBe(false)
 	})
 
 	test('refuses new work once closed', async () => {

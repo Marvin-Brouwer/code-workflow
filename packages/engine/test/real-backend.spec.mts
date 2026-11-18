@@ -1,21 +1,37 @@
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { buildApp } from '@mesh-flow/build'
+import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
+import * as tar from 'tar'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { openAppStore } from '../src/apps/app-store.mts'
+import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { Engine } from '../src/engine/engine.mts'
+import { finishedStatuses } from '../src/runs/run-record.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
+import { restoredPackage } from './fixtures/restoring-app/restored-package.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { copiedMailbox, deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
+import { copiedMailbox, deployTestApp, runtimeScript, testAppName, userRun } from './support/test-app.mts'
 
 /**
- * One run end to end in a real sandbox, across a shutdown and a restart of the engine. Opt in, as
+ * Runs end to end in a real sandbox: one across a shutdown and a restart of the engine, and one
+ * that restores a package with npm through the runtime's proxy, with no network. The second builds
+ * `fixtures/restoring-app` with `@mesh-flow/core`, so core has to be built first. Opt in, as
  * the sandbox package's conformance suite: `MESH_FLOW_ENGINE_TESTS=gvisor` (with
  * `RUNSC="sudo $(command -v runsc)"` when not root) or `MESH_FLOW_ENGINE_TESTS=microsandbox`.
  */
 const backendName = process.env.MESH_FLOW_ENGINE_TESTS
 const signal = new AbortController().signal
 const deadlines = () => ({ pause: AbortSignal.timeout(60_000), backend: AbortSignal.timeout(60_000) })
+
+/** How long the restore test may take, and its parts: pulling the image is most of it. */
+const restoreTimeoutMs = 300_000
+const buildTimeoutMs = 120_000
+const restoredWithinMs = 240_000
+const pollIntervalMs = 500
 
 /** Loads only the backend under test, so the other's SDK isn't needed. */
 async function openBackend(): Promise<SandboxBackend> {
@@ -25,6 +41,34 @@ async function openBackend(): Promise<SandboxBackend> {
 		directory: process.env.MESH_FLOW_GVISOR_DIRECTORY ?? path.join(tmpdir(), 'mesh-flow-gvisor-engine'),
 		runsc: (process.env.RUNSC ?? 'runsc').split(' ').filter(Boolean),
 	})
+}
+
+/** The app in `fixtures/restoring-app`, which runs `npm install` with the real runtime. */
+const restoringApp = path.join(import.meta.dirname, 'fixtures', 'restoring-app')
+
+/**
+ * What the npm registry would serve for {@link restoredPackage}: its packument, and a tarball laid
+ * out as `npm pack` makes it.
+ */
+async function fakeRegistry(): Promise<Record<string, Response | undefined>> {
+	const directory = await temporaryDirectory()
+	await mkdir(path.join(directory, 'package'))
+	await writeFile(path.join(directory, 'package', 'package.json'), JSON.stringify(restoredPackage))
+	const file = path.join(directory, 'package.tgz')
+	await tar.create({ gzip: true, cwd: directory, file, portable: true }, ['package'])
+	const tarball = await readFile(file)
+	const { name, version } = restoredPackage
+	const tarballPath = `/${name}/-/${name}-${version}.tgz`
+	const integrity = `sha512-${createHash('sha512').update(tarball).digest('base64')}`
+	const packument = {
+		name,
+		'dist-tags': { latest: version },
+		versions: { [version]: { ...restoredPackage, dist: { tarball: `https://registry.npmjs.org${tarballPath}`, integrity } } },
+	}
+	return {
+		[`/${name}`]: Response.json(packument),
+		[tarballPath]: new Response(tarball, { headers: { 'content-type': 'application/octet-stream' } }),
+	}
 }
 
 const twoQuestions = runtimeScript(
@@ -85,5 +129,45 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 		await vi.waitFor(async () => {
 			expect(await backend.list(signal)).toEqual([])
 		}, 60_000)
+	})
+
+	test("restores packages with npm through the runtime's proxy, in a sandbox with no network", { timeout: restoreTimeoutMs }, async () => {
+		// Arrange
+		const home = await temporaryDirectory()
+		const served = await fakeRegistry()
+		const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+			const { pathname } = new URL(input instanceof Request ? input.url : input)
+			return Promise.resolve(served[pathname]?.clone() ?? new Response('{}', { status: 404 }))
+		})
+		const gatewayHome = path.join(home, 'gateway')
+		const gateway = openGateway({
+			home: gatewayHome,
+			credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
+			providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
+			tools: [],
+			fetch,
+		})
+		const apps = await openAppStore(path.join(home, 'apps'), signal)
+		const built = path.join(home, 'built')
+		await buildApp({ directory: restoringApp, out: built, abortSignal: AbortSignal.timeout(buildTimeoutMs) })
+		await withPackedApp(built, (tarball) => apps.deploy(testAppName, tarball, signal), signal)
+		const engine = await Engine.open({ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), apps, gateway }, signal)
+		onTestFinished(() => engine.close(deadlines()))
+
+		// Act
+		const { id } = await engine.startRun({ ...userRun('restore'), abortSignal: signal })
+
+		// Assert
+		const finished = await vi.waitFor(
+			() => {
+				const record = engine.get(id)
+				if (!finishedStatuses.has(record.status)) throw new Error(`The run is ${record.status}.`)
+				return record
+			},
+			{ timeout: restoredWithinMs, interval: pollIntervalMs },
+		)
+		expect(finished.status, finished.error).toBe('succeeded')
+		const fetched = fetch.mock.calls.map(([input]) => new URL(input instanceof Request ? input.url : input).pathname)
+		expect(fetched).toEqual(expect.arrayContaining(Object.keys(served)))
 	})
 })

@@ -76,10 +76,11 @@ The sandbox has no other way out with a credential, so these are tool calls like
   tools: the workflow checks out before a loop and pushes after `verify` passes. Local git (status,
   diff, commit) needs no credential and stays in the sandbox. The earlier prototype's `git`
   package backs the host side.
-- **Private package registries** (CodeArtifact NuGet/npm). The package manager in the sandbox is
-  pointed at a local shim that turns each package fetch into a read-only tool call
-  (`registry.fetch(package, version)`). Public package sources need no credential and stay
-  reachable directly.
+- **Package registries.** The package manager in the sandbox goes through a proxy on loopback
+  that turns each package fetch into a read-only gateway call. Since 2026-11-16 this covers
+  public package sources too: the sandbox has no direct egress at all
+  ([plan](aws-codeartifact.md)). Private registries (CodeArtifact NuGet/npm) come next, the same
+  way.
 - **AWS.** Host-side tools per operation a workflow needs, using the gateway's role credentials.
   No credential handout to the sandbox, so no raw `aws` CLI there.
 

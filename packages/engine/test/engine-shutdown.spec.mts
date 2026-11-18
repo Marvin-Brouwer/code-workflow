@@ -12,7 +12,7 @@ import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 const never = () => new Promise<never>(() => undefined)
-const spec = { image: 'host', cpus: 1, memoryMb: 256, egress: { allow: [] } }
+const spec = { image: 'host', cpus: 1, memoryMb: 256 }
 const sandboxId = 'mesh-flow-000000000001'
 const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, spec })
 

@@ -9,7 +9,7 @@ describeConformance(
 	() =>
 		e2bBackend({
 			apiKey: process.env.E2B_API_KEY ?? '',
-			templates: { 'node:26-slim': template, 'node:26-bookworm': template },
+			templates: { 'node:26-slim': template },
 		}),
-	{ node: 'node:26-slim', packageManagers: 'node:26-bookworm' },
+	'node:26-slim',
 )

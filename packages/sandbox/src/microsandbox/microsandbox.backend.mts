@@ -8,16 +8,13 @@ import { assertSandboxId, isSandboxId, newSandboxId } from '../sandbox-id.mts'
 import type { Sandbox } from '../sandbox.mts'
 import { SandboxSpec } from '../sandbox-spec.mts'
 import { MicrosandboxSandbox } from './microsandbox.sandbox.mts'
-import { needsTlsInterception, networkPolicy, type NetworkBuilder } from './network-policy.mts'
+import { noNetwork } from './no-network.mts'
 import { ownedSnapshots } from './snapshots.mts'
 import { allSandboxes, removeSandbox, removeSandboxAndSnapshots } from './vms.mts'
 
 /**
  * The local backend with a hypervisor: microVMs through the `microsandbox` npm package, with no
- * daemon. VMs and snapshots live under `~/.microsandbox`.
- *
- * Egress to allowed hosts goes through microsandbox's TLS-intercepting proxy, see
- * {@link needsTlsInterception}.
+ * daemon. VMs and snapshots live under `~/.microsandbox`. VMs have no network, only loopback.
  */
 export function microsandboxBackend(): SandboxBackend {
 	const lifetime = new BackendLifetime()
@@ -44,9 +41,8 @@ export function microsandboxBackend(): SandboxBackend {
 				.cpus(spec.cpus)
 				.memory(spec.memoryMb)
 				.envs({ ...spec.env })
-				.network((network: NetworkBuilder) => network.policy(networkPolicy(spec.egress)))
-			const creating = needsTlsInterception(spec.egress) ? builder.interceptTls().create() : builder.create()
-			return await start(creating, spec, bound)
+				.network(noNetwork)
+			return await start(builder.create(), spec, bound)
 		},
 
 		async resume(input: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {

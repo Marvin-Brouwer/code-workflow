@@ -66,6 +66,7 @@
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
+		"@mesh-flow/core": "workspace:*",
 		"@types/node": "^26.6.6",
 		"@types/proper-lockfile": "^4.1.4",
 		"@types/write-file-atomic": "^4.0.3",

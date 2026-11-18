@@ -1,57 +1,51 @@
 /**
  * Runs inside the sandbox: requests https://<host>/ for each host on the command line and prints
- * `{ host: status }` as JSON, with '000' for anything that didn't get through.
+ * `{ hosts: { host: status }, loopback }` as JSON, with '000' for a host that didn't get through,
+ * and in `loopback` whether loopback works, which the runtime's package proxy needs.
  *
- * The test transpiles it to JavaScript first. Goes through HTTPS_PROXY when it is set (gVisor),
- * directly otherwise. Run it with `node --use-system-ca`, so a TLS-intercepting proxy
- * (microsandbox) is trusted.
+ * The test transpiles it to JavaScript first.
  */
-import { request } from 'node:http'
-import { connect } from 'node:tls'
+import { createServer, request } from 'node:http'
 
-function viaProxy(host: string, proxy: URL): Promise<string> {
-	return new Promise((resolve) => {
-		const fail = () => {
-			resolve('000')
-		}
-		const tunnel = request({ host: proxy.hostname, port: proxy.port, method: 'CONNECT', path: `${host}:443` })
-		tunnel.once('connect', (response, socket) => {
-			if (response.statusCode !== 200) {
-				socket.destroy()
-				fail()
-				return
-			}
-			const secure = connect({ socket, servername: host }, () => {
-				secure.write(`HEAD / HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`)
-			})
-			secure.setEncoding('utf8')
-			secure.once('data', (text: string) => {
-				resolve(text.split(' ')[1] ?? '000')
-				secure.destroy()
-			})
-			secure.once('error', fail)
-		})
-		tunnel.once('error', fail)
-		tunnel.setTimeout(10_000, () => {
-			tunnel.destroy()
-			fail()
-		})
-		tunnel.end()
-	})
-}
+/** What a host that didn't answer gets, as curl prints it. */
+const unreachable = '000'
 
-async function direct(host: string): Promise<string> {
+/** The loopback address, which the proxy listens on. */
+const loopbackHost = '127.0.0.1'
+
+async function status(host: string): Promise<string> {
 	try {
 		const response = await fetch(`https://${host}/`, { signal: AbortSignal.timeout(10_000) })
-		// microsandbox's proxy answers a blocked request itself, with this code in the body.
-		if (response.status === 403 && (await response.text()).includes('network_policy_denied')) return '000'
 		return String(response.status)
 	} catch {
-		return '000'
+		return unreachable
 	}
 }
 
-const proxy = process.env.HTTPS_PROXY ? new URL(process.env.HTTPS_PROXY) : undefined
-const result: Record<string, string> = {}
-for (const host of process.argv.slice(2)) result[host] = proxy ? await viaProxy(host, proxy) : await direct(host)
-console.log(JSON.stringify(result))
+function loopback(): Promise<string> {
+	return new Promise((resolve) => {
+		const server = createServer((_request, response) => response.end('ok'))
+		server.listen(0, loopbackHost, () => {
+			const address = server.address()
+			const port = typeof address === 'object' && address !== null ? address.port : 0
+			const asked = request({ host: loopbackHost, port, path: '/' }, (response) => {
+				response.setEncoding('utf8')
+				let body = ''
+				response.on('data', (chunk: string) => (body += chunk))
+				response.on('end', () => {
+					server.close()
+					resolve(body)
+				})
+			})
+			asked.once('error', () => {
+				server.close()
+				resolve(unreachable)
+			})
+			asked.end()
+		})
+	})
+}
+
+const hosts: Record<string, string> = {}
+for (const host of process.argv.slice(2)) hosts[host] = await status(host)
+console.log(JSON.stringify({ hosts, loopback: await loopback() }))

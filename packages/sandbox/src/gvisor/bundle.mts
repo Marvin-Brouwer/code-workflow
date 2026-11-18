@@ -10,8 +10,6 @@ export interface BundleOptions {
 	readonly env: Readonly<Record<string, string>>
 	readonly cpus: number
 	readonly memoryMb: number
-	/** Host directories bind-mounted into the sandbox, read-only. */
-	readonly mounts: readonly { readonly source: string; readonly destination: string }[]
 }
 
 const defaultPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
@@ -64,7 +62,6 @@ export async function writeBundle(directory: string, options: BundleOptions): Pr
 			{ destination: '/proc', type: 'proc', source: 'proc' },
 			{ destination: '/dev', type: 'tmpfs', source: 'tmpfs' },
 			{ destination: '/sys', type: 'sysfs', source: 'sysfs', options: ['nosuid', 'noexec', 'nodev', 'ro'] },
-			...options.mounts.map((mount) => ({ ...mount, type: 'bind', options: ['rbind', 'ro'] })),
 		],
 		linux: {
 			namespaces: ['pid', 'network', 'ipc', 'uts', 'mount'].map((type) => ({ type })),

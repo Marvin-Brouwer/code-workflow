@@ -12,7 +12,7 @@ import { github } from '@mesh-flow/github/hooks'
 import { fixIssue } from './workflows/fix-issue.mts'
 
 export default defineMeshFlow({
-	sandbox: image({ name: 'node:26-bookworm', egress: ['registry.npmjs.org'] }),
+	sandbox: image({ name: 'node:26-bookworm', registries: ['npm'] }),
 	workflows: [
 		// A button in the UI, with the issue as its form.
 		userTrigger(fixIssue),

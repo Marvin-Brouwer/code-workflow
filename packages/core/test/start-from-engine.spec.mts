@@ -2,7 +2,17 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { answerFile, mailboxEnvironmentVariable, mailboxLayout, runIdEnvironmentVariable, RuntimeMessage } from '@mesh-flow/protocol'
+import { tokensPerEndpoint } from '@mesh-flow/gateway'
+import {
+	answerFile,
+	type CallAnswer,
+	type EndpointGrant,
+	mailboxEnvironmentVariable,
+	mailboxLayout,
+	minTokenLength,
+	runIdEnvironmentVariable,
+	RuntimeMessage,
+} from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -16,13 +26,17 @@ const schemaReached = 'schema reached'
 // A URL, because `--import` resolves like `import`: a Windows path would read as a URL scheme.
 const loader = new URL('support/protocol-from-source.mts', import.meta.url).href
 
-/** Starts an entry file the way the engine does: `node <file>`, the mailbox in the environment and the start file in it. */
-async function startLikeTheEngine(source: string, start: unknown) {
+/**
+ * Starts an entry file the way the engine does: `node <file>`, the mailbox in the environment and
+ * the start file in it, and the gateway's grant when there is one.
+ */
+async function startLikeTheEngine(source: string, start: unknown, grant?: EndpointGrant) {
 	const directory = await temporaryDirectory()
 	const mailbox = path.join(directory, 'mailbox')
 	const layout = mailboxLayout(mailbox)
 	await mkdir(layout.inbox, { recursive: true })
 	await writeFile(layout.startFile, JSON.stringify(start))
+	if (grant !== undefined) await writeFile(layout.grantFile, JSON.stringify(grant))
 	const file = path.join(directory, 'main.mts')
 	await writeFile(file, source)
 	const child = spawn(process.execPath, ['--import', loader, file], {
@@ -86,9 +100,28 @@ export default defineMeshFlow({
 
 const greet = { mode: 'run', workflow: 'greet' }
 
+/** An app that restores from npm, whose workflow asks for a package with curl, as any command in the sandbox would. */
+const proxiedEntry = `
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { defineMeshFlow, image, userTrigger, workflow } from '${core}'
+
+const fetch = workflow('fetch', async () => {
+	const { stdout } = await promisify(execFile)('curl', ['--fail', '--silent', '--show-error', 'https://registry.npmjs.org/left-pad'])
+	if (JSON.parse(stdout).name !== 'left-pad') throw new Error('Not what the gateway answered: ' + stdout)
+})
+
+export default defineMeshFlow({ sandbox: image({ name: 'node:26-slim', registries: ['npm'] }), workflows: [userTrigger(fetch)] })
+`
+
 /** The error of a `failed` message, or `undefined` for any other message. */
 function errorOf(message: RuntimeMessage | undefined): string | undefined {
 	return message?.type === 'failed' ? message.error : undefined
+}
+
+/** A token the engine could hand over, different for each `index`. */
+function testToken(index: number): string {
+	return String(index).padStart(minTokenLength, 't')
 }
 
 describe('an entry file started by the engine', () => {
@@ -263,5 +296,38 @@ describe('an entry file started by the engine', () => {
 		// Assert
 		expect(await run.exited, run.stderr()).toBe(1)
 		expect((await run.messages()).at(-1)).toEqual({ type: 'failed', error: 'The run was stopped (SIGTERM).' })
+	})
+
+	// Its workflow runs curl, which on Windows trusts only the system store. Sandboxes are Linux.
+	test.skipIf(process.platform === 'win32')('serves package managers a proxy that fetches through the gateway', async () => {
+		// Arrange
+		const tokens = Array.from({ length: tokensPerEndpoint }, (_, index) => testToken(index))
+		const run = await startLikeTheEngine(proxiedEntry, { mode: 'run', workflow: 'fetch' }, { endpoint: 'run', tokens })
+		await expect
+			.poll(async () => (await run.messages()).some((message) => message.type === 'call'), { timeout: requestTimeoutMs })
+			.toBe(true)
+		const call = (await run.messages()).find((message) => message.type === 'call')
+
+		// Act
+		const answer: CallAnswer = {
+			next: testToken(tokensPerEndpoint),
+			outcome: {
+				ok: true,
+				result: {
+					status: 200,
+					headers: { 'content-type': 'application/json' },
+					body: Buffer.from('{"name":"left-pad"}').toString('base64'),
+				},
+			},
+		}
+		await writeFile(answerFile(run.layout, call?.type === 'call' ? call.id : ''), JSON.stringify({ value: answer }))
+
+		// Assert
+		expect(await run.exited, run.stderr()).toBe(0)
+		expect(call).toMatchObject({
+			type: 'call',
+			endpoint: 'run',
+			call: { type: 'package', request: { registry: 'npm', path: '/left-pad' } },
+		})
 	})
 })

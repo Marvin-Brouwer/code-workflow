@@ -27,7 +27,7 @@ export interface MeshFlowApp {
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', egress: ['api.example.com'] }),
+ * 	sandbox: image({ name: 'node:26-slim', registries: ['npm'] }),
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),

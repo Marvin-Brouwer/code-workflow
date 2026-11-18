@@ -64,7 +64,7 @@ async function withGateway(options: { readonly fetch?: typeof fetch } = {}) {
 			return opened.accept(id, message, acceptAbortSignal)
 		},
 	}
-	const grant = await gateway.openRun(runId, definedHostTools(), abortSignal)
+	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, abortSignal)
 	const client = (lifetime: AbortSignal) => gatewayClient(gatewayChannel(gateway, runId, lifetime), grant, 'test', lifetime)
 	return { gateway, credentials, providers, calls, client }
 }
@@ -126,6 +126,19 @@ describe('gateway', () => {
 
 		// Assert
 		await expect(run.result).rejects.toThrow(GatewayCallError)
+	})
+
+	test("refuses a call the engine couldn't read, and sends nothing, so the run goes on", async () => {
+		// Arrange
+		const { client, calls } = await withGateway()
+		const gateway = client(abortSignal)
+
+		// Act
+		const calling = gateway.call(gateway.run, { type: 'package', request: { registry: 'npm', path: 'left-pad' } }, abortSignal)
+
+		// Assert
+		await expect(calling).rejects.toThrow(GatewayCallError)
+		expect(calls).toEqual([])
 	})
 
 	test("runs an agent's host tool on the loop's own endpoint, and closes it after the loop", async () => {

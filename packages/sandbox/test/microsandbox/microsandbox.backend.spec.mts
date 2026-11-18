@@ -31,13 +31,11 @@ vi.mock('microsandbox', () => ({
 	Sandbox: { builder: sdk.Sandbox.builder, remove: sdk.remove },
 	Snapshot: { list: () => Promise.resolve([]) },
 	NetworkPolicy: { none: () => ({}) },
-	Destination: { domain: (host: string) => host },
-	Rule: { allowDns: () => ({}), allowEgress: () => ({}) },
 }))
 
 const { microsandboxBackend } = await import('../../src/microsandbox/microsandbox.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512, egress: { allow: [] } }
+const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 describe('microsandbox backend, on a fake SDK', () => {
 	beforeEach(() => {

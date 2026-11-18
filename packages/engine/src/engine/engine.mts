@@ -244,6 +244,7 @@ export class Engine {
 			entry: deployed.manifest.entry,
 			sandbox: sandbox.data,
 			tools: deployed.manifest.description.tools,
+			registries: [...deployed.manifest.description.sandbox.registries],
 		}
 		const id = newRunId()
 		// A copy of its own, so the run keeps its code when the app is deployed again or removed.
@@ -456,7 +457,7 @@ export class Engine {
 			if (error instanceof EngineError) await this.#discard(id, ref)
 			throw error
 		})
-		const grant = await this.#gateway?.openRun(id, app.tools, abortSignal)
+		const grant = await this.#gateway?.openRun(id, { tools: app.tools, registries: app.registries }, abortSignal)
 		const setup = {
 			tarball: this.#store.appOf(id),
 			entry: app.entry,
