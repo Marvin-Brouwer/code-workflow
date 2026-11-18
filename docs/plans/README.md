@@ -20,6 +20,7 @@ Decided designs:
   the sandbox over one channel with an endpoint and token per loop.
 - [aws-codeartifact.md](aws-codeartifact.md): AWS sign-in on the host with the user in the loop,
   `checkSession`, and CodeArtifact restores in the sandbox through a read-only package proxy.
+- [ui.md](ui.md): the UI, settings wizard and credential store, with a simple run view (proposed).
 
 ## POC pattern
 
