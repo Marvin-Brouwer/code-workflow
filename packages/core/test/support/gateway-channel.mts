@@ -56,15 +56,15 @@ export function gatewayChannel(
 		answers.set(id, created)
 		return created
 	}
-	const answer = async (message: CallMessage) => {
+	const answerCall = async (message: CallMessage) => {
 		const stop = new AbortController()
 		running.set(message.id, stop)
 		const accepted = await gateway.accept(runId, message, lifetime)
-		const { answer: value, staged } = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
+		const { answer, staged } = await accepted.answer(AbortSignal.any([stop.signal, lifetime]))
 		if (staged !== undefined) await writeFile(stagedFile(stagedFileName(message.id)), staged)
 		await gateway.settle(runId, message.id, lifetime)
 		running.delete(message.id)
-		slot(message.id).resolve({ value })
+		slot(message.id).resolve({ value: answer })
 	}
 	return {
 		send(message) {
@@ -91,7 +91,7 @@ export function gatewayChannel(
 				)
 			}
 			if (message.type !== 'call') return
-			const answered = answer(message).catch((error: unknown) => {
+			const answered = answerCall(message).catch((error: unknown) => {
 				slot(message.id).reject(error)
 			})
 			answering.add(answered)
