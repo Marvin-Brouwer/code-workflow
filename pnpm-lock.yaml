@@ -26,6 +26,9 @@ importers:
       '@mesh-flow/atlassian':
         specifier: workspace:*
         version: link:../../packages/atlassian
+      '@mesh-flow/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
       '@mesh-flow/core':
         specifier: workspace:*
         version: link:../../packages/core
