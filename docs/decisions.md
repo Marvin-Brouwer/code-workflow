@@ -94,11 +94,12 @@ Full sketches of all three exist; option C was chosen.
   were easy to mix up (seconds from AWS, milliseconds for timers). `duration.of('1h15m')` is checked
   at compile time; a tagged template (``duration.of`1h` ``) can't be, since TypeScript doesn't type a
   tag's strings as literals.
-- **Arithmetic on durations (`add`, `times`, `dividedBy`, `min`).** Every case in the repository
-  read better without it: backoff as an explicit list of waits, deadlines as dates moved with
-  `after` and `before`, patience counted in looks with a clock of its own. Add it only when a
-  case shows up that doesn't. The one sum left is RFC 8628's `slow_down`, which adds 5 seconds to the
-  interval a server gave; `slowedDown` in `@mesh-flow/aws` does it in seconds, as the protocol counts.
+- **Arithmetic on durations (`add`, `times`, `dividedBy`, `min`).** Rejected because, currently,
+  every case in the repository reads better without it: backoff as an explicit list of waits,
+  deadlines as dates moved with `after` and `before`, patience counted in looks with a clock of its
+  own. The one sum left is RFC 8628's `slow_down`, which adds 5 seconds to the interval a server
+  gave; `slowedDown` in `@mesh-flow/aws` does it in seconds, as the protocol counts. When more use
+  cases for arithmetic come up, add it.
 
 ## Agent loops
 
