@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { findScope } from '../run/run-scope.mts'
-import { assertToolName, toolOf, ToolInputError, type Tool } from '../tool/tool.mts'
+import { assertToolName, toolOf, ToolInputError, type Tool, type ToolContext } from '../tool/tool.mts'
 import { GatewayCallError } from './gateway-client.mts'
 
 /**
@@ -14,6 +14,8 @@ export interface HostToolDefinition<Input extends z.ZodType = z.ZodType, Output 
 	readonly input: Input
 	/** What the host tool returns. The stub checks the result against it; without it, the result is `unknown`. */
 	readonly output?: Output
+	/** A line that says what a call did, to title it in the run view, as `tool`'s `describe`. */
+	readonly describe?: (input: z.output<Input>, output: z.output<Output>) => string
 }
 
 const defined = new Set<string>()
@@ -49,7 +51,8 @@ export function hostToolStub<Input extends z.ZodType, Output extends z.ZodType =
 	const { name } = definition
 	assertToolName(name)
 	defined.add(name)
-	const output = definition.output ?? z.unknown()
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- without an output schema, Output is its default, z.ZodUnknown
+	const output = (definition.output ?? z.unknown()) as Output
 	return toolOf<z.input<Input>, z.output<Output>>({
 		name,
 		description: definition.description,
@@ -58,7 +61,7 @@ export function hostToolStub<Input extends z.ZodType, Output extends z.ZodType =
 		prepare: (input) => {
 			const parsed = definition.input.safeParse(input)
 			if (!parsed.success) throw new ToolInputError(`The input of ${name} doesn't fit:\n${z.prettifyError(parsed.error)}`)
-			return async ({ abortSignal }) => {
+			return async ({ abortSignal }: ToolContext) => {
 				const scope = findScope()
 				const gateway = scope?.run.gateway
 				if (gateway === undefined) throw new Error(`${name} runs on the host, through the gateway, and this run has none.`)
@@ -68,7 +71,7 @@ export function hostToolStub<Input extends z.ZodType, Output extends z.ZodType =
 				const result = await gateway.call(endpoint, { type: 'tool', tool: name, input }, abortSignal)
 				const checked = await output.safeParseAsync(result)
 				if (!checked.success) throw new GatewayCallError(`${name} returned something else than it says:\n${z.prettifyError(checked.error)}`)
-				return checked.data
+				return { output: checked.data, title: definition.describe?.(parsed.data, checked.data) }
 			}
 		},
 	})

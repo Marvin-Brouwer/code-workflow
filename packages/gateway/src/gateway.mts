@@ -25,7 +25,8 @@ import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/f
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential, type ProviderSettings } from './providers/provider-settings.mts'
-import { chosenModel, resolveModel } from './providers/resolve-model.mts'
+import { chosenModel, noProviderMessage, offeringProvider, resolveModel } from './providers/resolve-model.mts'
+import type { MissingSetting } from './settings/missing-setting.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import { isTransient, type HostTool } from './tools/host-tool.mts'
@@ -130,11 +131,11 @@ export interface Gateway {
 	 * Why each of `models` can't run now: no provider offers it, or the one that does has no key.
 	 * Empty when all can. A trigger checks the app's models with it before it makes a sandbox.
 	 */
-	readonly unavailableModels: (models: readonly string[], abortSignal: AbortSignal) => Promise<string[]>
+	readonly unavailableModels: (models: readonly string[], abortSignal: AbortSignal) => Promise<MissingSetting[]>
 	/** Which of `tools` this gateway has no host tool for. A trigger checks the app's tools with it before it makes a sandbox. */
 	readonly missingTools: (tools: readonly string[]) => string[]
 	/** Why each of `registries` can't be restored from: its connector isn't loaded. A trigger checks the app's registries with it. */
-	readonly missingRegistries: (registries: readonly PackageRegistry[]) => string[]
+	readonly missingRegistries: (registries: readonly PackageRegistry[]) => MissingSetting[]
 	/** Closes every endpoint of the run and forgets it. Resolves to what the run used. */
 	readonly closeRun: (runId: string, abortSignal: AbortSignal) => Promise<RunUsage>
 }
@@ -278,14 +279,17 @@ export function openGateway(options: GatewayOptions): Gateway {
 	const unavailableModels = async (models: readonly string[], abortSignal: AbortSignal) => {
 		const providers = await options.providers.list(abortSignal)
 		const keys = new Set(await options.credentials.names(abortSignal))
-		return [...new Set(models)].flatMap((modelId) => {
-			try {
-				const { provider } = resolveModel(providers, modelId)
-				if (keys.has(providerCredential(provider.name))) return []
-				return [`Provider ${provider.name} serves model ${modelId} but has no API key. ${setKeyHint(provider.name)}`]
-			} catch (error) {
-				return [messageOf(error)]
-			}
+		return [...new Set(models)].flatMap((modelId): MissingSetting[] => {
+			const choice = offeringProvider(providers, modelId)
+			if (choice === undefined) return [{ message: noProviderMessage(providers, modelId), fix: { kind: 'provider', model: modelId } }]
+			const { provider } = choice
+			if (keys.has(providerCredential(provider.name))) return []
+			return [
+				{
+					message: `Provider ${provider.name} serves model ${modelId} but has no API key. ${setKeyHint(provider.name)}`,
+					fix: { kind: 'provider-key', provider: provider.name },
+				},
+			]
 		})
 	}
 
@@ -305,10 +309,15 @@ export function openGateway(options: GatewayOptions): Gateway {
 
 	const missingTools = (appTools: readonly string[]) => [...new Set(appTools)].filter((name) => !tools.has(name))
 	const missingRegistries = (registries: readonly PackageRegistry[]) =>
-		registries.flatMap((registry) =>
+		registries.flatMap((registry): MissingSetting[] =>
 			!isConnectorRegistry(registry) || ownEntry(connectorRegistries, registry.connector) !== undefined
 				? []
-				: [`${registry.name} needs connector ${registry.connector}: add it with \`mesh-flow connector add\`.`],
+				: [
+						{
+							message: `${registry.name} needs connector ${registry.connector}: add it with \`mesh-flow connector add\`.`,
+							fix: { kind: 'connector', connector: registry.connector },
+						},
+					],
 		)
 
 	return Object.freeze<Gateway>({

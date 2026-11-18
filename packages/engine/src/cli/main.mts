@@ -4,7 +4,7 @@ import path from 'node:path'
 import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
 import { duration } from '@mesh-flow/duration'
-import type { CredentialStore } from '@mesh-flow/gateway'
+import type { CredentialStore, MissingSetting } from '@mesh-flow/gateway'
 import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
@@ -340,9 +340,9 @@ export async function main(argv: readonly string[]): Promise<void> {
 }
 
 /** Says what the engine still needs before the deployed app can run, so it's known before the first trigger. */
-function reportMissing(missing: readonly string[]): void {
+function reportMissing(missing: readonly MissingSetting[]): void {
 	if (missing.length === 0) return
-	log(`The app can't run until these settings are in:\n${missing.map((line) => `- ${line}`).join('\n')}`)
+	log(`The app can't run until these settings are in:\n${missing.map(({ message }) => `- ${message}`).join('\n')}`)
 }
 
 /** Where connectors keep what they hold between calls, in an engine's home. */

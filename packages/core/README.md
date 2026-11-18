@@ -90,6 +90,21 @@ const ticket = await readTicket({ key: 'ABC-1' })
 await developer.loop`Fix this: ${ticket} Look up related tickets with ${readTicket}.`
 ```
 
+`describe` titles a call in the UI's run view, from its input and what it returned. Without it, the call is titled by the tool's name:
+
+```ts
+import { tool } from '@mesh-flow/core'
+import { z } from 'zod'
+
+const tickets = new Map([['ABC-1', 'The login button does nothing on Safari.']])
+
+export const readTicket = tool('readTicket', {
+	input: z.object({ key: z.string() }),
+	action: async ({ key }) => tickets.get(key),
+	describe: ({ key }, ticket) => (ticket === undefined ? `Found no ticket ${key}` : `Read ticket ${key}`),
+})
+```
+
 A tool settles as soon as its signal aborts, even when its action doesn't: the call is wrapped in `untilAborted(promise, abortSignal)`, which packages can use for their own waits too.
 
 An agent becomes a tool for another agent with `as`. With `verify`, its work has to pass those checks before the tool returns:
@@ -393,7 +408,7 @@ A loop whose input changed, such as the next comment of a list that grew, starts
 
 ## Events
 
-Every workflow, loop, turn, tool call, exit call, input and dependency node is an event in a tree: each has an `id` and the `parentId` of the event it happened in, and ends with a `-succeeded` or `-failed` event. They go to the engine as they happen.
+Every workflow, loop, turn, tool call, exit call, input and dependency node is an event in a tree: each has an `id` and the `parentId` of the event it happened in, and ends with a `-succeeded` or `-failed` event. They go to the engine as they happen. A tool call's `-succeeded` event has what it returned as `result`, cut to 4000 characters with bytes left out, and its `describe` line as `title`. A host tool's stub takes `describe` the same way.
 
 ## Stopping
 

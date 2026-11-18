@@ -14,13 +14,25 @@ export interface ModelChoice {
  * Throws, naming what is offered, when none does.
  */
 export function resolveModel(providers: readonly ProviderSetting[], modelId: string): ModelChoice {
+	const choice = offeringProvider(providers, modelId)
+	if (choice !== undefined) return choice
+	throw new Error(noProviderMessage(providers, modelId))
+}
+
+/** The first provider in the user's order that offers `modelId`, or `undefined` when none does. */
+export function offeringProvider(providers: readonly ProviderSetting[], modelId: string): ModelChoice | undefined {
 	for (const provider of providers) {
 		const model = modelsOfKind(provider.kind)?.find((offered) => offered.id === modelId)
 		if (model !== undefined) return { provider, model }
 	}
+	return undefined
+}
+
+/** Says that no provider offers `modelId`, and what is there instead. */
+export function noProviderMessage(providers: readonly ProviderSetting[], modelId: string): string {
 	if (providers.length === 0)
-		throw new Error(`No model providers are set up, so nothing serves model ${modelId}. Add one with \`mesh-flow provider add\`.`)
-	throw new Error(`None of the providers (${providers.map((provider) => provider.name).join(', ')}) offers model ${modelId}.`)
+		return `No model providers are set up, so nothing serves model ${modelId}. Add one with \`mesh-flow provider add\`.`
+	return `None of the providers (${providers.map((provider) => provider.name).join(', ')}) offers model ${modelId}.`
 }
 
 /** The provider called `name`, offering `modelId`: what a model call names. Throws when it's not so. */

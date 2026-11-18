@@ -21,6 +21,7 @@ import {
 	type ConnectorSignInContext,
 	type CredentialStore,
 	type HostTool,
+	type MissingSetting,
 	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
@@ -55,8 +56,8 @@ export interface LoadedConnector {
 	readonly signIn?: (context: SignInContext) => Promise<void>
 	/** How the gateway reaches the connector's package registries, when it has any. */
 	readonly registries?: ResolveRegistryTarget
-	/** The settings the connector still needs, each as a line that says how to set it. */
-	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<string[]>
+	/** The settings the connector still needs, each a line that says how to set it, and what sets it. */
+	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<MissingSetting[]>
 }
 
 /** What `loadConnectors` takes. */

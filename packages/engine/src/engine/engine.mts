@@ -1,5 +1,5 @@
 import { duration } from '@mesh-flow/duration'
-import { mergeUsage, type AcceptedCall, type Gateway, type RunUsage } from '@mesh-flow/gateway'
+import { mergeUsage, type AcceptedCall, type Gateway, type MissingSetting, type RunUsage } from '@mesh-flow/gateway'
 import {
 	runIdEnvironmentVariable,
 	stagedFileName,
@@ -247,11 +247,12 @@ export class Engine {
 	}
 
 	/**
-	 * The settings an app needs that this engine doesn't have, each as a line that says what to do:
-	 * a model no provider with a key serves, a host tool no loaded connector brings. Empty when the
-	 * app can run. A trigger refuses a run with them; a deploy reports them.
+	 * The settings an app needs that this engine doesn't have, each a line that says what to do and
+	 * what sets it: a model no provider with a key serves, a host tool no loaded connector brings, a
+	 * credential a connector reads. Empty when the app can run. A trigger refuses a run with them; a
+	 * deploy reports them; the UI's wizard asks for them.
 	 */
-	async missingSettings(description: WorkflowsDescription, abortSignal: AbortSignal): Promise<string[]> {
+	async missingSettings(description: WorkflowsDescription, abortSignal: AbortSignal): Promise<MissingSetting[]> {
 		if (this.#gateway === undefined) return []
 		const models = await this.#gateway.unavailableModels(description.models, abortSignal)
 		const tools = this.#gateway.missingTools(description.tools)
@@ -262,7 +263,10 @@ export class Engine {
 			...(tools.length === 0
 				? []
 				: [
-						`No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+						{
+							message: `No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
+							fix: { kind: 'connector-for-tools' as const, tools },
+						},
 					]),
 			...this.#gateway.missingRegistries(registries),
 			...settings,
@@ -287,7 +291,10 @@ export class Engine {
 		}
 		const missing = await this.missingSettings(deployed.manifest.description, waitSignal)
 		if (missing.length > 0) {
-			throw new EngineError('unavailable', `${options.app} can't run now, so no run was started:\n${missing.join('\n')}`)
+			throw new EngineError(
+				'unavailable',
+				`${options.app} can't run now, so no run was started:\n${missing.map(({ message }) => message).join('\n')}`,
+			)
 		}
 		const app: RunApp = {
 			name: deployed.name,

@@ -102,7 +102,7 @@ describe('loadConnectors', () => {
 		url: 'https://packages.cloud.example' + path,
 		headers: { authorization: 'Bearer ' + (await credentials.get('cloud/token', abortSignal)) },
 	}),
-	missingSettings: async ({ credentials }, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? ['Set cloud/start-url.'] : []),
+	missingSettings: async ({ credentials }, abortSignal) => ((await credentials.get('cloud/start-url', abortSignal)) === undefined ? [{ message: 'Set cloud/start-url.', fix: { kind: 'credential', name: 'cloud/start-url' } }] : []),
 }
 `
 		const from = await installed({ cloud: withRegistries })
@@ -118,7 +118,7 @@ describe('loadConnectors', () => {
 
 		// Assert
 		expect(where).toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: { authorization: 'Bearer cloud-token' } })
-		expect(missing).toEqual(['Set cloud/start-url.'])
+		expect(missing).toEqual([{ message: 'Set cloud/start-url.', fix: { kind: 'credential', name: 'cloud/start-url' } }])
 	})
 
 	test("runs a tool once more when its connector's sign-in finished while it ran", async () => {

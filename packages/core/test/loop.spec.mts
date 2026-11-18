@@ -55,6 +55,22 @@ describe('loop', () => {
 		expect(textOf(model.requests[0])).toContain('What is the capital of France?')
 	})
 
+	test("sends what an agent's tool call returned with its success", async () => {
+		// Arrange
+		const lookUp = tool('lookUp', { input: z.object({}), action: async () => ({ city: 'Paris' }) })
+		const model = scriptedModel([callsTool('lookUp'), says('done')])
+		const helper = agent({ model: model.id })
+
+		// Act
+		const run = await runBody(() => helper.loop`Use ${lookUp}.`, model)
+		await run.result
+
+		// Assert
+		const succeeded = run.channel.events.find((event) => event.type === 'tool-call-succeeded')
+		expect(succeeded).toMatchObject({ result: '{"city":"Paris"}' })
+		expect(succeeded).not.toHaveProperty('title')
+	})
+
 	test('sends the template dedented, with values rendered in place', async () => {
 		// Arrange
 		const model = scriptedModel([says('ok')])
