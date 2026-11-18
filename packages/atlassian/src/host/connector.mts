@@ -4,10 +4,12 @@ import { confluenceHostTools } from './confluence/confluence-host-tools.mts'
 import type { AtlassianHostOptions } from './host-options.mts'
 import { jiraApi } from './jira/jira-api.mts'
 import { jiraHostTools } from './jira/jira-host-tools.mts'
+import { missingSiteSettings } from './site.mts'
 
 /**
  * The host halves of every Jira and Confluence tool, with each product's site and token read from
- * the gateway's credential store on every call (see `credentialNames`). The engine loads them
+ * the gateway's credential store on every call (see `cloudCredentialNames` and
+ * `dataCenterCredentialNames`). The engine loads them
  * itself with `mesh-flow connector add @mesh-flow/atlassian`; call this when you embed a gateway of
  * your own, or to test a workflow against a fake site.
  *
@@ -29,14 +31,16 @@ export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool
 /**
  * The Atlassian connector's host half, as `mesh-flow connector add @mesh-flow/atlassian` loads it:
  * {@link atlassianHostTools} with the defaults. Set the sites and tokens it reads with
- * `mesh-flow credential set` (see `credentialNames`).
+ * `mesh-flow credential set` (see `cloudCredentialNames` and `dataCenterCredentialNames`).
  *
- * @example
+ * @example Atlassian Cloud, one site for Jira and Confluence
  * ```sh
  * mesh-flow connector add @mesh-flow/atlassian
- * echo 'https://example.atlassian.net' | mesh-flow credential set jira/url
- * echo 'bot@example.com' | mesh-flow credential set jira/email   # Cloud only
- * mesh-flow credential set jira/token < api-token.txt
+ * echo 'https://example.atlassian.net' | mesh-flow credential set atlassian/url
+ * echo 'bot@example.com' | mesh-flow credential set atlassian/email
+ * mesh-flow credential set atlassian/token < api-token.txt
  * ```
  */
-export const connector: ConnectorHost = connectorHost('atlassian', () => atlassianHostTools())
+export const connector: ConnectorHost = connectorHost('atlassian', () => atlassianHostTools(), {
+	missingSettings: ({ credentials }, abortSignal) => missingSiteSettings(credentials, abortSignal),
+})

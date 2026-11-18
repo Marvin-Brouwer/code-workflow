@@ -6,9 +6,8 @@
  * gateway; the sandbox never has it.
  *
  * Every call also fails, saying what to set, when the product's site or token isn't set on the
- * host (`mesh-flow credential set jira/url`, `jira/token`, and the same for `confluence/`). On
- * Cloud, a missing `<product>/email` fails as a refused token instead: without it, the token is
- * sent as a Data Center personal access token.
+ * host: `atlassian/url`, `atlassian/email` and `atlassian/token` for Atlassian Cloud, or
+ * `<product>/url` and `<product>/token` for a product on Data Center.
  *
  * @module
  */

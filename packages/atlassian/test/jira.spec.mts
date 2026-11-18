@@ -6,9 +6,9 @@ import { fakeIssue, pngSignature, rita } from './support/fake-atlassian.mts'
 import { runOnFake, type Arrangement } from './support/run-on-fake.mts'
 
 const settings = {
-	'jira/url': 'https://example.atlassian.net',
-	'jira/email': 'bot@example.com',
-	'jira/token': 'cloud-token',
+	'atlassian/url': 'https://example.atlassian.net',
+	'atlassian/email': 'bot@example.com',
+	'atlassian/token': 'cloud-token',
 }
 
 /** An attachment that isn't an image, so it stays on the site. */
