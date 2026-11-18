@@ -67,6 +67,12 @@ const promptlyMs = shortBackendMs + 1_000
  */
 const shortDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(shortBackendMs) })
 
+/**
+ * A short pause deadline, for work that never settles and would otherwise hold the close up, and a
+ * backend deadline a busy runner can't run out of: for a test about what a shutdown leads to.
+ */
+const shortPauseDeadlines = () => ({ pause: AbortSignal.timeout(200), backend: AbortSignal.timeout(20_000) })
+
 /** Deadlines for a test about what a shutdown leads to, not how long it takes: a busy runner can't run out of them. */
 const ampleDeadlines = () => ({ pause: AbortSignal.timeout(10_000), backend: AbortSignal.timeout(20_000) })
 
@@ -124,7 +130,7 @@ describe('Engine.close', () => {
 		const created = deferred<Sandbox>()
 		const { backend } = stubBackend({ create: () => created.promise })
 		const { engine, id } = await startRun(backend)
-		await engine.close(shortDeadlines())
+		await engine.close(shortPauseDeadlines())
 
 		// Act
 		created.resolve(await stubBackend({}).backend.create(spec, signal))
