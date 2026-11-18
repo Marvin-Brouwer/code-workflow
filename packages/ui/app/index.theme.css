@@ -63,3 +63,8 @@ fieldset {
 	border: var(--line);
 	margin: 0 0 var(--space-m);
 }
+
+button:disabled {
+	color: var(--color-muted);
+	cursor: default;
+}
