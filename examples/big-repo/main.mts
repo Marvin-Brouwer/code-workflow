@@ -27,7 +27,7 @@ export default defineMeshFlow({
 	sandbox: image({
 		name: sandboxImage,
 		memoryMb: 4096,
-		registries: [nugetOrg, ...awsCodeArtifacts],
+		registries: [nugetOrg, awsCodeArtifacts],
 	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
