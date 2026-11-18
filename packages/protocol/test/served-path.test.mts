@@ -47,7 +47,7 @@ describe('servedPrefixLength', () => {
 		expect(length).toBeUndefined()
 	})
 
-	test.each(['/left-pad/..%2F-%2Fwhoami', '/left-pad/%2E%2E/-/whoami', '/left-pad%5C..%5C-', '/left-pad%2F%2Fevil'])(
+	test.each(['/left-pad/..%2F-%2Fwhoami', '/left-pad/%2E%2E/-/whoami', '/left-pad%5C..%5C-', '/left-pad%2F%2Fevil', '/%252D/whoami'])(
 		"doesn't take a path that resolves elsewhere once decoded: %s",
 		(path) => {
 			// Act
@@ -57,6 +57,17 @@ describe('servedPrefixLength', () => {
 			expect(length).toBeUndefined()
 		},
 	)
+
+	test("doesn't take a path that is below one of the paths only once decoded", () => {
+		// Arrange
+		const feedOnly: PublicRegistry = { ...registry, paths: ['/feed/'] }
+
+		// Act
+		const length = servedPrefixLength(feedOnly, '/feed%2Fleft-pad')
+
+		// Assert
+		expect(length).toBeUndefined()
+	})
 
 	test('reads the path without its query, and keeps escapes servers keep, such as a scoped npm name', () => {
 		// Act
