@@ -50,6 +50,22 @@ describe('loadConnectors', () => {
 		await expect(loaded[0]?.tools[0]?.run({}, context)).resolves.toBe(path.join(directory, 'github'))
 	})
 
+	test("carries a connector's sign-in, for `mesh-flow login`", async () => {
+		// Arrange
+		const withLogin = `export const connector = { name: 'cloud', tools: () => [], login: () => Promise.resolve() }\n`
+		const from = await installed({ cloud: withLogin, tracker: hostModule('tracker', ['search']) })
+		const directory = await temporaryDirectory()
+
+		// Act
+		const loaded = await loadConnectors({ connectors: [{ package: 'cloud' }, { package: 'tracker' }], from, directory })
+
+		// Assert
+		expect(loaded.map((connector) => [connector.name, typeof connector.login])).toEqual([
+			['cloud', 'function'],
+			['tracker', 'undefined'],
+		])
+	})
+
 	test('names the package that is not installed or has no host entry point', async () => {
 		// Arrange
 		const from = await installed({ 'no-host': undefined })

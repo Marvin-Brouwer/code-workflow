@@ -13,7 +13,7 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ConnectorName, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
+import { ConnectorName, type ConnectorHost, type ConnectorLogin, type HostTool } from '@mesh-flow/gateway'
 import { resolve } from 'import-meta-resolve'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
@@ -24,14 +24,20 @@ export const hostEntry = 'host'
 
 /** What a connector's host entry point has to export. */
 const HostModule = z.object({
-	connector: z.object({ name: ConnectorName, tools: z.custom<ConnectorHost['tools']>((value) => typeof value === 'function') }),
+	connector: z.object({
+		name: ConnectorName,
+		tools: z.custom<ConnectorHost['tools']>((value) => typeof value === 'function'),
+		login: z.custom<ConnectorLogin>((value) => typeof value === 'function').optional(),
+	}),
 })
 
-/** A connector the engine loaded: where it came from, and the host tools it brought. */
+/** A connector the engine loaded: where it came from, the host tools it brought, and how to sign in to its service. */
 export interface LoadedConnector {
 	readonly package: string
 	readonly name: string
 	readonly tools: readonly HostTool[]
+	/** Signs the user in, for `mesh-flow login <name>`, when the connector's service has sessions. */
+	readonly login?: ConnectorLogin
 }
 
 /** What `loadConnectors` takes. */
@@ -61,7 +67,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 			if (owner !== undefined && owner !== name) throw new Error(`Connectors ${owner} and ${name} both bring a host tool ${tool.name}.`)
 			owners.set(tool.name, name)
 		}
-		loaded.push({ package: name, name: host.name, tools })
+		loaded.push({ package: name, name: host.name, tools, ...(host.login === undefined ? {} : { login: host.login }) })
 	}
 	return loaded
 }
@@ -78,5 +84,6 @@ async function importHost(name: string, from: string): Promise<ConnectorHost> {
 	}
 	const parsed = HostModule.safeParse(await import(url))
 	if (!parsed.success) throw new Error(`${specifier} doesn't export a connector host: export \`connector\` made with connectorHost.`)
-	return parsed.data.connector
+	const { name: connectorName, tools, login } = parsed.data.connector
+	return { name: connectorName, tools, ...(login === undefined ? {} : { login }) }
 }
