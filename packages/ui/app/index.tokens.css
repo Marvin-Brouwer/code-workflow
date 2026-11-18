@@ -1,0 +1,28 @@
+/* Wireframe tokens: greys, one font, spacing. The design comes later. */
+:root {
+	--color-bg: #ffffff;
+	--color-fg: #1a1a1a;
+	--color-muted: #6b6b6b;
+	--color-line: #c8c8c8;
+	--color-fill: #f2f2f2;
+
+	--font: system-ui, sans-serif;
+	--font-mono: ui-monospace, monospace;
+
+	--space-xs: 0.25rem;
+	--space-s: 0.5rem;
+	--space-m: 1rem;
+	--space-l: 2rem;
+
+	--line: 1px solid var(--color-line);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-bg: #161616;
+		--color-fg: #e8e8e8;
+		--color-muted: #9a9a9a;
+		--color-line: #444444;
+		--color-fill: #222222;
+	}
+}
