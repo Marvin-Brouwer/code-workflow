@@ -528,7 +528,7 @@ describe('model calls', () => {
  */
 async function packageRun(
 	sent: typeof fetch,
-	registry: PackageRegistry = npmRegistry,
+	registry: PackageRegistry,
 	options: Partial<Pick<GatewayOptions, 'registries'>> & { readonly home?: string } = {},
 ) {
 	const { gateway } = await testGateway({ fetch: sent, ...options })
@@ -572,7 +572,7 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() =>
 			Promise.resolve(new Response('tarball', { headers: { 'content-type': 'application/octet-stream', 'set-cookie': 'a=b' } })),
 		)
-		const { fetchPath } = await packageRun(sent)
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer, staged } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz', 'application/octet-stream')
@@ -592,7 +592,8 @@ describe('package calls', () => {
 
 	test("passes the registry's 404 on: package managers ask for what may not exist", async () => {
 		// Arrange
-		const { fetchPath } = await packageRun(vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status: 404 }))))
+		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status: 404 })))
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer } = await fetchPath('/no-such-package')
@@ -653,7 +654,7 @@ describe('package calls', () => {
 		// Arrange
 		const location = 'https://elsewhere.example/left-pad'
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 302, headers: { location } })))
-		const { fetchPath } = await packageRun(sent)
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer } = await fetchPath('/left-pad')
@@ -735,7 +736,7 @@ describe('package calls', () => {
 	])('answers a fetch that failed because %s as one that may pass', async (_what, failing) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(failing)
-		const { fetchPath } = await packageRun(sent)
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
@@ -746,7 +747,7 @@ describe('package calls', () => {
 
 	test("answers a path that isn't a package fetch as a refusal, which another try won't change", async () => {
 		// Arrange
-		const { fetchPath } = await packageRun(vi.fn<typeof fetch>())
+		const { fetchPath } = await packageRun(vi.fn<typeof fetch>(), npmRegistry)
 
 		// Act
 		const { answer } = await fetchPath('/-/whoami')
@@ -759,7 +760,7 @@ describe('package calls', () => {
 		// Arrange
 		const headers = { 'content-length': String(maxPackageBytes + 1) }
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('too large', { headers })))
-		const { fetchPath } = await packageRun(sent)
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer } = await fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
@@ -771,7 +772,7 @@ describe('package calls', () => {
 	test("refuses a registry the run's app doesn't restore from", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { gateway, grant } = await packageRun(sent)
+		const { gateway, grant } = await packageRun(sent, npmRegistry)
 
 		// Act
 		const { answer } = await callGateway(
@@ -791,7 +792,7 @@ describe('package calls', () => {
 	test('refuses a registry the sandbox widened, though it has the name of one the app restores from', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { gateway, grant } = await packageRun(sent)
+		const { gateway, grant } = await packageRun(sent, npmRegistry)
 		const widened = { ...npmRegistry, excludedPaths: [] }
 
 		// Act
@@ -812,7 +813,7 @@ describe('package calls', () => {
 	test("refuses package calls on the run's and a loop's endpoint: they go on the package endpoint", async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { gateway, grant } = await packageRun(sent)
+		const { gateway, grant } = await packageRun(sent, npmRegistry)
 		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
 		const loop = EndpointGrant.parse(resultOf(opened))
 		const request = { registry: npmRegistry, path: '/left-pad' } as const
@@ -831,7 +832,7 @@ describe('package calls', () => {
 
 	test('opens a package endpoint with tokens of its own, which takes package fetches only', async () => {
 		// Arrange
-		const { gateway, grant } = await packageRun(vi.fn<typeof fetch>())
+		const { gateway, grant } = await packageRun(vi.fn<typeof fetch>(), npmRegistry)
 		const packages = packagesOf(grant)
 
 		// Act
@@ -876,7 +877,7 @@ describe('package calls', () => {
 	])('fetches %s again each time', async (_what, path, status) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}', { status })))
-		const { fetchPath } = await packageRun(sent)
+		const { fetchPath } = await packageRun(sent, npmRegistry)
 		await fetchPath(path)
 
 		// Act
