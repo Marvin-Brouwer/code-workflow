@@ -27,6 +27,23 @@ describe('runWorkflow', () => {
 		expect(run.channel.messages.at(-1)).toEqual({ type: 'succeeded' })
 	})
 
+	test('sends what a tool call returned, and its title, with its success', async () => {
+		// Arrange
+		const double = tool('double', {
+			input: z.object({ n: z.number() }),
+			action: async ({ n }) => n * 2,
+			describe: ({ n }, doubled) => `Doubled ${String(n)} to ${String(doubled)}`,
+		})
+
+		// Act
+		const run = await runBody(() => double({ n: 2 }))
+		await run.result
+
+		// Assert
+		const succeeded = run.channel.events.find((event) => event.type === 'tool-call-succeeded')
+		expect(succeeded).toMatchObject({ result: '4', title: 'Doubled 2 to 4' })
+	})
+
 	test('sends failed with the error when the body throws', async () => {
 		// Act
 		const run = await runBody(() => Promise.reject(new Error('no story')))

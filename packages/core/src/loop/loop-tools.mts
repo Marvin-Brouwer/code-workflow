@@ -1,10 +1,11 @@
-import type { ToolRegistration } from '@earendil-works/pi-durable'
+import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
 import { renderValue } from '../render/to-prompt.mts'
 import { describeError } from '../run/describe-error.mts'
+import { callOutcome } from '../run/call-outcome.mts'
 import { emitEvent, inEventOf } from '../run/run-events.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import { toolParameters } from '../tool/json-schema.mts'
-import { ToolInputError, type ToolSpec } from '../tool/tool.mts'
+import { ToolInputError, type ToolOutcome, type ToolSpec } from '../tool/tool.mts'
 import type { LoopSession } from './loop-session.mts'
 import { endingErrorResult, errorResult, textResult } from './tool-result.mts'
 
@@ -19,28 +20,53 @@ export function agentTool(spec: ToolSpec, session: LoopSession): ToolRegistratio
 		name: spec.name,
 		description: spec.description ?? spec.name,
 		parameters,
-		execute: (args, _api, context) =>
-			inEventOf(session.scope, 'tool-call', { tool: spec.name, from: 'agent', input: args }, async (scope) => {
-				const abortSignal =
-					context.abortSignal === undefined ? session.abortSignal : AbortSignal.any([session.abortSignal, context.abortSignal])
-				const bail = (error: unknown) => {
-					emitEvent(scope, 'tool-error', { error: describeError(error) })
-					session.finish({ kind: 'error', error }, 'round')
-					return endingErrorResult(spec.name, error)
-				}
-				let action: ReturnType<ToolSpec['prepare']>
-				try {
-					action = spec.prepare(unwrap(args))
-				} catch (error) {
-					if (error instanceof ToolInputError) return errorResult(`${error.message}\nFix the input and call ${spec.name} again.`)
-					return bail(error)
-				}
-				try {
-					return textResult(await renderValue(await untilAborted(action({ abortSignal }), abortSignal)))
-				} catch (error) {
-					// Also a bad input of a tool the action calls: that's the action failing, not the agent's mistake.
-					return bail(error)
-				}
-			}),
+		execute: async (args, _api, context) => {
+			const { result } = await inEventOf(
+				session.scope,
+				'tool-call',
+				{ tool: spec.name, from: 'agent', input: args },
+				(scope) => {
+					const abortSignal =
+						context.abortSignal === undefined ? session.abortSignal : AbortSignal.any([session.abortSignal, context.abortSignal])
+					return callForAgent(spec, unwrap(args), abortSignal, (error) => {
+						emitEvent(scope, 'tool-error', { error: describeError(error) })
+						session.finish({ kind: 'error', error }, 'round')
+						return endingErrorResult(spec.name, error)
+					})
+				},
+				// Only a call that returned has an outcome: an input the agent must fix, or a bail, doesn't.
+				({ outcome }) => (outcome === undefined ? {} : callOutcome(outcome)),
+			)
+			return result
+		},
+	}
+}
+
+/** What a call gives the agent, and what it returned when it did. */
+interface AgentCall {
+	readonly result: ToolExecutionResult
+	readonly outcome?: ToolOutcome<unknown>
+}
+
+/** Runs one call of the agent's: an input that doesn't fit goes back to the agent, any other throw goes to `bail`. */
+async function callForAgent(
+	spec: ToolSpec,
+	input: unknown,
+	abortSignal: AbortSignal,
+	bail: (error: unknown) => ToolExecutionResult,
+): Promise<AgentCall> {
+	let action: ReturnType<ToolSpec['prepare']>
+	try {
+		action = spec.prepare(input)
+	} catch (error) {
+		if (error instanceof ToolInputError) return { result: errorResult(`${error.message}\nFix the input and call ${spec.name} again.`) }
+		return { result: bail(error) }
+	}
+	try {
+		const outcome = await untilAborted(action({ abortSignal }), abortSignal)
+		return { result: textResult(await renderValue(outcome.output)), outcome }
+	} catch (error) {
+		// Also a bad input of a tool the action calls: that's the action failing, not the agent's mistake.
+		return { result: bail(error) }
 	}
 }

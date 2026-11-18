@@ -12,6 +12,7 @@ import {
 	type EntryId,
 	type Extension,
 	type SettledSubmissionRecord,
+	type ToolExecutionResult,
 	type ToolRegistration,
 } from '@earendil-works/pi-durable'
 import { CodingTools } from '@earendil-works/pi-durable/tools'
@@ -19,6 +20,7 @@ import { z } from 'zod'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
 import type { ExitSpec } from '../exits/exit.mts'
 import type { Endpoint } from '../gateway/gateway-client.mts'
+import { callOutcome } from '../run/call-outcome.mts'
 import { emitEvent, inEvent } from '../run/run-events.mts'
 import { currentScope, type Scope } from '../run/run-scope.mts'
 import type { WorkspaceFolder } from '../workspace/workspace-folder.mts'
@@ -283,7 +285,13 @@ function loopExtension(
 				// The loop's own tools have their own events; this covers the coding tools.
 				afterTool: (call, result) => {
 					if (!own.has(call.name))
-						emitEvent(scope, 'tool-call', { tool: call.name, from: 'agent', input: call.arguments, failed: result.isError === true })
+						emitEvent(scope, 'tool-call', {
+							tool: call.name,
+							from: 'agent',
+							input: call.arguments,
+							failed: result.isError === true,
+							...callOutcome({ output: outputText(result), title: undefined }),
+						})
 					return undefined
 				},
 			}),
@@ -353,6 +361,12 @@ async function answerText(conversation: Conversation, answer: EntryId, context: 
 	const entry = await conversation.commit((tx) => tx.entry(AssistantEntry, answer), context)
 	const message = entry?.model?.[0]
 	return message?.role === 'assistant' ? textOf(message) : ''
+}
+
+/** The text a coding tool handed the agent, such as a command's output. */
+function outputText(result: ToolExecutionResult): string | undefined {
+	const parts = (result.output ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : []))
+	return parts.length === 0 ? undefined : parts.join('')
 }
 
 function textOf(message: AssistantMessage): string {
