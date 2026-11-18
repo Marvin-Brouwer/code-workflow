@@ -16,6 +16,7 @@ import { agent } from '../src/agent/agent.mts'
 import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
 import { definedHostTools, hostToolStub } from '../src/gateway/host-tool-stub.mts'
 import { gatewayChannel } from './support/gateway-channel.mts'
+import { npmRegistry } from './support/registries.mts'
 import { runBody } from './support/run-body.mts'
 import { callsTool, says, scriptedModel } from './support/scripted-model.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
@@ -170,7 +171,7 @@ describe('gateway', () => {
 		const gateway = client(abortSignal)
 
 		// Act
-		const calling = gateway.call(gateway.run, { type: 'package', request: { registry: 'npm', path: 'left-pad' } }, abortSignal)
+		const calling = gateway.call(gateway.run, { type: 'package', request: { registry: npmRegistry, path: 'left-pad' } }, abortSignal)
 
 		// Assert
 		await expect(calling).rejects.toThrow(GatewayCallError)

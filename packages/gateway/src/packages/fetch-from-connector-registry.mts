@@ -1,6 +1,7 @@
-import { registryName, type ConnectorRegistry, type PackageRequest } from '@mesh-flow/protocol'
+import type { ConnectorRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { defaultFetchRetry, retryingFetch } from '../http/retrying-fetch.mts'
 import { ownEntry } from '../own-entry.mts'
+import { isRegistryPath } from './registry-path.mts'
 import { untilAborted } from '../until-aborted.mts'
 import type { ConnectorRegistryRequest, RegistryTarget, ResolveRegistryTarget } from './connector-registry.mts'
 import {
@@ -29,24 +30,10 @@ export function connectorRegistryFetch(
 ): { readonly request: ConnectorRegistryRequest; readonly resolve: ResolveRegistryTarget } {
 	const { registry, path, accept } = request
 	const resolve = ownEntry(resolvers, registry.connector)
-	if (resolve === undefined) throw new Error(`${registryName(registry)} needs connector ${registry.connector}, which isn't loaded.`)
+	if (resolve === undefined) throw new Error(`${registry.name} needs connector ${registry.connector}, which isn't loaded.`)
 	const checked: ConnectorRegistryRequest = { registry, path, ...(accept === undefined ? {} : { accept }) }
-	if (!isConnectorRegistryRequest(checked)) throw new Error(`${path} isn't a package fetch on ${registry.name}.`)
+	if (!isRegistryPath(registry, path)) throw new Error(`${path} isn't a package fetch on ${registry.name}.`)
 	return { request: checked, resolve }
-}
-
-/**
- * Whether `request` is a fetch on one of its connector registry's paths, already normalized (no
- * `..`, `//` or fragment), so a connector only has to say where it goes.
- */
-export function isConnectorRegistryRequest(request: ConnectorRegistryRequest): boolean {
-	const url = new URL(request.path, `https://${request.registry.host}`)
-	return (
-		url.host === request.registry.host &&
-		`${url.pathname}${url.search}` === request.path &&
-		!url.pathname.includes('//') &&
-		request.registry.paths.some((prefix) => url.pathname.startsWith(prefix))
-	)
 }
 
 /**
@@ -73,7 +60,7 @@ async function followedFetch(
 	{ fetchFromHost, maxBytes = maxPackageBytes }: RegistryFetchOptions,
 	abortSignal: AbortSignal,
 ): Promise<RegistryAnswer> {
-	const fetched = `${registryName(request.registry)} ${request.path}`
+	const fetched = `${request.registry.name} ${request.path}`
 	const send = retryingFetch(fetchFromHost, defaultFetchRetry)
 	const origin = new URL(where.url).origin
 	let url = where.url
@@ -91,9 +78,9 @@ async function followedFetch(
 		await response.body?.cancel()
 		const next = new URL(location, url)
 		if (next.protocol !== 'https:')
-			throw new Error(`${registryName(request.registry)} redirected ${request.path} to ${next.protocol} instead of HTTPS.`)
+			throw new Error(`${request.registry.name} redirected ${request.path} to ${next.protocol} instead of HTTPS.`)
 		if (redirects === maxRedirects)
-			throw new Error(`${registryName(request.registry)} redirected ${request.path} more than ${String(maxRedirects)} times.`)
+			throw new Error(`${request.registry.name} redirected ${request.path} more than ${String(maxRedirects)} times.`)
 		url = next.href
 	}
 }

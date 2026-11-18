@@ -1,6 +1,6 @@
 # `@mesh-flow/toolchain-dotnet`
 
-The .NET toolchain for mesh-flow: tools an agent checks its own work with, checks for `verify` that check it again, and a function for code that moves package references. Everything runs in the sandbox with the `dotnet` of the sandbox's image, so the image needs a .NET SDK; NuGet packages come through the runtime's package proxy, when the app's `image` lists `registries: ['nuget']` (see [`@mesh-flow/core`](../core/README.md#packages)). The package ships no agents.
+The .NET toolchain for mesh-flow: tools an agent checks its own work with, checks for `verify` that check it again, and a function for code that moves package references. Everything runs in the sandbox with the `dotnet` of the sandbox's image, so the image needs a .NET SDK; NuGet packages come through the runtime's package proxy, when the app's `image` lists `registries: [nugetOrg]` (see [`@mesh-flow/core`](../core/README.md#packages)). The package ships no agents.
 
 ## Usage
 

@@ -16,6 +16,7 @@ import {
 	type RunGrant,
 } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test } from 'vitest'
+import { npmRegistry } from './support/registries.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const core = pathToFileURL(path.join(import.meta.dirname, '../src/_module/core.mts')).href
@@ -113,7 +114,7 @@ const fetch = workflow('fetch', async () => {
 	if (JSON.parse(stdout).name !== 'left-pad') throw new Error('Not what the gateway answered: ' + stdout)
 })
 
-export default defineMeshFlow({ sandbox: image({ name: 'node:26-slim', registries: ['npm'] }), workflows: [userTrigger(fetch)] })
+export default defineMeshFlow({ sandbox: image({ name: 'node:26-slim', registries: [${JSON.stringify(npmRegistry)}] }), workflows: [userTrigger(fetch)] })
 `
 
 /** The error of a `failed` message, or `undefined` for any other message. */
@@ -338,7 +339,7 @@ describe('an entry file started by the engine', () => {
 		expect(call).toMatchObject({
 			type: 'call',
 			endpoint: 'packages',
-			call: { type: 'package', request: { registry: 'npm', path: '/left-pad' } },
+			call: { type: 'package', request: { registry: npmRegistry, path: '/left-pad' } },
 		})
 	})
 })

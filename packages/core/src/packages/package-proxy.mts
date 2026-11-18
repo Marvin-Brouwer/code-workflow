@@ -4,7 +4,7 @@ import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { TLSSocket } from 'node:tls'
-import { PackageRequest, registryHost, registryPaths, type PackageRegistry } from '@mesh-flow/protocol'
+import { PackageRequest, servedPrefixLength, type PackageRegistry } from '@mesh-flow/protocol'
 import { GatewayCallError } from '../gateway/gateway-client.mts'
 import type { GatewayFetch } from '../gateway/gateway-packages.mts'
 import { describeError } from '../run/describe-error.mts'
@@ -56,15 +56,14 @@ function normalizedHost(host: string): string {
 }
 
 /**
- * The registry on `host` that `path` is on: the one with the longest of its paths that `path` starts
- * with, so two repositories on one host each get their own fetches.
+ * The registry on `host` that `path` is a package fetch on: the one with the longest of its paths
+ * that `path` starts with, so two repositories on one host each get their own fetches.
  */
 function registryOfPath(registries: readonly PackageRegistry[], path: string): PackageRegistry | undefined {
 	let found: { registry: PackageRegistry; length: number } | undefined
 	for (const registry of registries) {
-		for (const prefix of registryPaths(registry)) {
-			if (path.startsWith(prefix) && prefix.length > (found?.length ?? -1)) found = { registry, length: prefix.length }
-		}
+		const length = servedPrefixLength(registry, path)
+		if (length !== undefined && length > (found?.length ?? -1)) found = { registry, length }
 	}
 	return found?.registry
 }
@@ -78,7 +77,7 @@ function registryOfPath(registries: readonly PackageRegistry[], path: string): P
  */
 export async function startPackageProxy(options: PackageProxyOptions): Promise<PackageProxy> {
 	options.abortSignal.throwIfAborted()
-	const registriesOfHost = Map.groupBy(options.registries, registryHost)
+	const registriesOfHost = Map.groupBy(options.registries, (registry) => registry.host)
 	const registriesOfSocket = new WeakMap<Socket, readonly PackageRegistry[]>()
 	const connections = new Set<Duplex>()
 

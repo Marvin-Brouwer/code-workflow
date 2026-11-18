@@ -12,6 +12,7 @@ import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.m
 import { packageFetchThroughGateway, type GatewayFetch } from '../src/gateway/gateway-packages.mts'
 import { startPackageAccess, type PackageEnvironment } from '../src/packages/package-access.mts'
 import { gatewayChannel } from './support/gateway-channel.mts'
+import { npmRegistry, nugetOrg } from './support/registries.mts'
 import { storedZip } from './support/stored-zip.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -88,7 +89,7 @@ async function throughGateway(registries: readonly PackageRegistry[], fetchFromH
  */
 async function proxyWith(
 	fetch: Fetch,
-	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
+	registries: readonly PackageRegistry[] = [npmRegistry, nugetOrg],
 ): Promise<{ environment: PackageEnvironment; stop: AbortController; staging: string }> {
 	const staging = await temporaryDirectory()
 	let staged = 0
@@ -104,7 +105,7 @@ async function proxyWith(
 /** Starts the proxy with `fetchStaged` behind it, stopped when the test ends. */
 async function proxyOver(
 	fetchStaged: GatewayFetch,
-	registries: readonly PackageRegistry[] = ['npm', 'nuget'],
+	registries: readonly PackageRegistry[] = [npmRegistry, nugetOrg],
 ): Promise<{ environment: PackageEnvironment; stop: AbortController }> {
 	const stop = new AbortController()
 	const directory = await temporaryDirectory()
@@ -272,7 +273,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 		// Assert
 		const installed = JSON.parse(await readFile(path.join(project, 'node_modules', fakeNpmPackage.name, 'package.json'), 'utf8')) as unknown
 		expect(installed).toMatchObject(fakeNpmPackage)
-		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'npm', path: tarballPath }), expect.any(AbortSignal))
+		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: npmRegistry, path: tarballPath }), expect.any(AbortSignal))
 	})
 
 	// .NET reads SSL_CERT_FILE on Linux only; on macOS it trusts the keychain. CI's Linux runners have the SDK.
@@ -290,7 +291,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 						: new Response(asked.body, { status: asked.status, headers: asked.headers }),
 				)
 			})
-			const { environment } = await proxyOver(await throughGateway(['nuget'], fromNuGet))
+			const { environment } = await proxyOver(await throughGateway([nugetOrg], fromNuGet))
 			const project = await restoringProject()
 			const packages = path.join(project, 'packages')
 
@@ -334,7 +335,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 		// Assert
 		expect(JSON.parse(stdout)).toEqual({ version: '3.0.0' })
-		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'nuget', path: '/v3/index.json' }), expect.any(AbortSignal))
+		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: nugetOrg, path: '/v3/index.json' }), expect.any(AbortSignal))
 	})
 
 	test('refuses hosts that are not the registries', async () => {
@@ -380,6 +381,20 @@ describe.skipIf(onWindows)('package proxy', () => {
 		expect(fetch).not.toHaveBeenCalled()
 	})
 
+	test("refuses a path the registry excludes, such as the npm registry's own API, and sends nothing", async () => {
+		// Arrange
+		const fetch = vi.fn<Fetch>()
+		const { environment } = await proxyWith(fetch)
+		const home = await temporaryDirectory()
+
+		// Act
+		const answered = await curlStatus(environment, home, ['https://registry.npmjs.org/-/whoami'])
+
+		// Assert
+		expect(answered).toBe('403')
+		expect(fetch).not.toHaveBeenCalled()
+	})
+
 	test.each([
 		["403 to a fetch the gateway refused, which another try won't change", new GatewayCallError('Not a package fetch.'), '403'],
 		['502 to a fetch that failed for now', new GatewayCallError('npm is down.', { transient: true }), '502'],
@@ -399,7 +414,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 	test('answers 403 to a path the gateway refuses, and 502 when the host cannot reach the registry', async () => {
 		// Arrange
 		const unreachable = vi.fn<typeof globalThis.fetch>(() => Promise.reject(new TypeError('fetch failed')))
-		const { environment } = await proxyOver(await throughGateway(['npm'], unreachable))
+		const { environment } = await proxyOver(await throughGateway([npmRegistry], unreachable))
 		const home = await temporaryDirectory()
 
 		// Act
@@ -435,7 +450,7 @@ describe.skipIf(onWindows)('package proxy', () => {
 
 		// Assert
 		expect(status).toBe('200')
-		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: 'npm', path: '/left-pad' }), expect.any(AbortSignal))
+		expect(fetch).toHaveBeenCalledWith(expect.objectContaining({ registry: npmRegistry, path: '/left-pad' }), expect.any(AbortSignal))
 	})
 
 	test('keeps serving when a client resets a refused tunnel', async () => {
@@ -540,7 +555,7 @@ describe('package access', () => {
 
 		// Act
 		const { proxy, environment } = await startPackageAccess({
-			registries: ['npm'],
+			registries: [npmRegistry],
 			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: stop.signal,
@@ -560,7 +575,7 @@ describe('package access', () => {
 
 		// Act
 		const starting = startPackageAccess({
-			registries: ['npm'],
+			registries: [npmRegistry],
 			fetchStaged: vi.fn<GatewayFetch>(),
 			directory,
 			abortSignal: AbortSignal.abort(reason),

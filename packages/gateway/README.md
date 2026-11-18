@@ -37,9 +37,9 @@ The gateway sends the Anthropic Messages, OpenAI Chat Completions and OpenAI Res
 
 ## Packages
 
-A sandbox has no network, so its package fetches come here too: a `package` call names one of the registries the run's app restores from (which `openRun` gets in `registries`) and a path on it.
+A sandbox has no network, so its package fetches come here too: a `package` call names one of the registries the run's app restores from (which `openRun` gets in `registries`) and a path on it. The gateway fetches from the registry as `openRun` got it, never as the call describes it: a registry with other paths or another host is another registry, and is refused.
 
-- **Public registries**, `nuget` (nuget.org) and `npm`: the gateway sends the fetch only when the path is a package fetch on that registry, already normalized: nuget.org's `/v3/` and `/v3-flatcontainer/`, or a package below its name on the npm registry, not npm's `/-/` API. A redirect isn't followed: it goes back as it is, so the next fetch is checked too.
+- **Public registries**, such as `nugetOrg` from `@mesh-flow/toolchain-dotnet` and `npmRegistry` from `@mesh-flow/toolchain-node`: the package of the registry's ecosystem defines its host, the paths below which it serves packages and the paths below those it doesn't (`excludedPaths`, such as npm's `/-/` API). The gateway sends the fetch only when the path is below one of its paths and none of the excluded ones, already normalized. A redirect isn't followed: it goes back as it is, so the next fetch is checked too.
 - **A connector's registry**, such as a CodeArtifact repository from `@mesh-flow/aws`: the path has to be below one of the registry's paths, already normalized, and the connector's `ResolveRegistryTarget` says where it goes and with which credential. The gateway follows up to three HTTPS redirects, as to a signed download, and sends the connector's headers to the registry's own host only. A redirect to plain HTTP, or a fourth one, is refused like a fetch that isn't a package fetch: the proxy answers 403.
 
 The registry's answer goes back whole, a 404 too, with only `content-type`, `etag`, `last-modified` and `location` of its headers. The body isn't in the answer: the call's `answer` resolves to it as `staged`, next to the answer, for the engine, which writes it into the sandbox as a file the answer names (see [`@mesh-flow/protocol`](../protocol/README.md)), so the mailbox only carries small JSON. A body larger than `maxPackageBytes` (256 MB) is refused. Reads are tried again as with `retryingFetch`.
@@ -50,10 +50,11 @@ A run whose app restores from npm and from a connector's registry opens its endp
 
 ```ts
 import { openGateway, openGatewayHome, type ResolveRegistryTarget } from '@mesh-flow/gateway'
-import type { ConnectorRegistry } from '@mesh-flow/protocol'
+import type { ConnectorRegistry, PublicRegistry } from '@mesh-flow/protocol'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const { directory, credentials, providers } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
+const npm: PublicRegistry = { name: 'npm', host: 'registry.npmjs.org', paths: ['/'], excludedPaths: ['/-/'] }
 const packages: ConnectorRegistry = { connector: 'cloud', name: 'cloud packages', host: 'packages.example.com', paths: ['/npm/packages/'], settings: {} }
 const cloud: ResolveRegistryTarget = async ({ registry, path }, fetchAbortSignal) => ({
 	url: `https://${registry.host}${path}`,
@@ -61,7 +62,7 @@ const cloud: ResolveRegistryTarget = async ({ registry, path }, fetchAbortSignal
 })
 
 const gateway = openGateway({ home: directory, credentials, providers, registries: { cloud } })
-const grant = await gateway.openRun('run-1', { tools: [], registries: ['npm', packages] }, abortSignal)
+const grant = await gateway.openRun('run-1', { tools: [], registries: [npm, packages] }, abortSignal)
 ```
 
 `missingRegistries(registries)` says which registries' connectors aren't loaded, for a trigger to report before a run starts.

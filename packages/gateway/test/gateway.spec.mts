@@ -14,6 +14,7 @@ import type { ResolveRegistryTarget } from '../src/packages/connector-registry.m
 import { fetchFromPublicRegistry, maxPackageBytes } from '../src/packages/fetch-from-public-registry.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
 import { SignInNeededError } from '../src/tools/sign-in-needed.mts'
+import { npmRegistry, nugetOrg } from './support/registries.mts'
 import { abortSignal, callGateway, callOf, testGateway } from './support/test-gateway.mts'
 
 const runId = 'run-1'
@@ -527,7 +528,7 @@ describe('model calls', () => {
  */
 async function packageRun(
 	sent: typeof fetch,
-	registry: PackageRegistry = 'npm',
+	registry: PackageRegistry = npmRegistry,
 	options: Partial<Pick<GatewayOptions, 'registries'>> & { readonly home?: string } = {},
 ) {
 	const { gateway } = await testGateway({ fetch: sent, ...options })
@@ -544,6 +545,9 @@ async function packageRun(
 		)
 	return { gateway, grant, fetchPath }
 }
+
+/** The public registries the tests restore from, by a short name for test titles. */
+const publicRegistries = { npm: npmRegistry, nuget: nugetOrg }
 
 /** A fetch or a connector stuck on the network, which ignores its signal. */
 const never = () => new Promise<never>(() => undefined)
@@ -597,8 +601,9 @@ describe('package calls', () => {
 		expect(resultOf(answer)).toMatchObject({ status: 404 })
 	})
 
-	test.each<[PackageRegistry, string]>([
+	test.each<[keyof typeof publicRegistries, string]>([
 		['npm', '/-/npm/v1/security/advisories/bulk'],
+		['npm', '/-/'],
 		['npm', '/left-pad/../-/whoami'],
 		['npm', '/left-pad/%2e%2e/-/whoami'],
 		['npm', '//evil.example/left-pad'],
@@ -606,12 +611,13 @@ describe('package calls', () => {
 		['npm', '/left-pad#fragment'],
 		['npm', '/'],
 		['nuget', '/v3x/index.json'],
+		['nuget', '/v3/'],
 		['nuget', '/v3-flatcontainer/../api/v2/package/x'],
 		['nuget', '/api/v2/package/newtonsoft.json'],
-	])('refuses %s %s, which is no package fetch, and sends nothing', async (registry, path) => {
+	])('refuses %s %s, which is no package fetch, and sends nothing', async (name, path) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>()
-		const { fetchPath } = await packageRun(sent, registry)
+		const { fetchPath } = await packageRun(sent, publicRegistries[name])
 
 		// Act
 		const { answer } = await fetchPath(path)
@@ -630,7 +636,7 @@ describe('package calls', () => {
 	])('fetches %s from nuget.org', async (path) => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
-		const { fetchPath } = await packageRun(sent, 'nuget')
+		const { fetchPath } = await packageRun(sent, nugetOrg)
 
 		// Act
 		const { answer } = await fetchPath(path)
@@ -668,7 +674,7 @@ describe('package calls', () => {
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 
 		// Act
-		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
+		const fetching = fetchFromPublicRegistry({ registry: npmRegistry, path: '/left-pad' }, { fetchFromHost: sent, maxBytes }, abortSignal)
 
 		// Assert
 		await expect(fetching).rejects.toThrow('the most a package fetch takes')
@@ -679,7 +685,7 @@ describe('package calls', () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => new Promise<never>(() => undefined))
 		const stop = new AbortController()
-		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: npmRegistry, path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -696,7 +702,7 @@ describe('package calls', () => {
 		const body = new ReadableStream<Uint8Array>()
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response(body)))
 		const stop = new AbortController()
-		const fetching = fetchFromPublicRegistry({ registry: 'npm', path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
+		const fetching = fetchFromPublicRegistry({ registry: npmRegistry, path: '/left-pad' }, { fetchFromHost: sent }, stop.signal)
 		await vi.waitFor(() => {
 			expect(sent).toHaveBeenCalled()
 		})
@@ -770,12 +776,33 @@ describe('package calls', () => {
 			runId,
 			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
 				type: 'package',
-				request: { registry: 'nuget', path: '/v3/index.json' },
+				request: { registry: nugetOrg, path: '/v3/index.json' },
 			}),
 		)
 
 		// Assert
 		expect(errorOf(answer)).toContain("doesn't restore from nuget")
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test('refuses a registry the sandbox widened, though it has the name of one the app restores from', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, grant } = await packageRun(sent)
+		const widened = { ...npmRegistry, excludedPaths: [] }
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(packagesOf(grant).endpoint, tokenOf(packagesOf(grant)), {
+				type: 'package',
+				request: { registry: widened, path: '/-/whoami' },
+			}),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toContain("doesn't restore from npm")
 		expect(sent).not.toHaveBeenCalled()
 	})
 
@@ -785,7 +812,7 @@ describe('package calls', () => {
 		const { gateway, grant } = await packageRun(sent)
 		const { answer: opened } = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant), { type: 'open', tools: [] }))
 		const loop = EndpointGrant.parse(resultOf(opened))
-		const request = { registry: 'npm', path: '/left-pad' } as const
+		const request = { registry: npmRegistry, path: '/left-pad' } as const
 
 		// Act
 		const onRun = await callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, 1), { type: 'package', request }))
@@ -827,9 +854,9 @@ describe('package calls', () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball', { headers: { etag: '"1"' } })))
 		const { home } = await testGateway()
-		const first = await packageRun(sent, 'npm', { home })
+		const first = await packageRun(sent, npmRegistry, { home })
 		await first.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
-		const later = await packageRun(sent, 'npm', { home })
+		const later = await packageRun(sent, npmRegistry, { home })
 
 		// Act
 		const { answer, staged } = await later.fetchPath('/left-pad/-/left-pad-1.3.0.tgz')
@@ -976,7 +1003,7 @@ describe('package calls', () => {
 		const { gateway, fetchPath } = await packageRun(sent, cloudRegistry)
 
 		// Act
-		const missing = gateway.missingRegistries(['npm', cloudRegistry])
+		const missing = gateway.missingRegistries([npmRegistry, cloudRegistry])
 		const { answer } = await fetchPath('/npm/packages/left-pad')
 
 		// Assert

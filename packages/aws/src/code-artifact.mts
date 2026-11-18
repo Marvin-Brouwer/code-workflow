@@ -13,7 +13,7 @@ import { codeArtifactHost, codeArtifactPaths, CodeArtifactRepository } from './r
  * export default defineMeshFlow({
  * 	sandbox: image({
  * 		name: 'node:26-slim',
- * 		registries: ['nuget', codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
+ * 		registries: [nugetOrg, codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
  * 	}),
  * 	workflows: [userTrigger(develop)],
  * })

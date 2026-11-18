@@ -1,0 +1,57 @@
+{
+	"name": "@mesh-flow/toolchain-node",
+	"version": "0.0.0",
+	"description": "The Node.js toolchain for mesh-flow workflows: the npm registry for the sandbox's package restores",
+	"keywords": [
+		"agents",
+		"mesh-flow",
+		"node",
+		"npm",
+		"workflow"
+	],
+	"homepage": "https://github.com/Marvin-Brouwer/code-workflow/tree/main/packages/toolchain-node#readme",
+	"bugs": "https://github.com/Marvin-Brouwer/code-workflow/issues",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Marvin-Brouwer/code-workflow.git",
+		"directory": "packages/toolchain-node"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/_module/node.mts",
+			"types": "./dist/node.d.mts",
+			"import": "./dist/node.mjs"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@mesh-flow/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@mesh-flow/protocol": "workspace:*",
+		"@types/node": "^26.6.6",
+		"tsdown": "^0.23.4",
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=26"
+	}
+}

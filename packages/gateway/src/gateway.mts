@@ -1,7 +1,7 @@
 import path from 'node:path'
 import {
 	registryKey,
-	registryName,
+	isConnectorRegistry,
 	stagedFileName,
 	uniqueRegistries,
 	type CallAnswer,
@@ -187,7 +187,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 	/** Fetches a package from the cache, or from its registry, and keeps it in the cache when it's one that never changes. */
 	const fetchedPackage = async (request: PackageRequest, abortSignal: AbortSignal): Promise<RegistryAnswer> => {
 		const { registry } = request
-		const connectorFetch = typeof registry === 'string' ? undefined : connectorRegistryFetch({ ...request, registry }, connectorRegistries)
+		const connectorFetch = isConnectorRegistry(registry) ? connectorRegistryFetch({ ...request, registry }, connectorRegistries) : undefined
 		const cached = await cache.get(request, abortSignal)
 		if (cached !== undefined) return cached
 		const fetched =
@@ -230,9 +230,11 @@ export function openGateway(options: GatewayOptions): Gateway {
 		}
 		if (call.type === 'package') {
 			const asked = registryKey(call.request.registry)
-			if (!state.registries.some((registry) => registryKey(registry) === asked))
-				throw new Error(`The app doesn't restore from ${registryName(call.request.registry)}: add it to the sandbox's registries.`)
-			const fetched = await fetchedPackage(call.request, abortSignal)
+			// The registry as the app listed it, never as the sandbox describes it.
+			const registry = state.registries.find((listed) => registryKey(listed) === asked)
+			if (registry === undefined)
+				throw new Error(`The app doesn't restore from ${call.request.registry.name}: add it to the sandbox's registries.`)
+			const fetched = await fetchedPackage({ ...call.request, registry }, abortSignal)
 			const result: PackageResponse = {
 				status: fetched.status,
 				headers: fetched.headers,
@@ -304,7 +306,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 	const missingTools = (appTools: readonly string[]) => [...new Set(appTools)].filter((name) => !tools.has(name))
 	const missingRegistries = (registries: readonly PackageRegistry[]) =>
 		registries.flatMap((registry) =>
-			typeof registry === 'string' || ownEntry(connectorRegistries, registry.connector) !== undefined
+			!isConnectorRegistry(registry) || ownEntry(connectorRegistries, registry.connector) !== undefined
 				? []
 				: [`${registry.name} needs connector ${registry.connector}: add it with \`mesh-flow connector add\`.`],
 		)

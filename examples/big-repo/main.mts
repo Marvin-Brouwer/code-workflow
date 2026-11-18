@@ -10,6 +10,7 @@
 import { jira } from '@mesh-flow/atlassian/hooks'
 import { codeArtifact } from '@mesh-flow/aws'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { develop } from './workflows/develop.mts'
 
 /** The Jira label that starts a run for a story. */
@@ -29,7 +30,7 @@ const sandboxImage = 'node:26-bookworm'
 const teamPackages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
 
 export default defineMeshFlow({
-	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: ['nuget', teamPackages] }),
+	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: [nugetOrg, teamPackages] }),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

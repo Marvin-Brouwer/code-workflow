@@ -1,10 +1,10 @@
-import { registryName, type TriggerDescription, type WorkflowsDescription } from '@mesh-flow/protocol'
+import type { TriggerDescription, WorkflowsDescription } from '@mesh-flow/protocol'
 import { webhookPath } from '../triggers/webhook-api.mts'
 
 /** What an app declares, for `triggers`: its sandbox, the workflows with their parameters, then the triggers. */
 export function formatDescription(description: WorkflowsDescription, app: string): string {
 	const { image, cpus, memoryMb, registries } = description.sandbox
-	const restores = registries.length === 0 ? 'no registries' : `restores from ${registries.map(registryName).join(', ')}`
+	const restores = registries.length === 0 ? 'no registries' : `restores from ${registries.map((registry) => registry.name).join(', ')}`
 	const lines = [`sandbox: ${image}, ${String(cpus)} CPUs, ${String(memoryMb)} MB, ${restores}`, 'workflows:']
 	for (const { name, parameters } of description.workflows) lines.push(`  ${name}  ${JSON.stringify(parameters)}`)
 	lines.push('triggers:')

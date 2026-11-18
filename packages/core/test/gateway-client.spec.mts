@@ -4,6 +4,7 @@ import path from 'node:path'
 import { minTokenLength, stagedFileName, type Answer, type CallAnswer, type RuntimeMessage } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
 import { gatewayClient, type GatewayChannel } from '../src/gateway/gateway-client.mts'
+import { npmRegistry } from './support/registries.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
@@ -63,7 +64,7 @@ describe('gatewayClient', () => {
 		const caller = new AbortController()
 		const fetching = client.call(
 			client.packages ?? client.run,
-			{ type: 'package', request: { registry: 'npm', path: '/left-pad' } },
+			{ type: 'package', request: { registry: npmRegistry, path: '/left-pad' } },
 			caller.signal,
 		)
 		fetching.catch(() => undefined)

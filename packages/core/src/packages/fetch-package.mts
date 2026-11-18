@@ -20,7 +20,7 @@ export interface FetchedPackage {
  * that wants a package itself. A 404 is an answer, not an error.
  *
  * ```ts
- * const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
+ * const index = await fetchPackage({ registry: nugetOrg, path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
  * const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
  * ```
  *

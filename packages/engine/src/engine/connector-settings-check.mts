@@ -1,4 +1,4 @@
-import type { PackageRegistry } from '@mesh-flow/protocol'
+import { isConnectorRegistry, type PackageRegistry } from '@mesh-flow/protocol'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 
 /** What an app uses connectors for: the host tools it calls and the registries it restores from. */
@@ -19,7 +19,7 @@ export function connectorSettingsOf(connectors: readonly LoadedConnector[]): Con
 		const used = connectors.filter(
 			(connector) =>
 				connector.tools.some((tool) => tools.includes(tool.name)) ||
-				registries.some((registry) => typeof registry !== 'string' && registry.connector === connector.name),
+				registries.some((registry) => isConnectorRegistry(registry) && registry.connector === connector.name),
 		)
 		const missing = await Promise.all(used.map(async (connector) => (await connector.missingSettings?.(abortSignal)) ?? []))
 		return missing.flat()

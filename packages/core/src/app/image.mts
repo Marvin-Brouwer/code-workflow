@@ -9,9 +9,10 @@ export interface ImageOptions {
 	/** The sandbox's memory, in MB. Default: 2048. */
 	readonly memoryMb?: number
 	/**
-	 * The package registries a run restores from: the public `nuget` (nuget.org) and `npm` (the npm
-	 * registry), and a connector's own, such as `codeArtifact(...)` from `@mesh-flow/aws`. Default:
-	 * none.
+	 * The package registries a run restores from: public ones, which the package of their ecosystem
+	 * defines, such as `nugetOrg` from `@mesh-flow/toolchain-dotnet` and `npmRegistry` from
+	 * `@mesh-flow/toolchain-node`, and a connector's own, such as `codeArtifact(...)` from
+	 * `@mesh-flow/aws`. Default: none.
 	 */
 	readonly registries?: readonly PackageRegistry[]
 }
@@ -29,8 +30,10 @@ const defaultMemoryMb = 2048
  * connector's credential for a connector's registry. Any other host is refused.
  *
  * ```ts
+ * import { npmRegistry } from '@mesh-flow/toolchain-node'
+ *
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, registries: ['npm'] }),
+ * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, registries: [npmRegistry] }),
  * 	workflows: [userTrigger(develop)],
  * })
  * ```

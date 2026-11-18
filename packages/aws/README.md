@@ -9,12 +9,13 @@ List the repository in the sandbox's `registries`. `dotnet restore` and `npm ci`
 ```ts
 import { codeArtifact } from '@mesh-flow/aws'
 import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { develop } from './develop.mts'
 
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
-		registries: ['nuget', codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
+		registries: [nugetOrg, codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
 	}),
 	workflows: [userTrigger(develop)],
 })

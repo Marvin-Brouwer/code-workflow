@@ -34,15 +34,13 @@ export {
 } from '../mailbox-layout.mts'
 export {
 	ConnectorRegistry,
+	isConnectorRegistry,
 	PackageRegistry,
-	publicRegistryHosts,
 	PackageRequest,
 	PackageResponse,
 	PublicRegistry,
-	registryHost,
 	registryKey,
-	registryName,
-	registryPaths,
+	servedPrefixLength,
 	StagedFileName,
 	uniqueRegistries,
 } from '../package-registry.mts'

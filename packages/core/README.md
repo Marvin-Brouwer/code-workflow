@@ -243,6 +243,7 @@ An app is a package whose `main` in `package.json` is its entry file. The entry 
 
 ```ts
 import { defineMeshFlow, image, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { npmRegistry } from '@mesh-flow/toolchain-node'
 import { z } from 'zod'
 import { develop, weeklyReport } from './workflows/develop.mts'
 
@@ -256,7 +257,7 @@ export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
 		memoryMb: 4096,
-		registries: ['npm'],
+		registries: [npmRegistry],
 	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
@@ -287,7 +288,7 @@ A trigger listed twice, in the app or across its bundles, is an error.
 
 ### Packages
 
-The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists, `nuget` (nuget.org), `npm` (the npm registry) and a connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md), with their own config and no changes to a repository:
+The sandbox has no network. Package managers in it still restore from the registries the app's `image` lists: public ones, which the package of their ecosystem defines, such as `nugetOrg` from [`@mesh-flow/toolchain-dotnet`](../toolchain-dotnet/README.md) and `npmRegistry` from [`@mesh-flow/toolchain-node`](../toolchain-node/README.md), and a connector's own, such as `codeArtifact(...)` from [`@mesh-flow/aws`](../aws/README.md), with their own config and no changes to a repository:
 
 - Every run that lists registries serves a proxy on loopback, and every process the workflow and its agents start has `HTTPS_PROXY` pointing at it, so `npm ci` and `dotnet restore` go through it.
 - For a registry's host it ends TLS itself, with a certificate from an authority made for that run in the sandbox, which those processes trust through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`. Nothing outside the sandbox trusts that authority, and its key never leaves the runtime. Those variables replace the system's trust store for the processes, so HTTPS in the sandbox with any other certificate, such as a local dev server's, doesn't verify; loopback and the sandbox's own host name aren't sent to the proxy.
@@ -299,10 +300,11 @@ Code can make the same call itself, with `fetchPackage`:
 
 ```ts
 import { fetchPackage, workflow } from '@mesh-flow/core'
+import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { z } from 'zod'
 
 export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
-	const index = await fetchPackage({ registry: 'nuget', path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
+	const index = await fetchPackage({ registry: nugetOrg, path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
 	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
 	return versions
 })
