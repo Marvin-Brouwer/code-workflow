@@ -159,6 +159,24 @@ import { commentTool } from './tools/comment.mts'
 export const connector = connectorHost('github', ({ directory }) => [commentTool(directory)])
 ```
 
+A connector that reads credentials says which are missing with `missingSettings`, so `mesh-flow deploy`, a trigger and the UI's wizard can ask for them before a run needs them. Each is a line that says what to do and a `fix` that says what sets it, such as `{ kind: 'credential', name: 'github/token' }`; `missingCredentials` makes them from the names the connector reads:
+
+```ts
+import { connectorHost, missingCredentials } from '@mesh-flow/gateway'
+import { commentTool } from './tools/comment.mts'
+
+export const connector = connectorHost('github', ({ directory }) => [commentTool(directory)], {
+	missingSettings: ({ credentials }, abortSignal) =>
+		missingCredentials(
+			credentials,
+			[
+				{ name: 'github/token' },
+			],
+			abortSignal,
+		),
+})
+```
+
 A connector whose service has sessions brings a `login` too, which `mesh-flow login <name>` runs, and the engine when a run waits for a sign-in. It gets the connector's own credentials to write to, and `show`, to tell the user where to approve the sign-in once the service hands out a code:
 
 ```ts

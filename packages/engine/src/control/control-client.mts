@@ -1,4 +1,5 @@
 import { request } from 'node:http'
+import { MissingSetting } from '@mesh-flow/gateway'
 import { AppManifest, RuntimeEvent, type TriggerRef } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { SignInState } from '../engine/sign-in-state.mts'
@@ -9,8 +10,8 @@ import { RunRecord } from '../runs/run-record.mts'
 export const DeployedApp = z.object({ name: z.string(), version: z.string(), manifest: AppManifest })
 export type DeployedApp = z.infer<typeof DeployedApp>
 
-/** What a deploy answers: the app, and the settings the engine still needs before it can run, each as a line that says what to do. */
-export const DeployOutcome = DeployedApp.extend({ missing: z.array(z.string()) })
+/** What a deploy answers: the app, and the settings the engine still needs before it can run. */
+export const DeployOutcome = DeployedApp.extend({ missing: z.array(MissingSetting) })
 export type DeployOutcome = z.infer<typeof DeployOutcome>
 
 /** Thrown when the engine refused a request or isn't running. */

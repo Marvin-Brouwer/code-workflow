@@ -203,7 +203,12 @@ describe('restoring from CodeArtifact', () => {
 		const none = await set.host.missingSettings?.(set.hostOptions, abortSignal)
 
 		// Assert
-		expect(missing).toEqual([expect.stringContaining(`mesh-flow credential set ${awsCredentialNames.startUrl}`)])
+		expect(missing?.map(({ fix }) => fix)).toEqual([
+			{ kind: 'credential', name: awsCredentialNames.startUrl, example: 'https://example.awsapps.com/start' },
+			{ kind: 'credential', name: awsCredentialNames.ssoRegion, example: 'eu-west-1' },
+			{ kind: 'credential', name: awsCredentialNames.account, example: '123456789012' },
+			{ kind: 'credential', name: awsCredentialNames.role, example: 'Developer' },
+		])
 		expect(none).toEqual([])
 	})
 })

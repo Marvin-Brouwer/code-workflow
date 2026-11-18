@@ -1,9 +1,9 @@
-import { connectorHost, type ConnectorHost, type CredentialStore } from '@mesh-flow/gateway'
+import { connectorHost, missingCredentials, type ConnectorHost, type CredentialStore } from '@mesh-flow/gateway'
 import { awsConnector } from '../connector-name.mts'
 import type { AwsEndpoints } from './aws-endpoints.mts'
 import { awsHostTools } from './aws-host-tools.mts'
 import { openAwsSession, type AwsSession } from './aws-session.mts'
-import { readAwsSettings } from './aws-settings.mts'
+import { awsSettingCredentials } from './aws-settings.mts'
 import { codeArtifactFetch } from './code-artifact-fetch.mts'
 import { signIn, type SignInOptions } from './sign-in.mts'
 
@@ -30,14 +30,7 @@ export function awsConnectorHost(options: AwsConnectorOptions = {}): ConnectorHo
 	return connectorHost(awsConnector, ({ credentials }) => awsHostTools(sessionFor(credentials)), {
 		signIn: (context) => signIn(context, options),
 		registries: ({ credentials }) => codeArtifactFetch(sessionFor(credentials)),
-		async missingSettings({ credentials }, abortSignal) {
-			try {
-				await readAwsSettings(credentials, abortSignal)
-				return []
-			} catch (error) {
-				return [error instanceof Error ? error.message : String(error)]
-			}
-		},
+		missingSettings: ({ credentials }, abortSignal) => missingCredentials(credentials, awsSettingCredentials, abortSignal),
 	})
 }
 

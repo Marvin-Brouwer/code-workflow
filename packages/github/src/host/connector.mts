@@ -1,7 +1,7 @@
 import { gitHostTools } from '@mesh-flow/code-repository/host'
-import { connectorHost, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
+import { connectorHost, missingCredentials, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
 import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
-import { githubApi, type GithubApiOptions } from './api.mts'
+import { githubApi, tokenCredential, type GithubApiOptions } from './api.mts'
 import { gitRemote, type GitRemoteOptions } from './git-remote.mts'
 import { issueHostTools } from './issue-tools.mts'
 import { pullRequestHostTools } from './pull-request-tools.mts'
@@ -46,4 +46,6 @@ export function githubHostTools(options: GithubHostOptions): HostTool[] {
  * mesh-flow credential set github/token < token.txt
  * ```
  */
-export const connector: ConnectorHost = connectorHost('github', ({ directory }) => githubHostTools({ directory }))
+export const connector: ConnectorHost = connectorHost('github', ({ directory }) => githubHostTools({ directory }), {
+	missingSettings: ({ credentials }, abortSignal) => missingCredentials(credentials, [{ name: tokenCredential }], abortSignal),
+})

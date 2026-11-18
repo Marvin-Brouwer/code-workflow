@@ -1,4 +1,4 @@
-import type { CredentialReader } from '@mesh-flow/gateway'
+import type { CredentialReader, WantedCredential } from '@mesh-flow/gateway'
 
 /**
  * The names the AWS connector uses in the gateway's credential store. The first four are settings,
@@ -36,6 +36,12 @@ const settingExamples: Readonly<Record<keyof AwsSettings, string>> = {
 
 /** The settings, in the order the error lists them. */
 const settingKeys = ['startUrl', 'ssoRegion', 'account', 'role'] as const satisfies readonly (keyof AwsSettings)[]
+
+/** The settings as the credentials that hold them, with an example of each, for a settings check. */
+export const awsSettingCredentials: readonly WantedCredential[] = settingKeys.map((key) => ({
+	name: awsCredentialNames[key],
+	example: settingExamples[key],
+}))
 
 /**
  * The AWS settings from the credential store.

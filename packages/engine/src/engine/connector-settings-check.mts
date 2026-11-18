@@ -1,3 +1,4 @@
+import type { MissingSetting } from '@mesh-flow/gateway'
 import { isConnectorRegistry, type PackageRegistry } from '@mesh-flow/protocol'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 
@@ -7,8 +8,8 @@ export interface ConnectorUse {
 	readonly registries: readonly PackageRegistry[]
 }
 
-/** The settings the connectors behind `use` still need, each as a line that says how to set it. */
-export type ConnectorSettingsCheck = (use: ConnectorUse, abortSignal: AbortSignal) => Promise<string[]>
+/** The settings the connectors behind `use` still need. */
+export type ConnectorSettingsCheck = (use: ConnectorUse, abortSignal: AbortSignal) => Promise<MissingSetting[]>
 
 /**
  * The settings check of the loaded connectors: for an app, each connector it uses, by a host tool

@@ -2,6 +2,7 @@ import { ConnectorName, ToolName } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import type { ResolveRegistryTarget } from '../packages/connector-registry.mts'
+import type { MissingSetting } from '../settings/missing-setting.mts'
 import type { ConnectorSignIn } from './connector-sign-in.mts'
 
 /** What a host tool's action gets besides its input. */
@@ -120,10 +121,12 @@ export interface ConnectorHost {
 	 */
 	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryTarget
 	/**
-	 * The settings the connector still needs, each as a line that says how to set it, from its own
-	 * credentials, made with the same options as its tools. `mesh-flow deploy` and a trigger report them for an app that uses the connector.
+	 * The settings the connector still needs, from its own credentials, made with the same options
+	 * as its tools: each a line that says how to set it, and what sets it, usually a credential
+	 * (`missingCredentials`). `mesh-flow deploy`, a trigger and the UI's wizard report them
+	 * for an app that uses the connector.
 	 */
-	readonly missingSettings?: (options: ConnectorHostOptions, abortSignal: AbortSignal) => Promise<string[]>
+	readonly missingSettings?: (options: ConnectorHostOptions, abortSignal: AbortSignal) => Promise<MissingSetting[]>
 }
 
 /** What else a connector's host half brings besides its tools. */
