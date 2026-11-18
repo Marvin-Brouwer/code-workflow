@@ -3,6 +3,9 @@ import type { PackageRegistry } from './package-registry.mts'
 /** A character a path may hold escaped that servers may read as the character itself: unreserved ones, `/` and `\`. */
 const decodableCharacter = /^[\w.~/\\-]$/
 
+/** An escaped `%`, which could decode a second time, on a server that decodes twice. */
+const escapedPercent = /%25/i
+
 /**
  * `path` as a server that decodes escapes may read it: `%2D` as `-`, `%2F` as `/`. Other escapes,
  * such as `%40`, stay as they are.
@@ -23,14 +26,14 @@ function resolvesElsewhere(path: string): boolean {
  * The length of the longest of the registry's paths that `path` is below, or `undefined` when it
  * isn't a package fetch on the registry: below none of its paths, or below an excluded one. A path
  * itself, such as `/` of the npm registry, isn't below it, and a path below one only once decoded,
- * such as `/v3%2Dflatcontainer/`, isn't either. The query doesn't count, and an escaped `%` is refused. The path is
- * read as a server that decodes escapes would, so `/%2D/whoami` is below `/-/`, and excluded paths
- * are compared without regard to case, so a server that ignores case can't reach one.
+ * such as `/v3%2Dflatcontainer/`, isn't either. The query doesn't count, and an escaped `%` is
+ * refused. The path is read as a server that decodes escapes would, so `/%2D/whoami` is below
+ * `/-/`, and excluded paths are compared without regard to case, so a server that ignores case
+ * can't reach one.
  */
 export function servedPrefixLength(registry: PackageRegistry, path: string): number | undefined {
 	const [rawPathname = ''] = path.split('?', 1)
-	// An escaped `%` could decode a second time, on a server that decodes twice.
-	if (/%25/i.test(rawPathname)) return undefined
+	if (escapedPercent.test(rawPathname)) return undefined
 	const pathname = decodedPath(rawPathname)
 	if (resolvesElsewhere(pathname)) return undefined
 	const lowerPathname = pathname.toLowerCase()

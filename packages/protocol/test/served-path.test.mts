@@ -10,6 +10,9 @@ const registry: PublicRegistry = {
 	excludedPaths: ['/-/', '/feed/admin/'],
 }
 
+/** The same registry, with only its deeper path. */
+const feedOnly: PublicRegistry = { ...registry, paths: ['/feed/'] }
+
 describe('servedPrefixLength', () => {
 	test('is the length of the longest path a fetch is below', () => {
 		// Act
@@ -20,9 +23,6 @@ describe('servedPrefixLength', () => {
 	})
 
 	test("doesn't take a path itself", () => {
-		// Arrange
-		const feedOnly: PublicRegistry = { ...registry, paths: ['/feed/'] }
-
 		// Act
 		const lengths = [servedPrefixLength(registry, '/'), servedPrefixLength(feedOnly, '/feed/')]
 
@@ -47,7 +47,7 @@ describe('servedPrefixLength', () => {
 		expect(length).toBeUndefined()
 	})
 
-	test.each(['/left-pad/..%2F-%2Fwhoami', '/left-pad/%2E%2E/-/whoami', '/left-pad%5C..%5C-', '/left-pad%2F%2Fevil', '/%252D/whoami'])(
+	test.each(['/left-pad/..%2F-%2Fwhoami', '/left-pad/%2E%2E/-/whoami', '/left-pad%5C..%5C-', '/left-pad%2F%2Fevil'])(
 		"doesn't take a path that resolves elsewhere once decoded: %s",
 		(path) => {
 			// Act
@@ -58,10 +58,15 @@ describe('servedPrefixLength', () => {
 		},
 	)
 
-	test("doesn't take a path that is below one of the paths only once decoded", () => {
-		// Arrange
-		const feedOnly: PublicRegistry = { ...registry, paths: ['/feed/'] }
+	test("doesn't take an escaped %, which a server could decode twice", () => {
+		// Act
+		const length = servedPrefixLength(registry, '/%252D/whoami')
 
+		// Assert
+		expect(length).toBeUndefined()
+	})
+
+	test("doesn't take a path that is below one of the paths only once decoded", () => {
 		// Act
 		const length = servedPrefixLength(feedOnly, '/feed%2Fleft-pad')
 
