@@ -54,15 +54,42 @@ import type { ConnectorRegistry, PublicRegistry } from '@mesh-flow/protocol'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const { directory, credentials, providers } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
-const npm: PublicRegistry = { name: 'npm', host: 'registry.npmjs.org', paths: ['/'], excludedPaths: ['/-/'] }
-const packages: ConnectorRegistry = { connector: 'cloud', name: 'cloud packages', host: 'packages.example.com', paths: ['/npm/packages/'], settings: {} }
-const cloud: ResolveRegistryTarget = async ({ registry, path }, fetchAbortSignal) => ({
-	url: `https://${registry.host}${path}`,
-	headers: { authorization: `Bearer ${await credentials.get('cloud/token', fetchAbortSignal)}` },
-})
 
-const gateway = openGateway({ home: directory, credentials, providers, registries: { cloud } })
-const grant = await gateway.openRun('run-1', { tools: [], registries: [npm, packages] }, abortSignal)
+const npm: PublicRegistry = {
+	name: 'npm',
+	host: 'registry.npmjs.org',
+	paths: ['/'],
+	excludedPaths: ['/-/'],
+}
+const packages: ConnectorRegistry = {
+	connector: 'cloud',
+	name: 'cloud packages',
+	host: 'packages.example.com',
+	paths: ['/npm/packages/'],
+	settings: {},
+}
+const cloud: ResolveRegistryTarget = async ({ registry, path }, fetchAbortSignal) => {
+	const token = await credentials.get('cloud/token', fetchAbortSignal)
+	return {
+		url: `https://${registry.host}${path}`,
+		headers: { authorization: `Bearer ${token}` },
+	}
+}
+
+const gateway = openGateway({
+	home: directory,
+	credentials,
+	providers,
+	registries: { cloud },
+})
+const grant = await gateway.openRun(
+	'run-1',
+	{
+		tools: [],
+		registries: [npm, packages],
+	},
+	abortSignal,
+)
 ```
 
 `missingRegistries(registries)` says which registries' connectors aren't loaded, for a trigger to report before a run starts.

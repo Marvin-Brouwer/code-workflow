@@ -263,7 +263,11 @@ export default defineMeshFlow({
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),
 		// Signed with the default secret header, `x-webhook-secret`; the tracker names each delivery.
-		webhook(develop, StoryLabeled.transform((event) => ({ story: event.story.key })), { deliveryHeader: 'x-delivery-id' }),
+		webhook(
+			develop,
+			StoryLabeled.transform((event) => ({ story: event.story.key })),
+			{ deliveryHeader: 'x-delivery-id' },
+		),
 		// Every Monday at midnight.
 		schedule(weeklyReport, 'weekly'),
 	],
@@ -303,9 +307,18 @@ import { fetchPackage, workflow } from '@mesh-flow/core'
 import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { z } from 'zod'
 
+/** A NuGet version list, as the flat container serves it. */
+const PackageVersions = z.object({ versions: z.array(z.string()) })
+
 export const nugetVersions = workflow('nuget-versions', async ({ abortSignal }) => {
-	const index = await fetchPackage({ registry: nugetOrg, path: '/v3-flatcontainer/newtonsoft.json/index.json' }, abortSignal)
-	const { versions } = z.object({ versions: z.array(z.string()) }).parse(JSON.parse(index.body.toString('utf8')))
+	const index = await fetchPackage(
+		{
+			registry: nugetOrg,
+			path: '/v3-flatcontainer/newtonsoft.json/index.json',
+		},
+		abortSignal,
+	)
+	const { versions } = PackageVersions.parse(JSON.parse(index.body.toString('utf8')))
 	return versions
 })
 ```

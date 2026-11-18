@@ -12,8 +12,13 @@ import type { PublicRegistry } from '@mesh-flow/core'
  * import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
  *
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', registries: [nugetOrg] }),
- * 	workflows: [userTrigger(develop)],
+ * 	sandbox: image({
+ * 		name: 'node:26-slim',
+ * 		registries: [nugetOrg],
+ * 	}),
+ * 	workflows: [
+ * 		userTrigger(develop),
+ * 	],
  * })
  * ```
  */

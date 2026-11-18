@@ -27,10 +27,19 @@ const sandboxImage = 'node:26-bookworm'
  * The team's private NuGet packages, which a repository's `nuget.config` names by their CodeArtifact
  * URL. Placeholder values: name the team's own domain, account, region and repository here.
  */
-const teamPackages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
+const teamPackages = codeArtifact({
+	domain: 'example',
+	owner: '123456789012',
+	region: 'eu-west-1',
+	repository: 'packages',
+})
 
 export default defineMeshFlow({
-	sandbox: image({ name: sandboxImage, memoryMb: 4096, registries: [nugetOrg, teamPackages] }),
+	sandbox: image({
+		name: sandboxImage,
+		memoryMb: 4096,
+		registries: [nugetOrg, teamPackages],
+	}),
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

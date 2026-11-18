@@ -11,8 +11,13 @@ import type { PublicRegistry } from '@mesh-flow/core'
  * import { npmRegistry } from '@mesh-flow/toolchain-node'
  *
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
- * 	workflows: [userTrigger(fixIssue)],
+ * 	sandbox: image({
+ * 		name: 'node:26-slim',
+ * 		registries: [npmRegistry],
+ * 	}),
+ * 	workflows: [
+ * 		userTrigger(fixIssue),
+ * 	],
  * })
  * ```
  */

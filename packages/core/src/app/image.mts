@@ -33,8 +33,14 @@ const defaultMemoryMb = 2048
  * import { npmRegistry } from '@mesh-flow/toolchain-node'
  *
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', memoryMb: 4096, registries: [npmRegistry] }),
- * 	workflows: [userTrigger(develop)],
+ * 	sandbox: image({
+ * 		name: 'node:26-slim',
+ * 		memoryMb: 4096,
+ * 		registries: [npmRegistry],
+ * 	}),
+ * 	workflows: [
+ * 		userTrigger(develop),
+ * 	],
  * })
  * ```
  */

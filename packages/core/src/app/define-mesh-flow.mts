@@ -27,11 +27,17 @@ export interface MeshFlowApp {
  *
  * ```ts
  * export default defineMeshFlow({
- * 	sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
+ * 	sandbox: image({
+ * 		name: 'node:26-slim',
+ * 		registries: [npmRegistry],
+ * 	}),
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),
- * 		webhook(fixIssue, IssueLabeled.transform((event) => ({ issue: event.issue.number }))),
+ * 		webhook(
+ * 			fixIssue,
+ * 			IssueLabeled.transform((event) => ({ issue: event.issue.number })),
+ * 		),
  * 		schedule(weeklyReport, 'weekly'),
  * 	],
  * })

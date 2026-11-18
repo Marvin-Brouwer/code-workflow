@@ -12,12 +12,21 @@ import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { develop } from './develop.mts'
 
+const privateRegistry = codeArtifact({
+	domain: 'example',
+	owner: '123456789012',
+	region: 'eu-west-1',
+	repository: 'packages',
+})
+
 export default defineMeshFlow({
 	sandbox: image({
 		name: 'node:26-slim',
-		registries: [nugetOrg, codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })],
+		registries: [nugetOrg, privateRegistry],
 	}),
-	workflows: [userTrigger(develop)],
+	workflows: [
+		userTrigger(develop),
+	],
 })
 ```
 
@@ -33,10 +42,21 @@ Code fetches from it with `fetchPackage` from `@mesh-flow/core`, as from any reg
 import { codeArtifact } from '@mesh-flow/aws'
 import { fetchPackage, workflow } from '@mesh-flow/core'
 
-const packages = codeArtifact({ domain: 'example', owner: '123456789012', region: 'eu-west-1', repository: 'packages' })
+const privateRegistry = codeArtifact({
+	domain: 'example',
+	owner: '123456789012',
+	region: 'eu-west-1',
+	repository: 'packages',
+})
 
 export const packageIndex = workflow('package-index', async ({ abortSignal }) => {
-	const index = await fetchPackage({ registry: packages, path: '/nuget/packages/v3/index.json' }, abortSignal)
+	const index = await fetchPackage(
+		{
+			registry: privateRegistry,
+			path: '/nuget/packages/v3/index.json',
+		},
+		abortSignal,
+	)
 	return index.body.toString('utf8')
 })
 ```
@@ -81,11 +101,20 @@ One sign-in lasts as long as Identity Center's session does, a limit its admin s
 import { openAwsSession } from '@mesh-flow/aws/host'
 import { keyFile, openCredentialStore } from '@mesh-flow/gateway'
 
-const credentials = openCredentialStore('/srv/mesh-flow/credentials.json', keyFile('/srv/mesh-flow/store.key'))
+const storeKey = keyFile('/srv/mesh-flow/store.key')
+const credentials = openCredentialStore('/srv/mesh-flow/credentials.json', storeKey)
 const abortSignal = AbortSignal.timeout(30_000)
 const session = openAwsSession({ credentials })
+
 const { accessKeyId, secretAccessKey, sessionToken } = await session.roleCredentials(abortSignal)
-const { token } = await session.codeArtifactToken({ domain: 'example', owner: '123456789012', region: 'eu-west-1' }, abortSignal)
+const { token } = await session.codeArtifactToken(
+	{
+		domain: 'example',
+		owner: '123456789012',
+		region: 'eu-west-1',
+	},
+	abortSignal,
+)
 ```
 
 - Role credentials come from the access portal for the account and role in the settings. They are kept in memory only, fetched again when they near their end, and at once when the settings change.
