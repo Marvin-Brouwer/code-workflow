@@ -1,6 +1,6 @@
 # Plan: the UI
 
-Status: proposed 2026-11-18. Covers roadmap step 6 of [`../design.md`](../design.md#roadmap): the
+Status: agreed 2026-11-18. Covers roadmap step 6 of [`../design.md`](../design.md#roadmap): the
 UI, the settings wizard and the credential store, with a simple run view. The flight data recorder
 ([issue #2](https://github.com/Marvin-Brouwer/code-workflow/issues/2)) is separate and not part of
 this. Hosted and multi-user is step 7.
