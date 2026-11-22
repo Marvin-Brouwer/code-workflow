@@ -15,6 +15,7 @@ import type {
 } from '@mesh-flow/sandbox'
 import { SandboxSpec } from '@mesh-flow/sandbox'
 import { z } from 'zod'
+import { hasErrorCode } from '../../src/errors.mts'
 
 const HostSandboxState = z.object({
 	state: z.enum(['running', 'paused']),
@@ -46,6 +47,15 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 	const stateFile = (id: string) => path.join(root, id, 'state.json')
 	const readState = async (id: string): Promise<HostSandboxState> =>
 		HostSandboxState.parse(JSON.parse(await readFile(stateFile(id), 'utf8')))
+	/** Its state, or `undefined` for a sandbox being removed: its folder can outlast its state file for a while. */
+	const readStateIfThere = async (id: string): Promise<HostSandboxState | undefined> => {
+		try {
+			return await readState(id)
+		} catch (error) {
+			if (hasErrorCode(error, 'ENOENT')) return undefined
+			throw error
+		}
+	}
 	const writeState = (id: string, state: HostSandboxState) => writeFile(stateFile(id), JSON.stringify(state))
 
 	const remove = async (id: string): Promise<void> => {
@@ -131,7 +141,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 		},
 		async list(): Promise<HeldSandbox[]> {
 			const ids = existsSync(root) ? await readdir(root) : []
-			return Promise.all(ids.map(async (id) => ({ id, state: (await readState(id)).state })))
+			const held = await Promise.all(ids.map(async (id) => ({ id, state: (await readStateIfThere(id))?.state })))
+			return held.flatMap(({ id, state }) => (state === undefined ? [] : [{ id, state }]))
 		},
 		remove: (id) => remove(id),
 		async close() {
