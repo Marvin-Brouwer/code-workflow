@@ -581,7 +581,7 @@ describe('settings', () => {
 
 		// Assert
 		await expect(outcome).rejects.toThrow(
-			'There is no Jira site. For Atlassian Cloud, set atlassian/url, atlassian/email and atlassian/token; for Jira Data Center, set jira/url and jira/token',
+			'There is no Jira site. Set atlassian/url, atlassian/email and atlassian/token for Atlassian Cloud, or jira/url and jira/token for Jira Data Center',
 		)
 	})
 
@@ -591,6 +591,17 @@ describe('settings', () => {
 
 		// Assert
 		await expect(outcome).rejects.toThrow('There is no Jira Data Center token. Set it with `mesh-flow credential set jira/token`.')
+	})
+
+	test('an old Cloud setup says how to move to the shared site, rather than send its token as Data Center', async () => {
+		// Arrange
+		const oldCloud = { 'jira/url': 'https://example.atlassian.net', 'jira/email': 'bot@example.com', 'jira/token': 'token' }
+
+		// Act
+		const outcome = runOnFake(oldCloud, {}, () => jira.collect('PROJ-7'))
+
+		// Assert
+		await expect(outcome).rejects.toThrow('Set atlassian/url, atlassian/email and atlassian/token instead')
 	})
 
 	test('one product on Data Center and the other on Cloud each use their own site', async () => {
