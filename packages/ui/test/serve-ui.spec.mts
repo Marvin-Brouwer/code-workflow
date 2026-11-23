@@ -1,8 +1,10 @@
+import { request } from 'node:http'
 import { createServer, type Socket } from 'node:net'
 import { controlSocketPath, openEngineGatewayHome } from '@mesh-flow/engine'
 import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { send, servedUi, testPage } from './support/served-ui.mts'
+import { standInEngine } from './support/stand-in-engine.mts'
 
 const abortSignal = AbortSignal.timeout(20_000)
 
@@ -170,5 +172,38 @@ describe.skipIf(process.platform === 'win32')('closing', () => {
 		// Assert
 		expect(Date.now() - started).toBeLessThan(duration.of('2s').to('ms'))
 		expect(await open).toBeInstanceOf(Error)
+	})
+})
+
+describe.skipIf(process.platform === 'win32')("the engine's change stream", () => {
+	test('passes through, and does not hold up closing while it is open', async () => {
+		// Arrange
+		const { url, cookie, home, stopping, served } = await servedUi()
+		await standInEngine(home)
+		const stream = new Promise<{ text: () => string }>((resolve, reject) => {
+			const outgoing = request(
+				{ host: url.hostname, port: url.port, path: '/api/engine/changes', headers: { host: url.host, cookie } },
+				(response) => {
+					let text = ''
+					response.on('data', (chunk: Buffer) => {
+						text += chunk.toString('utf8')
+						resolve({ text: () => text })
+					})
+					response.on('error', () => undefined)
+				},
+			)
+			outgoing.on('error', reject)
+			outgoing.end()
+		})
+		const { text } = await stream
+
+		// Act
+		const started = Date.now()
+		stopping.abort()
+		await served.closed
+
+		// Assert
+		expect(text()).toContain('event: ready')
+		expect(Date.now() - started).toBeLessThan(duration.of('2s').to('ms'))
 	})
 })

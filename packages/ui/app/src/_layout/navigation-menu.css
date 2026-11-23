@@ -10,3 +10,8 @@
 	font-weight: 600;
 	text-decoration: none;
 }
+
+.live {
+	margin-left: auto;
+	color: var(--color-muted);
+}

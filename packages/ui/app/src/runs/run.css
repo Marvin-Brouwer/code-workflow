@@ -1,0 +1,26 @@
+.facts {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: var(--space-xs) var(--space-m);
+	margin: 0 0 var(--space-m);
+}
+
+.facts dd {
+	margin: 0;
+}
+
+.actions {
+	display: flex;
+	gap: var(--space-s);
+	margin-bottom: var(--space-m);
+}
+
+.waiting {
+	border: var(--line);
+	padding: var(--space-s) var(--space-m);
+	margin-bottom: var(--space-m);
+}
+
+.section {
+	margin-bottom: var(--space-l);
+}

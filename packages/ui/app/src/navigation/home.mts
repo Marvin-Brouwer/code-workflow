@@ -1,16 +1,10 @@
 import { component } from '@rooted/components'
+import { RunsList } from '../runs/runs-list.mts'
 
-/** The first page. The runs, apps and settings pages come next. */
+/** The first page: the runs, those that need someone on top. */
 export const HomePage = component({
 	name: 'home-page',
-	onMount({ append, element }) {
-		append(
-			element('h1', {
-				textContent: 'mesh-flow',
-			}),
-			element('p', {
-				textContent: 'Runs, apps and settings will be here.',
-			}),
-		)
+	onMount({ append, element, create }) {
+		append(element('h1', { textContent: 'Runs' }), create(RunsList))
 	},
 })

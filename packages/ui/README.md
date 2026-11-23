@@ -54,6 +54,7 @@ This is the local way in. Hosted (roadmap step 7), a sign-in per user takes its 
 |---|---|
 | `GET /api/engine/status` | `{ running }`: whether an engine answers on the home's socket |
 | `/api/engine/runs`, `/runs/:run`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
+| `GET /api/engine/changes` | the engine's change stream, as server-sent events: which run changed, and a heartbeat every 15 seconds |
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/apps`, `GET /api/engine/apps/:name/missing` | deployed apps, and what one still needs before it can run |
@@ -67,9 +68,17 @@ Deploying isn't in it: that stays with the CLI and CI.
 
 | Page | Shows | Does |
 |---|---|---|
+| `/` and `/runs/` | every run: workflow, app, status, what it waits on; those that need someone on top | open a run |
+| `/runs/:id/` | its status, what it waits on, its steps as bars, its usage once done | answer a question, stop, resume, restart |
+| `/apps/` | deployed apps, their triggers, a webhook's secret set or not | start a workflow from its button |
+| `/apps/:app/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
 | `/settings/providers/` | providers in the order models are looked up, whether each has a key | add one, set a key, move one up or down, remove one |
 | `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
+
+Runs update as they change: the page follows the engine's change stream and refetches what changed. A stream that goes quiet for 35 seconds counts as dead; while it's down the page says so, refreshes every two seconds and connects again, and every connect refetches everything.
+
+The run view reads top to bottom as bars, one per step: a tool call from code (titled by its `describe` line), an agent (its text, with its calls as chips that open their input and result), a question, a wait, and a node of `inDependencyOrder` with its own bars inside. Bars are closed but for the latest and failed ones.
 
 Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: a flat object of text, numbers, yes or no and options gets a field each, anything else a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider, a provider's key or a credential.
 
@@ -79,5 +88,7 @@ Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaF
 pnpm --filter @mesh-flow/ui build   # the server into dist, the page into dist/app
 pnpm --filter @mesh-flow/ui test
 ```
+
+The browser test runs the built page against a stand-in engine, in Chrome, or in the Chromium at `CHROMIUM_PATH`.
 
 The page lives in `app/`, a rooted app laid out in vertical slices (a folder per page with its `_routes.mts`), with rooted's four CSS layers: `index.tokens.css`, `index.theme.css`, the shell's stylesheet and one per component. Its Vite config is a plain one with rooted's CSS loader and route discovery, not `rootedManifest`: the PWA, SEO and pre-rendering that brings are for public sites.
