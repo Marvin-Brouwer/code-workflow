@@ -1,7 +1,8 @@
 import { component } from '@rooted/components'
 import { RunsList } from './runs-list.mts'
+import { RunsStart } from '../start/runs-start.mts'
 
-/** The runs page. */
+/** The runs page: what the app still needs, a new run, and every run. */
 export const RunsPage = component({
 	name: 'runs-page',
 	onMount({ append, element, create }) {
@@ -9,6 +10,7 @@ export const RunsPage = component({
 			element('h1', {
 				textContent: 'Runs',
 			}),
+			create(RunsStart),
 			create(RunsList),
 		)
 	},

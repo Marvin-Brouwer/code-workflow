@@ -13,7 +13,7 @@ look is a wireframe on purpose: plain HTML elements, borders, one font, no color
 Design comes after the roadmap is done and tested.
 
 Done when: from a fresh engine home with the GitHub connector added, a user deploys
-`examples/github-issue`, opens the UI, clicks its start button, gets a wizard with only what's
+`examples/github-issue`, opens the UI, clicks New run, gets a wizard with only what's
 missing (a provider key, `github/token`), fills it in, starts the run, and answers its input
 requests in the run view, without touching the CLI after `mesh-flow deploy`.
 
@@ -29,7 +29,7 @@ settings work on the home's files without a running engine, and a running one se
 once.
 
 - Listens on `127.0.0.1`, on a free port (`--port` to pick one), serves the built UI and an API
-  under `/api`, and opens the browser (`--no-open` to only print the URL).
+  under `/api`, and prints the URL, so you open it in the browser you choose.
 - **Access** is one middleware in front of `/api`:
   - the URL carries a token made at start (`/?token=...`); the first request swaps it for an
     `HttpOnly`, `SameSite=Strict` cookie, named after the port so two UIs don't overwrite each
@@ -42,13 +42,14 @@ once.
   - a request that changes something must send `Content-Type: application/json`, which a plain
     form on another site can't.
 
-  This is the control socket's rule: only the user who started it gets in. It has the same known
-  gap: the token is on the command line that opens the browser, which other users of the machine
-  can read, as they can reach the control socket's named pipe on Windows. It's only the local way
+  This is the control socket's rule: only the user who started it gets in. The token only goes to
+  the terminal, never on a command line other users could read. The control socket's known gap
+  stays: on Windows other users can reach its named pipe. It's only the local way
   in: hosted (roadmap step 7) swaps the middleware for a real sign-in per user. The UI itself only
   knows it talks to `/api` with a cookie, so it doesn't change for that.
-- **Runs and apps** go to the running engine over its control socket, the same routes the CLI uses.
-  When no engine runs, those pages say so and how to start it; settings still work.
+- **Runs and triggers** go to the running engine over its control socket, the same routes the CLI uses.
+  When no engine runs, those pages say so and how to start it; settings still work. mesh-flow runs
+  one app, so the UI shows the first app the engine lists until the engine knows that too (#57).
 - **Settings** use the gateway home directly, through the same functions the CLI commands call
   (`providers.put/order/remove`, `credentials.set/remove/names`). No second implementation.
 - Takes a required `AbortSignal` like everything else, and Ctrl+C closes it promptly, even with
@@ -86,10 +87,10 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 
 | Slice | Shows | Does |
 |---|---|---|
-| `runs` | every run: workflow, app, status, what it waits on; "needs input" and "needs login" on top | open a run |
+| `runs` | a bar when the app still needs settings; every run: workflow, status, what it waits on; "needs input" and "needs login" on top | open a run, start a new one when the app has a user trigger |
 | `runs` (one run) | status, the run as bars (below), usage per model when done | answer a request, stop, resume, restart, sign in |
-| `apps` | deployed apps, their workflows and triggers; webhooks and schedules with whether a secret is set | start a workflow from its button |
-| `start` | the workflow's parameters as a form, after the wizard | start a run (with an idempotency key per form, so a double click starts only one run), then go to it |
+| `triggers` | the app's triggers; webhooks and schedules with whether a secret is set | start a workflow from its user trigger |
+| `start` | the user triggers when there are several; the workflow's parameters as a form, after the wizard; `/setup/` for the wizard alone | start a run (with an idempotency key per form, so a double click starts only one run), then go to it |
 | `settings/providers` | providers in order, kind, whether a key is set | add, set key, reorder, remove |
 | `settings/credentials` | credential names, never their values | set, remove; generate a webhook secret |
 | `settings/connectors` | loaded connectors, and sign-ins under way with their URL and code | sign in |
@@ -214,4 +215,4 @@ Stacked PRs, each on the one before:
    `GET /apps/:name/missing`, so the wizard can ask before it starts anything. `@mesh-flow/ui` as
    an empty rooted app with the shell, so the command has something to serve.
 4. Settings pages and the wizard's forms.
-5. Apps, the start page with the wizard, and the run view.
+5. Triggers, the start page with the wizard, and the run view.

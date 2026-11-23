@@ -1,8 +1,8 @@
 import { component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
-import { AppsRoute } from '../apps/_routes.mts'
 import { RunsRoute } from '../runs/_routes.mts'
 import { SettingsRoute } from '../settings/_routes.mts'
+import { TriggersRoute } from '../triggers/_routes.mts'
 import { LiveIndicator } from './live-indicator.mts'
 import styles from './navigation-menu.css'
 
@@ -28,8 +28,8 @@ export const NavigationMenu = component({
 						children: 'Runs',
 					}),
 					create(Link, {
-						href: href.for(AppsRoute),
-						children: 'Apps',
+						href: href.for(TriggersRoute),
+						children: 'Triggers',
 					}),
 					create(Link, {
 						href: href.for(SettingsRoute),

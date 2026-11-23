@@ -6,15 +6,15 @@ The page is a [rooted](https://github.com/rooted-org/rooted) app. Its server, wh
 
 ## Use
 
-Install it where `mesh-flow` runs, the same as a connector, and open it:
+Install it where `mesh-flow` runs, the same as a connector, and serve it:
 
 ```bash
 pnpm add @mesh-flow/ui
-mesh-flow ui            # serves it on a free port and opens the browser
-mesh-flow ui --port 4800 --no-open
+mesh-flow ui            # serves it on a free port and prints the address
+mesh-flow ui --port 4800
 ```
 
-The address it prints has a token that lets one browser in. Settings work without a running engine; runs and apps need `mesh-flow serve`. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
+Open the address it prints in the browser you choose: its token lets one browser in. Settings work without a running engine; runs and triggers need `mesh-flow serve`. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
 
 To serve it from code of your own:
 
@@ -26,7 +26,6 @@ const served = await serveUi({
 	home: '/home/me/.local/share/mesh-flow',
 	keychain: true,
 	port: 0,
-	open: false,
 	abortSignal: stopping.signal,
 })
 console.log(served.url)
@@ -49,7 +48,7 @@ The server listens on 127.0.0.1 and lets in only the browser that opened its add
 
 Every answer has a `Content-Security-Policy` that lets the page run only its own scripts, since a run's events come from the sandbox and can carry prompt-injected text, which the page shows as text.
 
-This is the local way in. The token is on the command line that opens the browser, which other users of the machine can read, as they can reach the control socket's named pipe on Windows. Hosted (roadmap step 7), a sign-in per user takes its place in front of the same routes; the page only knows it talks to `/api` with a cookie.
+This is the local way in. The token only goes to the terminal, never on a command line that other users of the machine can read; they can still reach the control socket's named pipe on Windows. Hosted (roadmap step 7), a sign-in per user takes its place in front of the same routes; the page only knows it talks to `/api` with a cookie.
 
 ## The API
 
@@ -74,10 +73,12 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 
 | Page | Shows | Does |
 |---|---|---|
-| `/` and `/runs/` | every run: workflow, app, status, what it waits on; those that need someone on top | open a run |
+| `/` and `/runs/` | a bar when the app still needs settings, and every run: workflow, status, what it waits on; those that need someone on top | open a run, start a new one when the app has a user trigger |
 | `/runs/:id/` | its status, what it waits on, its steps as bars, its usage once done | answer a question, stop, resume, restart |
-| `/apps/` | deployed apps, their triggers, a webhook's secret set or not | start a workflow from its button |
-| `/apps/:app/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
+| `/triggers/` | the app's version and its triggers: a schedule's cron, a webhook's secret set or not | start a workflow from its user trigger |
+| `/start/` | the app's user triggers, when it has more than one | pick one |
+| `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
+| `/setup/` | what the app still needs before a run can start | set what's missing |
 | `/settings/providers/` | providers in the order models are looked up, whether each has a key | add one, set a key, move one up or down, remove one |
 | `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |

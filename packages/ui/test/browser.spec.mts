@@ -25,7 +25,7 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		const home = await temporaryDirectory()
 		await standInEngine(home)
 		const stopping = new AbortController()
-		const served = await serveUiFrom(builtPage, { home, keychain: false, port: 0, open: false, abortSignal: stopping.signal })
+		const served = await serveUiFrom(builtPage, { home, keychain: false, port: 0, abortSignal: stopping.signal })
 		onTestFinished(async () => {
 			stopping.abort()
 			await served.closed
@@ -36,8 +36,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 
 		// Act
 		await page.goto(served.url)
-		await page.getByRole('link', { name: 'Apps' }).click()
-		await page.getByRole('link', { name: 'Start' }).click()
+		await page.getByText('The app still needs 1 setting before a run can start.').waitFor()
+		await page.getByRole('link', { name: 'New run' }).click()
 		await page.getByText('Set github/token').waitFor()
 		await page.getByLabel('Value').fill('ghp_test')
 		await page.getByRole('button', { name: 'Set' }).click()

@@ -10,7 +10,7 @@ import { RunRecord } from '../_shared/runs.mts'
 import { RunRoute } from './_routes.mts'
 import { inListOrder, shownTime, waitsOn } from './run-labels.mts'
 
-/** Every run: workflow, app, status and what it waits on, those that need someone on top. Live. */
+/** Every run: workflow, status and what it waits on, those that need someone on top. Live. */
 export const RunsList = component({
 	name: 'runs-list',
 	onMount({ append, element, create, signal }) {
@@ -29,9 +29,6 @@ export const RunsList = component({
 						textContent: record.workflow,
 					}),
 					element('td', {
-						textContent: record.app.name,
-					}),
-					element('td', {
 						textContent: record.status,
 					}),
 					element('td', {
@@ -47,10 +44,10 @@ export const RunsList = component({
 			if (!runs.ok) return errorText(element, runs.error)
 			if (runs.value.length === 0)
 				return element('p', {
-					textContent: 'No runs yet. Start one from its app.',
+					textContent: 'No runs yet.',
 				})
 			return create(Table, {
-				headings: ['Run', 'Workflow', 'App', 'Status', 'Waits on', 'Last change'],
+				headings: ['Run', 'Workflow', 'Status', 'Waits on', 'Last change'],
 				rows: inListOrder(runs.value).map(row),
 			})
 		}

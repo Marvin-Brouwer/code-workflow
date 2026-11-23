@@ -23,7 +23,7 @@ export async function servedUi() {
 	const assets = await temporaryDirectory()
 	await writeFile(path.join(assets, 'index.html'), testPage)
 	const stopping = new AbortController()
-	const served = await serveUiFrom(assets, { home, keychain: false, port: 0, open: false, abortSignal: stopping.signal })
+	const served = await serveUiFrom(assets, { home, keychain: false, port: 0, abortSignal: stopping.signal })
 	onTestFinished(async () => {
 		stopping.abort()
 		await served.closed

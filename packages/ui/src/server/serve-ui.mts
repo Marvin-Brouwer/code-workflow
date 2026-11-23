@@ -12,7 +12,6 @@ import {
 	type ServeUi,
 	type ServeUiOptions,
 } from '@mesh-flow/engine'
-import open from 'open'
 import { newSecret } from './ui-access.mts'
 import { assertBuilt, uiApp } from './ui-app.mts'
 
@@ -36,7 +35,6 @@ export const defaultAssets = path.join(path.dirname(fileURLToPath(import.meta.re
  * 	home: '/home/me/.local/share/mesh-flow',
  * 	keychain: true,
  * 	port: 0,
- * 	open: false,
  * 	abortSignal: stopping.signal,
  * })
  * console.log(served.url)
@@ -78,8 +76,6 @@ export async function serveUiFrom(assets: string, options: ServeUiOptions): Prom
 		else abortSignal.addEventListener('abort', close, { once: true })
 	})
 	const url = `http://${address}/?token=${token}`
-	// The address is printed as well, so a browser that won't open leaves the UI usable.
-	if (options.open) await open(url).catch(() => undefined)
 	return { url, closed }
 }
 
