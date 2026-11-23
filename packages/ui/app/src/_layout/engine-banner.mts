@@ -7,32 +7,23 @@ export const EngineBanner = component({
 	name: 'engine-banner',
 	styles,
 	onMount({ append, element, signal }) {
-		const stopped = append(
-			element('p', {
-				classes: styles.banner,
-				role: 'status',
-				children: [
-					'No engine is running. Runs and apps need one: start it with ',
-					element('code', {
-						textContent: 'mesh-flow serve',
-					}),
-					'. Settings work without it.',
-				],
-			}),
-		)
-		const noAccess = append(
-			element('p', {
-				classes: styles.banner,
-				role: 'status',
-				children: [
-					'This page has no access any more. Open the address ',
-					element('code', {
-						textContent: 'mesh-flow ui',
-					}),
-					' printed.',
-				],
-			}),
-		)
+		const banner = (before: string, command: string, after: string) =>
+			append(
+				element('p', {
+					classes: styles.banner,
+					role: 'status',
+					hidden: true,
+					children: [
+						before,
+						element('code', {
+							textContent: command,
+						}),
+						after,
+					],
+				}),
+			)
+		const stopped = banner('No engine is running. Runs and apps need one: start it with ', 'mesh-flow serve', '. Settings work without it.')
+		const noAccess = banner('This page has no access any more. Open the address ', 'mesh-flow ui', ' printed.')
 		const show = (status: EngineStatus) => {
 			stopped.hidden = status !== 'stopped'
 			noAccess.hidden = status !== 'no-access'

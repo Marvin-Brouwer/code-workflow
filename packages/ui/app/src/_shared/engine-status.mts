@@ -9,7 +9,10 @@ import { poll } from './poll.mts'
  */
 export type EngineStatus = 'unknown' | 'running' | 'stopped' | 'no-access'
 
-/** The engine's status, shown on every page and read by pages that need the engine. */
+/**
+ * The engine's status, shown on every page and read by pages that need the engine. It also says
+ * when the UI's server stopped letting this page in, since then nothing about the engine is known.
+ */
 export const engineStatus = createStore<EngineStatus>('unknown')
 
 const Status = z.object({ running: z.boolean() })

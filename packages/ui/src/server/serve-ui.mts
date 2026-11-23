@@ -13,7 +13,7 @@ import {
 	type ServeUiOptions,
 } from '@mesh-flow/engine'
 import open from 'open'
-import { newAccessToken } from './ui-access.mts'
+import { newSecret } from './ui-access.mts'
 import { assertBuilt, uiApp } from './ui-app.mts'
 
 /** The address the UI listens on: this machine only. */
@@ -50,7 +50,7 @@ export async function serveUiFrom(assets: string, options: ServeUiOptions): Prom
 	abortSignal.throwIfAborted()
 	assertBuilt(assets)
 	const socketPath = controlSocketPath(home)
-	const token = newAccessToken()
+	const token = newSecret()
 	let listener: ReturnType<typeof getRequestListener> | undefined
 	const server = createServer((request, response) => {
 		if (listener === undefined) response.writeHead(503).end()

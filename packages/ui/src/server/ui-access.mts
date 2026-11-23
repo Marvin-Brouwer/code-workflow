@@ -17,11 +17,14 @@ export function accessCookieName(host: string): string {
  */
 const ownFetchSites: readonly string[] = ['same-origin', 'none']
 
+/** The port browsers leave out of `Host`. */
+const defaultHttpPort = ':80'
+
 /** How many random bytes a token or a session is. */
 const secretBytes = 32
 
-/** A new token, made each time the UI is served. */
-export function newAccessToken(): string {
+/** A new random secret: the token made each time the UI is served, and the session its cookie holds. */
+export function newSecret(): string {
 	return randomBytes(secretBytes).toString('base64url')
 }
 
@@ -51,14 +54,14 @@ export interface UiAccessOptions {
  */
 export function uiAccess({ token, host }: UiAccessOptions): MiddlewareHandler {
 	const cookie = accessCookieName(host)
-	// On port 80, browsers leave the port out of `Host`.
-	const hosts = host.endsWith(':80') ? [host, host.slice(0, -':80'.length)] : [host]
+	const hosts = host.endsWith(defaultHttpPort) ? [host, host.slice(0, -defaultHttpPort.length)] : [host]
+	const origins = hosts.map((name) => `http://${name}`)
 	// The cookie holds a session of its own rather than the token, since the browser sends it to
 	// every port of 127.0.0.1: another server there reads the session, never the printed token.
-	const session = newAccessToken()
+	const session = newSecret()
 	return async (context, next) => {
 		if (!hosts.includes(context.req.header('host') ?? '')) return context.text('This address is not the one the UI listens on.', 403)
-		if (!fromOwnOrigin(context.req.header('sec-fetch-site'), context.req.header('origin'), host))
+		if (!fromOwnOrigin(context.req.header('sec-fetch-site'), context.req.header('origin'), origins))
 			return context.text('Only the UI itself can use this address.', 403)
 		const offered = context.req.query('token')
 		if (offered !== undefined) {
@@ -78,9 +81,9 @@ export function uiAccess({ token, host }: UiAccessOptions): MiddlewareHandler {
 }
 
 /** Whether a request comes from the UI's own page, or from the user opening its address. A header a browser didn't send doesn't count against it. */
-function fromOwnOrigin(fetchSite: string | undefined, origin: string | undefined, host: string): boolean {
+function fromOwnOrigin(fetchSite: string | undefined, origin: string | undefined, origins: readonly string[]): boolean {
 	if (fetchSite !== undefined && !ownFetchSites.includes(fetchSite)) return false
-	return origin === undefined || origin === `http://${host}`
+	return origin === undefined || origins.includes(origin)
 }
 
 /** Compares two secrets in a time that doesn't tell how much of them matched. */

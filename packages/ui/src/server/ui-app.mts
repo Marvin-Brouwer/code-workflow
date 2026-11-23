@@ -37,10 +37,10 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
 /**
  * The UI as one Hono app: access first, then `/api/engine` (runs, apps and sign-ins, from the
  * running engine), `/api/settings` (on the home's files) and the page itself, with every other
- * path answered by `index.html` so the page's own router picks it up.
+ * path answered by `index.html` so the page's own router picks it up. `serveUiFrom` checks
+ * that `assets` holds a built page first ({@link assertBuilt}).
  */
 export function uiApp(options: UiAppOptions): Hono {
-	assertBuilt(options.assets)
 	const app = new Hono()
 	app.use(pageHeaders())
 	app.use(uiAccess({ token: options.token, host: options.host }))
