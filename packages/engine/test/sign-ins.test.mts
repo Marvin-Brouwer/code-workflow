@@ -44,7 +44,7 @@ describe('sign-ins', () => {
 		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }] })
 		const listening = new AbortController()
 		const heard: string[] = []
-		signIns.listen((connector) => {
+		signIns.onChange((connector) => {
 			heard.push(connector)
 		}, listening.signal)
 

@@ -104,8 +104,9 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   - a bar for `input` (with the answer form in it), `wait` and login requests;
   - steps that overlap (`Promise.all`, `inDependencyOrder` nodes) are bars stacked by start time;
     a node is a bar grouping its own steps;
-  - a restart adds an attempt, and bars group by attempt; the current attempt is the highest one
-    in the event ids. A step with no end event is open (running, waiting or paused, as the run is)
+  - a restart adds an attempt, and bars group by attempt (the part of an event id before the `-`);
+    the current attempt is the one of the latest event, since attempt ids are random rather than
+    counted. A step with no end event is open (running, waiting or paused, as the run is)
     when it is in the current attempt of a run that isn't finished or restartable, and interrupted
     otherwise.
 
@@ -146,21 +147,29 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   The tests cover the JSON Schema form logic (`fieldsOf`, `valueOf`, `checkAgainst`) and that the
   page's copies of the engine's answer schemas match the originals, since the page can't import the
   Node packages.
-- Runs update by push, not polling (Marvin, 2026-11-23): the engine's control API streams which run
-  changed as server-sent events (`GET /changes`: `ready`, then `run` with its id after each record
-  or events write, and a `heartbeat` every 15 seconds), and the UI's server passes it through at
-  `/api/engine/changes`. Server-sent events and not a websocket: updates only go one way, actions
-  stay POSTs, and it's plain HTTP behind the same access checks. Against a view that silently stops
-  updating, the page counts the stream as dead after 35 seconds without a heartbeat, connects again
-  with a growing wait, refetches everything on every (re)connect, refreshes every two seconds while
-  it's down, and shows "Live" or "Reconnecting" in the shell. The settings still poll.
-- Review on #54 (Marvin, 2026-11-23): the stream is `GET /events` (was `/changes`) and also says
-  which sign-in changed, such as the AWS login, so the sign-ins list follows it instead of polling.
-  The run view follows its own stream instead: `GET /runs/:run/events` asked for as
-  `text/event-stream` sends `run` with the record and `event` with each event, numbered for
-  `Last-Event-ID`, first all of them and then each change; plain `GET` still answers the JSON list.
-  Both streams are behind the UI's access check, which a hosted sign-in replaces for every route;
-  EventSource sends the cookie on the same origin, so `withCredentials` only matters cross-origin.
+- Runs and sign-ins update by push, not polling (Marvin, 2026-11-23, both global and per run): the
+  engine's control API streams what changed as server-sent events. `GET /events` (was `/changes`)
+  sends `ready`, then `run` with its id after each record or events write, `sign-in` with the
+  connector after each change to a sign-in, such as the AWS login, and a `heartbeat` every
+  `streamHeartbeat` (15 seconds). The run view follows its own stream instead: `GET /runs/:run/events`
+  asked for as `text/event-stream` sends `run` with the record, `run-event` with each event,
+  numbered for `Last-Event-ID`, first all of them and then each change, and `sign-in` as above;
+  plain `GET` still answers the JSON list. The UI's server passes both through under
+  `/api/engine/`. Server-sent events and not a websocket: updates only go one way, actions stay
+  POSTs, and it's plain HTTP behind the same access checks, which a hosted sign-in replaces for
+  every route; EventSource sends the cookie on the same origin, so `withCredentials` only matters
+  cross-origin. Against a view that silently stops updating, the page counts a stream as dead after
+  35 seconds without a heartbeat, connects again with a growing wait, refetches everything on every
+  (re)connect, refreshes every `pollInterval` while it's down, and shows "Live" or "Reconnecting" in
+  the shell. The settings forms still read on demand.
+- A tab holds one stream at most: the run page's own stream replaces the shell's while it's open,
+  and passes its sign-in changes on. A browser keeps six connections to an HTTP/1.1 address, and a
+  stream holds one for as long as it's open, so two per tab would leave three run tabs with none
+  for anything else. A stream ends a reader that is connected but doesn't read once 1000 messages
+  wait for it, rather than the engine holding them.
+- Starting a run sends a key made once per start page, so a start sent again, such as after the
+  engine restarted, returns the run it started instead of a second one. An answer refused with 404
+  or 409 says it was answered elsewhere, in another tab or with the CLI.
 - A run's requests are answered in a "Waiting on" section at the top of the run page rather than
   inside their bars, so what needs someone is the first thing on it; the input bar shows the
   question and whether it was answered.

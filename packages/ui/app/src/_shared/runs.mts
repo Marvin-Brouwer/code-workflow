@@ -1,10 +1,11 @@
-import { z } from 'zod'
-
 /**
  * The runs and apps as the engine routes answer them, as far as the page reads them. Loose, so a
  * field the engine adds later doesn't break the page; the page can't import the engine's own
  * schemas, which come with Node packages.
+ *
+ * @module
  */
+import { z } from 'zod'
 
 /** What a run waits on that a person or the engine answers. */
 export const RunRequest = z.discriminatedUnion('kind', [
@@ -14,6 +15,7 @@ export const RunRequest = z.discriminatedUnion('kind', [
 ])
 export type RunRequest = z.infer<typeof RunRequest>
 
+/** Where a run is, as `RunStatus` in `@mesh-flow/engine` says. */
 export const RunStatus = z.enum(['starting', 'running', 'paused', 'restartable', 'succeeded', 'failed', 'stopped', 'skipped'])
 export type RunStatus = z.infer<typeof RunStatus>
 
@@ -27,6 +29,7 @@ export const ModelUsage = z.looseObject({
 	costUsd: z.number(),
 })
 
+/** A run as the engine keeps it, as far as the page reads it. */
 export const RunRecord = z.looseObject({
 	id: z.string(),
 	workflow: z.string(),

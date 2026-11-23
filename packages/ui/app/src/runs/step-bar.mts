@@ -7,9 +7,11 @@ import styles from './step-bar.css'
 export interface OpenState {
 	/** Whether `id` is open: as someone left it, or else `otherwise`. */
 	readonly isOpen: (id: string, otherwise: boolean) => boolean
+	/** Keeps whether `id` is open, as someone just left it. */
 	readonly remember: (id: string, open: boolean) => void
 }
 
+/** The step a bar shows, and how its bars are kept open. */
 export interface StepBarOptions {
 	readonly step: Step
 	/** Open unless someone closed it: the latest step. Failed steps are open too. */
@@ -37,7 +39,10 @@ export const StepBar = component<StepBarOptions>({
 						textContent: `${label}\n${typeof value === 'string' ? value : JSON.stringify(value, undefined, 2)}`,
 					})
 
-		const callDetails = (call: Call) => [detail('Input', call.input), detail('Result', call.result), detail('Error', call.error)]
+		const callDetails = (call: Call | undefined) => {
+			if (call === undefined) return []
+			return [detail('Input', call.input), detail('Result', call.result), detail('Error', call.error)]
+		}
 
 		const remembered = (id: string, otherwise: boolean, classes: CssClass[], children: (HTMLElement | undefined)[]) => {
 			const details = element('details', {
@@ -83,7 +88,7 @@ export const StepBar = component<StepBarOptions>({
 		const body = element('div', {
 			classes: styles.body,
 			children: [
-				...(step.call === undefined ? [] : callDetails(step.call)),
+				...callDetails(step.call),
 				...step.stream.map(streamItem),
 				...step.steps.map((inner, index) =>
 					create(StepBar, {

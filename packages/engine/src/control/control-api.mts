@@ -5,13 +5,21 @@ import { z } from 'zod'
 import type { AppStore, AppVersion } from '../apps/app-store.mts'
 import { AppName } from '../apps/names.mts'
 import type { Engine } from '../engine/engine.mts'
-import { engineEvents } from './engine-events.mts'
-import { runEventStream } from './run-events.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
+import { engineEventStream } from './engine-event-stream.mts'
+import { runEventStream } from './run-event-stream.mts'
 import type { ShownConnector } from './shown-connector.mts'
 
-/** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
-export const StartRunBody = z.object({ app: AppName, trigger: TriggerReference, input: z.unknown().optional() })
+/**
+ * The body of `POST /runs`: which trigger of which app, its parameters or payload, and optionally a
+ * key, so a request sent again starts no second run.
+ */
+export const StartRunBody = z.object({
+	app: AppName,
+	trigger: TriggerReference,
+	input: z.unknown().optional(),
+	key: z.string().min(1).max(200).optional(),
+})
 
 /** The body of `PUT /apps/:name`: the built app, packed, on this machine. */
 export const DeployBody = z.object({ tarball: z.string().min(1) })
@@ -49,10 +57,10 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `GET /runs` | every run record |
  * | `POST /runs` | starts a run through a trigger: `{ app, trigger: { kind, id }, input }` |
  * | `GET /runs/:run` | one run record |
- * | `GET /runs/:run/events` | the run's event tree so far; asked for as `text/event-stream`, server-sent events: `run` with the record and `event` with each event, numbered for `Last-Event-ID`, first all of them and then each change |
+ * | `GET /runs/:run/events` | the run's event tree so far; asked for as `text/event-stream`, server-sent events: `run` with the record and `run-event` with each event, numbered for `Last-Event-ID`, first all of them and then each change, and `sign-in` as below |
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
- * | `GET /events` | server-sent events: `run` with `{ id }` after each change to a run, `sign-in` with `{ connector }` after each change to a sign-in, and a `heartbeat` every 15 seconds |
+ * | `GET /events` | server-sent events: `run` with `{ id }` after each change to a run, `sign-in` with `{ connector }` after each change to a sign-in, and a `heartbeat` every `streamHeartbeat` |
  * | `GET /connectors` | the connectors the engine loaded, and whether each signs in |
  * | `GET /sign-ins` | the sign-ins under way, with where to sign in |
  * | `POST /sign-ins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
@@ -68,8 +76,8 @@ export function controlApi(engine: Engine, { apps, connectors = [] }: ControlApi
 
 	api.get('/runs', (context) => context.json(engine.list()))
 	api.post('/runs', async (context) => {
-		const { app, trigger, input } = StartRunBody.parse(await context.req.json())
-		return context.json(await engine.startRun({ app, trigger, input, abortSignal: context.req.raw.signal }), 201)
+		const { app, trigger, input, key } = StartRunBody.parse(await context.req.json())
+		return context.json(await engine.startRun({ app, trigger, input, key, abortSignal: context.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', (context) => context.json(engine.get(context.req.param('run'))))
 	const followRun = runEventStream(engine)
@@ -85,7 +93,7 @@ export function controlApi(engine: Engine, { apps, connectors = [] }: ControlApi
 	api.post('/runs/:run/stop', async (context) => context.json(await engine.stop(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/resume', async (context) => context.json(await engine.resume(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/restart', async (context) => context.json(await engine.restart(context.req.param('run'), context.req.raw.signal)))
-	api.get('/events', engineEvents(engine))
+	api.get('/events', engineEventStream(engine))
 	api.get('/connectors', (context) => context.json(connectors))
 	api.get('/sign-ins', (context) => context.json(engine.signIns()))
 	api.post('/sign-ins/:connector', async (context) => {

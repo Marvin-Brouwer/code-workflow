@@ -4,8 +4,8 @@ import { duration } from '@mesh-flow/duration'
 import { chromium, type Browser } from 'playwright-core'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { serveUiFrom } from '../src/_module/server.mts'
-import { standInEngine } from './support/stand-in-engine.mts'
 import { temporaryDirectory } from './support/served-ui.mts'
+import { standInEngine } from './support/stand-in-engine.mts'
 
 /** The page as `pnpm build` makes it: this test runs against the real one. */
 const builtPage = fileURLToPath(new URL('../dist/app', import.meta.url))
@@ -45,11 +45,18 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.getByRole('button', { name: 'Start' }).click()
 		await page.getByText('Which die is wrong?').first().waitFor()
 		const startedBar = await page.getByText('Collected issue #63').isVisible()
+		const shownMarkup = await page.locator('main').textContent()
+		const madeElements = await page.locator('main script, main img').count()
+		const ranScript = await page.evaluate(() => 'injected' in globalThis)
 		await page.getByLabel('answer').fill('the red one')
 		await page.getByRole('button', { name: 'Answer' }).click()
 
 		// Assert
 		expect(startedBar).toBe(true)
+		expect(shownMarkup).toContain('<script>window.injected = true</script>')
+		expect(shownMarkup).toContain('<img src=x onerror="window.injected = true">')
+		expect(madeElements).toBe(0)
+		expect(ranScript).toBe(false)
 		await expect.poll(() => page.locator('dd').first().textContent()).toBe('succeeded')
 		await expect.poll(() => page.getByRole('status').filter({ hasText: 'Live' }).count()).toBe(1)
 	})

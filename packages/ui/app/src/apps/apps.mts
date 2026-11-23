@@ -1,10 +1,10 @@
 import { component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
 import { z } from 'zod'
+import { Table } from '../_layout/table.mts'
 import { read } from '../_shared/api.mts'
 import { DeployedApp, type TriggerDescription } from '../_shared/runs.mts'
 import { shownTime } from '../runs/run-labels.mts'
-import { Table } from '../_layout/table.mts'
 import { CredentialsRoute } from '../settings/_routes.mts'
 import { StartRoute } from './_routes.mts'
 
@@ -36,7 +36,13 @@ export const AppsPage = component({
 		if (apps.value.length === 0) {
 			append(
 				element('p', {
-					textContent: 'No apps yet. Deploy one with `mesh-flow deploy`.',
+					children: [
+						'No apps yet. Deploy one with ',
+						element('code', {
+							textContent: 'mesh-flow deploy',
+						}),
+						'.',
+					],
 				}),
 			)
 			return
@@ -54,23 +60,23 @@ export const AppsPage = component({
 					textContent: trigger.cron,
 				})
 			const name = `webhook/${app.name}/${trigger.id}`
-			return secrets.has(name)
-				? element('span', {
-						textContent: 'Secret set',
-					})
-				: element('span', {
-						children: [
-							'No secret: set ',
-							element('code', {
-								textContent: name,
-							}),
-							' under ',
-							create(Link, {
-								href: href.for(CredentialsRoute),
-								children: 'credentials',
-							}),
-						],
-					})
+			if (secrets.has(name))
+				return element('span', {
+					textContent: 'Secret set',
+				})
+			return element('span', {
+				children: [
+					'No secret: set ',
+					element('code', {
+						textContent: name,
+					}),
+					' under ',
+					create(Link, {
+						href: href.for(CredentialsRoute),
+						children: 'credentials',
+					}),
+				],
+			})
 		}
 
 		for (const app of apps.value)

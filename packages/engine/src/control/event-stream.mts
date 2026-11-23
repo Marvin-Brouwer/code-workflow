@@ -1,21 +1,38 @@
 import { duration, type Duration } from '@mesh-flow/duration'
 import type { Context } from 'hono'
-import { streamSSE } from 'hono/streaming'
+import { streamSSE, type SSEMessage } from 'hono/streaming'
 
 /** How often a stream says it's still there, so a reader can tell a quiet stream from a dead one. */
 export const streamHeartbeat: Duration = duration.of('15s')
 
+/**
+ * How many messages may wait for a reader that is connected but doesn't read. Past it the stream
+ * ends, and the reader connects again and starts over, rather than the engine holding them all.
+ */
+const queueLimit = 1000
+
+/** One message of a stream. */
+export interface StreamMessage {
+	readonly event: string
+	readonly data: unknown
+	/** The stream's place, which a reader that connects again names in `Last-Event-ID`. */
+	readonly id?: string | undefined
+}
+
 /** What a stream's `follow` sends with. */
 export interface EventSender {
-	/**
-	 * Sends `event` with `data` as JSON, after everything sent before it. `id` is the stream's place,
-	 * which a reader that connects again names in `Last-Event-ID`.
-	 */
-	readonly send: (event: string, data: unknown, id?: string) => void
+	/** Sends `message`, its data as JSON, after everything sent before it. */
+	readonly send: (message: StreamMessage) => void
 	/** Ends the stream. */
 	readonly close: () => void
 	/** Aborts when the stream ends: closed, or the reader went away. Stop following with it. */
 	readonly closed: AbortSignal
+}
+
+/** `message` as Hono writes it, its data as JSON. */
+function sseMessage({ event, data, id }: StreamMessage): SSEMessage {
+	if (id === undefined) return { event, data: JSON.stringify(data) }
+	return { event, data: JSON.stringify(data), id }
 }
 
 /**
@@ -32,13 +49,24 @@ export function eventStream(context: Context, heartbeat: Duration, follow: (send
 		context.req.raw.signal.addEventListener('abort', close, { once: true })
 		// One write at a time. A write to a reader that went away fails; the abort above ends the stream.
 		let writing = Promise.resolve()
-		const send = (event: string, data: unknown, id?: string) => {
-			const message = { event, data: JSON.stringify(data), ...(id === undefined ? {} : { id }) }
-			writing = writing.then(() => stream.writeSSE(message)).catch(() => undefined)
+		let waiting = 0
+		const send = (message: StreamMessage) => {
+			if (controller.signal.aborted) return
+			if (waiting >= queueLimit) {
+				close()
+				return
+			}
+			waiting++
+			writing = writing
+				.then(() => stream.writeSSE(sseMessage(message)))
+				.catch(() => undefined)
+				.finally(() => {
+					waiting--
+				})
 		}
 		follow({ send, close, closed: controller.signal })
 		const timer = setInterval(() => {
-			send('heartbeat', {})
+			send({ event: 'heartbeat', data: {} })
 		}, heartbeat.to('ms'))
 		await new Promise<void>((resolve) => {
 			if (controller.signal.aborted) resolve()

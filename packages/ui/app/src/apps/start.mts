@@ -8,6 +8,7 @@ import { DeployedApp, RunRecord } from '../_shared/runs.mts'
 import { MissingSetting } from '../_shared/settings.mts'
 import { RunRoute } from '../runs/_routes.mts'
 
+/** Which app's button the page starts. */
 export interface StartPageOptions {
 	readonly app: string
 	readonly trigger: string
@@ -44,11 +45,13 @@ export const StartPage = component<StartPageOptions>({
 		}
 		heading.textContent = `Start ${workflow.name} of ${appName}`
 
+		// One key for this page, so a start sent again, such as after the engine restarted, starts one run.
+		const key = `ui-${crypto.randomUUID()}`
 		const start = async (input: unknown, abortSignal: AbortSignal) => {
 			const started = await send(
 				'POST',
 				'/engine/runs',
-				{ app: appName, trigger: { kind: 'user', id: triggerId }, input },
+				{ app: appName, trigger: { kind: 'user', id: triggerId }, input, key },
 				RunRecord,
 				abortSignal,
 			)

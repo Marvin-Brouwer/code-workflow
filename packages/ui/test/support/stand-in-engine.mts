@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import { getRequestListener } from '@hono/node-server'
-import { controlSocketPath, engineEvents, openEngineGatewayHome, RunRecord, runEventStream } from '@mesh-flow/engine'
+import { controlSocketPath, engineEventStream, openEngineGatewayHome, RunRecord, runEventStream } from '@mesh-flow/engine'
 import { Hono } from 'hono'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
@@ -110,6 +110,17 @@ export async function standInEngine(home: string) {
 		const root = event(run, 'workflow', undefined, { workflow: 'fix-issue' })
 		const call = event(run, 'tool-call', root, { tool: 'githubIssue', from: 'code', input })
 		event(run, 'tool-call-succeeded', call, { title: `Collected issue #${String(input.issue)}`, result: '{"title":"The dice roll a 7"}' })
+		// What a sandbox writes can carry markup meant to run in the page: it has to show as text.
+		const loop = event(run, 'loop', root, { model: 'claude-sonnet-5-5' })
+		event(run, 'turn', loop, { turn: 1, text: '<script>window.injected = true</script>' })
+		event(run, 'tool-call', loop, {
+			tool: 'read',
+			from: 'agent',
+			input: { path: 'README.md' },
+			failed: false,
+			result: '<img src=x onerror="window.injected = true">',
+		})
+		event(run, 'loop-succeeded', loop)
 		event(run, 'input', root, { question: 'Which die is wrong?' })
 		run.pending = [{ kind: 'input', id: 'input-1', question: 'Which die is wrong?', fields: { answer: { type: 'string' } } }]
 		changed(run)
@@ -146,11 +157,15 @@ export async function standInEngine(home: string) {
 			{ once: true },
 		)
 	}
-	api.get('/events', engineEvents({ onRunChange, onSignInChange: () => undefined }))
+	api.get('/events', engineEventStream({ onRunChange, onSignInChange: () => undefined }))
 	const followRun = runEventStream({
-		get: (id) => record(found(id)),
+		find: (id) => {
+			const run = runs.get(id)
+			return run === undefined ? undefined : record(run)
+		},
 		events: (id) => Promise.resolve(found(id).events),
 		onRunChange,
+		onSignInChange: () => undefined,
 	})
 	const listener = getRequestListener(api.fetch)
 	const server: Server = createServer((incoming, outgoing) => {

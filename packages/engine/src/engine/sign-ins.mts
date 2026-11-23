@@ -26,7 +26,7 @@ export interface SignIns {
 	 * Calls `listener` with a connector's name each time its sign-in starts, shows a new code, fails a
 	 * try or ends, until `abortSignal` aborts. For views that follow the sign-ins.
 	 */
-	readonly listen: (listener: (connector: string) => void, abortSignal: AbortSignal) => void
+	readonly onChange: (listener: (connector: string) => void, abortSignal: AbortSignal) => void
 	/** Stops every sign-in, also those nobody waits for, such as when the engine shuts down. */
 	readonly close: () => void
 }
@@ -185,7 +185,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 			}
 		},
 		list: () => [...underWay].map(([connector, { shown }]) => ({ connector, ...shown })),
-		listen: (listener, abortSignal) => {
+		onChange: (listener, abortSignal) => {
 			if (abortSignal.aborted) return
 			// The same function twice is two listeners.
 			const own = (connector: string) => {

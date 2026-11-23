@@ -1,33 +1,39 @@
-import { component } from '@rooted/components'
+import { choice, component } from '@rooted/components'
 import { z } from 'zod'
 import { read, send, type Answer } from '../_shared/api.mts'
 import { followStream } from '../_shared/follow-stream.mts'
+import { announce, withOwnStream } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunEvent, RunRecord, type RunStatus } from '../_shared/runs.mts'
 import { RunFacts } from './run-facts.mts'
+import { runFeed } from './run-feed.mts'
 import { RunRequestView } from './run-requests.mts'
+import { attemptsOf, type Attempt, type Step } from './run-steps.mts'
 import { RunUsage } from './run-usage.mts'
-import { stepsOf } from './run-steps.mts'
 import { StepBar, type OpenState } from './step-bar.mts'
 import styles from './run.css'
 
+/** Which run the page shows. */
 export interface RunPageOptions {
 	readonly id: string
 }
 
-/** Statuses a run never leaves on its own. */
-const finished: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped'])
+/** Statuses in which a run goes no further unless someone restarts it. */
+const over: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped', 'restartable'])
+
+type RunAction = 'stop' | 'resume' | 'restart'
 
 /** What can be done to a run, and in which statuses the engine takes it. */
-const actions = [
+const actions: readonly { readonly action: RunAction; readonly label: string; readonly when: readonly RunStatus[] }[] = [
 	{ action: 'stop', label: 'Stop', when: ['starting', 'running', 'paused', 'restartable'] },
 	{ action: 'resume', label: 'Resume', when: ['paused'] },
 	{ action: 'restart', label: 'Restart', when: ['restartable', 'failed', 'stopped'] },
-] as const satisfies readonly { action: string; label: string; when: readonly RunStatus[] }[]
+]
 
 /**
- * One run: its status, what it waits on with the forms that answer it, and its steps as bars. Live:
- * it follows the run's own stream, and fetches it every two seconds while that stream is down.
+ * One run: its status, what it waits on with the forms that answer it, and its steps as bars, by
+ * attempt. Live: it follows the run's own stream, in place of the engine's (see `withOwnStream`),
+ * and fetches the run every `pollInterval` while that stream is down.
  */
 export const RunPage = component<RunPageOptions>({
 	name: 'run-page',
@@ -65,9 +71,62 @@ export const RunPage = component<RunPageOptions>({
 		// The request forms stay as they are while the run waits on them, so a refresh doesn't clear what's typed.
 		let shownRequests = ''
 
-		const act = async (action: string) => {
+		const act = async (action: RunAction) => {
 			const answer: Answer<unknown> = await send('POST', `/engine/runs/${encodeURIComponent(id)}/${action}`, {}, RunRecord, signal)
 			status.textContent = answer.ok ? '' : answer.error
+		}
+
+		const waitingView = (record: RunRecord): HTMLElement[] => {
+			if (record.pending.length === 0) return []
+			return [
+				element('h2', {
+					textContent: 'Waiting on',
+				}),
+				...record.pending.map((request) =>
+					element('div', {
+						classes: styles.waiting,
+						children: create(RunRequestView, {
+							run: id,
+							request,
+						}),
+					}),
+				),
+			]
+		}
+
+		const usageView = (record: RunRecord): HTMLElement[] => {
+			if (record.usage === undefined) return []
+			return [
+				create(RunUsage, {
+					usage: record.usage,
+				}),
+			]
+		}
+
+		const barsView = (bars: readonly Step[]): HTMLElement[] =>
+			bars.map((step, index) =>
+				create(StepBar, {
+					step,
+					latest: index === bars.length - 1,
+					open,
+				}),
+			)
+
+		const stepsView = (attempts: readonly Attempt[]): HTMLElement[] => {
+			if (attempts.length === 0)
+				return [
+					element('p', {
+						textContent: 'No steps yet.',
+					}),
+				]
+			const [only] = attempts
+			if (attempts.length === 1 && only !== undefined) return barsView(only.steps)
+			return attempts.flatMap((attempt, index) => [
+				element('h3', {
+					textContent: `Attempt ${String(index + 1)}${choice(attempt.current, ', the current one', '')}`,
+				}),
+				...barsView(attempt.steps),
+			])
 		}
 
 		const showRecord = (record: RunRecord) => {
@@ -78,7 +137,7 @@ export const RunPage = component<RunPageOptions>({
 			)
 			buttons.replaceChildren(
 				...actions
-					.filter(({ when }) => (when as readonly RunStatus[]).includes(record.status))
+					.filter(({ when }) => when.includes(record.status))
 					.map(({ action, label }) =>
 						element('button', {
 							type: 'button',
@@ -94,67 +153,29 @@ export const RunPage = component<RunPageOptions>({
 			const requests = JSON.stringify(record.pending)
 			if (requests !== shownRequests) {
 				shownRequests = requests
-				waiting.replaceChildren(
-					...(record.pending.length === 0
-						? []
-						: [
-								element('h2', {
-									textContent: 'Waiting on',
-								}),
-								...record.pending.map((request) =>
-									element('div', {
-										classes: styles.waiting,
-										children: create(RunRequestView, {
-											run: id,
-											request,
-										}),
-									}),
-								),
-							]),
-				)
+				waiting.replaceChildren(...waitingView(record))
 			}
-			usage.replaceChildren(
-				...(record.usage === undefined
-					? []
-					: [
-							create(RunUsage, {
-								usage: record.usage,
-							}),
-						]),
-			)
+			usage.replaceChildren(...usageView(record))
 		}
 
 		const showSteps = (record: RunRecord, events: readonly RunEvent[]) => {
-			const bars = stepsOf(events, finished.has(record.status))
 			steps.replaceChildren(
 				element('h2', {
 					textContent: 'Steps',
 				}),
-				...(bars.length === 0
-					? [
-							element('p', {
-								textContent: 'No steps yet.',
-							}),
-						]
-					: bars.map((step, index) =>
-							create(StepBar, {
-								step,
-								latest: index === bars.length - 1,
-								open,
-							}),
-						)),
+				...stepsView(attemptsOf(events, over.has(record.status))),
 			)
 		}
 
 		// What the run's stream sent so far, drawn once for each burst of it.
-		let record: RunRecord | undefined
-		let events: RunEvent[] = []
+		const feed = runFeed()
 		let drawing = false
 		const draw = () => {
 			if (drawing) return
 			drawing = true
 			queueMicrotask(() => {
 				drawing = false
+				const { record, events } = feed.snapshot()
 				if (record === undefined || signal.aborted) return
 				showRecord(record)
 				showSteps(record, events)
@@ -163,6 +184,7 @@ export const RunPage = component<RunPageOptions>({
 
 		// While the stream is down: the same, fetched.
 		const fetchRun = async (abortSignal: AbortSignal) => {
+			const started = feed.fetchStarted()
 			const [fetchedRecord, fetchedEvents] = await Promise.all([
 				read(`/engine/runs/${encodeURIComponent(id)}`, RunRecord, abortSignal),
 				read(`/engine/runs/${encodeURIComponent(id)}/events`, z.array(RunEvent), abortSignal),
@@ -176,30 +198,38 @@ export const RunPage = component<RunPageOptions>({
 				status.textContent = fetchedEvents.error
 				return
 			}
-			record = fetchedRecord.value
-			events = fetchedEvents.value
-			draw()
+			if (feed.fetched(started, { record: fetchedRecord.value, events: fetchedEvents.value })) draw()
 		}
 
+		const refreshRun = refresher(fetchRun, signal)
+		withOwnStream(signal)
 		followStream(`/api/engine/runs/${encodeURIComponent(id)}/events`, {
 			on: {
 				run: (data) => {
 					const sent = RunRecord.safeParse(data)
 					if (!sent.success) return
-					record = sent.data
+					feed.streamedRecord(sent.data)
 					draw()
 				},
-				event: (data) => {
+				'run-event': (data) => {
 					const sent = RunEvent.safeParse(data)
 					if (!sent.success) return
-					events.push(sent.data)
+					feed.streamedEvent(sent.data)
 					draw()
+				},
+				'sign-in': (data) => {
+					const sent = z.object({ connector: z.string() }).safeParse(data)
+					announce(sent.success ? { kind: 'sign-in', connector: sent.data.connector } : { kind: 'all' })
 				},
 			},
 			connected: () => {
-				events = []
+				feed.connected()
+				announce({ kind: 'all' })
 			},
-			whileDown: refresher(fetchRun, signal),
+			whileDown: () => {
+				refreshRun()
+				announce({ kind: 'all' })
+			},
 			abortSignal: signal,
 		})
 	},

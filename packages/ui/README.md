@@ -58,7 +58,7 @@ This is the local way in. The token is on the command line that opens the browse
 | `GET /api/engine/status` | `{ running }`: whether an engine answers on the home's socket |
 | `/api/engine/runs`, `/runs/:run`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
 | `GET /api/engine/events` | the engine's event stream, as server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds |
-| `GET /api/engine/runs/:run/events` as `text/event-stream` | one run's stream: its record and its events, first all of them and then each change |
+| `GET /api/engine/runs/:run/events` as `text/event-stream` | one run's stream: its record and its events, first all of them and then each change, and its sign-ins |
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/apps`, `GET /api/engine/apps/:name/missing` | deployed apps, and what one still needs before it can run |
@@ -67,6 +67,8 @@ This is the local way in. The token is on the command line that opens the browse
 | `GET /api/settings/connectors` | the connector packages the engine loads |
 
 Deploying isn't in it: that stays with the CLI and CI.
+
+A tab follows one stream at a time: the run page's own stream takes the place of the engine's while it's open. A browser keeps six connections to an HTTP/1.1 address, and each open stream holds one, so many tabs of the UI at once can leave a tab waiting for a connection.
 
 ## The pages
 
