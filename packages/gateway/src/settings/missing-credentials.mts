@@ -1,5 +1,5 @@
 import type { CredentialReader } from '../credentials/credential-store.mts'
-import type { MissingSetting } from './missing-setting.mts'
+import type { MissingSetting, SettingFix } from './missing-setting.mts'
 
 /** A credential a connector reads, and what its value looks like. */
 export interface WantedCredential {
@@ -28,7 +28,7 @@ export async function missingCredentials(
 	return wanted.flatMap(({ name, example }, index) => {
 		if (values[index] !== undefined) return []
 		const command = example === undefined ? `mesh-flow credential set ${name}` : `echo '${example}' | mesh-flow credential set ${name}`
-		const fix = example === undefined ? { kind: 'credential' as const, name } : { kind: 'credential' as const, name, example }
+		const fix: SettingFix = { kind: 'credential', name, example }
 		return [{ message: `${name} isn't set. Set it with \`${command}\`.`, fix }]
 	})
 }

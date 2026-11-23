@@ -258,19 +258,16 @@ export class Engine {
 		const tools = this.#gateway.missingTools(description.tools)
 		const { registries } = description.sandbox
 		const settings = (await this.#connectorSettings?.({ tools: description.tools, registries }, abortSignal)) ?? []
-		return [
-			...models,
-			...(tools.length === 0
+		const toolsWithoutConnector: MissingSetting[] =
+			tools.length === 0
 				? []
 				: [
 						{
 							message: `No loaded connector brings the host tools ${tools.join(', ')}. Add the connector with \`mesh-flow connector add <package>\` and start the engine again.`,
-							fix: { kind: 'connector-for-tools' as const, tools },
+							fix: { kind: 'connector-for-tools', tools },
 						},
-					]),
-			...this.#gateway.missingRegistries(registries),
-			...settings,
-		]
+					]
+		return [...models, ...toolsWithoutConnector, ...this.#gateway.missingRegistries(registries), ...settings]
 	}
 
 	async #create(options: StartRunOptions): Promise<RunRecord> {
