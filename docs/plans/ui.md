@@ -125,7 +125,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   a `Duration` of two seconds. They stop with the component's abort signal (rooted's mount `signal`,
   taken as `signal: abortSignal`), so leaving the page stops them. The next poll waits for the last
   one to settle, an answer form keeps what was typed across updates, and an answer that another tab
-  or the CLI gave first says so. Server-sent events can replace polling behind the same data later.
+  or the CLI gave first says so. Superseded: updates are pushed over server-sent events now, with
+  polling only while a stream is down (see As built).
 - **Shared state** in `@rooted/store` only where two components need it: whether the engine is
   reachable (shown in the shell on every page), and the run list. The rest is local to `onMount`.
 - Styling follows rooted's four layers: `index.tokens.css` (a few greys and spacing),
