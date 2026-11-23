@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { FixForm } from '../_forms/fix-form.mts'
 import { SchemaForm } from '../_forms/schema-form.mts'
 import { read, send } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { DeployedApp, RunRecord } from '../_shared/runs.mts'
 import { MissingSetting } from '../_shared/settings.mts'
 import { RunRoute } from '../runs/_routes.mts'
@@ -35,12 +36,7 @@ export const StartPage = component<StartPageOptions>({
 		const trigger = app?.manifest.description.triggers.find(({ kind, id }) => kind === 'user' && id === triggerId)
 		const workflow = app?.manifest.description.workflows.find(({ name }) => name === trigger?.workflow)
 		if (!apps.ok || workflow === undefined) {
-			content.replaceChildren(
-				element('p', {
-					role: 'alert',
-					textContent: apps.ok ? `${appName} has no button ${triggerId}.` : apps.error,
-				}),
-			)
+			content.replaceChildren(errorText(element, apps.ok ? `${appName} has no button ${triggerId}.` : apps.error))
 			return
 		}
 		heading.textContent = `Start ${workflow.name} of ${appName}`
@@ -63,12 +59,7 @@ export const StartPage = component<StartPageOptions>({
 			const missing = await read(`/engine/apps/${encodeURIComponent(appName)}/missing`, z.array(MissingSetting), signal)
 			if (signal.aborted) return
 			if (!missing.ok) {
-				content.replaceChildren(
-					element('p', {
-						role: 'alert',
-						textContent: missing.error,
-					}),
-				)
+				content.replaceChildren(errorText(element, missing.error))
 				return
 			}
 			if (missing.value.length > 0) {

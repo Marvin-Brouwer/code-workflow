@@ -3,6 +3,7 @@ import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read, type Answer } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunRecord } from '../_shared/runs.mts'
@@ -43,11 +44,7 @@ export const RunsList = component({
 			})
 
 		const runsView = (runs: Answer<RunRecord[]>) => {
-			if (!runs.ok)
-				return element('p', {
-					role: 'alert',
-					textContent: runs.error,
-				})
+			if (!runs.ok) return errorText(element, runs.error)
 			if (runs.value.length === 0)
 				return element('p', {
 					textContent: 'No runs yet. Start one from its app.',

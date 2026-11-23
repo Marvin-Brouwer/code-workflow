@@ -151,8 +151,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   engine's control API streams what changed as server-sent events. `GET /events` (was `/changes`)
   sends `ready`, then `run` with its id after each record or events write, `sign-in` with the
   connector after each change to a sign-in, such as the AWS login, and a `heartbeat` every
-  `streamHeartbeat` (15 seconds). The run view follows its own stream instead: `GET /runs/:run/events`
-  asked for as `text/event-stream` sends `run` with the record, `run-event` with each event,
+  `streamHeartbeat` (15 seconds). The run view follows its own stream instead:
+  `GET /runs/:run/events` asked for as `text/event-stream` sends `run` with the record, `run-event` with each event,
   numbered for `Last-Event-ID`, first all of them and then each change, and `sign-in` as above;
   plain `GET` still answers the JSON list. The UI's server passes both through under
   `/api/engine/`. Server-sent events and not a websocket: updates only go one way, actions stay
@@ -184,8 +184,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   state for it yet.
 - Adding a connector from the UI: it means installing a package where the engine runs.
 - Overrides of static config, and team-level providers.
-- The flight data recorder, and the natural views of [design section 10](../design.md#10-ui-contract)
-  (lanes for `inDependencyOrder`, a feed for review handling), which can come later as first-party
+- The flight data recorder, and the natural views of
+  [design section 10](../design.md#10-ui-contract) (lanes for `inDependencyOrder`, a feed for review handling), which can come later as first-party
   renderers in `@mesh-flow/ui`: the run view is the event tree as a list.
 - Remote access. The UI is for the machine the engine runs on, as the control socket is.
 

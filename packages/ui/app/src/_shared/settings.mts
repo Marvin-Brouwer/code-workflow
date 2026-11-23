@@ -18,7 +18,7 @@ export type ListedProvider = z.infer<typeof ListedProvider>
 /** The names `ProviderName` in `@mesh-flow/gateway` takes, as an input's `pattern`. */
 export const providerNamePattern = '[a-z0-9][\\w\\-]{0,63}'
 
-/** A connector package the engine loads. */
+/** A connector package the engine loads: `ConnectorSetting` in `@mesh-flow/engine`. */
 export const ConnectorPackage = z.object({ package: z.string() })
 export type ConnectorPackage = z.infer<typeof ConnectorPackage>
 

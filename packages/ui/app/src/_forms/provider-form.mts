@@ -1,6 +1,7 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { read, send } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { NoContent, ProviderKind, providerNamePattern } from '../_shared/settings.mts'
 import styles from './forms.css'
 import { formStatus, submitActions } from './form-parts.mts'
@@ -87,12 +88,7 @@ export const ProviderForm = component<ProviderFormOptions>({
 						],
 					}),
 					submitActions(element, 'Add'),
-					kinds.ok
-						? undefined
-						: element('p', {
-								role: 'alert',
-								textContent: kinds.error,
-							}),
+					kinds.ok ? undefined : errorText(element, kinds.error),
 					status,
 				],
 				on: {

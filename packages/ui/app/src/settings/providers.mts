@@ -4,6 +4,7 @@ import { ProviderForm } from '../_forms/provider-form.mts'
 import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
 import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { ListedProvider, NoContent } from '../_shared/settings.mts'
 import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
@@ -103,11 +104,7 @@ export const ProvidersPage = component({
 		}
 
 		const view = (providers: Answer<ListedProvider[]>) => {
-			if (!providers.ok)
-				return element('p', {
-					role: 'alert',
-					textContent: providers.error,
-				})
+			if (!providers.ok) return errorText(element, providers.error)
 			if (providers.value.length === 0)
 				return element('p', {
 					textContent: 'No providers yet. Agents need one that offers their model.',

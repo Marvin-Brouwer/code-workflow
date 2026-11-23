@@ -2,6 +2,7 @@ import { component, optional } from '@rooted/components'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { ConnectorPackage, ShownConnector } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
@@ -33,11 +34,7 @@ export const ConnectorsPage = component({
 		}
 
 		const packagesView = (listed: Answer<ConnectorPackage[]>) => {
-			if (!listed.ok)
-				return element('p', {
-					role: 'alert',
-					textContent: listed.error,
-				})
+			if (!listed.ok) return errorText(element, listed.error)
 			if (listed.value.length === 0)
 				return element('p', {
 					textContent: 'No connector packages yet.',
