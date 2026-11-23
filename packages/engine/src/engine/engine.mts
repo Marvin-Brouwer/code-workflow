@@ -24,6 +24,7 @@ import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunApp, type RunRecord, type RunStatus } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
+import { watchedRunStore, type RunChangeFeed } from '../runs/watched-run-store.mts'
 import type { ConnectorSettingsCheck } from './connector-settings-check.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
@@ -138,6 +139,7 @@ export const startRunTimeout = duration.of('1m')
 export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
+	readonly #changes: RunChangeFeed
 	readonly #apps: AppStore
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
@@ -156,7 +158,9 @@ export class Engine {
 
 	private constructor(options: EngineOptions) {
 		this.#backend = options.backend
-		this.#store = options.store
+		const watched = watchedRunStore(options.store)
+		this.#store = watched.store
+		this.#changes = watched.changes
 		this.#apps = options.apps
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
@@ -199,6 +203,14 @@ export class Engine {
 		const record = RunId.safeParse(id).success ? this.#records.get(id) : undefined
 		if (!record) throw new EngineError('not-found', `There is no run ${id}.`)
 		return record
+	}
+
+	/**
+	 * Calls `listener` with a run's id each time its record or events change, after the change is
+	 * written, until `abortSignal` aborts or the engine shuts down. For views that follow the runs.
+	 */
+	onRunChange(listener: (run: RunId) => void, abortSignal: AbortSignal): void {
+		this.#changes.listen(listener, this.#withLifetime(abortSignal))
 	}
 
 	/** The sign-ins under way, for runs or for `mesh-flow login`, with where to sign in. */

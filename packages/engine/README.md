@@ -243,7 +243,7 @@ The home's lock comes first: a second engine on the same home refuses to start, 
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, apps, connectors)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /apps`, `GET /apps/:name/missing`, and `PUT` and `DELETE` on `/apps/:name`. `controlClient(socketPath)` returns the functions that call it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, apps, connectors)` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /changes` (server-sent events: which run changed, and a heartbeat every 15 seconds), `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /apps`, `GET /apps/:name/missing`, and `PUT` and `DELETE` on `/apps/:name`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 

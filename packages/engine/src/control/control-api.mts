@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { AppStore, AppVersion } from '../apps/app-store.mts'
 import { AppName } from '../apps/names.mts'
 import type { Engine } from '../engine/engine.mts'
+import { changeStream } from './change-stream.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 
 /** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
@@ -45,6 +46,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `GET /runs/:run/events` | the run's event tree so far |
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
+ * | `GET /changes` | server-sent events: `run` with `{ id }` after each change to a run, and a `heartbeat` every 15 seconds |
  * | `GET /connectors` | the connectors the engine loaded, and whether each signs in |
  * | `GET /sign-ins` | the sign-ins under way, with where to sign in |
  * | `POST /sign-ins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
@@ -72,6 +74,7 @@ export function controlApi(engine: Engine, apps?: ControlApps, connectors: reado
 	api.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
+	api.get('/changes', changeStream(engine))
 	api.get('/connectors', (c) => c.json(connectors))
 	api.get('/sign-ins', (c) => c.json(engine.signIns()))
 	api.post('/sign-ins/:connector', async (c) => {

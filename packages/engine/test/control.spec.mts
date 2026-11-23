@@ -24,7 +24,7 @@ async function serve(connectors: readonly LoadedConnector[] = []) {
 	})
 	onTestFinished(() => served.close({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() }))
 	const client = controlClient(served.socketPath)
-	return { client, home }
+	return { client, home, served }
 }
 
 const ask = runtimeScript(`
@@ -78,6 +78,28 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		expect(stillMissing).toEqual([])
 		expect(deployed.manifest.description.triggers).toEqual([{ kind: 'user', id: 'ask', workflow: 'ask' }])
 		expect(await client.apps(signal)).toEqual([])
+	})
+
+	test('streams which run changed, and closes with the stream still open', async () => {
+		// Arrange
+		const { client, served } = await serve()
+		await deployThroughApi(client, { ask })
+		const changes = await client.changes(signal)
+		let text = ''
+		changes.on('data', (chunk: Buffer) => {
+			text += chunk.toString('utf8')
+		})
+
+		// Act
+		const started = await client.startRun({ ...userRun('ask'), abortSignal: signal })
+		await vi.waitFor(() => {
+			expect(text).toContain(`event: run\ndata: {"id":"${started.id}"}`)
+		}, duration.of('20s').to('ms'))
+		const closing = served.close({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
+
+		// Assert
+		await expect(closing).resolves.toBeUndefined()
+		expect(text.startsWith('event: ready\n')).toBe(true)
 	})
 
 	test('lists the connectors it loaded, and which of them sign in', async () => {
