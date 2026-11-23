@@ -7,9 +7,11 @@ import { ConnectorPackage, ShownConnector, SignInState } from '../_shared/settin
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
+const webProtocols: readonly string[] = ['http:', 'https:']
+
 /** Whether `url` is a web address, and so safe to link to. */
 function isWebAddress(url: string): boolean {
-	return URL.parse(url)?.protocol.startsWith('http') === true
+	return webProtocols.includes(URL.parse(url)?.protocol ?? '')
 }
 
 /**

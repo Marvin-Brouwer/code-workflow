@@ -1,6 +1,7 @@
 import { component } from '@rooted/components'
 
-type ConfirmButtonOptions = {
+/** What the control says, and what it does once confirmed. */
+interface ConfirmButtonOptions {
 	/** What the closed control says, such as "Remove". */
 	readonly summary: string
 	/** What the button that does it says, once opened, such as "Remove github/token". */

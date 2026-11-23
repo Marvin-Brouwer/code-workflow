@@ -6,7 +6,7 @@ import { jsonBody, pathParameters } from './checked-request.mts'
 
 /** A pasted secret without the spaces or line break around it, as the CLI reads one from stdin. */
 const Secret = z.string().trim()
-const ProviderBody = z.object({ kind: z.string(), baseUrl: z.url().optional(), key: Secret.optional() })
+const ProviderBody = z.object({ kind: z.string(), baseUrl: z.url().optional(), key: Secret.min(1).optional() })
 const KeyBody = z.object({ key: Secret.min(1) })
 const OrderBody = z.object({ names: z.array(z.string()) })
 const SecretBody = z.object({ value: Secret.min(1) })

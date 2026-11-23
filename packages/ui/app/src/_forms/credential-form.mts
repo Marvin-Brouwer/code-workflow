@@ -10,7 +10,7 @@ import { submitForm } from './submit-form.mts'
 /** What the credential form sets, and what it does after. */
 export interface CredentialFormOptions {
 	/** The credential to set. Without it, the form asks for the name too. */
-	readonly name?: string
+	readonly name?: string | undefined
 	/**
 	 * A value of the right shape, such as `https://example.atlassian.net`. A credential with one is a
 	 * setting rather than a secret, so its value is shown as it's typed.

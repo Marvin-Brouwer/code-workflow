@@ -211,6 +211,12 @@ describe('settings', () => {
 		{ request: "a name that isn't a credential's", route: '/api/settings/credentials/no-slash', method: 'DELETE', body: '{}' },
 		{ request: 'a secret of only spaces', route: '/api/settings/credentials/github/token', method: 'PUT', body: '{"value": "   "}' },
 		{ request: 'a key of only spaces', route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": " \\n"}' },
+		{
+			request: 'a new provider with a key of only spaces',
+			route: '/api/settings/providers/work',
+			method: 'PUT',
+			body: '{"kind": "anthropic", "key": "  "}',
+		},
 	])('answers $request with 400', async ({ route, method, body }) => {
 		// Arrange
 		const { url, cookie } = await servedUi()

@@ -1,8 +1,10 @@
 import { component } from '@rooted/components'
 
-type TableOptions = {
+/** The table's headings and rows. */
+interface TableOptions {
 	/** The column headings, in order. An empty one leaves a column without a heading. */
 	readonly headings: readonly string[]
+	/** The rows, each a `tr`. */
 	readonly rows: readonly HTMLElement[]
 }
 
