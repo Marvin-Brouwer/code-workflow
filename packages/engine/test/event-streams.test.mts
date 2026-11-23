@@ -3,6 +3,7 @@ import type { RuntimeEvent } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import { describe, expect, test, vi } from 'vitest'
 import { engineEventStream } from '../src/control/engine-event-stream.mts'
+import { streamQueueLimit } from '../src/control/event-stream.mts'
 import { runEventStream } from '../src/control/run-event-stream.mts'
 import type { RunId } from '../src/runs/run-id.mts'
 import type { RunRecord } from '../src/runs/run-record.mts'
@@ -209,7 +210,8 @@ describe('runEventStream', () => {
 	test('sends a run with more events than the stream may queue, up to its record', async () => {
 		// Arrange
 		const run = followedRun()
-		for (let event = 0; event < 1500; event++) run.addEvent(runEvent(`event-${String(event)}`))
+		const pastTheLimit = streamQueueLimit + 500
+		for (let event = 0; event < pastTheLimit; event++) run.addEvent(runEvent(`event-${String(event)}`))
 
 		// Act
 		const reader = readerOf(await run.app.request(`/runs/${runId}/events`))
@@ -217,7 +219,7 @@ describe('runEventStream', () => {
 		await reader.cancel()
 
 		// Assert
-		expect(sent.match(/event: run-event\n/g)).toHaveLength(1501)
+		expect(sent.match(/event: run-event\n/g)).toHaveLength(pastTheLimit + 1)
 		expect(sent).toContain(`event: run\ndata: ${JSON.stringify(runRecord('running'))}`)
 	})
 
