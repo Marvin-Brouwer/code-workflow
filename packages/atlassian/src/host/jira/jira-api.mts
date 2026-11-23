@@ -1,7 +1,7 @@
 import { defaultFetchRetry, retryingFetch, type HostToolContext } from '@mesh-flow/gateway'
 import { atlassianResends } from '../atlassian-resends.mts'
 import type { AtlassianHostOptions } from '../host-options.mts'
-import { readSite } from '../site.mts'
+import { readSite } from '../read-site.mts'
 import type { Download } from './attachments.mts'
 import { jiraCloud } from './jira-cloud.mts'
 import { jiraDataCenter } from './jira-data-center.mts'

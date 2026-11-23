@@ -1,12 +1,12 @@
 import type { CredentialReader } from '@mesh-flow/gateway'
 import { describe, expect, test } from 'vitest'
-import { missingSiteSettings } from '../src/host/site.mts'
+import { missingSiteSettings } from '../src/host/missing-site-settings.mts'
 
-const abortSignal = AbortSignal.timeout(5_000)
+const abortSignal = new AbortController().signal
 
-/** A reader that has only `set`. */
-function readerWith(set: Readonly<Record<string, string>>): CredentialReader {
-	return { get: async (name) => set[name] }
+/** A reader that holds only `values`. */
+function readerWith(values: Readonly<Record<string, string>>): CredentialReader {
+	return { get: async (name) => values[name] }
 }
 
 describe('missingSiteSettings', () => {
@@ -27,6 +27,26 @@ describe('missingSiteSettings', () => {
 
 		// Assert
 		expect(missing.map(({ fix }) => fix)).toEqual([{ kind: 'credential', name: 'jira/token' }])
+	})
+
+	test('asks to move an old Cloud setup to the shared site, rather than take it for Data Center', async () => {
+		// Arrange
+		const credentials = readerWith({
+			'jira/url': 'https://example.atlassian.net',
+			'jira/email': 'bot@example.com',
+			'jira/token': 'token',
+		})
+
+		// Act
+		const missing = await missingSiteSettings(credentials, abortSignal)
+
+		// Assert
+		expect(missing).toEqual([
+			{
+				message: expect.stringContaining('Set atlassian/url, atlassian/email and atlassian/token instead') as unknown,
+				fix: { kind: 'other' },
+			},
+		])
 	})
 
 	test('asks for nothing once Cloud is set', async () => {

@@ -29,7 +29,7 @@ echo 'https://wiki.example.com' | mesh-flow credential set confluence/url
 mesh-flow credential set confluence/token < confluence-pat.txt
 ```
 
-On Data Center, set only the product a workflow uses. Every call reads the settings again, so a changed token counts at once. `mesh-flow deploy` and a trigger say what's missing: the Cloud settings when no product has a Data Center site, otherwise the token of each product that has one.
+On Data Center, set only the product a workflow uses. Every call reads the settings again, so a changed token counts at once. `mesh-flow deploy` and a trigger say what's missing: the Cloud settings when no product has a Data Center site, otherwise the token of each product that has one. Cloud used to be set per product too (`jira/url`, `jira/email`, `jira/token`); a product that still has `<product>/email` is that old setup, not Data Center, and both its calls and the check say to move it to the `atlassian/` settings.
 
 ## Usage
 
