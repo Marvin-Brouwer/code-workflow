@@ -28,12 +28,12 @@ describe('callOutcome', () => {
 		expect(outcome).toEqual({ result: '{"file":"(3 bytes)","view":"(5 bytes)"}' })
 	})
 
-	test('cuts a long result and says how much is left out', () => {
+	test('cuts a long result, says how much is left out and marks it as cut', () => {
 		// Act
-		const { result } = callOutcome({ output: 'x'.repeat(4010), title: undefined })
+		const outcome = callOutcome({ output: 'x'.repeat(4010), title: undefined })
 
 		// Assert
-		expect(result).toBe(`${'x'.repeat(4000)}… (10 more characters)`)
+		expect(outcome).toEqual({ result: `${'x'.repeat(4000)}… (10 more characters)`, resultCut: true })
 	})
 
 	test("says so when JSON can't hold the result", () => {
@@ -45,6 +45,6 @@ describe('callOutcome', () => {
 		const outcome = callOutcome({ output: cycle, title: undefined })
 
 		// Assert
-		expect(outcome).toEqual({ result: '(a value JSON can’t show)' })
+		expect(outcome).toEqual({ result: "(a value JSON can't show)" })
 	})
 })

@@ -4,9 +4,9 @@ import { missingCredentials } from '../src/settings/missing-credentials.mts'
 
 const abortSignal = AbortSignal.timeout(5_000)
 
-/** A reader that has only `set`. */
-function readerWith(set: Readonly<Record<string, string>>): CredentialReader {
-	return { get: async (name) => set[name] }
+/** A reader that holds only `values`. */
+function readerWith(values: Readonly<Record<string, string>>): CredentialReader {
+	return { get: async (name) => values[name] }
 }
 
 describe('missingCredentials', () => {

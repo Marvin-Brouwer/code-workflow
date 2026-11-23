@@ -68,15 +68,14 @@ so each becomes `{ message, fix }`, with `fix` one of:
 - `{ kind: 'other' }`: the message is all there is.
 
 The CLI keeps printing `message`. `ConnectorHost.missingSettings` changes the same way, and the
-GitHub connector starts reporting `github/token`. The control API gets `GET /apps/:name/missing`,
-so the wizard can ask before it starts anything.
+GitHub connector starts reporting `github/token`.
 
 ### 3. Tool calls in the event tree (core)
 
 - `tool-call-succeeded` carries the call's result, cut to a named size limit (a few KB), with binary
-  content left out, so a chip can show it. Cutting keeps the JSON valid (long strings are shortened)
-  and marks the result as cut. Results are already in the sandbox, so this shows nothing the run
-  didn't have.
+  content left out, so a chip can show it. The text is for reading, not for parsing: a cut one says
+  how much is left out and is marked as cut. Results are already in the sandbox, so this shows
+  nothing the run didn't have.
 - A tool may give `describe(input, output)`, which returns a line of text that titles its bar
   ("Collected issue #63"). Without one, or when it throws, the bar is titled by the tool's name; a
   failing `describe` never fails the call.
@@ -161,7 +160,8 @@ Stacked PRs, each on the one before:
 1. This plan.
 2. Structured missing settings in the engine and the connectors; tool results and `describe` in
    the event tree.
-3. `mesh-flow ui`: the server, access, the settings and runs API. `@mesh-flow/ui` as an empty
+3. `mesh-flow ui`: the server, access, the settings and runs API, and the engine's
+   `GET /apps/:name/missing`, so the wizard can ask before it starts anything. `@mesh-flow/ui` as an empty
    rooted app with the shell, so the command has something to serve.
 4. Settings pages and the wizard's forms.
 5. Apps, the start page with the wizard, and the run view.

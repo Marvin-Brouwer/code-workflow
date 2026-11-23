@@ -28,6 +28,7 @@ import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
+import { checkedMissingSettings } from './checked-missing-settings.mts'
 import type { ConnectorSetting } from './connector-settings.mts'
 
 /** The subpath of a connector package that exports its host half. */
@@ -108,7 +109,10 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 			...(registries === undefined ? {} : { registries: withOwnRegistrySignIns(host.name, registries(hostOptions), signInCount) }),
 			...(missingSettings === undefined
 				? {}
-				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(hostOptions, abortSignal) }),
+				: {
+						missingSettings: async (abortSignal: AbortSignal) =>
+							checkedMissingSettings(host.name, await missingSettings(hostOptions, abortSignal)),
+					}),
 		})
 	}
 	return loaded
