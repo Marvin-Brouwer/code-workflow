@@ -1,6 +1,6 @@
 import { duration, type Duration } from '@mesh-flow/duration'
 import { createStore } from '@rooted/store'
-import { pollEvery } from './poll.mts'
+import { pollInterval } from './poll.mts'
 
 /**
  * Whether the page hears the engine as things happen: `live` while every stream it follows is up,
@@ -73,9 +73,9 @@ export function followStream(url: string, options: FollowOptions): void {
 		status('reconnecting')
 		if (fallback === undefined) {
 			whileDown()
-			fallback = setInterval(whileDown, pollEvery.to('ms'))
+			fallback = setInterval(whileDown, pollInterval.to('ms'))
 		}
-		const wait = reconnectWaits[Math.min(failures, reconnectWaits.length - 1)] ?? pollEvery
+		const wait = reconnectWaits[Math.min(failures, reconnectWaits.length - 1)] ?? pollInterval
 		failures++
 		reconnect = setTimeout(connect, wait.to('ms'))
 	}

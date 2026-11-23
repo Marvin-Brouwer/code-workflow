@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream'
 import { AnswerBody, StartRunBody, type ControlClient } from '@mesh-flow/engine'
 import { Hono } from 'hono'
+import { jsonBody } from './checked-request.mts'
 
 /**
  * The runs, apps and sign-ins, from the running engine over its control socket: the same calls the
@@ -9,8 +10,8 @@ import { Hono } from 'hono'
 export function runsApi(client: ControlClient): Hono {
 	const api = new Hono()
 	api.get('/runs', async (context) => context.json(await client.list(context.req.raw.signal)))
-	api.post('/runs', async (context) => {
-		const { app, trigger, input } = StartRunBody.parse(await context.req.json())
+	api.post('/runs', jsonBody(StartRunBody), async (context) => {
+		const { app, trigger, input } = context.req.valid('json')
 		return context.json(await client.startRun({ app, trigger, input, abortSignal: context.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', async (context) => context.json(await client.get(context.req.param('run'), context.req.raw.signal)))
@@ -20,8 +21,8 @@ export function runsApi(client: ControlClient): Hono {
 		if (context.req.header('accept')?.includes('text/event-stream') !== true) return context.json(await client.events(run, abortSignal))
 		return streamed(await client.followRun(run, { lastEventId: context.req.header('last-event-id'), abortSignal }))
 	})
-	api.post('/runs/:run/answers/:request', async (context) => {
-		const { value } = AnswerBody.parse(await context.req.json())
+	api.post('/runs/:run/answers/:request', jsonBody(AnswerBody), async (context) => {
+		const { value } = context.req.valid('json')
 		return context.json(await client.answer(context.req.param('run'), context.req.param('request'), value, context.req.raw.signal))
 	})
 	api.post('/runs/:run/stop', async (context) => context.json(await client.stop(context.req.param('run'), context.req.raw.signal)))

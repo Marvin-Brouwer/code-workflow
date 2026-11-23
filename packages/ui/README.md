@@ -42,11 +42,14 @@ The server listens on 127.0.0.1 and lets in only the browser that opened its add
 | Check | Answer when it fails |
 |---|---|
 | the `Host` header is the address it listens on, so a site pointing its own name at 127.0.0.1 (DNS rebinding) gets nothing | 403 |
-| `?token=` is the printed token; it's swapped for an `HttpOnly`, `SameSite=Strict` cookie and dropped from the address bar | 401 |
+| the request comes from the UI's own page or from opening its address: `Sec-Fetch-Site` is `same-origin` or `none`, and `Origin`, when sent, is the UI's own. A page on another port of 127.0.0.1 counts as the same site to the browser, so the cookie alone wouldn't keep it out | 403 |
+| `?token=` is the printed token; it's swapped for an `HttpOnly`, `SameSite=Strict` cookie named after the port (`mesh-flow-ui-4800`), so two UIs keep their own, and dropped from the address bar | 401 |
 | every other request has that cookie | 401 |
 | a change is sent as JSON, which a form on another site can't send without asking first | 415 |
 
-This is the local way in. Hosted (roadmap step 7), a sign-in per user takes its place in front of the same routes; the page only knows it talks to `/api` with a cookie.
+Every answer has a `Content-Security-Policy` that lets the page run only its own scripts, since a run's events come from the sandbox and can carry prompt-injected text, which the page shows as text.
+
+This is the local way in. The token is on the command line that opens the browser, which other users of the machine can read, as they can reach the control socket's named pipe on Windows. Hosted (roadmap step 7), a sign-in per user takes its place in front of the same routes; the page only knows it talks to `/api` with a cookie.
 
 ## The API
 

@@ -25,7 +25,7 @@ export async function listProviders(home: GatewayHome, abortSignal: AbortSignal)
 	return (await home.providers.list(abortSignal)).map(({ name, kind, baseUrl }) => ({
 		name,
 		kind,
-		...(baseUrl === undefined ? {} : { baseUrl }),
+		baseUrl,
 		hasKey: keys.has(providerCredential(name)),
 	}))
 }
@@ -37,8 +37,7 @@ export async function putProvider(home: GatewayHome, input: ProviderInput, abort
 	const name = ProviderName.safeParse(input.name)
 	if (!name.success)
 		throw new EngineError('invalid', `${input.name} isn't a provider name: ${name.error.issues.map(({ message }) => message).join(' ')}`)
-	const baseUrl = input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }
-	await home.providers.put({ name: name.data, kind: input.kind, ...baseUrl }, abortSignal)
+	await home.providers.put({ name: name.data, kind: input.kind, baseUrl: input.baseUrl }, abortSignal)
 	if (input.key !== undefined && input.key.length > 0) await home.credentials.set(providerCredential(name.data), input.key, abortSignal)
 }
 

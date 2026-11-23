@@ -133,15 +133,41 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 
 ## As built
 
-- `mesh-flow ui` loads `@mesh-flow/ui/server` from where it runs, as connectors are loaded, instead of the engine depending on the UI. The UI depends on the engine (its control client, settings functions and types), so the other way round would be a cycle, and an engine without a UI stays as it is.
-- The settings functions the CLI's provider commands had inline (`putProvider`, `setProviderKey`, `removeProvider`, `listProviders`) moved into the engine, so the CLI and the UI share them.
-- The engine's control API lists the connectors it loaded (`GET /connectors`: name, package, whether it signs in), so the connectors page can offer a sign-in by connector name; the settings only know package names.
-- The wizard's fix-to-form mapping is a switch in the `FixForm` component, too small to test apart. The tests cover the JSON Schema form logic (`fieldsOf`, `valueOf`, `checkAgainst`) and that the page's copies of the engine's answer schemas match the originals, since the page can't import the Node packages.
-- Runs update by push, not polling (Marvin, 2026-11-23): the engine's control API streams which run changed as server-sent events (`GET /changes`: `ready`, then `run` with its id after each record or events write, and a `heartbeat` every 15 seconds), and the UI's server passes it through at `/api/engine/changes`. Server-sent events and not a websocket: updates only go one way, actions stay POSTs, and it's plain HTTP behind the same access checks. Against a view that silently stops updating, the page counts the stream as dead after 35 seconds without a heartbeat, connects again with a growing wait, refetches everything on every (re)connect, refreshes every two seconds while it's down, and shows "Live" or "Reconnecting" in the shell. The settings still poll.
-- Review on #54 (Marvin, 2026-11-23): the stream is `GET /events` (was `/changes`) and also says which sign-in changed, such as the AWS login, so the sign-ins list follows it instead of polling. The run view follows its own stream instead: `GET /runs/:run/events` asked for as `text/event-stream` sends `run` with the record and `event` with each event, numbered for `Last-Event-ID`, first all of them and then each change; plain `GET` still answers the JSON list. Both streams are behind the UI's access check, which a hosted sign-in replaces for every route; EventSource sends the cookie on the same origin, so `withCredentials` only matters cross-origin.
-- A run's requests are answered in a "Waiting on" section at the top of the run page rather than inside their bars, so what needs someone is the first thing on it; the input bar shows the question and whether it was answered.
-- Forms check a value with `z.fromJSONSchema` of the same schema the engine checks it with; a schema zod can't read is left to the server.
-- The page's Vite config is plain, with rooted's CSS loader and route discovery, not `rootedManifest` from `@rooted/application`: its PWA, SEO and pre-rendering are for public sites.
+- `mesh-flow ui` loads `@mesh-flow/ui/server` from where it runs, as connectors are loaded, instead
+  of the engine depending on the UI. The UI depends on the engine (its control client, settings
+  functions and types), so the other way round would be a cycle, and an engine without a UI stays as
+  it is.
+- The settings functions the CLI's provider commands had inline (`putProvider`, `setProviderKey`,
+  `removeProvider`, `listProviders`) moved into the engine, so the CLI and the UI share them.
+- The engine's control API lists the connectors it loaded (`GET /connectors`: name, package, whether
+  it signs in), so the connectors page can offer a sign-in by connector name; the settings only know
+  package names.
+- The wizard's fix-to-form mapping is a switch in the `FixForm` component, too small to test apart.
+  The tests cover the JSON Schema form logic (`fieldsOf`, `valueOf`, `checkAgainst`) and that the
+  page's copies of the engine's answer schemas match the originals, since the page can't import the
+  Node packages.
+- Runs update by push, not polling (Marvin, 2026-11-23): the engine's control API streams which run
+  changed as server-sent events (`GET /changes`: `ready`, then `run` with its id after each record
+  or events write, and a `heartbeat` every 15 seconds), and the UI's server passes it through at
+  `/api/engine/changes`. Server-sent events and not a websocket: updates only go one way, actions
+  stay POSTs, and it's plain HTTP behind the same access checks. Against a view that silently stops
+  updating, the page counts the stream as dead after 35 seconds without a heartbeat, connects again
+  with a growing wait, refetches everything on every (re)connect, refreshes every two seconds while
+  it's down, and shows "Live" or "Reconnecting" in the shell. The settings still poll.
+- Review on #54 (Marvin, 2026-11-23): the stream is `GET /events` (was `/changes`) and also says
+  which sign-in changed, such as the AWS login, so the sign-ins list follows it instead of polling.
+  The run view follows its own stream instead: `GET /runs/:run/events` asked for as
+  `text/event-stream` sends `run` with the record and `event` with each event, numbered for
+  `Last-Event-ID`, first all of them and then each change; plain `GET` still answers the JSON list.
+  Both streams are behind the UI's access check, which a hosted sign-in replaces for every route;
+  EventSource sends the cookie on the same origin, so `withCredentials` only matters cross-origin.
+- A run's requests are answered in a "Waiting on" section at the top of the run page rather than
+  inside their bars, so what needs someone is the first thing on it; the input bar shows the
+  question and whether it was answered.
+- Forms check a value with `z.fromJSONSchema` of the same schema the engine checks it with; a schema
+  zod can't read is left to the server.
+- The page's Vite config is plain, with rooted's CSS loader and route discovery, not
+  `rootedManifest` from `@rooted/application`: its PWA, SEO and pre-rendering are for public sites.
 
 ## Not in this step
 

@@ -1,7 +1,12 @@
 import type { z } from 'zod'
 
-/** What the UI's API answered: the value, or why there is none. A refusal is an answer, not a throw. */
-export type Answer<Value> = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: string }
+/**
+ * What the UI's API answered: the value, or why there is none, with the HTTP status when the
+ * server answered. A refusal is an answer, not a throw.
+ */
+export type Answer<Value> =
+	| { readonly ok: true; readonly value: Value }
+	| { readonly ok: false; readonly error: string; readonly status?: number | undefined }
 
 /** Reads `path` of the UI's API, checked against `schema`. */
 export function read<Value>(path: string, schema: z.ZodType<Value>, abortSignal: AbortSignal): Promise<Answer<Value>> {
@@ -32,7 +37,8 @@ async function call<Value>(path: string, schema: z.ZodType<Value>, init: Request
 		return { ok: false, error: `The UI's server didn't answer: ${error instanceof Error ? error.message : String(error)}` }
 	}
 	const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined)
-	if (!response.ok) return { ok: false, error: errorOf(body) ?? `The UI's server answered ${String(response.status)}.` }
+	if (!response.ok)
+		return { ok: false, error: errorOf(body) ?? `The UI's server answered ${String(response.status)}.`, status: response.status }
 	const checked = schema.safeParse(body)
 	return checked.success ? { ok: true, value: checked.data } : { ok: false, error: `The answer didn't fit: ${checked.error.message}` }
 }
