@@ -7,7 +7,8 @@ import { openGateway, type CredentialStore, type GatewayHome } from '@mesh-flow/
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
-import { controlApi, type ShownConnector } from '../control/control-api.mts'
+import { controlApi } from '../control/control-api.mts'
+import type { ShownConnector } from '../control/shown-connector.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
 import { connectorSettingsOf } from '../engine/connector-settings-check.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
@@ -134,7 +135,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		scheduler.update(apps.list())
 	}
 	armSchedules()
-	const api = getRequestListener(controlApi(engine, { store: apps, changed: armSchedules }, shownConnectors).fetch)
+	const api = getRequestListener(
+		controlApi(engine, {
+			apps: { store: apps, changed: armSchedules },
+			connectors: shownConnectors,
+		}).fetch,
+	)
 	listener = (request, response) => {
 		void api(request, response)
 	}

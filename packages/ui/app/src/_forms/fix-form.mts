@@ -4,7 +4,9 @@ import { CredentialForm } from './credential-form.mts'
 import { ProviderForm } from './provider-form.mts'
 import { ProviderKeyForm } from './provider-key-form.mts'
 
+/** The setting the form is for, and what it does after. */
 export interface FixFormOptions {
+	/** The missing setting, as the engine reported it. */
 	readonly setting: MissingSetting
 	/** Called once the form set it. */
 	readonly done?: (() => void) | undefined

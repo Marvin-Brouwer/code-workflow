@@ -2,10 +2,11 @@ import { choice, component } from '@rooted/components'
 import { z } from 'zod'
 import { ProviderForm } from '../_forms/provider-form.mts'
 import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
+import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
 import { ListedProvider, NoContent } from '../_shared/settings.mts'
+import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
-import { Table } from '../_layout/table.mts'
 import { SettingsMenu } from './settings-menu.mts'
 
 /** The model providers in the order models are looked up: add one, set a key, move one, remove one. */
@@ -20,18 +21,18 @@ export const ProvidersPage = component({
 			role: 'alert',
 		})
 
-		const change = async (changing: Promise<Answer<unknown>>) => {
-			const answer = await changing
+		const applyChange = async (sent: Promise<Answer<unknown>>) => {
+			const answer = await sent
 			status.textContent = answer.ok ? '' : answer.error
 			await show()
 		}
 
 		const row = (provider: ListedProvider, index: number, providers: readonly ListedProvider[]) => {
-			const move = (by: number) => {
+			const move = (offset: number) => {
 				const names = providers.map(({ name }) => name)
 				names.splice(index, 1)
-				names.splice(index + by, 0, provider.name)
-				void change(send('PUT', '/settings/provider-order', { names }, NoContent, signal))
+				names.splice(index + offset, 0, provider.name)
+				void applyChange(send('PUT', '/settings/provider-order', { names }, NoContent, signal))
 			}
 			return element('tr', {
 				children: [
@@ -81,25 +82,18 @@ export const ProvidersPage = component({
 										}),
 										create(ProviderKeyForm, {
 											provider: provider.name,
-											done: shown,
-										}),
-									],
-								}),
-								element('details', {
-									children: [
-										element('summary', {
-											textContent: 'Remove',
-										}),
-										element('button', {
-											type: 'button',
-											textContent: `Remove ${provider.name} and its key`,
-											on: {
-												click() {
-													void change(send('DELETE', `/settings/providers/${encodeURIComponent(provider.name)}`, {}, NoContent, signal))
-												},
+											done() {
+												void show()
 											},
 										}),
 									],
+								}),
+								create(ConfirmButton, {
+									summary: 'Remove',
+									label: `Remove ${provider.name} and its key`,
+									confirmed() {
+										void applyChange(send('DELETE', `/settings/providers/${encodeURIComponent(provider.name)}`, {}, NoContent, signal))
+									},
 								}),
 							],
 						}),
@@ -124,10 +118,6 @@ export const ProvidersPage = component({
 			})
 		}
 
-		const shown = () => {
-			void show()
-		}
-
 		async function show(): Promise<void> {
 			list.replaceChildren(view(await read('/settings/providers', z.array(ListedProvider), signal)))
 		}
@@ -149,7 +139,9 @@ export const ProvidersPage = component({
 						textContent: 'Add a provider',
 					}),
 					create(ProviderForm, {
-						done: shown,
+						done() {
+							void show()
+						},
 					}),
 				],
 			}),

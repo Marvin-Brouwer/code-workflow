@@ -1,12 +1,17 @@
 import { choice, component } from '@rooted/components'
 import type { Answer } from '../_shared/api.mts'
 import styles from './forms.css'
+import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
 import { checkAgainst, fieldsOf, jsonOf, valueOf, type SchemaField } from './schema-fields.mts'
 import { submitForm } from './submit-form.mts'
 
+/** What the schema form asks for, and what it does with the answer. */
 export interface SchemaFormOptions {
-	/** The JSON Schema of what the form sends, such as a workflow's parameters or an input request's fields. */
+	/**
+	 * The JSON Schema of what the form sends, such as a workflow's parameters. An input request's
+	 * fields are a record of schemas, so they go in as the object schema they make together.
+	 */
 	readonly schema: unknown
 	readonly submitLabel: string
 	/** Sends the value, once it fits the schema. */
@@ -24,10 +29,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { schema, submitLabel, send, done } = options
-		const status = element('p', {
-			classes: styles.status,
-			role: 'alert',
-		})
+		const status = formStatus(element)
 		const fields = fieldsOf(schema)
 
 		const fieldElement = (field: SchemaField) => {
@@ -94,14 +96,15 @@ export const SchemaForm = component<SchemaFormOptions>({
 							name: field.name,
 							required: field.required,
 							type: choice(field.kind === 'text', 'text', 'number'),
-							...(field.kind === 'number' ? { step: 'any' } : {}),
+							// An empty step is the default one, which an integer wants.
+							step: choice(field.kind === 'number', 'any', ''),
 						})
 			return element('label', {
 				children: [field.label, hint, input],
 			})
 		}
 
-		const read = (form: FormData): Answer<unknown> =>
+		const formValue = (form: FormData): Answer<unknown> =>
 			fields === undefined ? jsonOf(formText(form, 'json')) : { ok: true, value: valueOf(fields, form) }
 
 		append(
@@ -132,13 +135,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 								}),
 							]
 						: fields.map(fieldElement)),
-					element('div', {
-						classes: styles.actions,
-						children: element('button', {
-							type: 'submit',
-							textContent: submitLabel,
-						}),
-					}),
+					submitActions(element, submitLabel),
 					status,
 				],
 				on: {
@@ -146,7 +143,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 						status,
 						abortSignal: signal,
 						send: async (form, abortSignal) => {
-							const value = read(form)
+							const value = formValue(form)
 							if (!value.ok) return value
 							const checked = checkAgainst(schema, value.value)
 							return checked.ok ? send(checked.value, abortSignal) : checked
