@@ -7,16 +7,16 @@
  * onChange(() => refresh(), signal)
  * ```
  */
-export function refresher(look: (abortSignal: AbortSignal) => Promise<void>, abortSignal: AbortSignal): () => void {
+export function refresher(check: (abortSignal: AbortSignal) => Promise<void>, abortSignal: AbortSignal): () => void {
 	let running = false
 	let asked = 0
 	const run = async (): Promise<void> => {
 		running = true
-		let looked: number
+		let checked: number
 		do {
-			looked = asked
-			await look(abortSignal)
-		} while (asked !== looked && !abortSignal.aborted)
+			checked = asked
+			await check(abortSignal)
+		} while (asked !== checked && !abortSignal.aborted)
 		running = false
 	}
 	return () => {

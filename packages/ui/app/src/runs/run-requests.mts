@@ -3,13 +3,17 @@ import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { SchemaForm } from '../_forms/schema-form.mts'
 import { read, send } from '../_shared/api.mts'
-import { poll } from '../_shared/poll.mts'
+import { onChange } from '../_shared/live-events.mts'
+import { refresher } from '../_shared/refresher.mts'
 import { answerSchemaOf, RunRecord, type RunRequest } from '../_shared/runs.mts'
 import { SignInState } from '../_shared/settings.mts'
+import { signInLink } from '../_shared/sign-in-prompt.mts'
 import { ConnectorsRoute } from '../settings/_routes.mts'
+import { shownAnswer } from './answered-elsewhere.mts'
 import { shownTime } from './run-labels.mts'
 import styles from './run-requests.css'
 
+/** The run that waits, and what it waits on. */
 export interface RunRequestOptions {
 	readonly run: string
 	readonly request: RunRequest
@@ -41,13 +45,15 @@ export const RunRequestView = component<RunRequestOptions>({
 				create(SchemaForm, {
 					schema: answerSchemaOf(request),
 					submitLabel: 'Answer',
-					send: (value, abortSignal) =>
-						send(
-							'POST',
-							`/engine/runs/${encodeURIComponent(run)}/answers/${encodeURIComponent(request.id)}`,
-							{ value },
-							RunRecord,
-							abortSignal,
+					send: async (value, abortSignal) =>
+						shownAnswer(
+							await send(
+								'POST',
+								`/engine/runs/${encodeURIComponent(run)}/answers/${encodeURIComponent(request.id)}`,
+								{ value },
+								RunRecord,
+								abortSignal,
+							),
 						),
 				}),
 			)
@@ -68,25 +74,24 @@ export const RunRequestView = component<RunRequestOptions>({
 			}),
 			where,
 		)
-		// Sign-ins aren't in the change stream: look while this waits.
-		poll(async (abortSignal) => {
+		const showPrompt = async (abortSignal: AbortSignal) => {
 			const signIns = await read('/engine/sign-ins', z.array(SignInState), abortSignal)
 			const state = signIns.ok ? signIns.value.find(({ connector }) => connector === request.connector) : undefined
 			if (state?.prompt === undefined) return
 			where.replaceChildren(
 				'Open ',
-				element('a', {
-					href: state.prompt.url,
-					target: '_blank',
-					rel: 'noreferrer',
-					textContent: state.prompt.url,
-				}),
+				signInLink(element, state.prompt.url),
 				' and enter ',
 				element('code', {
 					textContent: state.prompt.code,
 				}),
 				`, before ${shownTime(state.prompt.expiresAt)}.`,
 			)
+		}
+		const refresh = refresher(showPrompt, signal)
+		onChange((change) => {
+			if (change.kind !== 'run') refresh()
 		}, signal)
+		refresh()
 	},
 })

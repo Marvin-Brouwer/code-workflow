@@ -4,14 +4,17 @@ import { pollInterval } from './poll.mts'
 
 /**
  * Whether the page hears the engine as things happen: `live` while every stream it follows is up,
- * `reconnecting` while one is down and its page refreshes every two seconds instead.
+ * `reconnecting` while one is down and its page refreshes every `pollInterval` instead.
  */
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting'
 
 /** How the streams the page follows are, together, for the shell to show. */
 export const liveStatus = createStore<LiveStatus>('connecting')
 
-/** How long a stream may stay quiet before it counts as dead: two heartbeats and a bit. */
+/**
+ * How long a stream may stay quiet before it counts as dead: two of the engine's heartbeats
+ * (`streamHeartbeat`, 15 seconds) and a bit. The page can't import it from the engine.
+ */
 const silenceLimit: Duration = duration.of('35s')
 
 /** How long to wait before connecting again after each failure in a row; the last one repeats. */
@@ -20,9 +23,25 @@ const reconnectWaits: readonly Duration[] = [duration.of('1s'), duration.of('2s'
 /** Each followed stream's own status. */
 const statuses = new Map<symbol, LiveStatus>()
 
+/** How the streams are together: reconnecting if one is, else connecting if one is, else live. */
+function combinedStatus(each: readonly LiveStatus[]): LiveStatus {
+	if (each.includes('reconnecting')) return 'reconnecting'
+	if (each.includes('connecting')) return 'connecting'
+	return 'live'
+}
+
 function showStatuses(): void {
-	const all = [...statuses.values()]
-	liveStatus.update(() => (all.includes('reconnecting') ? 'reconnecting' : all.includes('connecting') ? 'connecting' : 'live'))
+	liveStatus.update(() => combinedStatus([...statuses.values()]))
+}
+
+/** The JSON in a message's data, or `undefined` when it isn't JSON. */
+function jsonOrUndefined(data: unknown): unknown {
+	if (typeof data !== 'string') return undefined
+	try {
+		return JSON.parse(data)
+	} catch {
+		return undefined
+	}
 }
 
 /** What to do with a stream. */
@@ -31,8 +50,9 @@ export interface FollowOptions {
 	readonly on: Readonly<Record<string, (data: unknown) => void>>
 	/** Called on every connect: the stream starts over from what is now, so drop what came before. */
 	readonly connected: () => void
-	/** Called right away and every two seconds while the stream is down: fetch what it would have sent. */
+	/** Called right away and every `pollInterval` while the stream is down: fetch what it would have sent. */
 	readonly whileDown: () => void
+	/** Ends following: closes the stream and stops its timers. */
 	readonly abortSignal: AbortSignal
 }
 
@@ -94,7 +114,8 @@ export function followStream(url: string, options: FollowOptions): void {
 		for (const [event, handle] of Object.entries(on))
 			stream.addEventListener(event, (message) => {
 				heard()
-				handle(typeof message.data === 'string' ? JSON.parse(message.data) : undefined)
+				// Data that isn't JSON comes as `undefined`, which every handler checks for.
+				handle(jsonOrUndefined(message.data))
 			})
 		// The browser would try again on its own after some errors and not after others: one way for all.
 		stream.addEventListener('error', down)

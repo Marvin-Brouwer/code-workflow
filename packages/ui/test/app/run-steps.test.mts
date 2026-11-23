@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import type { RunEvent, RunRecord } from '../../app/src/_shared/runs.mts'
 import { inListOrder } from '../../app/src/runs/run-labels.mts'
-import { stepsOf } from '../../app/src/runs/run-steps.mts'
+import { attemptsOf, stepsOf } from '../../app/src/runs/run-steps.mts'
 
 const at = '2026-11-23T08:00:00.000Z'
 
@@ -72,12 +72,41 @@ describe('stepsOf', () => {
 		expect(node?.steps.map(({ title, status, call }) => [title, status, call?.error])).toEqual([['gitPush', 'failed', 'Push refused']])
 	})
 
-	test('shows a step that never ended as unfinished once the run is over', () => {
+	test('shows a step that never ended as interrupted once the attempt is over', () => {
 		// Act
 		const steps = stepsOf(events, true)
 
 		// Assert
-		expect(steps.at(-1)?.status).toBe('unfinished')
+		expect(steps.at(-1)?.status).toBe('interrupted')
+	})
+})
+
+describe('attemptsOf', () => {
+	/** A run that was restarted: its first attempt stopped while it asked, its second asks again. */
+	const restarted: RunEvent[] = [
+		event('a1-1', 'workflow', undefined, { workflow: 'fix-issue' }),
+		event('a1-2', 'input', 'a1-1', { question: 'Merge it?' }),
+		event('b2-1', 'workflow', undefined, { workflow: 'fix-issue' }),
+		event('b2-2', 'input', 'b2-1', { question: 'Merge it?' }),
+	]
+
+	test("groups the steps by attempt, with the latest event's attempt as the current one", () => {
+		// Act
+		const attempts = attemptsOf(restarted, false)
+
+		// Assert
+		expect(attempts.map(({ id, current, steps }) => [id, current, steps.map(({ status }) => status)])).toEqual([
+			['a1', false, ['interrupted']],
+			['b2', true, ['running']],
+		])
+	})
+
+	test('shows the open steps of a restartable or finished run as interrupted', () => {
+		// Act
+		const attempts = attemptsOf(restarted, true)
+
+		// Assert
+		expect(attempts.flatMap(({ steps }) => steps.map(({ status }) => status))).toEqual(['interrupted', 'interrupted'])
 	})
 })
 

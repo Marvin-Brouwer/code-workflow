@@ -1,9 +1,17 @@
+import { match } from '@rooted/components'
 import type { RunRecord, RunRequest } from '../_shared/runs.mts'
 import type { StepStatus } from './run-steps.mts'
 
 /** What a run waits on, in a few words, such as `needs input`. Empty when it waits on nothing. */
 export function waitsOn(pending: readonly RunRequest[]): string {
-	return [...new Set(pending.map(({ kind }) => (kind === 'input' ? 'needs input' : kind === 'login' ? 'needs login' : 'waits')))].join(', ')
+	const said = pending.map(({ kind }) =>
+		match(kind, {
+			input: 'needs input',
+			login: 'needs login',
+			wake: 'waits',
+		}),
+	)
+	return [...new Set(said)].join(', ')
 }
 
 /** Whether a run waits on a person: an answer or a sign-in. */
@@ -20,7 +28,12 @@ export function inListOrder(records: readonly RunRecord[]): RunRecord[] {
 
 /** A step's status as the bar shows it. */
 export function statusLabel(status: StepStatus): string {
-	return { running: 'running', succeeded: 'done', failed: 'failed', unfinished: 'unfinished' }[status]
+	return match(status, {
+		running: 'running',
+		succeeded: 'done',
+		failed: 'failed',
+		interrupted: 'interrupted',
+	})
 }
 
 /** A time as the page shows it, in the browser's own time zone. */

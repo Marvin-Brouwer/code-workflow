@@ -2,7 +2,7 @@ import { component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
-import { read } from '../_shared/api.mts'
+import { read, type Answer } from '../_shared/api.mts'
 import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunRecord } from '../_shared/runs.mts'
@@ -42,28 +42,26 @@ export const RunsList = component({
 				],
 			})
 
+		const runsView = (runs: Answer<RunRecord[]>) => {
+			if (!runs.ok)
+				return element('p', {
+					role: 'alert',
+					textContent: runs.error,
+				})
+			if (runs.value.length === 0)
+				return element('p', {
+					textContent: 'No runs yet. Start one from its app.',
+				})
+			return create(Table, {
+				headings: ['Run', 'Workflow', 'App', 'Status', 'Waits on', 'Last change'],
+				rows: inListOrder(runs.value).map(row),
+			})
+		}
+
 		const show = async (abortSignal: AbortSignal) => {
 			const runs = await read('/engine/runs', z.array(RunRecord), abortSignal)
 			if (abortSignal.aborted) return
-			if (!runs.ok) {
-				list.replaceChildren(
-					element('p', {
-						role: 'alert',
-						textContent: runs.error,
-					}),
-				)
-				return
-			}
-			list.replaceChildren(
-				runs.value.length === 0
-					? element('p', {
-							textContent: 'No runs yet. Start one from its app.',
-						})
-					: create(Table, {
-							headings: ['Run', 'Workflow', 'App', 'Status', 'Waits on', 'Last change'],
-							rows: inListOrder(runs.value).map(row),
-						}),
-			)
+			list.replaceChildren(runsView(runs))
 		}
 
 		const refresh = refresher(show, signal)

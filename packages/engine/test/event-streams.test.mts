@@ -2,8 +2,8 @@ import { duration } from '@mesh-flow/duration'
 import type { RuntimeEvent } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import { describe, expect, test, vi } from 'vitest'
-import { engineEvents } from '../src/control/engine-events.mts'
-import { runEventStream } from '../src/control/run-events.mts'
+import { engineEventStream } from '../src/control/engine-event-stream.mts'
+import { runEventStream } from '../src/control/run-event-stream.mts'
 import type { RunId } from '../src/runs/run-id.mts'
 import type { RunRecord } from '../src/runs/run-record.mts'
 
@@ -11,7 +11,7 @@ import type { RunRecord } from '../src/runs/run-record.mts'
 function listeners<T>() {
 	const added: { listener: (value: T) => void; abortSignal: AbortSignal }[] = []
 	return {
-		listen: (listener: (value: T) => void, abortSignal: AbortSignal) => {
+		onChange: (listener: (value: T) => void, abortSignal: AbortSignal) => {
 			added.push({ listener, abortSignal })
 		},
 		call: (value: T) => {
@@ -86,15 +86,14 @@ function runEvent(id: string): RuntimeEvent {
 /** A run that a test changes, with the stream route over it. */
 function followedRun() {
 	const changes = listeners<RunId>()
+	const signIns = listeners<string>()
 	let record: RunRecord | undefined = runRecord('running')
 	const events: RuntimeEvent[] = [runEvent('a')]
 	const source = {
-		get: (id: string) => {
-			if (id !== runId || record === undefined) throw new Error(`There is no run ${id}.`)
-			return record
-		},
+		find: (id: string) => (id === runId ? record : undefined),
 		events: () => Promise.resolve([...events]),
-		onRunChange: changes.listen,
+		onRunChange: changes.onChange,
+		onSignInChange: signIns.onChange,
 	}
 	const follow = runEventStream(source, duration.of('1h'))
 	const app = new Hono()
@@ -103,6 +102,7 @@ function followedRun() {
 	return {
 		app,
 		changes,
+		signIns,
 		addEvent: (event: RuntimeEvent) => {
 			events.push(event)
 			changes.call(runId)
@@ -118,12 +118,15 @@ function followedRun() {
 	}
 }
 
-describe('engineEvents', () => {
+describe('engineEventStream', () => {
 	test('says it is ready, then which run or sign-in changed, with a heartbeat between', async () => {
 		// Arrange
 		const runs = listeners<RunId>()
 		const signIns = listeners<string>()
-		const app = new Hono().get('/events', engineEvents({ onRunChange: runs.listen, onSignInChange: signIns.listen }, duration.of('50ms')))
+		const app = new Hono().get(
+			'/events',
+			engineEventStream({ onRunChange: runs.onChange, onSignInChange: signIns.onChange }, duration.of('50ms')),
+		)
 		const response = await app.request('/events')
 		const reader = readerOf(response)
 
@@ -144,7 +147,10 @@ describe('engineEvents', () => {
 		// Arrange
 		const runs = listeners<RunId>()
 		const signIns = listeners<string>()
-		const app = new Hono().get('/events', engineEvents({ onRunChange: runs.listen, onSignInChange: signIns.listen }, duration.of('1h')))
+		const app = new Hono().get(
+			'/events',
+			engineEventStream({ onRunChange: runs.onChange, onSignInChange: signIns.onChange }, duration.of('1h')),
+		)
 		const reader = readerOf(await app.request('/events'))
 		await readEvents(reader, 1)
 
@@ -174,11 +180,11 @@ describe('runEventStream', () => {
 
 		// Assert
 		expect(first).toEqual([
-			`event: event\ndata: ${JSON.stringify(runEvent('a'))}\nid: 1`,
+			`event: run-event\ndata: ${JSON.stringify(runEvent('a'))}\nid: 1`,
 			`event: run\ndata: ${JSON.stringify(runRecord('running'))}`,
 		])
 		expect(later).toEqual([
-			`event: event\ndata: ${JSON.stringify(runEvent('b'))}\nid: 2`,
+			`event: run-event\ndata: ${JSON.stringify(runEvent('b'))}\nid: 2`,
 			`event: run\ndata: ${JSON.stringify(runRecord('succeeded'))}`,
 		])
 	})
@@ -195,9 +201,24 @@ describe('runEventStream', () => {
 
 		// Assert
 		expect(sent).toEqual([
-			`event: event\ndata: ${JSON.stringify(runEvent('b'))}\nid: 2`,
+			`event: run-event\ndata: ${JSON.stringify(runEvent('b'))}\nid: 2`,
 			`event: run\ndata: ${JSON.stringify(runRecord('running'))}`,
 		])
+	})
+
+	test('passes on sign-in changes, which the run may wait on', async () => {
+		// Arrange
+		const run = followedRun()
+		const reader = readerOf(await run.app.request(`/runs/${runId}/events`))
+		await readEvents(reader, 2)
+
+		// Act
+		run.signIns.call('cloud')
+		const sent = await readEvents(reader, 1)
+		await reader.cancel()
+
+		// Assert
+		expect(sent).toEqual(['event: sign-in\ndata: {"connector":"cloud"}'])
 	})
 
 	test('answers a run there is none of before it streams', async () => {
@@ -226,5 +247,26 @@ describe('runEventStream', () => {
 		// Assert
 		expect(ended).toBe(true)
 		expect(run.changes.listening()).toBe(false)
+	})
+})
+
+describe('eventStream', () => {
+	test('ends the stream of a reader that is connected but never reads, rather than queueing without end', async () => {
+		// Arrange
+		const runs = listeners<RunId>()
+		const signIns = listeners<string>()
+		const app = new Hono().get(
+			'/events',
+			engineEventStream({ onRunChange: runs.onChange, onSignInChange: signIns.onChange }, duration.of('1h')),
+		)
+		await app.request('/events')
+
+		// Act
+		for (let change = 0; change < 2000; change++) runs.call(runId)
+
+		// Assert
+		await vi.waitFor(() => {
+			expect(runs.listening()).toBe(false)
+		})
 	})
 })

@@ -39,6 +39,8 @@ export interface ControlClient {
 		readonly app: string
 		readonly trigger: TriggerRef
 		readonly input?: unknown
+		/** Names the start, so sending it again returns the run it started instead of a second one. */
+		readonly key?: string | undefined
 		readonly abortSignal: AbortSignal
 	}): Promise<RunRecord>
 	answer(run: string, requestId: string, value: unknown, abortSignal: AbortSignal): Promise<RunRecord>
@@ -84,7 +86,8 @@ export function controlClient(socketPath: string): ControlClient {
 		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
 		get: (run, abortSignal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, abortSignal),
 		events: (run, abortSignal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, abortSignal),
-		startRun: ({ app, trigger, input, abortSignal }) => call(socketPath, RunRecord, 'POST', '/runs', { app, trigger, input }, abortSignal),
+		startRun: ({ app, trigger, input, key, abortSignal }) =>
+			call(socketPath, RunRecord, 'POST', '/runs', { app, trigger, input, key }, abortSignal),
 		answer: (run, requestId, value, abortSignal) =>
 			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, abortSignal),
 		stop: act('stop'),
@@ -92,12 +95,7 @@ export function controlClient(socketPath: string): ControlClient {
 		restart: act('restart'),
 		followEngine: (abortSignal) => openStream(socketPath, '/events', {}, abortSignal),
 		followRun: (run, { lastEventId, abortSignal }) =>
-			openStream(
-				socketPath,
-				`${runPath(run)}/events`,
-				{ accept: 'text/event-stream', ...(lastEventId === undefined ? {} : { 'last-event-id': lastEventId }) },
-				abortSignal,
-			),
+			openStream(socketPath, `${runPath(run)}/events`, runStreamHeaders(lastEventId), abortSignal),
 		connectors: (abortSignal) => call(socketPath, z.array(ShownConnector), 'GET', '/connectors', undefined, abortSignal),
 		signIns: (abortSignal) => call(socketPath, z.array(SignInState), 'GET', '/sign-ins', undefined, abortSignal),
 		waitForSignIn: async (connector, abortSignal) => {
@@ -112,6 +110,12 @@ export function controlClient(socketPath: string): ControlClient {
 			await call(socketPath, z.unknown(), 'DELETE', `/apps/${encodeURIComponent(name)}`, undefined, abortSignal)
 		},
 	} satisfies ControlClient)
+}
+
+/** The headers that ask for a run's stream, from after `lastEventId` when there is one. */
+function runStreamHeaders(lastEventId: string | undefined): Record<string, string> {
+	if (lastEventId === undefined) return { accept: 'text/event-stream' }
+	return { accept: 'text/event-stream', 'last-event-id': lastEventId }
 }
 
 /** One request to the control API, with the response checked against `schema`. */

@@ -5,14 +5,8 @@ import { read, type Answer } from '../_shared/api.mts'
 import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { SignInState } from '../_shared/settings.mts'
+import { signInLink } from '../_shared/sign-in-prompt.mts'
 import styles from './settings.css'
-
-const webProtocols: readonly string[] = ['http:', 'https:']
-
-/** Whether `url` is a web address, and so safe to link to. */
-function isWebAddress(url: string): boolean {
-	return webProtocols.includes(URL.parse(url)?.protocol ?? '')
-}
 
 /** The connector sign-ins under way: where to sign in, with which code and until when. Live. */
 export const SignInsUnderWay = component({
@@ -25,13 +19,7 @@ export const SignInsUnderWay = component({
 
 		const signInAt = (prompt: SignInState['prompt']) => {
 			if (prompt === undefined) return 'Waiting for a code'
-			if (!isWebAddress(prompt.url)) return prompt.url
-			return element('a', {
-				href: prompt.url,
-				target: '_blank',
-				rel: 'noreferrer',
-				textContent: prompt.url,
-			})
+			return signInLink(element, prompt.url)
 		}
 
 		const signInRow = ({ connector, prompt, error }: SignInState) =>
