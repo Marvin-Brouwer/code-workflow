@@ -59,14 +59,14 @@ export async function installForPlatform(
 function run(
 	command: string,
 	commandArguments: readonly string[],
-	cwd: string,
+	workingDirectory: string,
 	environment: Record<string, string>,
 	abortSignal: AbortSignal,
 ): Promise<void> {
 	return new Promise((resolve, reject) => {
 		// npm is a `.cmd` on Windows, which only starts through a shell.
 		const child = spawn(command, commandArguments, {
-			cwd,
+			cwd: workingDirectory,
 			env: { ...process.env, ...environment },
 			shell: process.platform === 'win32',
 			stdio: 'inherit',

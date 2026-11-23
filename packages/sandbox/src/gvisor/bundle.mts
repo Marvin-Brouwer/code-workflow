@@ -49,7 +49,7 @@ export async function writeBundle(directory: string, options: BundleOptions): Pr
 		process: {
 			user: { uid: 0, gid: 0 },
 			args: options.init,
-			env: environment(options.rootfs.env, options.environment),
+			env: environment(options.rootfs.environment, options.environment),
 			cwd: options.rootfs.workingDirectory,
 			capabilities: { bounding: capabilities, effective: capabilities, inheritable: capabilities, permitted: capabilities },
 			rlimits: [{ type: 'RLIMIT_NOFILE', hard: 1024, soft: 1024 }],

@@ -15,7 +15,7 @@ export const imageMarker = '.mesh-flow-image'
 export interface Rootfs {
 	readonly path: string
 	/** `KEY=value` entries from the image config, `PATH` among them. */
-	readonly env: readonly string[]
+	readonly environment: readonly string[]
 	readonly workingDirectory: string
 }
 
@@ -100,7 +100,7 @@ export async function prepareRootfs(images: string, image: string, signal: Abort
 }
 
 function rootfsOf(target: string, info: ImageInfo): Rootfs {
-	return { path: target, env: info.env, workingDirectory: info.workingDir }
+	return { path: target, environment: info.env, workingDirectory: info.workingDir }
 }
 
 /** Image configs leave `WorkingDir` out, or set it to `''`, when it's the root. */
