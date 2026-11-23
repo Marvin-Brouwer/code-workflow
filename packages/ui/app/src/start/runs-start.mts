@@ -51,14 +51,7 @@ export const RunsStart = component({
 			)
 		}
 
-		const showMissing = async (app: DeployedApp | undefined, abortSignal: AbortSignal) => {
-			if (app === undefined) {
-				missingSlot.replaceChildren()
-				return
-			}
-			const missing = await read(missingPath(app), z.array(MissingSetting), abortSignal)
-			if (abortSignal.aborted) return
-			const count = missing.ok ? missing.value.length : 0
+		const showMissing = (count: number) => {
 			if (count === 0) {
 				missingSlot.replaceChildren()
 				return
@@ -66,12 +59,14 @@ export const RunsStart = component({
 			missingSlot.replaceChildren(missingBar(count))
 		}
 
+		// Both read first and show together, so the bar never comes in below the link a moment later.
 		const show = async (abortSignal: AbortSignal) => {
 			const theApp = await readTheApp(abortSignal)
-			if (abortSignal.aborted) return
 			const app = theApp.ok ? theApp.value : undefined
+			const count = await missingCount(app, abortSignal)
+			if (abortSignal.aborted) return
 			showNewRun(app)
-			await showMissing(app, abortSignal)
+			showMissing(count)
 		}
 
 		const refresh = refresher(show, signal)
@@ -82,3 +77,10 @@ export const RunsStart = component({
 		refresh()
 	},
 })
+
+/** How many settings `app` still needs; none without an app, or while the engine can't say. */
+async function missingCount(app: DeployedApp | undefined, abortSignal: AbortSignal): Promise<number> {
+	if (app === undefined) return 0
+	const missing = await read(missingPath(app), z.array(MissingSetting), abortSignal)
+	return missing.ok ? missing.value.length : 0
+}

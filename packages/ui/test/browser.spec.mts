@@ -5,7 +5,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { serveUiFrom } from '../src/_module/server.mts'
 import { temporaryDirectory } from './support/served-ui.mts'
-import { standInEngine } from './support/stand-in-engine.mts'
+import { standInApp, standInEngine, standInSchedule } from './support/stand-in-engine.mts'
 
 /** The page as `pnpm build` makes it: this test runs against the real one. */
 const builtPage = fileURLToPath(new URL('../dist/app', import.meta.url))
@@ -82,13 +82,13 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.getByRole('link', { name: 'New run' }).waitFor()
 		const barCount = await page.getByText('The app still needs').count()
 		await page.getByRole('link', { name: 'Triggers' }).click()
-		await page.getByText('0 3 * * *').waitFor()
+		await page.getByText(standInSchedule).waitFor()
 		const startLinks = await page.getByRole('link', { name: 'Start' }).count()
 		const webhookDetail = await page.getByRole('row', { name: /issue-opened/ }).textContent()
 
 		// Assert
 		expect(barCount).toBe(0)
 		expect(startLinks).toBe(2)
-		expect(webhookDetail).toContain('No secret: set webhook/dice/issue-opened under credentials')
+		expect(webhookDetail).toContain(`No secret: set webhook/${standInApp}/issue-opened under credentials`)
 	})
 })

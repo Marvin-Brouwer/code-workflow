@@ -61,7 +61,7 @@ export const MissingSettings = component<MissingSettingsOptions>({
 				}),
 			)
 		}
-		// A set and a Check again close together check once after the other, so an older answer never shows last.
+		// A Set and a Check again close together run one after the other, so an older answer never shows last.
 		const refresh = refresher(show, signal)
 		refresh()
 	},

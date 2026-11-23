@@ -11,6 +11,9 @@ import { z } from 'zod'
  */
 export const standInApp = 'dice'
 
+/** The cron of the stand-in app's schedule. */
+export const standInSchedule = '0 3 * * *'
+
 const builtAt = '2026-11-23T08:00:00.000Z'
 
 const app = {
@@ -42,7 +45,7 @@ const app = {
 					payload: { type: 'object' },
 					signature: { scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' },
 				},
-				{ kind: 'schedule', id: 'nightly', workflow: 'fix-issue', cron: '0 3 * * *' },
+				{ kind: 'schedule', id: 'nightly', workflow: 'fix-issue', cron: standInSchedule },
 			],
 			tools: [],
 			models: [],
