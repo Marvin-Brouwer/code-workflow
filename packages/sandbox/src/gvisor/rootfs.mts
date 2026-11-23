@@ -16,10 +16,10 @@ export interface Rootfs {
 	readonly path: string
 	/** `KEY=value` entries from the image config, `PATH` among them. */
 	readonly env: readonly string[]
-	readonly workingDir: string
+	readonly workingDirectory: string
 }
 
-/** What the marker holds. */
+/** What the marker holds. Its field names are what unpacked images on disk already have. */
 const ImageInfo = z.object({ image: z.string(), env: z.array(z.string()), workingDir: z.string() })
 type ImageInfo = z.infer<typeof ImageInfo>
 
@@ -100,7 +100,7 @@ export async function prepareRootfs(images: string, image: string, signal: Abort
 }
 
 function rootfsOf(target: string, info: ImageInfo): Rootfs {
-	return { path: target, env: info.env, workingDir: info.workingDir }
+	return { path: target, env: info.env, workingDirectory: info.workingDir }
 }
 
 /** Image configs leave `WorkingDir` out, or set it to `''`, when it's the root. */

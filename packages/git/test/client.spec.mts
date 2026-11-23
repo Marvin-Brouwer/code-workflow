@@ -223,7 +223,7 @@ describe('gitClient', () => {
 
 		// Assert
 		expect(seen[0]).toBe(`Basic ${Buffer.from('x-access-token:ghp_test').toString('base64')}`)
-		expect(command.args.join(' ')).not.toContain('ghp_test')
+		expect(command.commandArguments.join(' ')).not.toContain('ghp_test')
 	})
 })
 

@@ -35,6 +35,7 @@
 			}
 		},
 		{
+			// Proofs of concept stay as they were written.
 			"files": ["pocs/**"],
 			"rules": {
 				"eslint/id-length": "off",
@@ -73,11 +74,14 @@
 			"error",
 			{
 				"replacements": {
+					// unicorn would shorten these to app_ and config_; we spell words out.
 					"application": false,
 					"applications": false,
 					"configuration": false,
+					// id-length already reports it.
 					"e": false
 				},
+				// Names from other packages that we have to use as they are. One of our own only once the maintainer approved it.
 				"allowList": {
 					"searchParams": true
 				}

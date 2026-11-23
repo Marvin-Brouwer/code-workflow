@@ -16,7 +16,7 @@ export interface GitRemoteOptions {
 	 */
 	readonly cloneSegments: (repository: string) => readonly string[]
 	/** Git's environment for a call, which carries the credential, such as `basicAuthHeaderEnvironment`. */
-	readonly credentialEnv: (context: HostToolContext) => Promise<Readonly<Record<string, string>>>
+	readonly credentialEnvironment: (context: HostToolContext) => Promise<Readonly<Record<string, string>>>
 }
 
 /** A repository's clone on the host, kept between calls, that pushes and fetches with the credential. */
@@ -66,7 +66,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<GitClient> {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
 		// The credential travels as `GIT_CONFIG_*` environment, so it never shows in a process list.
-		const git = gitClient({ cwd: clone, env: await options.credentialEnv(context), abortSignal: context.abortSignal })
+		const git = gitClient({ cwd: clone, env: await options.credentialEnvironment(context), abortSignal: context.abortSignal })
 		await git.init({ bare: true, quiet: true })
 		const url = await options.remoteUrl(repository, context)
 		const remotes = (await git.remotes()).stdout.split('\n').map((line) => line.trim())

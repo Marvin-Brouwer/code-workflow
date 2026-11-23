@@ -109,7 +109,7 @@ const remote = gitRemote({
 	directory: '/var/lib/mesh-flow/gitlab',
 	remoteUrl: (project) => `https://gitlab.example.com/${project}.git`,
 	cloneSegments: (project) => project.split('/'),
-	credentialEnv: async (context) => basicAuthHeaderEnvironment('oauth2', await token(context)),
+	credentialEnvironment: async (context) => basicAuthHeaderEnvironment('oauth2', await token(context)),
 })
 const tools = gitHostTools(remote, gitlabGitTools)
 const body = signed('Looks good.', context.runId, ['reply:note/12'])

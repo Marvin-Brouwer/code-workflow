@@ -1,7 +1,7 @@
 import type { PausedSandbox } from './paused-sandbox.mts'
 
 /** A program and its arguments. Never run through a shell, so nothing needs quoting. */
-export type Command = readonly [program: string, ...args: string[]]
+export type Command = readonly [program: string, ...commandArguments: string[]]
 
 export interface ExecOptions {
 	readonly signal: AbortSignal

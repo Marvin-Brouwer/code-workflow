@@ -15,7 +15,7 @@ import { runGit, type GitResult, type RunGitOptions } from './run-git.mts'
  */
 export interface GitCommand extends PromiseLike<GitResult> {
 	/** The arguments, without the leading `git`. */
-	readonly args: readonly string[]
+	readonly commandArguments: readonly string[]
 	/** Runs it; a non-zero exit comes back as `ok: false`, not as an error. */
 	readonly run: () => Promise<GitResult>
 	/** Runs it and swallows the result and any error, for cleanup. */
@@ -30,7 +30,7 @@ export interface GitCommandOptions extends RunGitOptions {
 	readonly prefix?: readonly string[]
 }
 
-/** A command over `args` that runs with `options` when used. */
+/** A command over `commandArguments` that runs with `options` when used. */
 export function gitCommand(commandArguments: readonly string[], options: GitCommandOptions): GitCommand {
 	const run = () => runGit([...(options.prefix ?? []), ...commandArguments], options)
 	const succeed = async (): Promise<GitResult> => {
@@ -44,7 +44,7 @@ export function gitCommand(commandArguments: readonly string[], options: GitComm
 		return result
 	}
 	return Object.freeze<GitCommand>({
-		args: commandArguments,
+		commandArguments,
 		run,
 		attempt: async () => {
 			try {

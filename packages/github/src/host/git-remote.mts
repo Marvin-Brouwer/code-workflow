@@ -21,6 +21,6 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 			const { owner, repo } = splitRepositoryName(repository.toLowerCase())
 			return [owner, repo]
 		},
-		credentialEnv: async (context) => basicAuthHeaderEnvironment('x-access-token', await requireToken(context)),
+		credentialEnvironment: async (context) => basicAuthHeaderEnvironment('x-access-token', await requireToken(context)),
 	})
 }
