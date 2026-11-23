@@ -5,31 +5,32 @@ import type { EventFields } from './run-events.mts'
 const maxResultLength = 4000
 
 /**
- * The fields of a call's `-succeeded` event: what it returned, cut to {@link maxResultLength}
- * characters with bytes left out, so the run view can show it, and the line that titles it.
+ * The fields of a call's `-succeeded` event, so the run view can show it: what it returned as
+ * text, with byte arrays shown as their length, and the line that titles it. The text is for
+ * reading, not for parsing: a longer one is cut to {@link maxResultLength} characters, says how
+ * much is left out, and has `resultCut` set.
  */
 export function callOutcome({ output, title }: ToolOutcome<unknown>): EventFields {
-	const result = resultText(output)
+	const text = typeof output === 'string' ? output : asJson(output)
 	return {
-		...(result === undefined ? {} : { result }),
+		...(text === undefined ? {} : shown(text)),
 		...(title === undefined ? {} : { title }),
 	}
 }
 
-/** `output` as text: a string as it is, anything else as JSON. `undefined` when there's nothing to show. */
-function resultText(output: unknown): string | undefined {
-	const text = typeof output === 'string' ? output : asJson(output)
-	if (text === undefined) return undefined
-	if (text.length <= maxResultLength) return text
-	return `${text.slice(0, maxResultLength)}… (${String(text.length - maxResultLength)} more characters)`
+/** `text` as the event's `result`, cut when it's longer than {@link maxResultLength}. */
+function shown(text: string): EventFields {
+	if (text.length <= maxResultLength) return { result: text }
+	const leftOut = text.length - maxResultLength
+	return { result: `${text.slice(0, maxResultLength)}… (${String(leftOut)} more characters)`, resultCut: true }
 }
 
-/** `value` as JSON with bytes as their length, or a note when JSON can't hold it, such as a cycle or a bigint. */
+/** `value` as JSON with byte arrays as their length, or a note when JSON can't hold it, such as a cycle or a bigint. */
 function asJson(value: unknown): string | undefined {
 	try {
 		return JSON.stringify(value, withoutBytes)
 	} catch {
-		return '(a value JSON can’t show)'
+		return "(a value JSON can't show)"
 	}
 }
 

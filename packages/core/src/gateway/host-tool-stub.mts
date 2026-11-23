@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { findScope } from '../run/run-scope.mts'
+import { titleOf } from '../tool/title-of.mts'
 import { assertToolName, toolOf, ToolInputError, type Tool, type ToolContext } from '../tool/tool.mts'
 import { GatewayCallError } from './gateway-client.mts'
 
@@ -71,7 +72,7 @@ export function hostToolStub<Input extends z.ZodType, Output extends z.ZodType =
 				const result = await gateway.call(endpoint, { type: 'tool', tool: name, input }, abortSignal)
 				const checked = await output.safeParseAsync(result)
 				if (!checked.success) throw new GatewayCallError(`${name} returned something else than it says:\n${z.prettifyError(checked.error)}`)
-				return { output: checked.data, title: definition.describe?.(parsed.data, checked.data) }
+				return { output: checked.data, title: titleOf(definition.describe, parsed.data, checked.data) }
 			}
 		},
 	})
