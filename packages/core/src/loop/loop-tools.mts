@@ -1,7 +1,7 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
 import { renderValue } from '../render/to-prompt.mts'
-import { describeError } from '../run/describe-error.mts'
 import { callOutcome } from '../run/call-outcome.mts'
+import { describeError } from '../run/describe-error.mts'
 import { emitEvent, inEventOf } from '../run/run-events.mts'
 import { untilAborted } from '../run/until-aborted.mts'
 import { toolParameters } from '../tool/json-schema.mts'
