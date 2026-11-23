@@ -2,7 +2,7 @@ import { hostToolStub } from '@mesh-flow/core'
 import { cloneRepository, pushBundle } from './tools/git-tools.mts'
 import { closeIssue, commentOnIssue, getIssue, labelIssue } from './tools/issue-tools.mts'
 import {
-	checksOnRef,
+	checksOnReference,
 	findPullRequest,
 	getPullRequest,
 	openPullRequest,
@@ -30,5 +30,5 @@ export const stubs = Object.freeze({
 	reviewActivity: hostToolStub(reviewActivity),
 	replyToReviewItem: hostToolStub(replyToReviewItem),
 	showBeingRead: hostToolStub(showBeingRead),
-	checksOnRef: hostToolStub(checksOnRef),
+	checksOnReference: hostToolStub(checksOnReference),
 })

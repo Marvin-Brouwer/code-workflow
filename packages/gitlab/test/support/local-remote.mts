@@ -9,8 +9,8 @@ import { temporaryDirectory } from './temporary-directory.mts'
  * Line endings stay as written, whatever the machine's git is configured to do, so the tests
  * can compare file contents byte for byte.
  */
-export async function git(cwd: string, ...args: string[]): Promise<string> {
-	const { stdout } = await execa('git', args, {
+export async function git(cwd: string, ...commandArguments: string[]): Promise<string> {
+	const { stdout } = await execa('git', commandArguments, {
 		cwd,
 		env: {
 			GIT_AUTHOR_NAME: 'Test',

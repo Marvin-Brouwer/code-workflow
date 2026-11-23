@@ -1,5 +1,13 @@
 import TurndownService from 'turndown'
-import { linkedPerson, mentionKey, mentionRefOf, mentionText, type MentionRef, type Person, type RenderedNode } from './mention.mts'
+import {
+	linkedPerson,
+	mentionKey,
+	mentionReferenceOf,
+	mentionText,
+	type MentionReference,
+	type Person,
+	type RenderedNode,
+} from './mention.mts'
 
 /** How rich text becomes Markdown: where its images and links point, and who its mentions are. */
 export interface RichTextOptions {
@@ -8,12 +16,12 @@ export interface RichTextOptions {
 	/** The people the site told about, by {@link mentionKey}. A mention of anyone else keeps the name and id its link holds. */
 	readonly people?: ReadonlyMap<string, Person>
 	/** Called with each mention as the link holds it. */
-	readonly onMention?: (mention: MentionRef) => void
+	readonly onMention?: (mention: MentionReference) => void
 }
 
 /** A turndown setup for Jira's and Confluence's rendered HTML, with its addresses and mentions as `options` say. */
 function converter({ address = (url) => url, people = new Map(), onMention }: RichTextOptions): TurndownService {
-	const personNamed = (mention: MentionRef) => people.get(mentionKey(mention)) ?? linkedPerson(mention)
+	const personNamed = (mention: MentionReference) => people.get(mentionKey(mention)) ?? linkedPerson(mention)
 	return new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
 		.addRule('table', {
 			filter: 'table',
@@ -21,23 +29,24 @@ function converter({ address = (url) => url, people = new Map(), onMention }: Ri
 			replacement: (_content, node: TableNode) => `\n\n${tableHtml(node, address, personNamed)}\n\n`,
 		})
 		.addRule('mention', {
-			filter: (node: RenderedNode) => mentionRefOf(node) !== undefined,
+			filter: (node: RenderedNode) => mentionReferenceOf(node) !== undefined,
 			replacement: (_content, node: RenderedNode) => {
-				const mention = mentionRefOf(node)
+				const mention = mentionReferenceOf(node)
 				if (mention === undefined) return ''
 				onMention?.(mention)
 				return mentionText(personNamed(mention))
 			},
 		})
 		.addRule('link', {
-			filter: (node: RenderedNode) => node.nodeName === 'A' && (node.getAttribute('href') ?? '') !== '' && mentionRefOf(node) === undefined,
+			filter: (node: RenderedNode) =>
+				node.nodeName === 'A' && (node.getAttribute('href') ?? '') !== '' && mentionReferenceOf(node) === undefined,
 			replacement: (content, node: RenderedNode) => `[${content}](${markdownAddress(address(node.getAttribute('href') ?? ''))})`,
 		})
 		.addRule('image', {
 			filter: 'img',
 			replacement: (_content, node: RenderedNode) => {
-				const src = node.getAttribute('src') ?? ''
-				return src === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${markdownAddress(address(src))})`
+				const source = node.getAttribute('src') ?? ''
+				return source === '' ? '' : `![${altText(node.getAttribute('alt') ?? '')}](${markdownAddress(address(source))})`
 			},
 		})
 }
@@ -53,14 +62,14 @@ interface TableNode extends RenderedNode {
 }
 
 /** A table as HTML, with its images and links pointing where `address` says and its mentions as Markdown does them. */
-function tableHtml(table: TableNode, address: (url: string) => string, personNamed: (mention: MentionRef) => Person): string {
+function tableHtml(table: TableNode, address: (url: string) => string, personNamed: (mention: MentionReference) => Person): string {
 	// A table in a table is written as part of the outer one, which changes it once.
 	if (insideTable(table)) return ''
 	for (const image of Array.from(table.querySelectorAll('img[src]'))) {
 		image.setAttribute('src', address(image.getAttribute('src') ?? ''))
 	}
 	for (const link of Array.from(table.querySelectorAll('a'))) {
-		const mention = mentionRefOf(link)
+		const mention = mentionReferenceOf(link)
 		const href = link.getAttribute('href')
 		if (mention !== undefined) {
 			link.replaceWith(table.ownerDocument.createTextNode(mentionText(personNamed(mention))))
@@ -93,9 +102,9 @@ function altText(alt: string): string {
  * The mentions in rendered rich text, as the links hold them, so the site can be asked who each is
  * first. It converts the text and keeps only the mentions: turndown's parser is the one the host has.
  */
-export function mentionsIn(html: string | null | undefined): MentionRef[] {
+export function mentionsIn(html: string | null | undefined): MentionReference[] {
 	if (html === null || html === undefined || html.trim() === '') return []
-	const found: MentionRef[] = []
+	const found: MentionReference[] = []
 	converter({ onMention: (mention) => found.push(mention) }).turndown(html)
 	return found
 }

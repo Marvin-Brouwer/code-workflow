@@ -1,4 +1,4 @@
-import { TriggerRef } from '@mesh-flow/protocol'
+import { TriggerReference } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
@@ -10,7 +10,7 @@ import { runEventStream } from './run-events.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 
 /** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
-export const StartRunBody = z.object({ app: AppName, trigger: TriggerRef, input: z.unknown().optional() })
+export const StartRunBody = z.object({ app: AppName, trigger: TriggerReference, input: z.unknown().optional() })
 
 /** The body of `PUT /apps/:name`: the built app, packed, on this machine. */
 export const DeployBody = z.object({ tarball: z.string().min(1) })

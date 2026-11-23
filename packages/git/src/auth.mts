@@ -4,7 +4,7 @@
  * the credential helper off, so git never asks for or stores anything else. `runGit` sets
  * `GIT_TERMINAL_PROMPT=0` for every command, so a refused header fails instead of prompting.
  */
-export function basicAuthHeaderEnv(username: string, token: string): Record<string, string> {
+export function basicAuthHeaderEnvironment(username: string, token: string): Record<string, string> {
 	const authorization = Buffer.from(`${username}:${token}`).toString('base64')
 	return {
 		GIT_CONFIG_COUNT: '2',

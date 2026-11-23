@@ -83,8 +83,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				options.signal.throwIfAborted()
 				const mapped = mapOptions(options)
 				const log = openSync(map(options.logFile ?? '/dev/null'), 'a')
-				const [program, ...args] = command.map(map)
-				const child = spawn(program ?? 'false', args, {
+				const [program, ...commandArguments] = command.map(map)
+				const child = spawn(program ?? 'false', commandArguments, {
 					cwd: mapped.cwd,
 					env: { ...process.env, ...mapped.env },
 					detached: true,
@@ -176,11 +176,11 @@ function signalGroup(pid: number, signal: NodeJS.Signals): void {
 }
 
 function execOnHost(command: Command, options: ExecOptions): Promise<ExecResult> {
-	const [program, ...args] = command
+	const [program, ...commandArguments] = command
 	return new Promise((resolve, reject) => {
 		execFile(
 			program,
-			args,
+			commandArguments,
 			{ cwd: options.cwd, env: { ...process.env, ...options.env }, signal: options.signal },
 			(error, stdout, stderr) => {
 				if (error && typeof error.code !== 'number') reject(error)

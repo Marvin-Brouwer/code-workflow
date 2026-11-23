@@ -1,7 +1,7 @@
 import { untilAborted } from '@mesh-flow/core'
 
 /** A call that waits its turn behind the earlier calls with the same key. */
-export type OneAtATime = <T>(key: string, abortSignal: AbortSignal, call: () => Promise<T>) => Promise<T>
+export type OneAtATime = <Result>(key: string, abortSignal: AbortSignal, call: () => Promise<Result>) => Promise<Result>
 
 /**
  * Runs calls with the same key one after another, and calls with different keys side by side. A

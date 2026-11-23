@@ -8,13 +8,13 @@ import type { RunId } from '../src/runs/run-id.mts'
 import type { RunRecord } from '../src/runs/run-record.mts'
 
 /** Listeners a test calls, and that say when they stopped. */
-function listeners<T>() {
-	const added: { listener: (value: T) => void; abortSignal: AbortSignal }[] = []
+function listeners<Value>() {
+	const added: { listener: (value: Value) => void; abortSignal: AbortSignal }[] = []
 	return {
-		listen: (listener: (value: T) => void, abortSignal: AbortSignal) => {
+		listen: (listener: (value: Value) => void, abortSignal: AbortSignal) => {
 			added.push({ listener, abortSignal })
 		},
-		call: (value: T) => {
+		call: (value: Value) => {
 			for (const { listener, abortSignal } of added) if (!abortSignal.aborted) listener(value)
 		},
 		listening: () => added.some(({ abortSignal }) => !abortSignal.aborted),

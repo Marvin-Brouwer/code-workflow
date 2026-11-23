@@ -59,20 +59,20 @@ const inTurn = oneAtATime()
  * the same directory take turns: they share `obj` and `bin`, which two at once would both write,
  * such as `verify` running the tests and the security check side by side.
  */
-export function runDotnet(args: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
+export function runDotnet(commandArguments: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
 	const resolved = path.resolve(options.cwd)
 	const key = pathsIgnoreCase ? resolved.toLowerCase() : resolved
-	return inTurn(key, options.abortSignal, () => spawnDotnet(args, options))
+	return inTurn(key, options.abortSignal, () => spawnDotnet(commandArguments, options))
 }
 
 /**
  * Runs `dotnet` once. It runs in a process group of its own, which is what a stop goes to, so the
  * compilers and test hosts it started go too.
  */
-async function spawnDotnet(args: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
+async function spawnDotnet(commandArguments: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
 	const { abortSignal } = options
 	abortSignal.throwIfAborted()
-	const subprocess = execa('dotnet', args, {
+	const subprocess = execa('dotnet', commandArguments, {
 		cwd: options.cwd,
 		env: dotnetEnvironment,
 		stdin: 'ignore',
@@ -103,7 +103,7 @@ async function spawnDotnet(args: readonly string[], options: RunDotnetOptions): 
 		if (result.isMaxBuffer) {
 			// execa stops `dotnet` itself only: what it started goes too, while the group still has members.
 			if (hasProcessGroups) killTree(subprocess.pid, 'SIGKILL')
-			throw new Error(`dotnet wrote more than ${String(maxOutputMiB)} MiB of output: dotnet ${args.join(' ')}`)
+			throw new Error(`dotnet wrote more than ${String(maxOutputMiB)} MiB of output: dotnet ${commandArguments.join(' ')}`)
 		}
 		// Killed from outside, such as by the system running out of memory: it failed, as a failed exit does.
 		if (result.exitCode === undefined && result.signal !== undefined)

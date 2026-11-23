@@ -14,10 +14,10 @@ export { checkoutRepository, type Checkout, type CheckoutOptions, type ClonedBun
 export { gitTools, type GitToolNames, type GitTools } from '../checkout/git-tools.mts'
 export { committer, localGit } from '../checkout/local-git.mts'
 export { branchHeadOf, pushCheckout, type PushBundle, type Pushed } from '../checkout/push.mts'
-export { origin, trackingRef } from '../checkout/tracking.mts'
+export { origin, trackingReference } from '../checkout/tracking.mts'
 export { readBrief, type ChangeBrief } from '../describe/brief.mts'
 export { capped } from '../describe/capped.mts'
-export { pascalCase, type ChangeRequest, type ChangeRequestRef, type CodeHostTerms } from '../describe/change-request.mts'
+export { pascalCase, type ChangeRequest, type ChangeRequestReference, type CodeHostTerms } from '../describe/change-request.mts'
 export {
 	changeTextSchema,
 	footerRoomCharacters,

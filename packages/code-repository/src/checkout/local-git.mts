@@ -7,7 +7,7 @@ export const committer = { name: 'mesh-flow', email: 'mesh-flow@users.noreply.gi
  * The committer as git's environment, which wins over any config and over the same variables in
  * the sandbox's own environment: a commit is mesh-flow's, both as author and as committer.
  */
-const committerEnv = Object.freeze({
+const committerEnvironment = Object.freeze({
 	GIT_AUTHOR_NAME: committer.name,
 	GIT_AUTHOR_EMAIL: committer.email,
 	GIT_COMMITTER_NAME: committer.name,
@@ -19,5 +19,5 @@ const committerEnv = Object.freeze({
  * fetching and pushing go through the host. Aborting the signal kills whatever runs.
  */
 export function localGit(directory: string, abortSignal: AbortSignal): GitClient {
-	return gitClient({ cwd: directory, env: committerEnv, abortSignal })
+	return gitClient({ cwd: directory, env: committerEnvironment, abortSignal })
 }

@@ -131,7 +131,7 @@ const MergeRequestBody = z.object({ source_branch: z.string(), target_branch: z.
 const MergeRequestUpdate = z.object({ title: z.string().optional(), description: z.string().optional() })
 
 /** The items of `page`, `per_page` at a time, with GitLab's header for the next page. */
-function paged<T>(context: Context, items: readonly T[]) {
+function paged<Item>(context: Context, items: readonly Item[]) {
 	const perPage = Number(context.req.query('per_page') ?? '20')
 	const page = Number(context.req.query('page') ?? '1')
 	const start = (page - 1) * perPage
@@ -363,9 +363,11 @@ export async function fakeGitlab(): Promise<FakeGitlab> {
 	})
 	inProject.get('/pipelines', (context) => {
 		const sha = context.req.query('sha')
-		const ref = context.req.query('ref')
+		const reference = context.req.query('ref')
 		const found = project(pathOf(context))
-			.pipelines.filter((pipeline) => (sha === undefined || pipeline.sha === sha) && (ref === undefined || pipeline.ref === ref))
+			.pipelines.filter(
+				(pipeline) => (sha === undefined || pipeline.sha === sha) && (reference === undefined || pipeline.ref === reference),
+			)
 			.toSorted((one, other) => other.id - one.id)
 		return paged(context, found.map(pipelineJson))
 	})

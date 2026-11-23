@@ -11,7 +11,7 @@ import type { SandboxSpec } from '../../src/sandbox-spec.mts'
 
 const stub = guestScript('stub.mts')
 const probe = guestScript('probe.mts')
-const stateDir = '/var/tmp/conformance'
+const stateDirectory = '/var/tmp/conformance'
 const stubLog = '/var/tmp/stub.log'
 /** A script from `guest/`, transpiled to JavaScript for the image's own Node. */
 function guestScript(name: string): string {
@@ -33,7 +33,7 @@ function timeout(time = duration.of('1m')): AbortSignal {
 }
 
 /** Reads a JSON file in the sandbox, again and again until it is there and valid, for a minute. */
-async function pollJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string): Promise<T> {
+async function pollJson<Value>(schema: z.ZodType<Value>, sandbox: Sandbox, file: string): Promise<Value> {
 	const deadline = Date.now() + 60_000
 	for (;;) {
 		try {
@@ -47,7 +47,7 @@ async function pollJson<T>(schema: z.ZodType<T>, sandbox: Sandbox, file: string)
 
 /** What a failure needs to tell: whether the stub still runs, what it wrote, and the state files. */
 async function stubState(sandbox: Sandbox, pid: number): Promise<string> {
-	const script = `head -n 3 /proc/${String(pid)}/status 2>&1; echo '--- log'; cat ${stubLog} 2>&1; echo '--- files'; ls -la ${stateDir} 2>&1`
+	const script = `head -n 3 /proc/${String(pid)}/status 2>&1; echo '--- log'; cat ${stubLog} 2>&1; echo '--- files'; ls -la ${stateDirectory} 2>&1`
 	const result = await sandbox.exec(['sh', '-c', script], { signal: timeout() }).catch((error: unknown) => ({ stdout: String(error) }))
 	return result.stdout
 }
@@ -78,16 +78,16 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
 			await sandbox.startInBackground(['node', '/var/tmp/stub.mjs'], {
 				signal: timeout(),
-				env: { STATE_DIR: stateDir },
+				env: { STATE_DIR: stateDirectory },
 				logFile: stubLog,
 			})
-			const waiting = await pollJson(Waiting, sandbox, `${stateDir}/waiting.json`)
+			const waiting = await pollJson(Waiting, sandbox, `${stateDirectory}/waiting.json`)
 
 			// Act
 			const paused = await sandbox.pause(timeout(duration.of('2m')))
 			const resumed = await backend.resume(paused, timeout(duration.of('2m')))
-			await resumed.writeFile(`${stateDir}/answer.json`, JSON.stringify({ approved: true }), timeout())
-			const done = await pollJson(Done, resumed, `${stateDir}/done.json`).catch(async (error: unknown) => {
+			await resumed.writeFile(`${stateDirectory}/answer.json`, JSON.stringify({ approved: true }), timeout())
+			const done = await pollJson(Done, resumed, `${stateDirectory}/done.json`).catch(async (error: unknown) => {
 				throw new Error(`The stub didn't finish. ${await stubState(resumed, waiting.pid)}`, { cause: error })
 			})
 

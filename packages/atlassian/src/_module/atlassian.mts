@@ -13,6 +13,6 @@
  */
 export * as confluence from '../confluence.mts'
 export * as jira from '../jira.mts'
-export { JiraIssueParameters, type IssueRef, type JiraIssue } from '../issue/issue.mts'
+export { JiraIssueParameters, type IssueReference, type JiraIssue } from '../issue/issue.mts'
 export type { ConfluencePage } from '../page/page.mts'
-export type { PageRef } from '../page/page-ref.mts'
+export type { PageReference } from '../page/page-reference.mts'

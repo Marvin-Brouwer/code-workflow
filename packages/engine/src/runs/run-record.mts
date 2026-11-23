@@ -1,5 +1,5 @@
 import { RunUsage } from '@mesh-flow/gateway'
-import { PackageRegistry, RuntimeRequest, TriggerRef } from '@mesh-flow/protocol'
+import { PackageRegistry, RuntimeRequest, TriggerReference } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox, SandboxSpec } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { AppName } from '../apps/names.mts'
@@ -45,7 +45,7 @@ export const RunRecord = z.object({
 	id: RunId,
 	workflow: z.string().min(1),
 	/** The trigger that started the run, from a delivery, a schedule or the CLI. */
-	trigger: TriggerRef,
+	trigger: TriggerReference,
 	/** Names what the run was started for, such as a webhook delivery: a second start with it reuses this run. */
 	key: z.string().min(1).optional(),
 	app: RunApp,

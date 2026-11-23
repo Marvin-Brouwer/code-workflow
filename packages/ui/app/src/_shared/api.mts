@@ -1,21 +1,21 @@
 import type { z } from 'zod'
 
 /** What the UI's API answered: the value, or why there is none. A refusal is an answer, not a throw. */
-export type Answer<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string }
+export type Answer<Value> = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: string }
 
 /** Reads `path` of the UI's API, checked against `schema`. */
-export function read<T>(path: string, schema: z.ZodType<T>, abortSignal: AbortSignal): Promise<Answer<T>> {
+export function read<Value>(path: string, schema: z.ZodType<Value>, abortSignal: AbortSignal): Promise<Answer<Value>> {
 	return call(path, schema, { method: 'GET', signal: abortSignal })
 }
 
 /** Sends a change to `path` of the UI's API as JSON, and checks the answer against `schema`. */
-export function send<T>(
+export function send<Value>(
 	method: 'POST' | 'PUT' | 'DELETE',
 	path: string,
 	body: unknown,
-	schema: z.ZodType<T>,
+	schema: z.ZodType<Value>,
 	abortSignal: AbortSignal,
-): Promise<Answer<T>> {
+): Promise<Answer<Value>> {
 	return call(path, schema, {
 		method,
 		signal: abortSignal,
@@ -24,7 +24,7 @@ export function send<T>(
 	})
 }
 
-async function call<T>(path: string, schema: z.ZodType<T>, init: RequestInit): Promise<Answer<T>> {
+async function call<Value>(path: string, schema: z.ZodType<Value>, init: RequestInit): Promise<Answer<Value>> {
 	let response: Response
 	try {
 		response = await fetch(`/api${path}`, init)

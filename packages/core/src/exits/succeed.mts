@@ -15,7 +15,7 @@ import { makeExit, type Exit } from './exit.mts'
  * ```
  */
 export function succeed(): Exit<void>
-export function succeed<T extends z.ZodType>(schema: T): Exit<z.output<T>>
+export function succeed<Schema extends z.ZodType>(schema: Schema): Exit<z.output<Schema>>
 export function succeed(folder: WorkspaceFolder): Exit<WorkspaceFolder>
 export function succeed(result?: z.ZodType | WorkspaceFolder): Exit<unknown> {
 	if (result === undefined) return makeExit({ kind: 'succeed' })

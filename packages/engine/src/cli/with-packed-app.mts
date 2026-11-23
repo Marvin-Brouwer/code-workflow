@@ -7,7 +7,11 @@ import * as tar from 'tar'
  * Packs the built app in `folder` into a tarball, hands it to `use`, and removes it again, also
  * when `abortSignal` aborts. `use` is bound by its own signal.
  */
-export async function withPackedApp<T>(folder: string, use: (tarball: string) => Promise<T>, abortSignal: AbortSignal): Promise<T> {
+export async function withPackedApp<Result>(
+	folder: string,
+	use: (tarball: string) => Promise<Result>,
+	abortSignal: AbortSignal,
+): Promise<Result> {
 	abortSignal.throwIfAborted()
 	const scratch = await mkdtemp(path.join(tmpdir(), 'mesh-flow-deploy-'))
 	try {

@@ -45,12 +45,12 @@ export interface InstallOptions {
 }
 
 /** Lets corepack fetch pnpm from the npm registry without asking first. */
-const corepackEnv = { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
+const corepackEnvironment = { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
 
 /** The command for each lockfile, in the order they're looked for. */
 const installers = [
 	{ lockfile: 'package-lock.json', command: ['npm', 'ci', '--no-audit', '--no-fund'], env: {} },
-	{ lockfile: 'pnpm-lock.yaml', command: ['corepack', 'pnpm', 'install', '--frozen-lockfile'], env: corepackEnv },
+	{ lockfile: 'pnpm-lock.yaml', command: ['corepack', 'pnpm', 'install', '--frozen-lockfile'], env: corepackEnvironment },
 ] as const
 
 /** Without a lockfile: install, but don't write one into the checkout. */
@@ -88,12 +88,12 @@ export async function installDependencies(repository: github.Repository, options
 		installers.map((installer) => installer.lockfile),
 	)
 	const { command, env } = installers.find((installer) => installer.lockfile === lockfile) ?? withoutLockfile
-	const [program, ...args] = command
+	const [program, ...commandArguments] = command
 	// The timer runs inside the sandbox, whose clock can jump across a pause; that's fine, since the
 	// engine aborts the run before it pauses.
 	const installTimeouts = timeout === 'indefinite' ? [] : [timeout.toAbortSignal()]
 	try {
-		await execFileAsync(program, args, {
+		await execFileAsync(program, commandArguments, {
 			cwd: directory,
 			// Stops npm itself; a process a lifecycle script started in the background keeps running.
 			signal: AbortSignal.any([options.abortSignal, ...installTimeouts]),

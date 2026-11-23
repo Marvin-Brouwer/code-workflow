@@ -10,8 +10,8 @@ const run = promisify(execFile)
 
 /** Runs the poll script on the host and returns its exit code. */
 async function poll(directory: string, pidFile: string): Promise<number> {
-	const args = [path.join(directory, 'outbox.jsonl'), pidFile, '0', '8', path.join(directory, 'polls')]
-	return run('sh', ['-c', pollScript, 'poll', ...args]).then(
+	const commandArguments = [path.join(directory, 'outbox.jsonl'), pidFile, '0', '8', path.join(directory, 'polls')]
+	return run('sh', ['-c', pollScript, 'poll', ...commandArguments]).then(
 		() => 0,
 		(error: unknown) => {
 			if (error instanceof Error && 'code' in error && typeof error.code === 'number') return error.code

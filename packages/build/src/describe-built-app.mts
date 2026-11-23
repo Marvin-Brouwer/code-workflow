@@ -56,9 +56,9 @@ export async function describeBuiltApp(options: DescribeBuiltAppOptions): Promis
 }
 
 /** Runs `node entry` until it exits, and returns what it wrote. Aborting kills it. */
-function runToEnd(entry: string, env: NodeJS.ProcessEnv, abortSignal: AbortSignal): Promise<string> {
+function runToEnd(entry: string, environment: NodeJS.ProcessEnv, abortSignal: AbortSignal): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(process.execPath, [entry], { env, stdio: ['ignore', 'pipe', 'pipe'], signal: abortSignal })
+		const child = spawn(process.execPath, [entry], { env: environment, stdio: ['ignore', 'pipe', 'pipe'], signal: abortSignal })
 		let output = ''
 		const collect = (chunk: Buffer) => {
 			output = (output + chunk.toString()).slice(-shownOutputLength)

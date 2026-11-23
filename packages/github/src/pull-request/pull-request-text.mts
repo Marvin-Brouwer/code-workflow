@@ -1,6 +1,6 @@
 import { changeTextSchema, type ChangeContent } from '@mesh-flow/code-repository'
 import type { z } from 'zod'
-import type { IssueRef } from '../issue/issue.mts'
+import type { IssueReference } from '../issue/issue.mts'
 import { githubTerms } from './github-terms.mts'
 
 /** The longest title GitHub takes. */
@@ -32,4 +32,4 @@ export type PullRequestText = z.infer<typeof PullRequestText>
  * the issue it closes, for which `Fixes` goes in the footer. `describe` resolves to one, ready for
  * `openPullRequest` or `updatePullRequest`.
  */
-export type PullRequestContent = ChangeContent<IssueRef>
+export type PullRequestContent = ChangeContent<IssueReference>

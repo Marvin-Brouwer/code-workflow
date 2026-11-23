@@ -12,7 +12,7 @@ import {
 	changeLogin,
 	connectedGithub,
 	firstPullRequest,
-	issueRef,
+	issueReference,
 	promptly,
 	repositoryName,
 	sameSite,
@@ -33,7 +33,7 @@ describe('describe', () => {
 
 		// Act
 		const run = await runOnGateway(gateway, async () => {
-			const issue = await collect(issueRef)
+			const issue = await collect(issueReference)
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const { head } = await push(repository)({ message: 'Set SameSite on the session cookie\n\nSafari drops it otherwise.' })
@@ -207,7 +207,7 @@ describe('describe', () => {
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
-			const pullRequest = await openPullRequest(repository, { ...sameSite, closes: issueRef })
+			const pullRequest = await openPullRequest(repository, { ...sameSite, closes: issueReference })
 			return describeBranch(writer, repository, { pullRequest })
 		})
 		const content = await run.result

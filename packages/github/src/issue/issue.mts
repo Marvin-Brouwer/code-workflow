@@ -1,6 +1,6 @@
 import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
-import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
+import { IssueReference, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
 
 /**
  * Names an issue, `{ repository: 'owner/name', number }`: a zod schema, for the `issue` parameter
@@ -18,8 +18,8 @@ import { IssueRef, type IssueData, type PostedComment } from '../tools/issue-too
  * })
  * ```
  */
-export const issue = IssueRef
-export type { IssueRef }
+export const issue = IssueReference
+export type { IssueReference }
 
 /**
  * The parameters of a workflow that works on one issue, `{ issue }`, so a workflow declares them
@@ -31,7 +31,7 @@ export type { IssueRef }
  * })
  * ```
  */
-export const IssueParameters = Object.freeze({ issue: IssueRef })
+export const IssueParameters = Object.freeze({ issue: IssueReference })
 export type IssueParameters = typeof IssueParameters
 
 /** Where collected issues are dumped, for agents to read. */
@@ -76,9 +76,9 @@ export interface Issue extends IssueData {
  */
 export const collect = tool('githubCollect', {
 	description: 'Reads a GitHub issue and writes it as Markdown into the workspace',
-	input: IssueRef,
-	action: async (ref, context): Promise<Issue> => {
-		const data = await stubs.getIssue(ref, context)
+	input: IssueReference,
+	action: async (reference, context): Promise<Issue> => {
+		const data = await stubs.getIssue(reference, context)
 		const file = workspace.file(`${issuesFolder.path}/${fileName(data)}`)
 		await file.write(markdownOf(data))
 		const location = file.location()
@@ -111,7 +111,7 @@ export const collect = tool('githubCollect', {
  * ```
  */
 export function comment(
-	on: IssueRef,
+	on: IssueReference,
 	body: string,
 	options: { readonly key?: string } = {},
 	context?: ToolContext,
@@ -139,7 +139,7 @@ export function comment(
  * const labels = await github.label(issue, ['in-progress'])
  * ```
  */
-export async function label(on: IssueRef, labels: readonly string[], context?: ToolContext): Promise<readonly string[]> {
+export async function label(on: IssueReference, labels: readonly string[], context?: ToolContext): Promise<readonly string[]> {
 	return (await stubs.labelIssue({ repository: on.repository, number: on.number, labels: [...labels] }, context)).labels
 }
 
@@ -157,7 +157,7 @@ export async function label(on: IssueRef, labels: readonly string[], context?: T
  * if (state === 'merged') await github.close(issue)
  * ```
  */
-export async function close(on: IssueRef, context?: ToolContext): Promise<void> {
+export async function close(on: IssueReference, context?: ToolContext): Promise<void> {
 	await stubs.closeIssue({ repository: on.repository, number: on.number }, context)
 }
 

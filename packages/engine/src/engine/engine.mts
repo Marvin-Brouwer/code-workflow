@@ -12,7 +12,7 @@ import {
 	type RuntimeEvent,
 	type RuntimeMessage,
 	type RuntimeRequest,
-	type TriggerRef,
+	type TriggerReference,
 	type WakeRequest,
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
@@ -77,7 +77,7 @@ export interface StartRunOptions {
 	/** The deployed app; the run starts on its current version. */
 	readonly app: string
 	/** One of the triggers the app's current version lists. Its workflow is the one that runs. */
-	readonly trigger: TriggerRef
+	readonly trigger: TriggerReference
 	/**
 	 * For a user trigger or a schedule, the run's parameters, which the runtime checks against the
 	 * workflow's; for a webhook, the delivery's payload, which the trigger's schema turns into them.
@@ -113,7 +113,7 @@ interface ActiveRun {
 }
 
 /** Which sandbox a run record points at. */
-type SandboxRef = NonNullable<RunRecord['sandbox']>
+type SandboxReference = NonNullable<RunRecord['sandbox']>
 
 /** How long cleaning up after a run, such as removing its sandbox, may take. */
 const cleanupTimeout = duration.of('1m')
@@ -334,7 +334,7 @@ export class Engine {
 		})
 		waitSignal.throwIfAborted()
 		// Only the kind and the id, whatever else the caller's object holds: this goes into the record.
-		const trigger: TriggerRef = { kind, id: triggerId }
+		const trigger: TriggerReference = { kind, id: triggerId }
 		const start: RunStart = {
 			mode: 'run',
 			workflow: listed.workflow,
@@ -507,11 +507,11 @@ export class Engine {
 		runSignal: AbortSignal,
 	): Promise<SandboxChannel> {
 		const sandbox = await this.#backend.resume(paused, AbortSignal.any([signal, runSignal]))
-		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
+		const reference: SandboxReference = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
 		await this.#update(id, { status: 'running', paused: undefined }, ['paused']).catch(async (error: unknown) => {
 			// The run was stopped while its sandbox was being resumed: nobody else will remove it.
-			if (error instanceof EngineError) await this.#discard(id, ref)
+			if (error instanceof EngineError) await this.#discard(id, reference)
 			throw error
 		})
 		runSignal.throwIfAborted()
@@ -534,11 +534,11 @@ export class Engine {
 		const { app } = record
 		const start = await this.#store.loadStart(record)
 		const sandbox = await this.#backend.create(app.sandbox, abortSignal)
-		const ref: SandboxRef = { backend: this.#backend.name, id: sandbox.id }
+		const reference: SandboxReference = { backend: this.#backend.name, id: sandbox.id }
 		const channel = this.#attach(active, sandbox)
-		await this.#update(id, { sandbox: ref }, ['starting']).catch(async (error: unknown) => {
+		await this.#update(id, { sandbox: reference }, ['starting']).catch(async (error: unknown) => {
 			// The run was given up on while the sandbox was being made: nobody else will remove it.
-			if (error instanceof EngineError) await this.#discard(id, ref)
+			if (error instanceof EngineError) await this.#discard(id, reference)
 			throw error
 		})
 		const grant = await this.#gateway?.openRun(id, { tools: app.tools, registries: app.registries }, abortSignal)
@@ -832,7 +832,7 @@ export class Engine {
 	 * Removes a sandbox no run needs any more. A failure is only logged, and a sandbox on another
 	 * backend is left alone: the next start's reconcile on its backend removes it.
 	 */
-	async #discard(id: RunId, sandbox: SandboxRef): Promise<void> {
+	async #discard(id: RunId, sandbox: SandboxReference): Promise<void> {
 		if (sandbox.backend !== this.#backend.name) {
 			this.#log(`Left sandbox ${sandbox.id} of run ${id} to ${sandbox.backend}; this engine runs ${this.#backend.name}.`)
 			return

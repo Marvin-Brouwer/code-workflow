@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import path from 'node:path'
 import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test } from 'vitest'
-import { basicAuthHeaderEnv } from '../src/auth.mts'
+import { basicAuthHeaderEnvironment } from '../src/auth.mts'
 import { gitClient, rawGit } from '../src/client.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
@@ -209,7 +209,7 @@ describe('gitClient', () => {
 		const stop = new AbortController()
 		const git = gitClient({
 			cwd: await temporaryDirectory(),
-			env: basicAuthHeaderEnv('x-access-token', 'ghp_test'),
+			env: basicAuthHeaderEnvironment('x-access-token', 'ghp_test'),
 			abortSignal: stop.signal,
 		})
 		await git.init({ bare: true, quiet: true })

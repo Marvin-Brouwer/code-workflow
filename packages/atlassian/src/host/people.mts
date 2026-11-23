@@ -1,6 +1,6 @@
 import { isApiError, isNetworkError, isSchemaMismatchError } from 'jira.js'
 import { mentionsIn } from './html-to-markdown.mts'
-import { mentionIdOf, mentionKey, type MentionRef, type Person } from './mention.mts'
+import { mentionIdOf, mentionKey, type MentionReference, type Person } from './mention.mts'
 
 /** What a site says of a person: their display name and email, as far as it shows them. */
 export interface UserDetails {
@@ -9,7 +9,7 @@ export interface UserDetails {
 }
 
 /** Asks the site who a mention names; `undefined` when it can't say. */
-export type UserLookup = (mention: MentionRef, abortSignal: AbortSignal) => Promise<UserDetails | undefined>
+export type UserLookup = (mention: MentionReference, abortSignal: AbortSignal) => Promise<UserDetails | undefined>
 
 /** How many people are asked about at once: a few, so many mentions don't take long, nor hit the site's rate limit. */
 const lookupsAtOnce = 4
@@ -44,7 +44,7 @@ export async function peopleIn(
  * removed or a 403 without permission to browse users, and a dropped connection mean it can't say:
  * the mention keeps what its link holds, rather than failing the read of the issue or page.
  */
-async function askSite(lookup: UserLookup, mention: MentionRef, abortSignal: AbortSignal): Promise<UserDetails | undefined> {
+async function askSite(lookup: UserLookup, mention: MentionReference, abortSignal: AbortSignal): Promise<UserDetails | undefined> {
 	if (mentionIdOf(mention) === undefined) return undefined
 	try {
 		return await lookup(mention, abortSignal)

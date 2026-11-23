@@ -51,7 +51,7 @@ export interface TreeStateOptions {
  */
 export async function treeState(directory: string, defaultBranch: string, options: TreeStateOptions): Promise<TreeState> {
 	const { abortSignal } = options
-	const git = async (args: readonly string[]) => (await gitCommand(args, { cwd: directory, abortSignal })).stdout
+	const git = async (commandArguments: readonly string[]) => (await gitCommand(commandArguments, { cwd: directory, abortSignal })).stdout
 	const head = await git(['rev-parse', 'HEAD'])
 	const base = await mergeBase(directory, defaultBranch, abortSignal)
 	const diff = await git(['diff', '--binary', base])

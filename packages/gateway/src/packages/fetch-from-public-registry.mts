@@ -107,7 +107,7 @@ export async function fetchedOf(
  * partway, as one that may pass on another try: the proxy then answers 502, which package managers
  * try again, instead of the 403 of a refusal. An abort stays an abort.
  */
-async function asTransientOnNetworkFailure<T>(reading: Promise<T>, fetched: string, abortSignal: AbortSignal): Promise<T> {
+async function asTransientOnNetworkFailure<Result>(reading: Promise<Result>, fetched: string, abortSignal: AbortSignal): Promise<Result> {
 	try {
 		return await reading
 	} catch (error) {

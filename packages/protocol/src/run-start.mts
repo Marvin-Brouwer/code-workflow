@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { TriggerKind } from './workflows-description.mts'
 
 /** Which trigger started a run: its kind and its id in the entry file. */
-export const TriggerRef = z.object({ kind: TriggerKind, id: z.string().min(1) })
-export type TriggerRef = z.infer<typeof TriggerRef>
+export const TriggerReference = z.object({ kind: TriggerKind, id: z.string().min(1) })
+export type TriggerReference = z.infer<typeof TriggerReference>
 
 /**
  * What the engine asks of the entry file, in the mailbox's `start.json` before the runtime starts:
@@ -16,6 +16,6 @@ export type TriggerRef = z.infer<typeof TriggerRef>
  */
 export const RunStart = z.discriminatedUnion('mode', [
 	z.object({ mode: z.literal('describe') }),
-	z.object({ mode: z.literal('run'), workflow: z.string().min(1), trigger: TriggerRef.optional(), input: z.unknown().optional() }),
+	z.object({ mode: z.literal('run'), workflow: z.string().min(1), trigger: TriggerReference.optional(), input: z.unknown().optional() }),
 ])
 export type RunStart = z.infer<typeof RunStart>

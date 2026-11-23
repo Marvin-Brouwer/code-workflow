@@ -20,15 +20,15 @@ export function agentTool(spec: ToolSpec, session: LoopSession): ToolRegistratio
 		name: spec.name,
 		description: spec.description ?? spec.name,
 		parameters,
-		execute: async (args, _api, context) => {
+		execute: async (toolArguments, _api, context) => {
 			const { result } = await inEventOf(
 				session.scope,
 				'tool-call',
-				{ tool: spec.name, from: 'agent', input: args },
+				{ tool: spec.name, from: 'agent', input: toolArguments },
 				(scope) => {
 					const abortSignal =
 						context.abortSignal === undefined ? session.abortSignal : AbortSignal.any([session.abortSignal, context.abortSignal])
-					return callForAgent(spec, unwrap(args), abortSignal, (error) => {
+					return callForAgent(spec, unwrap(toolArguments), abortSignal, (error) => {
 						emitEvent(scope, 'tool-error', { error: describeError(error) })
 						session.finish({ kind: 'error', error }, 'round')
 						return endingErrorResult(spec.name, error)

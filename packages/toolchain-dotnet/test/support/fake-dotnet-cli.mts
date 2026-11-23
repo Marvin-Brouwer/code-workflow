@@ -19,9 +19,9 @@ const Answer = z.object({
 })
 const Answers = z.record(z.string(), Answer)
 
-const args = process.argv.slice(2)
-const [command = ''] = args
-appendFileSync(z.string().parse(process.env.FAKE_DOTNET_LOG), `${JSON.stringify(args)}\n`)
+const commandArguments = process.argv.slice(2)
+const [command = ''] = commandArguments
+appendFileSync(z.string().parse(process.env.FAKE_DOTNET_LOG), `${JSON.stringify(commandArguments)}\n`)
 const answers = Answers.parse(JSON.parse(readFileSync(z.string().parse(process.env.FAKE_DOTNET_SCRIPT), 'utf8')))
 const answer = answers[command] ?? { exitCode: 0 }
 /**
@@ -44,7 +44,7 @@ if (answer.killedWith !== undefined) process.kill(process.pid, answer.killedWith
 else if (answer.hang === true) setInterval(() => undefined, keepAliveInterval)
 else if (answer.hold !== undefined) setTimeout(() => process.exit(answer.exitCode ?? 0), answer.hold.milliseconds)
 else {
-	const results = args[args.indexOf('--results-directory') + 1] ?? '.'
+	const results = commandArguments[commandArguments.indexOf('--results-directory') + 1] ?? '.'
 	for (const [index, trx] of (answer.trx ?? []).entries()) writeFileSync(path.join(results, `run-${String(index)}.trx`), trx)
 	process.stdout.write(answer.stdout ?? '')
 	process.exitCode = answer.exitCode ?? 0

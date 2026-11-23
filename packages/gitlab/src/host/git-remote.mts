@@ -1,6 +1,6 @@
 import { gitRemote as sharedGitRemote, type GitRemote } from '@mesh-flow/code-repository/host'
 import type { HostToolContext } from '@mesh-flow/gateway'
-import { basicAuthHeaderEnv } from '@mesh-flow/git'
+import { basicAuthHeaderEnvironment } from '@mesh-flow/git'
 import { readSite } from './site.mts'
 
 /** Where the host clones live and how it reaches GitLab over git. */
@@ -20,6 +20,6 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 		// paths, so `Team/Api` and `team/api` share one clone, and one call at a time.
 		cloneSegments: (project) => project.toLowerCase().split('/'),
 		// GitLab takes a token as the password of any user name; `oauth2` is the one its docs use.
-		credentialEnv: async (context) => basicAuthHeaderEnv('oauth2', (await readSite(context)).token),
+		credentialEnv: async (context) => basicAuthHeaderEnvironment('oauth2', (await readSite(context)).token),
 	})
 }

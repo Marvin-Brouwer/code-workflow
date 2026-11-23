@@ -2,7 +2,7 @@ import { watchReview } from '@mesh-flow/code-repository'
 import type { ToolContext } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
-import type { MergeRequestRef, ReviewItem } from '../tools/merge-request-tools.mts'
+import type { MergeRequestReference, ReviewItem } from '../tools/merge-request-tools.mts'
 import type { JobFailure } from '../tools/pipeline-tools.mts'
 import { mergeRequestOf, type MergeRequest } from './merge-request.mts'
 
@@ -90,7 +90,7 @@ export interface ReviewOutcome {
  * ```
  */
 export async function review(
-	on: MergeRequestRef,
+	on: MergeRequestReference,
 	handlers: ReviewHandlers,
 	options: ReviewOptions = {},
 	context?: ToolContext,

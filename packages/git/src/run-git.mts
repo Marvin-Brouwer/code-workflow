@@ -37,10 +37,10 @@ const maxOutputBytes = 16 * 1024 * 1024
  * group of its own, which is what a stop goes to: killing git alone leaves `git-remote-https`
  * holding the pipes, and the call would never settle.
  */
-export async function runGit(args: readonly string[], options: RunGitOptions): Promise<GitResult> {
+export async function runGit(commandArguments: readonly string[], options: RunGitOptions): Promise<GitResult> {
 	const { abortSignal } = options
 	abortSignal.throwIfAborted()
-	const subprocess = execa('git', args, {
+	const subprocess = execa('git', commandArguments, {
 		cwd: options.cwd,
 		env: { GIT_TERMINAL_PROMPT: '0', ...options.env },
 		stdin: 'ignore',
@@ -75,7 +75,7 @@ export async function runGit(args: readonly string[], options: RunGitOptions): P
 			exitCode: result.exitCode,
 			stdout: result.stdout,
 			stderr: result.stderr,
-			command: ['git', ...args],
+			command: ['git', ...commandArguments],
 		}
 	} catch (error) {
 		if (abortSignal.aborted) throw stoppedWith(abortSignal)

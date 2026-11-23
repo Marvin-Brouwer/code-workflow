@@ -15,7 +15,7 @@ export const repositoryName = 'team/app'
 export const branch = 'fix/7'
 
 /** The issue the branch fixes, which {@link connectedGithub} files. */
-export const issueRef = Object.freeze({ repository: repositoryName, number: 7 })
+export const issueReference = Object.freeze({ repository: repositoryName, number: 7 })
 
 /** The text the tests' agent writes for the fix of `login.txt`. */
 export const sameSite = Object.freeze({ title: 'Keep the session on Safari', description: 'Sets SameSite.' })
@@ -33,7 +33,7 @@ export async function connectedGithub() {
 	const gateway = await testGateway(
 		githubHostTools({ directory: await temporaryDirectory(), apiUrl: api.url, remoteUrl: () => remote.url }),
 	)
-	api.issue(repositoryName, issueRef.number, { title: 'Login fails on Safari', body: 'Safari drops the session cookie.' })
+	api.issue(repositoryName, issueReference.number, { title: 'Login fails on Safari', body: 'Safari drops the session cookie.' })
 	return { api, remote, gateway }
 }
 

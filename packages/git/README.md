@@ -35,14 +35,14 @@ await git.rebaseAbort().attempt()                         // runs; swallows the 
 const line = String(git.rebase('origin/main'))            // 'git rebase origin/main', nothing runs
 ```
 
-The questions a workflow asks are there as functions: `hasRef`, `hasLocalBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges` (staged or not), `dirtyFiles` (`git status --porcelain=v1` entries, paths unquoted), `conflictedFiles`, `discardChanges` (back to HEAD; untracked files stay, a file added since HEAD goes), `setIdentity`.
+The questions a workflow asks are there as functions: `hasReference`, `hasLocalBranch`, `hasRemoteBranch`, `defaultBranch` (what the remote recorded, else `main` or `master`), `currentBranch`, `checkoutOrCreate`, `hasChanges` (staged or not), `dirtyFiles` (`git status --porcelain=v1` entries, paths unquoted), `conflictedFiles`, `discardChanges` (back to HEAD; untracked files stay, a file added since HEAD goes), `setIdentity`.
 
 ### A credential, for the host
 
 ```ts
-import { basicAuthHeaderEnv, gitClient } from '@mesh-flow/git'
+import { basicAuthHeaderEnvironment, gitClient } from '@mesh-flow/git'
 
-const git = gitClient({ cwd: clone, env: basicAuthHeaderEnv('x-access-token', token), abortSignal })
+const git = gitClient({ cwd: clone, env: basicAuthHeaderEnvironment('x-access-token', token), abortSignal })
 await git.fetch('origin', ['+refs/heads/*:refs/heads/*'], { prune: true, quiet: true })
 ```
 

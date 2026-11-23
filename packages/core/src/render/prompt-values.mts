@@ -5,7 +5,7 @@ export interface NotForPrompts<Reason extends string> {
 	readonly 'This value cannot go into a prompt': Reason
 }
 
-type IsAny<T> = 0 extends 1 & T ? true : false
+type IsAny<Candidate> = 0 extends 1 & Candidate ? true : false
 
 /**
  * A value as a prompt takes it. Tools, exits, limits, nested prompts, values with `[toPrompt]`,
@@ -19,7 +19,7 @@ export type PromptValue<Value> =
 			? NotForPrompts<'a Promise: await it first'>
 			: Value extends AnyTool
 				? Value
-				: Value extends (...args: never[]) => unknown
+				: Value extends (...parameters: never[]) => unknown
 					? NotForPrompts<'a function: call it, or make it a tool'>
 					: Value extends symbol
 						? NotForPrompts<'a symbol'>

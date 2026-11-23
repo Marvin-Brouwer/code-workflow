@@ -77,14 +77,14 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 }
 
 /** A run of `body` as a workflow on `gateway`, in a workspace of its own. */
-export interface TestRun<T> {
+export interface TestRun<Result> {
 	/** The id the gateway knows the run by, which the connector signs its posts with. */
 	readonly runId: string
 	readonly workspace: string
 	readonly controller: AbortController
 	readonly outcome: Promise<RunOutcome>
 	/** What the body returned, or why it threw. */
-	readonly result: Promise<T>
+	readonly result: Promise<Result>
 }
 
 /** A run channel that answers no request: the Atlassian functions ask no person and wait for nothing. */
@@ -99,7 +99,10 @@ const silentChannel: RunChannel = {
 }
 
 /** Runs `body` as a workflow with its host tools on `gateway`. The run is stopped when the test ends. */
-export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortSignal: AbortSignal }) => Promise<T>): Promise<TestRun<T>> {
+export async function runOnGateway<Result>(
+	gateway: Gateway,
+	body: (context: { abortSignal: AbortSignal }) => Promise<Result>,
+): Promise<TestRun<Result>> {
 	const workspace = path.join(await temporaryDirectory(), 'workspace')
 	const controller = new AbortController()
 	onTestFinished(() => {
@@ -107,7 +110,7 @@ export async function runOnGateway<T>(gateway: Gateway, body: (context: { abortS
 	})
 	const runId = `run-${String(Date.now())}`
 	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, controller.signal)
-	const { promise: result, resolve, reject } = Promise.withResolvers<T>()
+	const { promise: result, resolve, reject } = Promise.withResolvers<Result>()
 	result.catch(() => undefined)
 	const definition = workflow('test', async ({ abortSignal }) => {
 		try {

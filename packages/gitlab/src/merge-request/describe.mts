@@ -2,7 +2,7 @@ import { branchHeadTool, describeChange, type DescribeCodeHost } from '@mesh-flo
 import type { Agent, Limit } from '@mesh-flow/core'
 import { sameProjectPath } from '../project-path.mts'
 import type { Repository } from '../repository/repository.mts'
-import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
+import type { MergeRequestReference } from '../tools/merge-request-tools.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 import { gitlabLayout } from './layout.mts'
 import { MergeRequestText, type ClosesIssue, type MergeRequestContent } from './merge-request-text.mts'
@@ -20,7 +20,7 @@ export interface DescribeOptions {
 	 * and description, for the branch as it was last pushed, and no loop runs when they already
 	 * cover that commit. It has to be the merge request of the checkout's branch onto the default branch.
 	 */
-	readonly mergeRequest?: MergeRequestRef
+	readonly mergeRequest?: MergeRequestReference
 	/** The limit of the loop. Default: 10 minutes. */
 	readonly limit?: Limit
 }
@@ -81,12 +81,12 @@ export function describe(agent: Agent, repository: Repository, options: Describe
 }
 
 /** How `describe` reads GitLab. */
-const gitlabDescribe: DescribeCodeHost<Repository, MergeRequest, MergeRequestRef> = {
+const gitlabDescribe: DescribeCodeHost<Repository, MergeRequest, MergeRequestReference> = {
 	terms: gitlabTerms,
 	layout: gitlabLayout,
 	text: MergeRequestText,
 	sameRepository: sameProjectPath,
 	findOpen: (repository) => findOpenMergeRequest(repository),
-	read: (ref) => mergeRequest(ref),
+	read: (reference) => mergeRequest(reference),
 	head: (repository, pushed) => branchHeadTool(gitlabTerms, repository)({ pushed }),
 }

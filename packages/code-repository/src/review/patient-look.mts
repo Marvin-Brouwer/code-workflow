@@ -17,7 +17,7 @@ export interface PatientLookOptions {
  * `toleratedOutage`; the time the failing calls take comes on top. Only transient gateway errors
  * are tolerated; a bad token, a missing permission or a stop is thrown at once.
  */
-export function patientLook(options: PatientLookOptions): <T>(attempt: () => Promise<T>) => Promise<T> {
+export function patientLook(options: PatientLookOptions): <Result>(attempt: () => Promise<Result>) => Promise<Result> {
 	return async (attempt) => {
 		const tolerated = lookBudget(options.toleratedOutage, options.every)
 		for (;;) {

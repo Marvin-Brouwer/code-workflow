@@ -3,7 +3,7 @@ import { check, type Check } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { PullRequestRef } from '../tools/pull-request-tools.mts'
+import type { PullRequestReference } from '../tools/pull-request-tools.mts'
 
 /** Options of `checksPass`. */
 export interface ChecksPassOptions {
@@ -58,7 +58,7 @@ export interface ChecksPassOptions {
  * `
  * ```
  */
-export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}): Check {
+export function checksPass(on: PullRequestReference, options: ChecksPassOptions = {}): Check {
 	return check('checks', async (context) => {
 		const where = { repository: on.repository, number: on.number }
 		const failures = await untilCompleted(async () => {
@@ -66,7 +66,7 @@ export function checksPass(on: PullRequestRef, options: ChecksPassOptions = {}):
 				options.checkout === undefined
 					? (await stubs.getPullRequest(where, context)).head.sha
 					: await branchHeadOf(options.checkout, true, context)
-			return stubs.checksOnRef({ repository: on.repository, ref: sha }, context)
+			return stubs.checksOnReference({ repository: on.repository, ref: sha }, context)
 		}, options)
 		return failures.map((failure) => ({
 			source: `check: ${failure.name}`,

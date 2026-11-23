@@ -4,7 +4,7 @@ import { sameProjectPath } from '../project-path.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { MergeRequestData, MergeRequestRef } from '../tools/merge-request-tools.mts'
+import type { MergeRequestData, MergeRequestReference } from '../tools/merge-request-tools.mts'
 import { closingField } from './closing-reference.mts'
 import type { MergeRequestContent } from './merge-request-text.mts'
 
@@ -55,12 +55,12 @@ export interface MergeRequest extends MergeRequestData {
 export async function openMergeRequest(repository: Repository, content: MergeRequestContent, context?: ToolContext): Promise<MergeRequest> {
 	const { basedOn } = content
 	if (basedOn !== undefined) {
-		const ref = { repository: basedOn.repository, number: basedOn.number }
+		const reference = { repository: basedOn.repository, number: basedOn.number }
 		// Merged or closed meanwhile: nothing to push to, and its text stays.
-		const current = await mergeRequest(ref, context)
+		const current = await mergeRequest(reference, context)
 		if (current.state === 'closed') return current
 		await push(repository)({ message: content.title }, context)
-		return updateMergeRequest(ref, content, context)
+		return updateMergeRequest(reference, content, context)
 	}
 	const { head } = await push(repository)({ message: content.title }, context)
 	const data = await stubs.openMergeRequest(
@@ -91,7 +91,7 @@ export interface UpdatedMergeRequest extends MergeRequest {
  * read it, the person is asked whether to overwrite the edit, and nothing is written when they say
  * no. Pushes nothing: push first when the text describes new commits.
  *
- * @param ref - The merge request: anything with its `repository` and `number`, such as one
+ * @param reference - The merge request: anything with its `repository` and `number`, such as one
  * `openMergeRequest` gave.
  * @param content - The new title and description, and optionally the issue it closes. Text written
  * from another merge request than `ref` is refused.
@@ -115,23 +115,23 @@ export interface UpdatedMergeRequest extends MergeRequest {
  * ```
  */
 export async function updateMergeRequest(
-	ref: MergeRequestRef,
+	reference: MergeRequestReference,
 	content: MergeRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedMergeRequest> {
 	const { basedOn } = content
-	if (basedOn !== undefined && (!sameProjectPath(basedOn.repository, ref.repository) || basedOn.number !== ref.number))
+	if (basedOn !== undefined && (!sameProjectPath(basedOn.repository, reference.repository) || basedOn.number !== reference.number))
 		throw new Error(
-			`The text was written from ${basedOn.repository}!${String(basedOn.number)}, not from ${ref.repository}!${String(ref.number)}.`,
+			`The text was written from ${basedOn.repository}!${String(basedOn.number)}, not from ${reference.repository}!${String(reference.number)}.`,
 		)
 	let lastSeen: ChangeText | undefined = basedOn
 	for (;;) {
-		const decision = await decideOnEdit(() => mergeRequest(ref, context), content, lastSeen)
+		const decision = await decideOnEdit(() => mergeRequest(reference, context), content, lastSeen)
 		if ('kept' in decision) return Object.freeze({ ...decision.kept, skipped: 'edited' as const })
 		const { skipped, ...data } = await stubs.updateMergeRequest(
 			{
-				repository: ref.repository,
-				number: ref.number,
+				repository: reference.repository,
+				number: reference.number,
 				title: content.title,
 				body: content.description,
 				...(content.describedSha === undefined ? {} : { describedSha: content.describedSha }),
@@ -150,7 +150,7 @@ export async function updateMergeRequest(
  * Reads a merge request as it is now: its title, description, state, whether it was merged and
  * with which commit, and its head commit and branch.
  *
- * @param ref - The merge request: anything with its `repository` and `number`.
+ * @param reference - The merge request: anything with its `repository` and `number`.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The merge request, which renders as its URL in a prompt.
@@ -162,8 +162,8 @@ export async function updateMergeRequest(
  * if (current.merged) await jira.transition(story, 'Done')
  * ```
  */
-export async function mergeRequest(ref: MergeRequestRef, context?: ToolContext): Promise<MergeRequest> {
-	return mergeRequestOf(await stubs.getMergeRequest({ repository: ref.repository, number: ref.number }, context))
+export async function mergeRequest(reference: MergeRequestReference, context?: ToolContext): Promise<MergeRequest> {
+	return mergeRequestOf(await stubs.getMergeRequest({ repository: reference.repository, number: reference.number }, context))
 }
 
 /** The open merge request of the checkout's branch onto the default branch, when it has one. */

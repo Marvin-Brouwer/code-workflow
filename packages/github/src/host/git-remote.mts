@@ -1,5 +1,5 @@
 import { gitRemote as sharedGitRemote, type GitRemote } from '@mesh-flow/code-repository/host'
-import { basicAuthHeaderEnv } from '@mesh-flow/git'
+import { basicAuthHeaderEnvironment } from '@mesh-flow/git'
 import { githubRemoteUrl, splitRepositoryName } from '../repository-name.mts'
 import { requireToken } from './api.mts'
 
@@ -21,6 +21,6 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 			const { owner, repo } = splitRepositoryName(repository.toLowerCase())
 			return [owner, repo]
 		},
-		credentialEnv: async (context) => basicAuthHeaderEnv('x-access-token', await requireToken(context)),
+		credentialEnv: async (context) => basicAuthHeaderEnvironment('x-access-token', await requireToken(context)),
 	})
 }

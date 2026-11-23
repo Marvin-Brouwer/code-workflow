@@ -23,9 +23,9 @@ declare const resultType: unique symbol
  * An exit tool that finishes the loop with a result of type `T`: `succeed`, `propose` or `fail`.
  * Interpolate it in a loop's template; it's the only way an agent's result gets back to code.
  */
-export interface Exit<T> {
+export interface Exit<Result> {
 	readonly [exitSpec]: ExitSpec
-	readonly [resultType]?: T
+	readonly [resultType]?: Result
 }
 
 /** An exit that only decides whether the agent may finish: `verify`. It adds nothing to the result. */
@@ -34,7 +34,7 @@ export interface Gate {
 }
 
 /** An exit for `spec`. `T`, the result type, only exists for the compiler. */
-export function makeExit<T>(spec: ExitSpec): Exit<T> {
+export function makeExit<Result>(spec: ExitSpec): Exit<Result> {
 	return Object.freeze({ [exitSpec]: Object.freeze(spec) })
 }
 

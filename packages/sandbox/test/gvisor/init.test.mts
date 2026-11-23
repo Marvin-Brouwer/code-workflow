@@ -10,8 +10,8 @@ import { temporaryDirectory } from '../support/temporary-directory.mts'
 const execFileAsync = promisify(execFile)
 
 /** Runs a command on the host. A command that blocks on the FIFO fails after a few seconds. */
-function run(program: string, args: readonly string[]) {
-	return execFileAsync(program, args, { timeout: duration.of('5s').to('ms') })
+function run(program: string, commandArguments: readonly string[]) {
+	return execFileAsync(program, commandArguments, { timeout: duration.of('5s').to('ms') })
 }
 
 /** What a command that had to fail wrote to stderr. */
@@ -42,8 +42,8 @@ async function submission(
 	const fifo = path.join(directory, 'start')
 	await writeFile(job, 'true\n')
 	if (withFifo) await run('mkfifo', [fifo])
-	const [program, ...args] = submitJobCommand(job, options)
-	return { job, fifo, command: [program, args.map((arg) => (arg === jobFifo ? fifo : arg))] }
+	const [program, ...commandArguments] = submitJobCommand(job, options)
+	return { job, fifo, command: [program, commandArguments.map((argument) => (argument === jobFifo ? fifo : argument))] }
 }
 
 describe('jobScript', () => {
@@ -88,11 +88,11 @@ describe('jobScript', () => {
 describe('initCommand', () => {
 	test('is a script the shell accepts', async () => {
 		// Act
-		const [program, flag, script, ...args] = initCommand()
+		const [program, flag, script, ...commandArguments] = initCommand()
 
 		// Assert
 		expect([program, flag]).toEqual(['sh', '-c'])
-		expect(args).toEqual([])
+		expect(commandArguments).toEqual([])
 		await expect(run('sh', ['-n', '-c', script ?? ''])).resolves.toBeDefined()
 	})
 })

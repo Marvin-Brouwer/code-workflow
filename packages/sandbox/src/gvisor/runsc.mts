@@ -40,13 +40,13 @@ const outputGrace = duration.of('200ms')
  * Runs `runsc <flags> <args>`. Aborting kills it. Without a network (`--network=none`), and the
  * sandbox can't connect to the host's Unix sockets either, so it has no way out.
  */
-export function runsc(config: RunscConfig, args: readonly string[], call: RunscCall): Promise<RunscResult> {
+export function runsc(config: RunscConfig, commandArguments: readonly string[], call: RunscCall): Promise<RunscResult> {
 	const [program = 'runsc', ...prefix] = config.command
 	const flags = [`--root=${config.root}`, '--network=none']
 	if (config.platform !== undefined) flags.push(`--platform=${config.platform}`)
 
 	const log = call.logFile === undefined ? undefined : freshFile(call.logFile)
-	const child = spawn(program, [...prefix, ...flags, ...args], {
+	const child = spawn(program, [...prefix, ...flags, ...commandArguments], {
 		signal: call.signal,
 		stdio: [call.input === undefined ? 'ignore' : 'pipe', log ?? 'pipe', log ?? 'pipe'],
 	})
@@ -96,11 +96,11 @@ const logTailLines = 20
  * Like {@link runsc}, but a non-zero exit code is an error that carries runsc's stderr, or the end
  * of the log file when the call wrote its output there.
  */
-export async function runscOrThrow(config: RunscConfig, args: readonly string[], call: RunscCall): Promise<string> {
-	const result = await runsc(config, args, call)
+export async function runscOrThrow(config: RunscConfig, commandArguments: readonly string[], call: RunscCall): Promise<string> {
+	const result = await runsc(config, commandArguments, call)
 	if (result.exitCode === 0) return result.stdout
 	const output = call.logFile === undefined ? result.stderr : tailOf(call.logFile)
-	throw new Error(`runsc ${args[0] ?? ''} exited with ${String(result.exitCode)}: ${output.trim()}`)
+	throw new Error(`runsc ${commandArguments[0] ?? ''} exited with ${String(result.exitCode)}: ${output.trim()}`)
 }
 
 /** The last {@link logTailLines} lines of a file. */

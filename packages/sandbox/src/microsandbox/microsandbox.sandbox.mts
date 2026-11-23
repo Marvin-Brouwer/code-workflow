@@ -33,11 +33,11 @@ export class MicrosandboxSandbox implements Sandbox {
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
 		const signal = this.#lifetime.bind(options.signal)
-		const [program, ...args] = command
+		const [program, ...commandArguments] = command
 		const handle = await abortable(
 			this.#sandbox.execStreamWith(program, (builder) => {
-				const withArgs = builder.args(args).envs({ ...options.env })
-				return options.cwd === undefined ? withArgs : withArgs.cwd(options.cwd)
+				const withArguments = builder.args(commandArguments).envs({ ...options.env })
+				return options.cwd === undefined ? withArguments : withArguments.cwd(options.cwd)
 			}),
 			signal,
 			(late) => late.kill(),

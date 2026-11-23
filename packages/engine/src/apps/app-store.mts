@@ -79,7 +79,7 @@ export async function openAppStore(
 	}
 	let writing: Promise<unknown> = Promise.resolve()
 	let closed = false
-	const queued = <T,>(write: () => Promise<T>): Promise<T> => {
+	const queued = <Result,>(write: () => Promise<Result>): Promise<Result> => {
 		if (closed) return Promise.reject(new EngineError('conflict', 'The engine is shutting down.'))
 		const next = writing.then(write)
 		writing = next.catch(() => undefined)

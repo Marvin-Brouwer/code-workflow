@@ -31,18 +31,20 @@ export interface GitCommandOptions extends RunGitOptions {
 }
 
 /** A command over `args` that runs with `options` when used. */
-export function gitCommand(args: readonly string[], options: GitCommandOptions): GitCommand {
-	const run = () => runGit([...(options.prefix ?? []), ...args], options)
+export function gitCommand(commandArguments: readonly string[], options: GitCommandOptions): GitCommand {
+	const run = () => runGit([...(options.prefix ?? []), ...commandArguments], options)
 	const succeed = async (): Promise<GitResult> => {
 		const result = await run()
 		if (!result.ok) {
 			const detail = result.stderr.trim() || result.stdout.trim()
-			throw new Error(`\`${formatCommand(args)}\` failed (exit ${String(result.exitCode)})${detail === '' ? '' : `: ${detail}`}`)
+			throw new Error(
+				`\`${formatCommand(commandArguments)}\` failed (exit ${String(result.exitCode)})${detail === '' ? '' : `: ${detail}`}`,
+			)
 		}
 		return result
 	}
 	return Object.freeze<GitCommand>({
-		args,
+		args: commandArguments,
 		run,
 		attempt: async () => {
 			try {
@@ -51,7 +53,7 @@ export function gitCommand(args: readonly string[], options: GitCommandOptions):
 				// Best effort: a stop or a missing git while cleaning up is not the caller's problem.
 			}
 		},
-		toString: () => formatCommand(args),
+		toString: () => formatCommand(commandArguments),
 		// oxlint-disable-next-line unicorn/no-thenable -- awaiting a command is how it runs; that is the point of it
 		then: (onFulfilled, onRejected) => succeed().then(onFulfilled, onRejected),
 	})

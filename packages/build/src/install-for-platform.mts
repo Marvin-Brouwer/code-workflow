@@ -38,22 +38,36 @@ export async function installForPlatform(
 	const dependencies = Object.fromEntries(packages.map((native) => [native.name, native.version]))
 	await writeFile(path.join(out, 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies }, null, '\t'))
 	if (packages.length === 0) return
-	const args = ['install', '--omit=dev', '--no-audit', '--no-fund', `--os=${platform.os}`, `--cpu=${platform.cpu}`, `--libc=${sandboxLibc}`]
+	const commandArguments = [
+		'install',
+		'--omit=dev',
+		'--no-audit',
+		'--no-fund',
+		`--os=${platform.os}`,
+		`--cpu=${platform.cpu}`,
+		`--libc=${sandboxLibc}`,
+	]
 	await run(
 		'npm',
-		args,
+		commandArguments,
 		out,
 		{ npm_config_platform: platform.os, npm_config_arch: platform.cpu, npm_config_libc: sandboxLibc },
 		abortSignal,
 	)
 }
 
-function run(command: string, args: readonly string[], cwd: string, env: Record<string, string>, abortSignal: AbortSignal): Promise<void> {
+function run(
+	command: string,
+	commandArguments: readonly string[],
+	cwd: string,
+	environment: Record<string, string>,
+	abortSignal: AbortSignal,
+): Promise<void> {
 	return new Promise((resolve, reject) => {
 		// npm is a `.cmd` on Windows, which only starts through a shell.
-		const child = spawn(command, args, {
+		const child = spawn(command, commandArguments, {
 			cwd,
-			env: { ...process.env, ...env },
+			env: { ...process.env, ...environment },
 			shell: process.platform === 'win32',
 			stdio: 'inherit',
 			signal: abortSignal,
@@ -61,7 +75,7 @@ function run(command: string, args: readonly string[], cwd: string, env: Record<
 		child.on('error', reject)
 		child.on('close', (code) => {
 			if (code === 0) resolve()
-			else reject(new Error(`${command} ${args.join(' ')} failed with exit code ${String(code)}.`))
+			else reject(new Error(`${command} ${commandArguments.join(' ')} failed with exit code ${String(code)}.`))
 		})
 	})
 }

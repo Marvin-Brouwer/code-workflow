@@ -46,19 +46,19 @@ import {
 } from '@mesh-flow/code-repository'
 import type { Agent } from '@mesh-flow/core'
 
-interface MergeRequestRef {
+interface MergeRequestReference {
 	readonly repository: string
 	readonly number: number
 }
 
 declare const layout: ChangeRequestLayout
 declare function findOpenMergeRequest(repository: Checkout): Promise<ChangeRequest | undefined>
-declare function mergeRequest(ref: MergeRequestRef): Promise<ChangeRequest>
+declare function mergeRequest(ref: MergeRequestReference): Promise<ChangeRequest>
 
 const terms = { name: 'GitLab', request: 'merge request', toolPrefix: 'gitlab' }
 const MergeRequestText = changeTextSchema({ maxTitleCharacters: 255, maxDescriptionCharacters: 1_048_576, terms })
 
-const gitlabDescribe: DescribeCodeHost<Checkout, ChangeRequest, MergeRequestRef> = {
+const gitlabDescribe: DescribeCodeHost<Checkout, ChangeRequest, MergeRequestReference> = {
 	terms,
 	layout,
 	text: MergeRequestText,
@@ -68,7 +68,7 @@ const gitlabDescribe: DescribeCodeHost<Checkout, ChangeRequest, MergeRequestRef>
 	head: (repository, pushed) => branchHeadTool(terms, repository)({ pushed }),
 }
 
-export function describe(agent: Agent, repository: Checkout, options: DescribeChangeOptions<MergeRequestRef, never> = {}) {
+export function describe(agent: Agent, repository: Checkout, options: DescribeChangeOptions<MergeRequestReference, never> = {}) {
 	return describeChange(agent, repository, gitlabDescribe, options)
 }
 ```
@@ -98,7 +98,7 @@ const pipelinePasses = (sha: string) =>
 import type { GitTools } from '@mesh-flow/code-repository'
 import { gitHostTools, gitRemote, signed } from '@mesh-flow/code-repository/host'
 import type { HostToolContext } from '@mesh-flow/gateway'
-import { basicAuthHeaderEnv } from '@mesh-flow/git'
+import { basicAuthHeaderEnvironment } from '@mesh-flow/git'
 
 declare const context: HostToolContext
 /** The connector's git tools, as `gitTools` defined them. */
@@ -109,7 +109,7 @@ const remote = gitRemote({
 	directory: '/var/lib/mesh-flow/gitlab',
 	remoteUrl: (project) => `https://gitlab.example.com/${project}.git`,
 	cloneSegments: (project) => project.split('/'),
-	credentialEnv: async (context) => basicAuthHeaderEnv('oauth2', await token(context)),
+	credentialEnv: async (context) => basicAuthHeaderEnvironment('oauth2', await token(context)),
 })
 const tools = gitHostTools(remote, gitlabGitTools)
 const body = signed('Looks good.', context.runId, ['reply:note/12'])

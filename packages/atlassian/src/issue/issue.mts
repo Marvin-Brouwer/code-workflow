@@ -50,7 +50,7 @@ export const JiraIssueParameters = Object.freeze({ key: IssueKey })
 export type JiraIssueParameters = typeof JiraIssueParameters
 
 /** An issue, by its key or as collected. */
-export type IssueRef = IssueKey | { readonly key: IssueKey }
+export type IssueReference = IssueKey | { readonly key: IssueKey }
 
 /** Where collected issues are dumped, for agents to read. */
 const issuesFolder = workspace.folder('jira', { description: 'the Jira issues this run read, one Markdown file each' })
@@ -104,7 +104,7 @@ export interface JiraIssue extends IssueData {
  * const research = await researcher.loop`Research ${story}, then hand in with ${succeed(Research)}.`
  * ```
  */
-export async function collect(issue: IssueRef, context?: ToolContext): Promise<JiraIssue> {
+export async function collect(issue: IssueReference, context?: ToolContext): Promise<JiraIssue> {
 	const { attachments, ...data } = await stubs.getIssue({ key: keyOf(issue) }, context)
 	const file = workspace.file(`${issuesFolder.path}/${data.key}.md`)
 	const location = file.location()
@@ -180,7 +180,7 @@ export const dump = tool('jiraDump', {
  * ```
  */
 export function comment(
-	issue: IssueRef,
+	issue: IssueReference,
 	body: string,
 	options: { readonly key?: string } = {},
 	context?: ToolContext,
@@ -208,11 +208,11 @@ export function comment(
  * if (moved) await jira.comment(story, 'Picked up by mesh-flow.', { key: 'status' })
  * ```
  */
-export async function transition(issue: IssueRef, status: string, context?: ToolContext): Promise<{ readonly moved: boolean }> {
+export async function transition(issue: IssueReference, status: string, context?: ToolContext): Promise<{ readonly moved: boolean }> {
 	const { moved } = await stubs.transitionIssue({ key: keyOf(issue), status }, context)
 	return { moved }
 }
 
-function keyOf(issue: IssueRef): IssueKey {
+function keyOf(issue: IssueReference): IssueKey {
 	return typeof issue === 'string' ? issue : issue.key
 }

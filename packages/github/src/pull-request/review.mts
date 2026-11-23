@@ -2,7 +2,7 @@ import { watchReview } from '@mesh-flow/code-repository'
 import type { ToolContext } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
-import type { CheckFailure, PullRequestRef, ReviewItem } from '../tools/pull-request-tools.mts'
+import type { CheckFailure, PullRequestReference, ReviewItem } from '../tools/pull-request-tools.mts'
 import { pullRequestOf, type PullRequest } from './pull-request.mts'
 
 /** The checks of one commit failed. */
@@ -82,7 +82,7 @@ export interface ReviewOutcome {
  * ```
  */
 export async function review(
-	on: PullRequestRef,
+	on: PullRequestReference,
 	handlers: ReviewHandlers,
 	options: ReviewOptions = {},
 	context?: ToolContext,
@@ -108,7 +108,7 @@ export async function review(
 					},
 					context,
 				),
-			checks: (sha) => stubs.checksOnRef({ repository: on.repository, ref: sha }, context),
+			checks: (sha) => stubs.checksOnReference({ repository: on.repository, ref: sha }, context),
 		},
 		{
 			...(handlers.comments === undefined ? {} : { comments: handlers.comments }),

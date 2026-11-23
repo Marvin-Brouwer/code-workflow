@@ -8,7 +8,7 @@ function fakeProcess() {
 	const events = new EventEmitter()
 	const exit = vi.fn<(code: number) => void>()
 	const target: ShutdownProcess = {
-		on: (event: string, listener: (...args: unknown[]) => void) => events.on(event, listener),
+		on: (event: string, listener: (...parameters: unknown[]) => void) => events.on(event, listener),
 		exit,
 	}
 	return { events, exit, target }

@@ -1,13 +1,13 @@
 import { describe, expect, test, vi } from 'vitest'
 import { abortable } from '../src/abortable.mts'
 
-function never<T>(): Promise<T> {
-	return new Promise<T>(() => undefined)
+function never<Value>(): Promise<Value> {
+	return new Promise<Value>(() => undefined)
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-	const resolvers: { resolve?: (value: T) => void } = {}
-	const promise = new Promise<T>((resolve) => {
+function deferred<Value>(): { promise: Promise<Value>; resolve: (value: Value) => void } {
+	const resolvers: { resolve?: (value: Value) => void } = {}
+	const promise = new Promise<Value>((resolve) => {
 		resolvers.resolve = resolve
 	})
 	return {

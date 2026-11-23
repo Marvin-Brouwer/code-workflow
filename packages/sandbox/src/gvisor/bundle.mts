@@ -77,12 +77,12 @@ export async function writeBundle(directory: string, options: BundleOptions): Pr
 }
 
 /** The image's `KEY=value` entries with `env` on top, each key once, and a `PATH` either way. */
-function environment(image: readonly string[], env: Readonly<Record<string, string>>): string[] {
+function environment(image: readonly string[], extra: Readonly<Record<string, string>>): string[] {
 	const merged = new Map<string, string>([['PATH', defaultPath]])
 	for (const entry of image) {
 		const separator = entry.indexOf('=')
 		if (separator > 0) merged.set(entry.slice(0, separator), entry.slice(separator + 1))
 	}
-	for (const [key, value] of Object.entries(env)) merged.set(key, value)
+	for (const [key, value] of Object.entries(extra)) merged.set(key, value)
 	return [...merged].map(([key, value]) => `${key}=${value}`)
 }

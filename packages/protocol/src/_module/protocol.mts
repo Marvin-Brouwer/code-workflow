@@ -47,7 +47,7 @@ export { RequestId } from '../request-id.mts'
 export { RuntimeMailbox } from '../runtime-mailbox.mts'
 export { RuntimeEvent, RuntimeMessage, type Answer } from '../runtime-message.mts'
 export { InputRequest, LoginAnswer, LoginRequest, RuntimeRequest, WakeRequest } from '../runtime-request.mts'
-export { RunStart, TriggerRef } from '../run-start.mts'
+export { RunStart, TriggerReference } from '../run-start.mts'
 export { servedPrefixLength } from '../served-path.mts'
 export {
 	JsonSchema,

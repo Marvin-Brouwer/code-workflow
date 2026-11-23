@@ -3,7 +3,7 @@ import { check, type Check } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
+import type { MergeRequestReference } from '../tools/merge-request-tools.mts'
 
 /** Options of `pipelinePasses`. */
 export interface PipelinePassesOptions {
@@ -59,7 +59,7 @@ export interface PipelinePassesOptions {
  * `
  * ```
  */
-export function pipelinePasses(on: MergeRequestRef, options: PipelinePassesOptions = {}): Check {
+export function pipelinePasses(on: MergeRequestReference, options: PipelinePassesOptions = {}): Check {
 	return check('pipeline', async (context) => {
 		const where = { repository: on.repository, number: on.number }
 		const failures = await untilCompleted(async () => {

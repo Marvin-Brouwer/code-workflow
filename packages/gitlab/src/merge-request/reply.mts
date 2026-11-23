@@ -1,7 +1,7 @@
 import { replyTool, type ReplyInput } from '@mesh-flow/code-repository'
 import type { Tool } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
-import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/merge-request-tools.mts'
+import { ReviewItemId, type MergeRequestReference, type ReplyOutcome } from '../tools/merge-request-tools.mts'
 
 /**
  * The tool that replies to a review item on a merge request, in the item's thread, for an agent
@@ -32,7 +32,7 @@ import { ReviewItemId, type MergeRequestRef, type ReplyOutcome } from '../tools/
  * 	`
  * ```
  */
-export function reply(on: MergeRequestRef): Tool<ReplyInput, ReplyOutcome> {
+export function reply(on: MergeRequestReference): Tool<ReplyInput, ReplyOutcome> {
 	return replyTool({
 		on: `merge request ${on.repository}!${String(on.number)}`,
 		item: ReviewItemId,

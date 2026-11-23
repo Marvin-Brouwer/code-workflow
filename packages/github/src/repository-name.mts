@@ -33,9 +33,9 @@ export type RepositoryName = z.infer<typeof RepositoryName>
 
 /** The owner and the name in `owner/name`. */
 export function splitRepositoryName(full: RepositoryName): { readonly owner: string; readonly repo: string } {
-	const [owner, repo] = full.split('/')
-	if (owner === undefined || repo === undefined) throw new Error(`${full} isn't a repository name: use owner/name.`)
-	return { owner, repo }
+	const [owner, repository] = full.split('/')
+	if (owner === undefined || repository === undefined) throw new Error(`${full} isn't a repository name: use owner/name.`)
+	return { owner, repo: repository }
 }
 
 /** Where git clones `owner/name` from on GitHub. */

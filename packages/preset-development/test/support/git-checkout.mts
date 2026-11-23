@@ -19,8 +19,8 @@ export async function commit(directory: string, message: string, abortSignal: Ab
 export async function gitCheckout(): Promise<ReviewedCheckout> {
 	const directory = await temporaryDirectory()
 	const abortSignal = setupTimeout.toAbortSignal()
-	const git = async (...args: string[]) => {
-		await gitCommand(args, { cwd: directory, abortSignal })
+	const git = async (...commandArguments: string[]) => {
+		await gitCommand(commandArguments, { cwd: directory, abortSignal })
 	}
 	await git('init', '--quiet', '--initial-branch=main')
 	await writeFile(path.join(directory, 'README.md'), '# api\n')

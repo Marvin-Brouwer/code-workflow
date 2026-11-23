@@ -8,7 +8,7 @@ import {
 	changeLogin,
 	connectedGithub,
 	firstPullRequest,
-	issueRef,
+	issueReference,
 	promptly,
 	repositoryName,
 	sameSite,
@@ -37,7 +37,7 @@ describe('openPullRequest', () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			const { head } = await push(repository)({ message: 'Set SameSite' })
-			await openPullRequest(repository, { ...sameSite, closes: issueRef })
+			await openPullRequest(repository, { ...sameSite, closes: issueReference })
 			return head
 		})
 		const head = await run.result
@@ -88,8 +88,8 @@ describe('openPullRequest', () => {
 		const run = await runOnGateway(gateway, async () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
-			await openPullRequest(repository, { ...sameSite, closes: issueRef })
-			return openPullRequest(repository, { ...secure, closes: issueRef })
+			await openPullRequest(repository, { ...sameSite, closes: issueReference })
+			return openPullRequest(repository, { ...secure, closes: issueReference })
 		})
 		const rerun = await run.result
 
@@ -107,7 +107,7 @@ describe('openPullRequest', () => {
 			const repository = await checkout({ repository: repositoryName, branch })
 			await changeLogin(repository, 'SameSite=None\n')
 			await openPullRequest(repository, { ...sameSite, closes: { repository: repositoryName, number: otherIssueNumber } })
-			return openPullRequest(repository, { ...secure, closes: issueRef })
+			return openPullRequest(repository, { ...secure, closes: issueReference })
 		})
 		const reopened = await run.result
 

@@ -16,25 +16,25 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const home = path.join(root, '.mesh-flow', 'home')
 const cli = path.join(root, 'packages', 'engine', 'bin', 'mesh-flow.mts')
 
-const [example, ...serveArgs] = process.argv.slice(2)
+const [example, ...serveArguments] = process.argv.slice(2)
 if (example === undefined) throw new Error('Name the example app: node scripts/start-example.mts github-issue')
 const appDirectory = path.join(root, 'examples', example)
 
 /** Runs a command to its end, with its output on this terminal. Rejects when it fails. */
-function run(command: string, args: readonly string[], cwd: string): Promise<void> {
+function run(command: string, commandArguments: readonly string[], cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
+		const child = spawn(command, commandArguments, { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
 		child.on('error', reject)
 		child.on('exit', (code) => {
 			if (code === 0) resolve()
-			else reject(new Error(`${command} ${args.join(' ')} failed with ${String(code)}.`))
+			else reject(new Error(`${command} ${commandArguments.join(' ')} failed with ${String(code)}.`))
 		})
 	})
 }
 
 /** Starts `mesh-flow` with `args` in `cwd`, its output lines prefixed with `name`. */
-function start(name: string, args: readonly string[], cwd: string): ChildProcess {
-	const child = spawn(process.execPath, [cli, '--home', home, ...args], { cwd, stdio: ['inherit', 'pipe', 'pipe'] })
+function start(name: string, commandArguments: readonly string[], cwd: string): ChildProcess {
+	const child = spawn(process.execPath, [cli, '--home', home, ...commandArguments], { cwd, stdio: ['inherit', 'pipe', 'pipe'] })
 	for (const stream of [child.stdout, child.stderr])
 		stream.on('data', (chunk: Buffer) => {
 			for (const line of chunk.toString('utf8').split('\n').filter(Boolean)) console.log(`[${name}] ${line}`)
@@ -80,7 +80,7 @@ for (const connector of await connectorsOf(appDirectory))
 
 // Ctrl+C reaches every process on the terminal: each stops itself, and this waits for them.
 process.on('SIGINT', () => undefined)
-const engine = start('engine', ['serve', ...serveArgs], appDirectory)
+const engine = start('engine', ['serve', ...serveArguments], appDirectory)
 await printed(engine, 'Engine ready')
 const others = [start('app', ['dev'], appDirectory), start('ui', ['ui'], path.join(root, 'packages', 'ui'))]
 engine.on('exit', () => {
