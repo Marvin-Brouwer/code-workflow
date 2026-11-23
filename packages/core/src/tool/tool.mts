@@ -3,6 +3,7 @@ import { callOutcome } from '../run/call-outcome.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { findScope } from '../run/run-scope.mts'
 import { untilAborted } from '../run/until-aborted.mts'
+import { titleOf } from './title-of.mts'
 
 /** What a tool's action gets besides its input. */
 export interface ToolContext {
@@ -85,8 +86,8 @@ export function tool<Input extends z.ZodType, Output>(
 		readonly action: (input: z.output<Input>, context: ToolContext) => Promise<Output>
 		/**
 		 * A line that says what a call did, such as `Collected issue #63`, to title it in the run
-		 * view. Without it, the call is titled by the tool's name. It runs after every call, so keep
-		 * it to reading its arguments.
+		 * view. Without it, or when it throws, the call is titled by the tool's name. It runs after
+		 * every call, so keep it to reading its arguments.
 		 */
 		readonly describe?: (input: z.output<Input>, output: Output) => string
 	},
@@ -98,7 +99,7 @@ export function tool<Input extends z.ZodType, Output>(
 		if (!parsed.success) throw new ToolInputError(`The input of ${name} doesn't fit:\n${z.prettifyError(parsed.error)}`)
 		return async (context: ToolContext): Promise<ToolOutcome<Output>> => {
 			const output = await definition.action(parsed.data, context)
-			return { output, title: describe?.(parsed.data, output) }
+			return { output, title: titleOf(describe, parsed.data, output) }
 		}
 	}
 	return toolOf<z.input<Input>, Output>({ name, description: definition.description, input: definition.input, prepare })

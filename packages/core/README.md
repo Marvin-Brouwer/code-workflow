@@ -408,7 +408,7 @@ A loop whose input changed, such as the next comment of a list that grew, starts
 
 ## Events
 
-Every workflow, loop, turn, tool call, exit call, input and dependency node is an event in a tree: each has an `id` and the `parentId` of the event it happened in, and ends with a `-succeeded` or `-failed` event. They go to the engine as they happen. A tool call's `-succeeded` event has what it returned as `result`, cut to 4000 characters with bytes left out, and its `describe` line as `title`. A host tool's stub takes `describe` the same way.
+Every workflow, loop, turn, tool call, exit call, input and dependency node is an event in a tree: each has an `id` and the `parentId` of the event it happened in, and ends with a `-succeeded` or `-failed` event. They go to the engine as they happen. A tool call's `-succeeded` event has what it returned as `result`, as text for reading, with byte arrays shown as their length and cut to 4000 characters (then `resultCut` is set), and its `describe` line as `title`. A `describe` that throws only loses the title. A host tool's stub takes `describe` the same way.
 
 ## Stopping
 

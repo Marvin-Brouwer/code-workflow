@@ -3,10 +3,10 @@ import { connectorHost, missingCredentials, type ConnectorHost, type HostTool } 
 import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
 import { gitlabApi, type GitlabApiOptions } from './api.mts'
 import { gitRemote, type GitRemoteOptions } from './git-remote.mts'
-import { tokenCredential } from './site.mts'
 import { mergeRequestHostTools } from './merge-request-tools.mts'
 import { pipelineHostTools } from './pipeline-tools.mts'
 import { searchHostTools } from './search-tools.mts'
+import { tokenCredential } from './site.mts'
 
 /** What the GitLab host tools run on. */
 export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
