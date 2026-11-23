@@ -1,6 +1,6 @@
 import { component, match } from '@rooted/components'
 import { engineStatus } from '../_shared/engine-status.mts'
-import { liveStatus, type LiveStatus } from '../_shared/live-changes.mts'
+import { liveStatus, type LiveStatus } from '../_shared/follow-stream.mts'
 
 /**
  * Whether runs update as they change, so a view that stopped updating says so instead of looking

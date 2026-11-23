@@ -22,6 +22,11 @@ export interface SignIns {
 	readonly waitFor: (connector: string, abortSignal: AbortSignal) => Promise<void>
 	/** The sign-ins under way. */
 	readonly list: () => SignInState[]
+	/**
+	 * Calls `listener` with a connector's name each time its sign-in starts, shows a new code, fails a
+	 * try or ends, until `abortSignal` aborts. For views that follow the sign-ins.
+	 */
+	readonly listen: (listener: (connector: string) => void, abortSignal: AbortSignal) => void
 	/** Stops every sign-in, also those nobody waits for, such as when the engine shuts down. */
 	readonly close: () => void
 }
@@ -92,11 +97,17 @@ export function openSignIns(options: SignInsOptions): SignIns {
 	const idle = options.idle ?? defaultIdle
 	const signInTo = new Map(options.connectors.flatMap(({ name, signIn }) => (signIn === undefined ? [] : [[name, signIn] as const])))
 	const underWay = new Map<string, SignIn>()
+	const listeners = new Set<(connector: string) => void>()
+	const changed = (connector: string) => {
+		for (const listener of listeners) listener(connector)
+	}
 
 	/** Drops `signIn` from those under way, with its idle timer. */
 	const forget = (connector: string, signIn: SignIn) => {
 		clearTimeout(signIn.idle)
-		if (underWay.get(connector) === signIn) underWay.delete(connector)
+		if (underWay.get(connector) !== signIn) return
+		underWay.delete(connector)
+		changed(connector)
 	}
 
 	const stop = (connector: string, signIn: SignIn, reason: string) => {
@@ -118,6 +129,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 							delete shown.error
 							shown.prompt = shownSignInPrompt(prompt)
 							log(signInPromptMessage(connector, shown.prompt))
+							changed(connector)
 						},
 						abortSignal,
 					})
@@ -130,6 +142,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 					if (message !== shown.error) log(signInFailedLine(connector, message))
 					shown.error = message
 					delete shown.prompt
+					changed(connector)
 					await sleep(retryWaits[Math.min(failedTries, retryWaits.length - 1)] ?? retryWaits[0], abortSignal)
 					failedTries++
 				}
@@ -142,6 +155,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 		}
 		void signIn.settled.then(forgetThisSignIn, forgetThisSignIn)
 		underWay.set(connector, signIn)
+		changed(connector)
 		return signIn
 	}
 
@@ -171,6 +185,21 @@ export function openSignIns(options: SignInsOptions): SignIns {
 			}
 		},
 		list: () => [...underWay].map(([connector, { shown }]) => ({ connector, ...shown })),
+		listen: (listener, abortSignal) => {
+			if (abortSignal.aborted) return
+			// The same function twice is two listeners.
+			const own = (connector: string) => {
+				listener(connector)
+			}
+			listeners.add(own)
+			abortSignal.addEventListener(
+				'abort',
+				() => {
+					listeners.delete(own)
+				},
+				{ once: true },
+			)
+		},
 		close: () => {
 			for (const [connector, signIn] of underWay) stop(connector, signIn, 'The engine is shutting down.')
 		},

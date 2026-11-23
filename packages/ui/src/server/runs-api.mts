@@ -14,7 +14,13 @@ export function runsApi(client: ControlClient): Hono {
 		return c.json(await client.startRun({ app, trigger, input, abortSignal: c.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', async (c) => c.json(await client.get(c.req.param('run'), c.req.raw.signal)))
-	api.get('/runs/:run/events', async (c) => c.json(await client.events(c.req.param('run'), c.req.raw.signal)))
+	api.get('/runs/:run/events', async (c) => {
+		const run = c.req.param('run')
+		const abortSignal = c.req.raw.signal
+		if (c.req.header('accept')?.includes('text/event-stream') !== true) return c.json(await client.events(run, abortSignal))
+		const lastEventId = c.req.header('last-event-id')
+		return streamed(await client.followRun(run, { ...(lastEventId === undefined ? {} : { lastEventId }), abortSignal }))
+	})
 	api.post('/runs/:run/answers/:request', async (c) => {
 		const { value } = AnswerBody.parse(await c.req.json())
 		return c.json(await client.answer(c.req.param('run'), c.req.param('request'), value, c.req.raw.signal))
@@ -22,12 +28,7 @@ export function runsApi(client: ControlClient): Hono {
 	api.post('/runs/:run/stop', async (c) => c.json(await client.stop(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/resume', async (c) => c.json(await client.resume(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/restart', async (c) => c.json(await client.restart(c.req.param('run'), c.req.raw.signal)))
-	api.get('/changes', async (c) => {
-		const changes = await client.changes(c.req.raw.signal)
-		return new Response(Readable.toWeb(changes), {
-			headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-		})
-	})
+	api.get('/events', async (c) => streamed(await client.followEngine(c.req.raw.signal)))
 	api.get('/connectors', async (c) => c.json(await client.connectors(c.req.raw.signal)))
 	api.get('/sign-ins', async (c) => c.json(await client.signIns(c.req.raw.signal)))
 	api.post('/sign-ins/:connector', async (c) => {
@@ -38,4 +39,14 @@ export function runsApi(client: ControlClient): Hono {
 	api.get('/apps', async (c) => c.json(await client.apps(c.req.raw.signal)))
 	api.get('/apps/:name/missing', async (c) => c.json(await client.missingSettings(c.req.param('name'), c.req.raw.signal)))
 	return api
+}
+
+/** The engine's server-sent events, passed on as they come. */
+function streamed(events: Readable): Response {
+	return new Response(Readable.toWeb(events), {
+		headers: {
+			'content-type': 'text/event-stream',
+			'cache-control': 'no-cache',
+		},
+	})
 }

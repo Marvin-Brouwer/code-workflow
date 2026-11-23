@@ -1,8 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import { getRequestListener } from '@hono/node-server'
-import { controlSocketPath, openEngineGatewayHome } from '@mesh-flow/engine'
+import { controlSocketPath, engineEvents, openEngineGatewayHome, RunRecord, runEventStream } from '@mesh-flow/engine'
 import { Hono } from 'hono'
-import { streamSSE } from 'hono/streaming'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
 
@@ -41,7 +40,7 @@ interface StandInRun {
 	id: string
 	status: string
 	pending: unknown[]
-	events: Record<string, unknown>[]
+	events: { id: string; type: string; at: string; parentId?: string; [field: string]: unknown }[]
 	updatedAt: string
 }
 
@@ -57,17 +56,25 @@ export async function standInEngine(home: string) {
 		run.updatedAt = new Date().toISOString()
 		for (const listener of listeners) listener(run.id)
 	}
-	const record = (run: StandInRun) => ({
-		id: run.id,
-		workflow: 'fix-issue',
-		trigger: { kind: 'user', id: 'fix-issue' },
-		app: { name: standInApp, version: 'v1', entry: 'main.mjs', sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 } },
-		status: run.status,
-		cursor: 0,
-		pending: run.pending,
-		createdAt: builtAt,
-		updatedAt: run.updatedAt,
-	})
+	const record = (run: StandInRun) =>
+		RunRecord.parse({
+			id: run.id,
+			workflow: 'fix-issue',
+			trigger: { kind: 'user', id: 'fix-issue' },
+			app: {
+				name: standInApp,
+				version: 'v1',
+				entry: 'main.mjs',
+				sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
+				tools: [],
+				registries: [],
+			},
+			status: run.status,
+			cursor: 0,
+			pending: run.pending,
+			createdAt: builtAt,
+			updatedAt: run.updatedAt,
+		})
 	const event = (run: StandInRun, type: string, parentId: string | undefined, fields: Record<string, unknown> = {}) => {
 		const id = `1-${String(run.events.length + 1)}`
 		run.events.push({ ...fields, id, type, at: new Date().toISOString(), ...(parentId === undefined ? {} : { parentId }) })
@@ -110,7 +117,11 @@ export async function standInEngine(home: string) {
 	})
 	api.get('/runs', (c) => c.json([...runs.values()].map(record)))
 	api.get('/runs/:run', (c) => c.json(record(found(c.req.param('run')))))
-	api.get('/runs/:run/events', (c) => c.json(found(c.req.param('run')).events))
+	api.get('/runs/:run/events', (c) =>
+		c.req.header('accept')?.includes('text/event-stream') === true
+			? followRun(c, c.req.param('run'))
+			: c.json(found(c.req.param('run')).events),
+	)
 	api.post('/runs/:run/answers/:request', async (c) => {
 		const run = found(c.req.param('run'))
 		const { value } = z.object({ value: z.object({ answer: z.string() }) }).parse(await c.req.json())
@@ -125,20 +136,22 @@ export async function standInEngine(home: string) {
 	})
 	api.get('/sign-ins', (c) => c.json([]))
 	api.get('/connectors', (c) => c.json([]))
-	api.get('/changes', (c) =>
-		streamSSE(c, async (stream) => {
-			const listener = (id: string) => {
-				void stream.writeSSE({ event: 'run', data: JSON.stringify({ id }) })
-			}
-			listeners.add(listener)
-			await stream.writeSSE({ event: 'ready', data: '{}' })
-			await new Promise<void>((resolve) => {
-				stream.onAbort(resolve)
-			})
-			listeners.delete(listener)
-		}),
-	)
-
+	const onRunChange = (listener: (id: string) => void, abortSignal: AbortSignal) => {
+		listeners.add(listener)
+		abortSignal.addEventListener(
+			'abort',
+			() => {
+				listeners.delete(listener)
+			},
+			{ once: true },
+		)
+	}
+	api.get('/events', engineEvents({ onRunChange, onSignInChange: () => undefined }))
+	const followRun = runEventStream({
+		get: (id) => record(found(id)),
+		events: (id) => Promise.resolve(found(id).events),
+		onRunChange,
+	})
 	const listener = getRequestListener(api.fetch)
 	const server: Server = createServer((incoming, outgoing) => {
 		void listener(incoming, outgoing)

@@ -28,6 +28,18 @@ describe('access', () => {
 		{ request: 'another token', route: '/?token=not-it', headers: {}, status: 401 },
 		{ request: 'no cookie', route: '/api/settings/providers', headers: {}, status: 401 },
 		{ request: 'another cookie', route: '/api/settings/providers', headers: { cookie: 'mesh-flow-ui=not-it' }, status: 401 },
+		{
+			request: "the engine's event stream without the cookie",
+			route: '/api/engine/events',
+			headers: { accept: 'text/event-stream' },
+			status: 401,
+		},
+		{
+			request: "a run's event stream without the cookie",
+			route: '/api/engine/runs/run-000000000001/events',
+			headers: { accept: 'text/event-stream' },
+			status: 401,
+		},
 	])('refuses $request', async ({ route, headers, status }) => {
 		// Arrange
 		const { url } = await servedUi()
@@ -182,7 +194,7 @@ describe.skipIf(process.platform === 'win32')("the engine's change stream", () =
 		await standInEngine(home)
 		const stream = new Promise<{ text: () => string }>((resolve, reject) => {
 			const outgoing = request(
-				{ host: url.hostname, port: url.port, path: '/api/engine/changes', headers: { host: url.host, cookie } },
+				{ host: url.hostname, port: url.port, path: '/api/engine/events', headers: { host: url.host, cookie } },
 				(response) => {
 					let text = ''
 					response.on('data', (chunk: Buffer) => {

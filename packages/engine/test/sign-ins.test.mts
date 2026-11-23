@@ -38,6 +38,39 @@ describe('sign-ins', () => {
 		expect(signIns.list()).toEqual([])
 	})
 
+	test('says when a sign-in starts, shows its code and ends, until the listener stops', async () => {
+		// Arrange
+		const { signIn, approve } = approvableSignIn()
+		const signIns = testSignIns({ connectors: [{ name: 'cloud', signIn }] })
+		const listening = new AbortController()
+		const heard: string[] = []
+		signIns.listen((connector) => {
+			heard.push(connector)
+		}, listening.signal)
+
+		// Act
+		const waiting = signIns.waitFor('cloud', abortSignal)
+		await vi.waitFor(() => {
+			expect(signIns.list()[0]?.prompt).toBeDefined()
+		})
+		approve()
+		await waiting
+		const heardWhileListening = heard.length
+		listening.abort()
+		const stopWaiting = new AbortController()
+		const again = signIns.waitFor('cloud', stopWaiting.signal)
+		await vi.waitFor(() => {
+			expect(signIns.list()).toHaveLength(1)
+		})
+		stopWaiting.abort()
+		await again.catch(() => undefined)
+
+		// Assert
+		// Started, showed a code, ended.
+		expect(heard).toEqual(['cloud', 'cloud', 'cloud'])
+		expect(heard).toHaveLength(heardWhileListening)
+	})
+
 	test('tries again after a failed try, and says why it failed meanwhile', async () => {
 		// Arrange
 		const { signIn: approvable, approve } = approvableSignIn()

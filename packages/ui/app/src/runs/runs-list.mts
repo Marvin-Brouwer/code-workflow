@@ -3,7 +3,7 @@ import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read } from '../_shared/api.mts'
-import { onChange } from '../_shared/live-changes.mts'
+import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunRecord } from '../_shared/runs.mts'
 import { RunRoute } from './_routes.mts'
@@ -67,7 +67,9 @@ export const RunsList = component({
 		}
 
 		const refresh = refresher(show, signal)
-		onChange(refresh, signal)
+		onChange((change) => {
+			if (change.kind !== 'sign-in') refresh()
+		}, signal)
 		refresh()
 	},
 })

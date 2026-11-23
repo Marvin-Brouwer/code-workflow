@@ -213,6 +213,14 @@ export class Engine {
 		this.#changes.listen(listener, this.#withLifetime(abortSignal))
 	}
 
+	/**
+	 * Calls `listener` with a connector's name each time its sign-in starts, shows a new code, fails a
+	 * try or ends, until `abortSignal` aborts or the engine shuts down. For views that follow the sign-ins.
+	 */
+	onSignInChange(listener: (connector: string) => void, abortSignal: AbortSignal): void {
+		this.#signIns?.listen(listener, this.#withLifetime(abortSignal))
+	}
+
 	/** The sign-ins under way, for runs or for `mesh-flow login`, with where to sign in. */
 	signIns(): SignInState[] {
 		return this.#signIns?.list() ?? []

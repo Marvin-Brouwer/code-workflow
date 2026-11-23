@@ -2,11 +2,12 @@ import { component } from '@rooted/components'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read } from '../_shared/api.mts'
-import { poll } from '../_shared/poll.mts'
+import { onChange } from '../_shared/live-events.mts'
+import { refresher } from '../_shared/refresher.mts'
 import { SignInState } from '../_shared/settings.mts'
 import styles from './settings.css'
 
-/** The connector sign-ins under way: where to sign in, with which code and until when. Polls. */
+/** The connector sign-ins under way: where to sign in, with which code and until when. Live. */
 export const SignInsUnderWay = component({
 	name: 'sign-ins-under-way',
 	styles,
@@ -70,6 +71,10 @@ export const SignInsUnderWay = component({
 			}),
 			signIns,
 		)
-		poll(showSignIns, signal)
+		const refresh = refresher(showSignIns, signal)
+		onChange((change) => {
+			if (change.kind !== 'run') refresh()
+		}, signal)
+		refresh()
 	},
 })

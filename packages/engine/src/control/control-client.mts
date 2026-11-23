@@ -46,10 +46,16 @@ export interface ControlClient {
 	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/**
-	 * The engine's change stream, as server-sent events (see `GET /changes`), once the engine
+	 * The engine's event stream, as server-sent events (see `GET /events`), once the engine
 	 * answered. It ends when the engine closes or `abortSignal` aborts.
 	 */
-	changes(abortSignal: AbortSignal): Promise<Readable>
+	followEngine(abortSignal: AbortSignal): Promise<Readable>
+	/**
+	 * One run's event stream, as server-sent events (see `GET /runs/:run/events`), once the engine
+	 * answered. With `lastEventId`, only the events after it. It ends when the engine closes, the
+	 * run is removed or `abortSignal` aborts.
+	 */
+	followRun(run: string, options: { readonly lastEventId?: string; readonly abortSignal: AbortSignal }): Promise<Readable>
 	/** The connectors the engine loaded, and whether each signs in. */
 	connectors(abortSignal: AbortSignal): Promise<ShownConnector[]>
 	/** The sign-ins under way, with where to sign in. */
@@ -84,7 +90,14 @@ export function controlClient(socketPath: string): ControlClient {
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
-		changes: (abortSignal) => openStream(socketPath, '/changes', abortSignal),
+		followEngine: (abortSignal) => openStream(socketPath, '/events', {}, abortSignal),
+		followRun: (run, { lastEventId, abortSignal }) =>
+			openStream(
+				socketPath,
+				`${runPath(run)}/events`,
+				{ accept: 'text/event-stream', ...(lastEventId === undefined ? {} : { 'last-event-id': lastEventId }) },
+				abortSignal,
+			),
 		connectors: (abortSignal) => call(socketPath, z.array(ShownConnector), 'GET', '/connectors', undefined, abortSignal),
 		signIns: (abortSignal) => call(socketPath, z.array(SignInState), 'GET', '/sign-ins', undefined, abortSignal),
 		waitForSignIn: async (connector, abortSignal) => {
@@ -140,9 +153,9 @@ function call<T>(
 }
 
 /** A streamed answer of the control API, once the engine answered 200. */
-function openStream(socketPath: string, route: string, abortSignal: AbortSignal): Promise<Readable> {
+function openStream(socketPath: string, route: string, headers: Record<string, string>, abortSignal: AbortSignal): Promise<Readable> {
 	return new Promise<Readable>((resolve, reject) => {
-		const outgoing = request({ socketPath, path: route, method: 'GET', signal: abortSignal }, (response) => {
+		const outgoing = request({ socketPath, path: route, method: 'GET', headers, signal: abortSignal }, (response) => {
 			if (response.statusCode === 200) {
 				resolve(response)
 				return

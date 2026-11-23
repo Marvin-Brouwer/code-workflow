@@ -1,7 +1,7 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { read, send, type Answer } from '../_shared/api.mts'
-import { onChange } from '../_shared/live-changes.mts'
+import { followStream } from '../_shared/follow-stream.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunEvent, RunRecord, type RunStatus } from '../_shared/runs.mts'
 import { RunFacts } from './run-facts.mts'
@@ -27,7 +27,7 @@ const actions = [
 
 /**
  * One run: its status, what it waits on with the forms that answer it, and its steps as bars. Live:
- * it refreshes on every change to the run.
+ * it follows the run's own stream, and fetches it every two seconds while that stream is down.
  */
 export const RunPage = component<RunPageOptions>({
 	name: 'run-page',
@@ -68,7 +68,6 @@ export const RunPage = component<RunPageOptions>({
 		const act = async (action: string) => {
 			const answer: Answer<unknown> = await send('POST', `/engine/runs/${encodeURIComponent(id)}/${action}`, {}, RunRecord, signal)
 			status.textContent = answer.ok ? '' : answer.error
-			refresh()
 		}
 
 		const showRecord = (record: RunRecord) => {
@@ -125,27 +124,8 @@ export const RunPage = component<RunPageOptions>({
 			)
 		}
 
-		const show = async (abortSignal: AbortSignal) => {
-			const [record, events] = await Promise.all([
-				read(`/engine/runs/${encodeURIComponent(id)}`, RunRecord, abortSignal),
-				read(`/engine/runs/${encodeURIComponent(id)}/events`, z.array(RunEvent), abortSignal),
-			])
-			if (abortSignal.aborted) return
-			if (!record.ok) {
-				status.textContent = record.error
-				return
-			}
-			showRecord(record.value)
-			if (!events.ok) {
-				steps.replaceChildren(
-					element('p', {
-						role: 'alert',
-						textContent: events.error,
-					}),
-				)
-				return
-			}
-			const bars = stepsOf(events.value, finished.has(record.value.status))
+		const showSteps = (record: RunRecord, events: readonly RunEvent[]) => {
+			const bars = stepsOf(events, finished.has(record.status))
 			steps.replaceChildren(
 				element('h2', {
 					textContent: 'Steps',
@@ -166,10 +146,61 @@ export const RunPage = component<RunPageOptions>({
 			)
 		}
 
-		const refresh = refresher(show, signal)
-		onChange((change) => {
-			if (change.kind === 'all' || change.id === id) refresh()
-		}, signal)
-		refresh()
+		// What the run's stream sent so far, drawn once for each burst of it.
+		let record: RunRecord | undefined
+		let events: RunEvent[] = []
+		let drawing = false
+		const draw = () => {
+			if (drawing) return
+			drawing = true
+			queueMicrotask(() => {
+				drawing = false
+				if (record === undefined || signal.aborted) return
+				showRecord(record)
+				showSteps(record, events)
+			})
+		}
+
+		// While the stream is down: the same, fetched.
+		const fetchRun = async (abortSignal: AbortSignal) => {
+			const [fetchedRecord, fetchedEvents] = await Promise.all([
+				read(`/engine/runs/${encodeURIComponent(id)}`, RunRecord, abortSignal),
+				read(`/engine/runs/${encodeURIComponent(id)}/events`, z.array(RunEvent), abortSignal),
+			])
+			if (abortSignal.aborted) return
+			if (!fetchedRecord.ok) {
+				status.textContent = fetchedRecord.error
+				return
+			}
+			if (!fetchedEvents.ok) {
+				status.textContent = fetchedEvents.error
+				return
+			}
+			record = fetchedRecord.value
+			events = fetchedEvents.value
+			draw()
+		}
+
+		followStream(`/api/engine/runs/${encodeURIComponent(id)}/events`, {
+			on: {
+				run: (data) => {
+					const sent = RunRecord.safeParse(data)
+					if (!sent.success) return
+					record = sent.data
+					draw()
+				},
+				event: (data) => {
+					const sent = RunEvent.safeParse(data)
+					if (!sent.success) return
+					events.push(sent.data)
+					draw()
+				},
+			},
+			connected: () => {
+				events = []
+			},
+			whileDown: refresher(fetchRun, signal),
+			abortSignal: signal,
+		})
 	},
 })

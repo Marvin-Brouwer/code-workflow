@@ -54,7 +54,8 @@ This is the local way in. Hosted (roadmap step 7), a sign-in per user takes its 
 |---|---|
 | `GET /api/engine/status` | `{ running }`: whether an engine answers on the home's socket |
 | `/api/engine/runs`, `/runs/:run`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
-| `GET /api/engine/changes` | the engine's change stream, as server-sent events: which run changed, and a heartbeat every 15 seconds |
+| `GET /api/engine/events` | the engine's event stream, as server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds |
+| `GET /api/engine/runs/:run/events` as `text/event-stream` | one run's stream: its record and its events, first all of them and then each change |
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/apps`, `GET /api/engine/apps/:name/missing` | deployed apps, and what one still needs before it can run |
@@ -76,7 +77,7 @@ Deploying isn't in it: that stays with the CLI and CI.
 | `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
 
-Runs update as they change: the page follows the engine's change stream and refetches what changed. A stream that goes quiet for 35 seconds counts as dead; while it's down the page says so, refreshes every two seconds and connects again, and every connect refetches everything.
+Runs and sign-ins update as they change. The runs list and the sign-ins follow the engine's event stream and refetch what changed; the run view follows that run's own stream, which sends its record and events, so it needs no other request. A stream that goes quiet for 35 seconds counts as dead; while it's down the page says so, refreshes every two seconds and connects again, and every connect is a new stream that starts over from what is now. The streams sit behind the same access check as every other route.
 
 The run view reads top to bottom as bars, one per step: a tool call from code (titled by its `describe` line), an agent (its text, with its calls as chips that open their input and result), a question, a wait, and a node of `inDependencyOrder` with its own bars inside. Bars are closed but for the latest and failed ones.
 

@@ -84,7 +84,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		// Arrange
 		const { client, served } = await serve()
 		await deployThroughApi(client, { ask })
-		const changes = await client.changes(signal)
+		const changes = await client.followEngine(signal)
 		let text = ''
 		changes.on('data', (chunk: Buffer) => {
 			text += chunk.toString('utf8')
@@ -100,6 +100,28 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		// Assert
 		await expect(closing).resolves.toBeUndefined()
 		expect(text.startsWith('event: ready\n')).toBe(true)
+	})
+
+	test('streams one run as it goes, and closes with the stream still open', async () => {
+		// Arrange
+		const { client, served } = await serve()
+		await deployThroughApi(client, { ask })
+		const started = await client.startRun({ ...userRun('ask'), abortSignal: signal })
+		const stream = await client.followRun(started.id, { abortSignal: signal })
+		let text = ''
+		stream.on('data', (chunk: Buffer) => {
+			text += chunk.toString('utf8')
+		})
+
+		// Act
+		await vi.waitFor(() => {
+			expect(text).toContain('"question":"Which story?"')
+		}, duration.of('20s').to('ms'))
+		const closing = served.close({ pause: duration.of('5s').toAbortSignal(), backend: duration.of('10s').toAbortSignal() })
+
+		// Assert
+		await expect(closing).resolves.toBeUndefined()
+		expect(text.startsWith(`event: run\ndata: {"id":"${started.id}"`)).toBe(true)
 	})
 
 	test('lists the connectors it loaded, and which of them sign in', async () => {
