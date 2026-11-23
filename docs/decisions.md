@@ -259,8 +259,9 @@ Came out of building `@mesh-flow/engine` in November 2026; its
   `mesh-flow ui`, next to `serve`. It loads `@mesh-flow/ui/server` from where it runs, as
   connectors are loaded, since the UI depends on the engine and the other way round would be a
   cycle.
-- **A separate project for the UI** (as design section 3 first had it). It shares the engine's
-  types and settings functions, so it lives in this repository as `@mesh-flow/ui`.
+- **A separate project for the UI** (as design section 3 first had it). Rejected 2026-11-18: it
+  shares the engine's types and settings functions, so it lives in this repository as
+  `@mesh-flow/ui`.
 
 ## Sandboxes
 
