@@ -19,7 +19,10 @@ export const ProviderForm = component<ProviderFormOptions>({
 	styles,
 	async onMount({ append, element, options, signal }) {
 		const { model, done } = options
-		const status = element('p', { classes: styles.status, role: 'alert' })
+		const status = element('p', {
+			classes: styles.status,
+			role: 'alert',
+		})
 		const kinds = await read('/settings/provider-kinds', z.array(ProviderKind), signal)
 		append(
 			element('form', {
@@ -29,7 +32,13 @@ export const ProviderForm = component<ProviderFormOptions>({
 						? undefined
 						: element('p', {
 								classes: styles.hint,
-								children: ['Add a provider whose kind offers ', element('code', { textContent: model }), '.'],
+								children: [
+									'Add a provider whose kind offers ',
+									element('code', {
+										textContent: model,
+									}),
+									'.',
+								],
 							}),
 					element('label', {
 						children: [
@@ -50,19 +59,47 @@ export const ProviderForm = component<ProviderFormOptions>({
 								name: 'kind',
 								required: true,
 								children: (kinds.ok ? kinds.value : []).map(({ kind, models }) =>
-									element('option', { value: kind, textContent: `${kind} (${String(models)} models)` }),
+									element('option', {
+										value: kind,
+										textContent: `${kind} (${String(models)} models)`,
+									}),
 								),
 							}),
 						],
 					}),
 					element('label', {
-						children: ['API key', element('input', { name: 'key', type: 'password', required: true, autocomplete: 'off' })],
+						children: [
+							'API key',
+							element('input', {
+								name: 'key',
+								type: 'password',
+								required: true,
+								autocomplete: 'off',
+							}),
+						],
 					}),
 					element('label', {
-						children: ['Base URL, for a proxy or a compatible server', element('input', { name: 'baseUrl', type: 'url' })],
+						children: [
+							'Base URL, for a proxy or a compatible server',
+							element('input', {
+								name: 'baseUrl',
+								type: 'url',
+							}),
+						],
 					}),
-					element('div', { classes: styles.actions, children: element('button', { type: 'submit', textContent: 'Add' }) }),
-					kinds.ok ? undefined : element('p', { role: 'alert', textContent: kinds.error }),
+					element('div', {
+						classes: styles.actions,
+						children: element('button', {
+							type: 'submit',
+							textContent: 'Add',
+						}),
+					}),
+					kinds.ok
+						? undefined
+						: element('p', {
+								role: 'alert',
+								textContent: kinds.error,
+							}),
 					status,
 				],
 				on: {

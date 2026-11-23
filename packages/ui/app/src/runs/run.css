@@ -5,6 +5,10 @@
 	margin: 0 0 var(--space-m);
 }
 
+.facts > div {
+	display: contents;
+}
+
 .facts dd {
 	margin: 0;
 }

@@ -15,9 +15,18 @@ export const SettingsMenu = component({
 					label: 'Settings',
 				},
 				children: [
-					create(Link, { href: href.for(ProvidersRoute), children: 'Providers' }),
-					create(Link, { href: href.for(CredentialsRoute), children: 'Credentials' }),
-					create(Link, { href: href.for(ConnectorsRoute), children: 'Connectors' }),
+					create(Link, {
+						href: href.for(ProvidersRoute),
+						children: 'Providers',
+					}),
+					create(Link, {
+						href: href.for(CredentialsRoute),
+						children: 'Credentials',
+					}),
+					create(Link, {
+						href: href.for(ConnectorsRoute),
+						children: 'Connectors',
+					}),
 				],
 			}),
 		)

@@ -40,9 +40,15 @@ export const StepBar = component<StepBarOptions>({
 		const callDetails = (call: Call) => [detail('Input', call.input), detail('Result', call.result), detail('Error', call.error)]
 
 		const remembered = (id: string, otherwise: boolean, classes: CssClass[], children: (HTMLElement | undefined)[]) => {
-			const details = element('details', { classes, open: open.isOpen(id, otherwise), children })
-			details.addEventListener('toggle', () => {
-				open.remember(id, details.open)
+			const details = element('details', {
+				classes,
+				open: open.isOpen(id, otherwise),
+				children,
+				on: {
+					toggle() {
+						open.remember(id, details.open)
+					},
+				},
 			})
 			return details
 		}
@@ -52,12 +58,25 @@ export const StepBar = component<StepBarOptions>({
 				id,
 				false,
 				[styles.chip],
-				[element('summary', { textContent: `${call.title} · ${statusLabel(call.status)}` }), ...callDetails(call)],
+				[
+					element('summary', {
+						textContent: `${call.title} · ${statusLabel(call.status)}`,
+					}),
+					...callDetails(call),
+				],
 			)
 
 		const streamItem = (item: StreamItem, index: number) => {
-			if (item.kind === 'text') return element('p', { classes: styles.text, textContent: item.text })
-			if (item.kind === 'note') return element('p', { classes: styles.note, textContent: item.text })
+			if (item.kind === 'text')
+				return element('p', {
+					classes: styles.text,
+					textContent: item.text,
+				})
+			if (item.kind === 'note')
+				return element('p', {
+					classes: styles.note,
+					textContent: item.text,
+				})
 			return chip(item.call, `${step.id}/${String(index)}`)
 		}
 
@@ -66,7 +85,13 @@ export const StepBar = component<StepBarOptions>({
 			children: [
 				...(step.call === undefined ? [] : callDetails(step.call)),
 				...step.stream.map(streamItem),
-				...step.steps.map((inner, index) => create(StepBar, { step: inner, latest: index === step.steps.length - 1, open })),
+				...step.steps.map((inner, index) =>
+					create(StepBar, {
+						step: inner,
+						latest: index === step.steps.length - 1,
+						open,
+					}),
+				),
 			],
 		})
 
@@ -78,8 +103,14 @@ export const StepBar = component<StepBarOptions>({
 				[
 					element('summary', {
 						children: [
-							element('span', { classes: styles.title, textContent: step.title }),
-							element('span', { classes: styles.meta, textContent: `${step.kind} · ${statusLabel(step.status)} · ${shownTime(step.at)}` }),
+							element('span', {
+								classes: styles.title,
+								textContent: step.title,
+							}),
+							element('span', {
+								classes: styles.meta,
+								textContent: `${step.kind} · ${statusLabel(step.status)} · ${shownTime(step.at)}`,
+							}),
 						],
 					}),
 					body,

@@ -22,7 +22,11 @@ export const StartPage = component<StartPageOptions>({
 	name: 'start-page',
 	async onMount({ append, element, create, options, signal }) {
 		const { app: appName, trigger: triggerId } = options
-		const heading = append(element('h1', { textContent: `Start ${triggerId}` }))
+		const heading = append(
+			element('h1', {
+				textContent: `Start ${triggerId}`,
+			}),
+		)
 		const content = append(element('div'))
 
 		const apps = await read('/engine/apps', z.array(DeployedApp), signal)
@@ -30,7 +34,12 @@ export const StartPage = component<StartPageOptions>({
 		const trigger = app?.manifest.description.triggers.find(({ kind, id }) => kind === 'user' && id === triggerId)
 		const workflow = app?.manifest.description.workflows.find(({ name }) => name === trigger?.workflow)
 		if (!apps.ok || workflow === undefined) {
-			content.replaceChildren(element('p', { role: 'alert', textContent: apps.ok ? `${appName} has no button ${triggerId}.` : apps.error }))
+			content.replaceChildren(
+				element('p', {
+					role: 'alert',
+					textContent: apps.ok ? `${appName} has no button ${triggerId}.` : apps.error,
+				}),
+			)
 			return
 		}
 		heading.textContent = `Start ${workflow.name} of ${appName}`
@@ -51,12 +60,19 @@ export const StartPage = component<StartPageOptions>({
 			const missing = await read(`/engine/apps/${encodeURIComponent(appName)}/missing`, z.array(MissingSetting), signal)
 			if (signal.aborted) return
 			if (!missing.ok) {
-				content.replaceChildren(element('p', { role: 'alert', textContent: missing.error }))
+				content.replaceChildren(
+					element('p', {
+						role: 'alert',
+						textContent: missing.error,
+					}),
+				)
 				return
 			}
 			if (missing.value.length > 0) {
 				content.replaceChildren(
-					element('h2', { textContent: 'First, what it still needs' }),
+					element('h2', {
+						textContent: 'First, what it still needs',
+					}),
 					...missing.value.map((setting) =>
 						element('section', {
 							children: create(FixForm, {
@@ -80,8 +96,14 @@ export const StartPage = component<StartPageOptions>({
 				return
 			}
 			content.replaceChildren(
-				element('h2', { textContent: 'Parameters' }),
-				create(SchemaForm, { schema: workflow.parameters, submitLabel: 'Start', send: start }),
+				element('h2', {
+					textContent: 'Parameters',
+				}),
+				create(SchemaForm, {
+					schema: workflow.parameters,
+					submitLabel: 'Start',
+					send: start,
+				}),
 			)
 		}
 		await show()

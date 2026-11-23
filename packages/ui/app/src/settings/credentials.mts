@@ -4,6 +4,7 @@ import { CredentialForm } from '../_forms/credential-form.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
 import { credentialPath, NoContent } from '../_shared/settings.mts'
 import styles from './settings.css'
+import { Table } from '../_layout/table.mts'
 import { SettingsMenu } from './settings-menu.mts'
 
 /** The credentials by name, never their values: set one, generate a webhook secret, remove one. */
@@ -11,8 +12,12 @@ export const CredentialsPage = component({
 	name: 'credentials-page',
 	styles,
 	async onMount({ append, element, create, signal }) {
-		const list = element('div', { classes: styles.section })
-		const status = element('p', { role: 'alert' })
+		const list = element('div', {
+			classes: styles.section,
+		})
+		const status = element('p', {
+			role: 'alert',
+		})
 
 		const remove = async (name: string) => {
 			const answer = await send('DELETE', credentialPath(name), {}, NoContent, signal)
@@ -23,11 +28,17 @@ export const CredentialsPage = component({
 		const row = (name: string) =>
 			element('tr', {
 				children: [
-					element('td', { children: element('code', { textContent: name }) }),
+					element('td', {
+						children: element('code', {
+							textContent: name,
+						}),
+					}),
 					element('td', {
 						children: element('details', {
 							children: [
-								element('summary', { textContent: 'Remove' }),
+								element('summary', {
+									textContent: 'Remove',
+								}),
 								element('button', {
 									type: 'button',
 									textContent: `Remove ${name}`,
@@ -44,15 +55,18 @@ export const CredentialsPage = component({
 			})
 
 		const view = (names: Answer<string[]>) => {
-			if (!names.ok) return element('p', { role: 'alert', textContent: names.error })
-			if (names.value.length === 0) return element('p', { textContent: 'No credentials yet.' })
-			return element('table', {
-				children: [
-					element('thead', {
-						children: element('tr', { children: ['Name', ''].map((heading) => element('th', { textContent: heading })) }),
-					}),
-					element('tbody', { children: names.value.toSorted().map(row) }),
-				],
+			if (!names.ok)
+				return element('p', {
+					role: 'alert',
+					textContent: names.error,
+				})
+			if (names.value.length === 0)
+				return element('p', {
+					textContent: 'No credentials yet.',
+				})
+			return create(Table, {
+				headings: ['Name', ''],
+				rows: names.value.toSorted().map(row),
 			})
 		}
 
@@ -62,7 +76,9 @@ export const CredentialsPage = component({
 
 		append(
 			create(SettingsMenu),
-			element('h1', { textContent: 'Credentials' }),
+			element('h1', {
+				textContent: 'Credentials',
+			}),
 			element('p', {
 				textContent:
 					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<app>/<webhook>. Sealed on this machine; a value never comes back.',
@@ -72,7 +88,9 @@ export const CredentialsPage = component({
 			element('section', {
 				classes: styles.section,
 				children: [
-					element('h2', { textContent: 'Set a credential' }),
+					element('h2', {
+						textContent: 'Set a credential',
+					}),
 					element('p', {
 						classes: styles.muted,
 						textContent:

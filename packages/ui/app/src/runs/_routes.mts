@@ -12,6 +12,8 @@ export const RunsRoute = route`/runs/`({
 export const RunRoute = route`/${RunsRoute}/${token('id', String)}/`({
 	async resolve({ create, tokens }) {
 		const { RunPage } = await import('./run.mts')
-		return create(RunPage, { id: tokens.id })
+		return create(RunPage, {
+			id: tokens.id,
+		})
 	},
 })

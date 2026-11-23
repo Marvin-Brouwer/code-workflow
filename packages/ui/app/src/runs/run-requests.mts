@@ -25,12 +25,19 @@ export const RunRequestView = component<RunRequestOptions>({
 	onMount({ append, element, create, options, signal }) {
 		const { run, request } = options
 		if (request.kind === 'wake') {
-			append(element('p', { textContent: `Waits until ${shownTime(request.at)}.` }))
+			append(
+				element('p', {
+					textContent: `Waits until ${shownTime(request.at)}.`,
+				}),
+			)
 			return
 		}
 		if (request.kind === 'input') {
 			append(
-				element('p', { classes: styles.question, textContent: request.question }),
+				element('p', {
+					classes: styles.question,
+					textContent: request.question,
+				}),
 				create(SchemaForm, {
 					schema: answerSchemaOf(request),
 					submitLabel: 'Answer',
@@ -46,12 +53,17 @@ export const RunRequestView = component<RunRequestOptions>({
 			)
 			return
 		}
-		const where = element('p', { textContent: 'Waiting for the service to hand out a code.' })
+		const where = element('p', {
+			textContent: 'Waiting for the service to hand out a code.',
+		})
 		append(
 			element('p', {
 				children: [
 					`Sign in to ${request.connector}. The run goes on once you did. `,
-					create(Link, { href: href.for(ConnectorsRoute), children: 'All sign-ins' }),
+					create(Link, {
+						href: href.for(ConnectorsRoute),
+						children: 'All sign-ins',
+					}),
 				],
 			}),
 			where,
@@ -63,9 +75,16 @@ export const RunRequestView = component<RunRequestOptions>({
 			if (state?.prompt === undefined) return
 			where.replaceChildren(
 				'Open ',
-				element('a', { href: state.prompt.url, target: '_blank', rel: 'noreferrer', textContent: state.prompt.url }),
+				element('a', {
+					href: state.prompt.url,
+					target: '_blank',
+					rel: 'noreferrer',
+					textContent: state.prompt.url,
+				}),
 				' and enter ',
-				element('code', { textContent: state.prompt.code }),
+				element('code', {
+					textContent: state.prompt.code,
+				}),
 				`, before ${shownTime(state.prompt.expiresAt)}.`,
 			)
 		}, signal)

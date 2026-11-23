@@ -17,15 +17,32 @@ export const ProviderKeyForm = component<ProviderKeyFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { provider, done } = options
-		const status = element('p', { classes: styles.status, role: 'alert' })
+		const status = element('p', {
+			classes: styles.status,
+			role: 'alert',
+		})
 		append(
 			element('form', {
 				classes: styles.form,
 				children: [
 					element('label', {
-						children: [`API key of ${provider}`, element('input', { name: 'key', type: 'password', required: true, autocomplete: 'off' })],
+						children: [
+							`API key of ${provider}`,
+							element('input', {
+								name: 'key',
+								type: 'password',
+								required: true,
+								autocomplete: 'off',
+							}),
+						],
 					}),
-					element('div', { classes: styles.actions, children: element('button', { type: 'submit', textContent: 'Set key' }) }),
+					element('div', {
+						classes: styles.actions,
+						children: element('button', {
+							type: 'submit',
+							textContent: 'Set key',
+						}),
+					}),
 					status,
 				],
 				on: {

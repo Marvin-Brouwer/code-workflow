@@ -4,8 +4,9 @@ import { read, send, type Answer } from '../_shared/api.mts'
 import { onChange } from '../_shared/live-changes.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunEvent, RunRecord, type RunStatus } from '../_shared/runs.mts'
-import { shownTime } from './run-labels.mts'
+import { RunFacts } from './run-facts.mts'
 import { RunRequestView } from './run-requests.mts'
+import { RunUsage } from './run-usage.mts'
 import { stepsOf } from './run-steps.mts'
 import { StepBar, type OpenState } from './step-bar.mts'
 import styles from './run.css'
@@ -33,13 +34,25 @@ export const RunPage = component<RunPageOptions>({
 	styles,
 	onMount({ append, element, create, options, signal }) {
 		const { id } = options
-		const heading = element('h1', { textContent: `Run ${id}` })
-		const facts = element('dl', { classes: styles.facts })
-		const buttons = element('div', { classes: styles.actions })
-		const status = element('p', { role: 'alert' })
-		const waiting = element('section', { classes: styles.section })
-		const steps = element('section', { classes: styles.section })
-		const usage = element('section', { classes: styles.section })
+		const heading = element('h1', {
+			textContent: `Run ${id}`,
+		})
+		const facts = element('div')
+		const buttons = element('div', {
+			classes: styles.actions,
+		})
+		const status = element('p', {
+			role: 'alert',
+		})
+		const waiting = element('section', {
+			classes: styles.section,
+		})
+		const steps = element('section', {
+			classes: styles.section,
+		})
+		const usage = element('section', {
+			classes: styles.section,
+		})
 		append(heading, facts, buttons, status, waiting, steps, usage)
 
 		const opened = new Map<string, boolean>()
@@ -58,18 +71,11 @@ export const RunPage = component<RunPageOptions>({
 			refresh()
 		}
 
-		const fact = (term: string, value: string) => [element('dt', { textContent: term }), element('dd', { textContent: value })]
-
 		const showRecord = (record: RunRecord) => {
 			facts.replaceChildren(
-				...fact('Status', record.status),
-				...fact('Workflow', record.workflow),
-				...fact('App', `${record.app.name} ${record.app.version}`),
-				...fact('Started by', `${record.trigger.kind} ${record.trigger.id}`),
-				...fact('Started', shownTime(record.createdAt)),
-				...fact('Last change', shownTime(record.updatedAt)),
-				...(record.error === undefined ? [] : fact('Error', record.error)),
-				...(record.reason === undefined ? [] : fact('Skipped', record.reason)),
+				create(RunFacts, {
+					record,
+				}),
 			)
 			buttons.replaceChildren(
 				...actions
@@ -93,9 +99,17 @@ export const RunPage = component<RunPageOptions>({
 					...(record.pending.length === 0
 						? []
 						: [
-								element('h2', { textContent: 'Waiting on' }),
+								element('h2', {
+									textContent: 'Waiting on',
+								}),
 								...record.pending.map((request) =>
-									element('div', { classes: styles.waiting, children: create(RunRequestView, { run: id, request }) }),
+									element('div', {
+										classes: styles.waiting,
+										children: create(RunRequestView, {
+											run: id,
+											request,
+										}),
+									}),
 								),
 							]),
 				)
@@ -104,26 +118,8 @@ export const RunPage = component<RunPageOptions>({
 				...(record.usage === undefined
 					? []
 					: [
-							element('h2', { textContent: 'Usage' }),
-							element('table', {
-								children: [
-									element('thead', {
-										children: element('tr', {
-											children: ['Model', 'Requests', 'Input tokens', 'Output tokens', 'Cost (USD)'].map((label) =>
-												element('th', { textContent: label }),
-											),
-										}),
-									}),
-									element('tbody', {
-										children: Object.entries(record.usage).map(([model, used]) =>
-											element('tr', {
-												children: [model, used.requests, used.inputTokens, used.outputTokens, used.costUsd.toFixed(4)].map((value) =>
-													element('td', { textContent: String(value) }),
-												),
-											}),
-										),
-									}),
-								],
+							create(RunUsage, {
+								usage: record.usage,
 							}),
 						]),
 			)
@@ -141,15 +137,32 @@ export const RunPage = component<RunPageOptions>({
 			}
 			showRecord(record.value)
 			if (!events.ok) {
-				steps.replaceChildren(element('p', { role: 'alert', textContent: events.error }))
+				steps.replaceChildren(
+					element('p', {
+						role: 'alert',
+						textContent: events.error,
+					}),
+				)
 				return
 			}
 			const bars = stepsOf(events.value, finished.has(record.value.status))
 			steps.replaceChildren(
-				element('h2', { textContent: 'Steps' }),
+				element('h2', {
+					textContent: 'Steps',
+				}),
 				...(bars.length === 0
-					? [element('p', { textContent: 'No steps yet.' })]
-					: bars.map((step, index) => create(StepBar, { step, latest: index === bars.length - 1, open }))),
+					? [
+							element('p', {
+								textContent: 'No steps yet.',
+							}),
+						]
+					: bars.map((step, index) =>
+							create(StepBar, {
+								step,
+								latest: index === bars.length - 1,
+								open,
+							}),
+						)),
 			)
 		}
 

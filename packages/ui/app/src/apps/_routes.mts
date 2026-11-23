@@ -12,6 +12,9 @@ export const AppsRoute = route`/apps/`({
 export const StartRoute = route`/${AppsRoute}/${token('app', String)}/start/${token('trigger', String)}/`({
 	async resolve({ create, tokens }) {
 		const { StartPage } = await import('./start.mts')
-		return create(StartPage, { app: tokens.app, trigger: tokens.trigger })
+		return create(StartPage, {
+			app: tokens.app,
+			trigger: tokens.trigger,
+		})
 	},
 })

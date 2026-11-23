@@ -22,13 +22,29 @@ export const FixForm = component<FixFormOptions>({
 		const { fix } = setting
 		const then = done === undefined ? {} : { done }
 		const form = () => {
-			if (fix.kind === 'provider') return create(ProviderForm, { model: fix.model, ...then })
-			if (fix.kind === 'provider-key') return create(ProviderKeyForm, { provider: fix.provider, ...then })
+			if (fix.kind === 'provider')
+				return create(ProviderForm, {
+					model: fix.model,
+					...then,
+				})
+			if (fix.kind === 'provider-key')
+				return create(ProviderKeyForm, {
+					provider: fix.provider,
+					...then,
+				})
 			if (fix.kind === 'credential')
-				return create(CredentialForm, { name: fix.name, ...(fix.example === undefined ? {} : { example: fix.example }), ...then })
+				return create(CredentialForm, {
+					name: fix.name,
+					...(fix.example === undefined ? {} : { example: fix.example }),
+					...then,
+				})
 			return undefined
 		}
-		append(element('p', { textContent: setting.message }))
+		append(
+			element('p', {
+				textContent: setting.message,
+			}),
+		)
 		const shown = form()
 		if (shown !== undefined) append(shown)
 	},

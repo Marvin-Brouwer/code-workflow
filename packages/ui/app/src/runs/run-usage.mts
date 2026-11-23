@@ -1,0 +1,32 @@
+import { component } from '@rooted/components'
+import { Table } from '../_layout/table.mts'
+import type { RunRecord } from '../_shared/runs.mts'
+
+interface RunUsageOptions {
+	/** What each model used, under the model's name. */
+	readonly usage: NonNullable<RunRecord['usage']>
+}
+
+/** What a run's agents used, a row per model. */
+export const RunUsage = component<RunUsageOptions>({
+	name: 'run-usage',
+	onMount({ append, element, create, options }) {
+		append(
+			element('h2', {
+				textContent: 'Usage',
+			}),
+			create(Table, {
+				headings: ['Model', 'Requests', 'Input tokens', 'Output tokens', 'Cost (USD)'],
+				rows: Object.entries(options.usage).map(([model, used]) =>
+					element('tr', {
+						children: [model, used.requests, used.inputTokens, used.outputTokens, used.costUsd.toFixed(4)].map((value) =>
+							element('td', {
+								textContent: String(value),
+							}),
+						),
+					}),
+				),
+			}),
+		)
+	},
+})

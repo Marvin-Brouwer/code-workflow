@@ -1,4 +1,4 @@
-import { component } from '@rooted/components'
+import { choice, component } from '@rooted/components'
 import type { Answer } from '../_shared/api.mts'
 import styles from './forms.css'
 import { formText } from './form-text.mts'
@@ -24,25 +24,50 @@ export const SchemaForm = component<SchemaFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { schema, submitLabel, send, done } = options
-		const status = element('p', { classes: styles.status, role: 'alert' })
+		const status = element('p', {
+			classes: styles.status,
+			role: 'alert',
+		})
 		const fields = fieldsOf(schema)
 
 		const fieldElement = (field: SchemaField) => {
-			const hint = field.description === undefined ? undefined : element('span', { classes: styles.hint, textContent: field.description })
+			const hint =
+				field.description === undefined
+					? undefined
+					: element('span', {
+							classes: styles.hint,
+							textContent: field.description,
+						})
 			if (field.kind === 'boolean')
 				return element('label', {
 					classes: styles.inline,
-					children: [element('input', { name: field.name, type: 'checkbox' }), field.label, hint],
+					children: [
+						element('input', {
+							name: field.name,
+							type: 'checkbox',
+						}),
+						field.label,
+						hint,
+					],
 				})
 			if (field.kind === 'choices')
 				return element('fieldset', {
 					children: [
-						element('legend', { textContent: field.label }),
+						element('legend', {
+							textContent: field.label,
+						}),
 						hint,
 						...field.options.map((option) =>
 							element('label', {
 								classes: styles.inline,
-								children: [element('input', { name: field.name, type: 'checkbox', value: option }), option],
+								children: [
+									element('input', {
+										name: field.name,
+										type: 'checkbox',
+										value: option,
+									}),
+									option,
+								],
 							}),
 						),
 					],
@@ -53,17 +78,27 @@ export const SchemaForm = component<SchemaFormOptions>({
 							name: field.name,
 							required: field.required,
 							children: [
-								element('option', { value: '', textContent: '' }),
-								...field.options.map((option) => element('option', { value: option, textContent: option })),
+								element('option', {
+									value: '',
+									textContent: '',
+								}),
+								...field.options.map((option) =>
+									element('option', {
+										value: option,
+										textContent: option,
+									}),
+								),
 							],
 						})
 					: element('input', {
 							name: field.name,
 							required: field.required,
-							type: field.kind === 'text' ? 'text' : 'number',
+							type: choice(field.kind === 'text', 'text', 'number'),
 							...(field.kind === 'number' ? { step: 'any' } : {}),
 						})
-			return element('label', { children: [field.label, hint, input] })
+			return element('label', {
+				children: [field.label, hint, input],
+			})
 		}
 
 		const read = (form: FormData): Answer<unknown> =>
@@ -76,17 +111,34 @@ export const SchemaForm = component<SchemaFormOptions>({
 					...(fields === undefined
 						? [
 								element('label', {
-									children: ['As JSON', element('textarea', { name: 'json', rows: 8, value: '{}' })],
+									children: [
+										'As JSON',
+										element('textarea', {
+											name: 'json',
+											rows: 8,
+											value: '{}',
+										}),
+									],
 								}),
 								element('details', {
 									children: [
-										element('summary', { textContent: 'Schema' }),
-										element('pre', { textContent: JSON.stringify(schema, undefined, 2) }),
+										element('summary', {
+											textContent: 'Schema',
+										}),
+										element('pre', {
+											textContent: JSON.stringify(schema, undefined, 2),
+										}),
 									],
 								}),
 							]
 						: fields.map(fieldElement)),
-					element('div', { classes: styles.actions, children: element('button', { type: 'submit', textContent: submitLabel }) }),
+					element('div', {
+						classes: styles.actions,
+						children: element('button', {
+							type: 'submit',
+							textContent: submitLabel,
+						}),
+					}),
 					status,
 				],
 				on: {

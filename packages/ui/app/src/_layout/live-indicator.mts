@@ -9,7 +9,11 @@ import { liveStatus, type LiveStatus } from '../_shared/live-changes.mts'
 export const LiveIndicator = component({
 	name: 'live-indicator',
 	onMount({ append, element, signal }) {
-		const shown = append(element('span', { role: 'status' }))
+		const shown = append(
+			element('span', {
+				role: 'status',
+			}),
+		)
 		const show = () => {
 			shown.hidden = engineStatus.value !== 'running'
 			shown.textContent = match<LiveStatus, string>(liveStatus.value, {

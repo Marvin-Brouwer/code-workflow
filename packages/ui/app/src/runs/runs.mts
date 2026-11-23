@@ -5,6 +5,11 @@ import { RunsList } from './runs-list.mts'
 export const RunsPage = component({
 	name: 'runs-page',
 	onMount({ append, element, create }) {
-		append(element('h1', { textContent: 'Runs' }), create(RunsList))
+		append(
+			element('h1', {
+				textContent: 'Runs',
+			}),
+			create(RunsList),
+		)
 	},
 })

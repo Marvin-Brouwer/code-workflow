@@ -1,4 +1,4 @@
-import { component } from '@rooted/components'
+import { choice, component } from '@rooted/components'
 import { send } from '../_shared/api.mts'
 import { credentialPath, NoContent } from '../_shared/settings.mts'
 import styles from './forms.css'
@@ -26,9 +26,18 @@ export const CredentialForm = component<CredentialFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { name, example, done } = options
-		const status = element('p', { classes: styles.status, role: 'alert' })
-		const valueType = example === undefined ? 'password' : 'text'
-		const value = element('input', { name: 'value', type: valueType, required: true, autocomplete: 'off', placeholder: example ?? '' })
+		const status = element('p', {
+			classes: styles.status,
+			role: 'alert',
+		})
+		const valueType = choice(example === undefined, 'password', 'text')
+		const value = element('input', {
+			name: 'value',
+			type: valueType,
+			required: true,
+			autocomplete: 'off',
+			placeholder: example ?? '',
+		})
 		const generate = element('button', {
 			type: 'button',
 			textContent: 'Generate',
@@ -45,13 +54,36 @@ export const CredentialForm = component<CredentialFormOptions>({
 				children: [
 					name === undefined
 						? element('label', {
-								children: ['Name', element('input', { name: 'name', required: true, placeholder: 'service/token', autocomplete: 'off' })],
+								children: [
+									'Name',
+									element('input', {
+										name: 'name',
+										required: true,
+										placeholder: 'service/token',
+										autocomplete: 'off',
+									}),
+								],
 							})
-						: element('p', { children: ['Credential ', element('code', { textContent: name })] }),
-					element('label', { children: ['Value', value] }),
+						: element('p', {
+								children: [
+									'Credential ',
+									element('code', {
+										textContent: name,
+									}),
+								],
+							}),
+					element('label', {
+						children: ['Value', value],
+					}),
 					element('div', {
 						classes: styles.actions,
-						children: [element('button', { type: 'submit', textContent: 'Set' }), generate],
+						children: [
+							element('button', {
+								type: 'submit',
+								textContent: 'Set',
+							}),
+							generate,
+						],
 					}),
 					status,
 				],
