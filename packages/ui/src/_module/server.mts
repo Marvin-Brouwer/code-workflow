@@ -5,4 +5,3 @@
  * @module
  */
 export { serveUi, serveUiFrom } from '../server/serve-ui.mts'
-export { uiApp, type UiAppOptions } from '../server/ui-app.mts'
