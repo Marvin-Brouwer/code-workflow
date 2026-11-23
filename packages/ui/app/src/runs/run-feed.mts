@@ -24,12 +24,12 @@ export interface RunFeed {
 
 /** A run's record and events as its stream and the fetches while it's down bring them. */
 export function runFeed(): RunFeed {
-	let connects = 0
+	let connections = 0
 	let record: RunRecord | undefined
 	let events: RunEvent[] = []
 	return {
 		connected() {
-			connects++
+			connections++
 			events = []
 		},
 		streamedRecord(streamed) {
@@ -38,9 +38,9 @@ export function runFeed(): RunFeed {
 		streamedEvent(streamed) {
 			events.push(streamed)
 		},
-		fetchStarted: () => connects,
+		fetchStarted: () => connections,
 		fetched(started, snapshot) {
-			if (started !== connects) return false
+			if (started !== connections) return false
 			record = snapshot.record
 			events = [...snapshot.events]
 			return true

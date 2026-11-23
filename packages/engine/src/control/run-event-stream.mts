@@ -40,34 +40,36 @@ export function runEventStream(source: RunEventSource, heartbeat: Duration = str
 					return
 				}
 				const events = await source.events(id)
-				for (; sent < events.length; sent++) send({ event: 'run-event', data: events[sent], id: String(sent + 1) })
+				// Each written before the next, so a long run's events don't fill the stream's queue at once.
+				for (; sent < events.length && !closed.aborted; sent++) await send({ event: 'run-event', data: events[sent], id: String(sent + 1) })
+				if (closed.aborted) return
 				const recordText = JSON.stringify(record)
 				if (recordText === shownRecord) return
 				shownRecord = recordText
-				send({ event: 'run', data: record })
+				await send({ event: 'run', data: record })
 			}
-			// One look at a time; a change during one means one more look after it.
+			// One check at a time; a change during one means one more check after it.
 			let asked = 0
-			let looking = false
-			const look = async () => {
+			let checking = false
+			const check = async () => {
 				asked++
-				if (looking) return
-				looking = true
+				if (checking) return
+				checking = true
 				for (let answered = 0; answered < asked && !closed.aborted;) {
 					answered = asked
 					// The events can't be read, such as a run removed between the two reads: end the
 					// stream, and the reader connecting again is answered with what went wrong.
 					await sendWhatChanged().catch(close)
 				}
-				looking = false
+				checking = false
 			}
 			source.onRunChange((changed) => {
-				if (changed === id) void look()
+				if (changed === id) void check()
 			}, closed)
 			source.onSignInChange((connector) => {
-				send({ event: 'sign-in', data: { connector } })
+				void send({ event: 'sign-in', data: { connector } })
 			}, closed)
-			void look()
+			void check()
 		})
 	}
 }

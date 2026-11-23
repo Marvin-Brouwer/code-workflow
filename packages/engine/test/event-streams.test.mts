@@ -206,6 +206,21 @@ describe('runEventStream', () => {
 		])
 	})
 
+	test('sends a run with more events than the stream may queue, up to its record', async () => {
+		// Arrange
+		const run = followedRun()
+		for (let event = 0; event < 1500; event++) run.addEvent(runEvent(`event-${String(event)}`))
+
+		// Act
+		const reader = readerOf(await run.app.request(`/runs/${runId}/events`))
+		const sent = await readAllUntil(reader, (text) => text.includes('event: run\n'))
+		await reader.cancel()
+
+		// Assert
+		expect(sent.match(/event: run-event\n/g)).toHaveLength(1501)
+		expect(sent).toContain(`event: run\ndata: ${JSON.stringify(runRecord('running'))}`)
+	})
+
 	test('passes on sign-in changes, which the run may wait on', async () => {
 		// Arrange
 		const run = followedRun()

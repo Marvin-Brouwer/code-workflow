@@ -21,11 +21,11 @@ export function engineEventStream(source: EngineEventSource, heartbeat: Duration
 	return (context: Context) =>
 		eventStream(context, heartbeat, ({ send, closed }) => {
 			source.onRunChange((id) => {
-				send({ event: 'run', data: { id } })
+				void send({ event: 'run', data: { id } })
 			}, closed)
 			source.onSignInChange((connector) => {
-				send({ event: 'sign-in', data: { connector } })
+				void send({ event: 'sign-in', data: { connector } })
 			}, closed)
-			send({ event: 'ready', data: {} })
+			void send({ event: 'ready', data: {} })
 		})
 }

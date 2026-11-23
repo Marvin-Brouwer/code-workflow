@@ -38,8 +38,15 @@ function changedEverything(): void {
 	announce({ kind: 'all' })
 }
 
-/** The page's own lifetime and how many pages follow a stream of their own, for `watchEngineEvents`. */
-let shell: { readonly abortSignal: AbortSignal; following: AbortController | undefined } | undefined
+/** The shell's stream: how long the page lives, and what ends the stream while it's open. */
+interface ShellStream {
+	readonly abortSignal: AbortSignal
+	/** Ends the open stream; `undefined` while none is open, as while a page follows its own. */
+	following: AbortController | undefined
+}
+
+/** The page's one shell stream, once `watchEngineEvents` started it, and how many pages follow a stream of their own. */
+let shell: ShellStream | undefined
 let ownStreams = 0
 
 function followEngine(): void {

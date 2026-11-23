@@ -92,7 +92,7 @@ describe('attemptsOf', () => {
 
 	test("groups the steps by attempt, with the latest event's attempt as the current one", () => {
 		// Act
-		const attempts = attemptsOf(restarted, false)
+		const attempts = attemptsOf(restarted, 'running')
 
 		// Assert
 		expect(attempts.map(({ id, current, steps }) => [id, current, steps.map(({ status }) => status)])).toEqual([
@@ -101,12 +101,23 @@ describe('attemptsOf', () => {
 		])
 	})
 
-	test('shows the open steps of a restartable or finished run as interrupted', () => {
+	test.each(['restartable', 'failed', 'succeeded'] as const)('shows the open steps of a %s run as interrupted', (status) => {
 		// Act
-		const attempts = attemptsOf(restarted, true)
+		const attempts = attemptsOf(restarted, status)
 
 		// Assert
-		expect(attempts.flatMap(({ steps }) => steps.map(({ status }) => status))).toEqual(['interrupted', 'interrupted'])
+		expect(attempts.flatMap(({ steps }) => steps.map(({ status: stepStatus }) => stepStatus))).toEqual(['interrupted', 'interrupted'])
+	})
+
+	test('has no current attempt while a restarted run starts, before its new attempt sent anything', () => {
+		// Act
+		const attempts = attemptsOf(restarted, 'starting')
+
+		// Assert
+		expect(attempts.map(({ current, steps }) => [current, steps.map(({ status }) => status)])).toEqual([
+			[false, ['interrupted']],
+			[false, ['interrupted']],
+		])
 	})
 })
 

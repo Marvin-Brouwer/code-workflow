@@ -21,8 +21,11 @@ export interface StreamMessage {
 
 /** What a stream's `follow` sends with. */
 export interface EventSender {
-	/** Sends `message`, its data as JSON, after everything sent before it. */
-	readonly send: (message: StreamMessage) => void
+	/**
+	 * Sends `message`, its data as JSON, after everything sent before it. Settles once it's written,
+	 * or couldn't be: await it while sending many, so they don't all wait at once.
+	 */
+	readonly send: (message: StreamMessage) => Promise<void>
 	/** Ends the stream. */
 	readonly close: () => void
 	/** Aborts when the stream ends: closed, or the reader went away. Stop following with it. */
@@ -50,7 +53,7 @@ export function eventStream(context: Context, heartbeat: Duration, follow: (send
 		// One write at a time. A write to a reader that went away fails; the abort above ends the stream.
 		let writing = Promise.resolve()
 		let waiting = 0
-		const send = (message: StreamMessage) => {
+		const send = async (message: StreamMessage) => {
 			if (controller.signal.aborted) return
 			if (waiting >= queueLimit) {
 				close()
@@ -63,10 +66,11 @@ export function eventStream(context: Context, heartbeat: Duration, follow: (send
 				.finally(() => {
 					waiting--
 				})
+			await writing
 		}
 		follow({ send, close, closed: controller.signal })
 		const timer = setInterval(() => {
-			send({ event: 'heartbeat', data: {} })
+			void send({ event: 'heartbeat', data: {} })
 		}, heartbeat.to('ms'))
 		await new Promise<void>((resolve) => {
 			if (controller.signal.aborted) resolve()
