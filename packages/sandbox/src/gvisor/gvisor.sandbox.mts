@@ -73,7 +73,7 @@ export class GvisorSandbox implements Sandbox {
 		// deletes a leftover container record itself.
 		await runsc(this.#context.runsc, ['delete', '--force', this.id], { signal: bound }).catch(() => undefined)
 		await removeEarlierCheckpoints(checkpoints, name).catch(() => undefined)
-		return { backend: 'gvisor', id: this.id, spec: this.#specification, snapshot: name }
+		return { backend: 'gvisor', id: this.id, specification: this.#specification, snapshot: name }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

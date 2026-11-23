@@ -15,7 +15,7 @@ const signal = new AbortController().signal
 const never = () => new Promise<never>(() => undefined)
 const specification = { image: 'host', cpus: 1, memoryMb: 256 }
 const sandboxId = 'mesh-flow-000000000001'
-const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, spec: specification })
+const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, specification })
 
 /** A backend that answers what the engine needs to start a run, with the parts given here. */
 function stubBackend(parts: {

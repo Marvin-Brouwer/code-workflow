@@ -83,7 +83,7 @@ export class MicrosandboxSandbox implements Sandbox {
 		this.#lifetime.untrack(this.id)
 		// Housekeeping only: neither a failure nor an abort here may lose the pause that just worked.
 		await abortable(removeEarlierSnapshots(this.id, name), bound).catch(() => undefined)
-		return { backend: 'microsandbox', id: this.id, spec: this.#specification, snapshot: snapshot.reference }
+		return { backend: 'microsandbox', id: this.id, specification: this.#specification, snapshot: snapshot.reference }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

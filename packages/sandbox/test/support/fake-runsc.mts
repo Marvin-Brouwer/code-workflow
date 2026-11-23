@@ -60,6 +60,6 @@ export async function fakeRunsc(directory: string, image: string, options: FakeR
 	await chmod(file, 0o755)
 	const rootfs = rootfsDirectory(path.join(directory, 'images'), image)
 	await mkdir(rootfs, { recursive: true })
-	await writeFile(path.join(rootfs, imageMarker), JSON.stringify({ image, env: ['PATH=/usr/bin:/bin'], workingDir: '/' }))
+	await writeFile(path.join(rootfs, imageMarker), JSON.stringify({ image, environment: ['PATH=/usr/bin:/bin'], workingDirectory: '/' }))
 	return [file]
 }

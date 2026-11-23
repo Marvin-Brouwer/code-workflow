@@ -44,7 +44,7 @@ export function microsandboxBackend(): SandboxBackend {
 				.image(specification.image)
 				.cpus(specification.cpus)
 				.memory(specification.memoryMb)
-				.envs({ ...specification.env })
+				.envs({ ...specification.environment })
 				.network(noNetwork)
 			return await start(builder.create(), specification, bound)
 		},
@@ -59,10 +59,10 @@ export function microsandboxBackend(): SandboxBackend {
 				// A full restore needs the CPU and memory settings of the capture.
 				const restoring = MicrosandboxSdkSandbox.restore(snapshot)
 					.name(paused.id)
-					.cpus(paused.spec.cpus)
-					.memory(paused.spec.memoryMb)
+					.cpus(paused.specification.cpus)
+					.memory(paused.specification.memoryMb)
 					.restore()
-				return start(restoring, paused.spec, bound)
+				return start(restoring, paused.specification, bound)
 			})
 		},
 

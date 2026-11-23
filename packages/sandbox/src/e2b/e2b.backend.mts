@@ -54,7 +54,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 			const sandbox = await E2bSdkSandbox.create(template, {
 				...connection,
 				metadata: ownerMetadata,
-				envs: { ...specification.env },
+				envs: { ...specification.environment },
 				timeoutMs: timeout.to('ms'),
 				lifecycle: { onTimeout: 'pause' },
 				allowInternetAccess: false,
@@ -69,7 +69,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 			const bound = lifetime.bind(signal)
 			return lifetime.startOnce(paused.id, async () => {
 				const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs: timeout.to('ms'), signal: bound })
-				return new E2bSandbox(sandbox, paused.spec, lifetime)
+				return new E2bSandbox(sandbox, paused.specification, lifetime)
 			})
 		},
 

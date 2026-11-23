@@ -91,7 +91,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				await writeBundle(paths.bundle, {
 					rootfs,
 					init: initCommand(),
-					environment: { ...specification.env },
+					environment: { ...specification.environment },
 					cpus: specification.cpus,
 					memoryMb: specification.memoryMb,
 				})
@@ -128,7 +128,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 					await cleanUp((cleanupSignal) => stopContainer(paused.id, cleanupSignal))
 					throw error
 				}
-				return new GvisorSandbox(paused.id, paused.spec, context)
+				return new GvisorSandbox(paused.id, paused.specification, context)
 			})
 		},
 

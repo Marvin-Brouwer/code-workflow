@@ -4,7 +4,7 @@ import { PausedSandbox } from '../src/paused-sandbox.mts'
 const paused: PausedSandbox = {
 	backend: 'gvisor',
 	id: 'mesh-flow-0123456789ab',
-	spec: { image: 'node:26-slim', cpus: 1, memoryMb: 1024 },
+	specification: { image: 'node:26-slim', cpus: 1, memoryMb: 1024 },
 	snapshot: 'mhol3k2',
 }
 

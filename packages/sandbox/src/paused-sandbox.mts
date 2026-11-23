@@ -11,8 +11,8 @@ import { SandboxSpecification } from './sandbox-specification.mts'
 export const PausedSandbox = z.object({
 	backend: BackendName,
 	id: z.string().min(1),
-	/** What the sandbox was made with. Named `spec` because run records already hold it so. */
-	spec: SandboxSpecification,
+	/** What the sandbox was made with. */
+	specification: SandboxSpecification,
 	/** The backend's own name for the saved state: a microsandbox snapshot or a gVisor checkpoint. */
 	snapshot: z.string().min(1).optional(),
 })

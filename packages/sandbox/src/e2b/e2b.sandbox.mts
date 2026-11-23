@@ -62,7 +62,7 @@ export class E2bSandbox implements Sandbox {
 	async pause(signal: AbortSignal): Promise<PausedSandbox> {
 		await this.#sandbox.pause({ signal: this.#lifetime.bind(signal) })
 		this.#lifetime.untrack(this.id)
-		return { backend: 'e2b', id: this.id, spec: this.#specification }
+		return { backend: 'e2b', id: this.id, specification: this.#specification }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

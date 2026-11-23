@@ -113,7 +113,7 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				for (const pid of state.pids) signalGroup(pid, 'SIGSTOP')
 				await writeState(id, { ...state, state: 'paused' })
 				running.delete(id)
-				return { backend: 'gvisor', id, spec: state.specification } satisfies PausedSandbox
+				return { backend: 'gvisor', id, specification: state.specification } satisfies PausedSandbox
 			},
 			async destroy() {
 				await remove(id)

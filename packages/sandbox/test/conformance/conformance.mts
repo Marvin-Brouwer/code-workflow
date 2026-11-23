@@ -100,7 +100,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test('the specification environment reaches every command', async () => {
 			// Arrange
-			const sandbox = await backend.create({ ...specification, env: { MESH_FLOW_CHECK: 'present' } }, timeout())
+			const sandbox = await backend.create({ ...specification, environment: { MESH_FLOW_CHECK: 'present' } }, timeout())
 			cleanUp(sandbox.id)
 
 			// Act

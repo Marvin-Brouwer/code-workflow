@@ -33,7 +33,7 @@ function run(id: string, status: RunStatus, sandbox?: string, backend: BackendNa
 		createdAt: '2026-11-07T12:00:00.000Z',
 		updatedAt: '2026-11-07T12:00:00.000Z',
 		...(sandbox ? { sandbox: { backend, id: sandbox } } : {}),
-		...(sandbox && status === 'paused' ? { paused: { backend, id: sandbox, spec: specification } } : {}),
+		...(sandbox && status === 'paused' ? { paused: { backend, id: sandbox, specification } } : {}),
 	}
 }
 

@@ -21,10 +21,7 @@ export const SandboxSpecification = z.object({
 	image: z.string().min(1),
 	cpus: z.int().positive(),
 	memoryMb: z.int().positive(),
-	/**
-	 * Environment for every command in the sandbox. Never put a credential here. Named `env`
-	 * because app and run records already hold it so.
-	 */
-	env: z.record(z.string(), z.string()).readonly().optional(),
+	/** Environment for every command in the sandbox. Never put a credential here. */
+	environment: z.record(z.string(), z.string()).readonly().optional(),
 })
 export type SandboxSpecification = z.infer<typeof SandboxSpecification>
