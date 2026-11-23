@@ -2,7 +2,7 @@ import { defaultFetchRetry, retryingFetch, type HostToolContext } from '@mesh-fl
 import { createClient, type Client } from 'jira.js/core'
 import { atlassianResends } from '../atlassian-resends.mts'
 import type { AtlassianHostOptions } from '../host-options.mts'
-import { readSite } from '../site.mts'
+import { readSite } from '../read-site.mts'
 import type { ConfluenceSite } from './confluence-site.mts'
 import { RawPage, RawSearch } from './raw-page.mts'
 import { RawUser } from './raw-user.mts'
