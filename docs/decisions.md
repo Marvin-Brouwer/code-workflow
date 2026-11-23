@@ -252,6 +252,16 @@ Came out of building `@mesh-flow/engine` in November 2026; its
   truly unattended long work, use a workload identity (IAM role for the gateway) instead of
   stretching a human session.
 
+## UI
+
+- **The engine's `serve` serving the UI.** Rejected 2026-11-18 ([plan](plans/ui.md)): the
+  settings work on the home's files without a running engine, so the UI is its own command,
+  `mesh-flow ui`, next to `serve`. It loads `@mesh-flow/ui/server` from where it runs, as
+  connectors are loaded, since the UI depends on the engine and the other way round would be a
+  cycle.
+- **A separate project for the UI** (as design section 3 first had it). It shares the engine's
+  types and settings functions, so it lives in this repository as `@mesh-flow/ui`.
+
 ## Sandboxes
 
 Compared for per-run isolation with memory-preserving pause (October 2026), then tested without
