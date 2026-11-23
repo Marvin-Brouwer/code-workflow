@@ -1,10 +1,10 @@
 import { createServer, type Socket } from 'node:net'
-import { controlSocketPath, openEngineGatewayHome } from '@mesh-flow/engine'
 import { duration } from '@mesh-flow/duration'
+import { controlSocketPath, openEngineGatewayHome } from '@mesh-flow/engine'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { send, servedUi, testPage } from './support/served-ui.mts'
 
-const abortSignal = AbortSignal.timeout(20_000)
+const abortSignal = duration.of('20s').toAbortSignal()
 
 const json = { 'content-type': 'application/json' }
 
@@ -19,7 +19,10 @@ describe('access', () => {
 		// Assert
 		expect(swapped.status).toBe(303)
 		expect(swapped.headers['location']).toBe('/runs/')
-		expect(swapped.headers['set-cookie']).toEqual([`${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict`])
+		expect(swapped.headers['set-cookie']).toEqual([
+			expect.stringMatching(new RegExp(`^${cookieName}=[\\w-]+; Path=/; HttpOnly; SameSite=Strict$`)),
+		])
+		expect(swapped.headers['set-cookie']?.[0]).not.toContain(token)
 	})
 
 	test.each([
@@ -185,6 +188,20 @@ describe('settings', () => {
 		expect(refused.status).toBe(400)
 		expect(JSON.parse(refused.body)).toEqual({ error: expect.stringContaining('There is no provider kind no-such-kind') as unknown })
 	})
+	test.each([
+		{ request: "a body that doesn't fit", route: '/api/settings/providers/work/key', method: 'PUT', body: '{}' },
+		{ request: "a body that isn't JSON", route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": ' },
+		{ request: "a name that isn't a credential's", route: '/api/settings/credentials/no-slash', method: 'DELETE', body: '{}' },
+	])('answers $request with 400', async ({ route, method, body }) => {
+		// Arrange
+		const { url, cookie } = await servedUi()
+
+		// Act
+		const refused = await send(url, route, { method, headers: { cookie, ...json }, body })
+
+		// Assert
+		expect(refused.status).toBe(400)
+	})
 })
 
 describe('without an engine', () => {
@@ -203,19 +220,36 @@ describe('without an engine', () => {
 	})
 })
 
+/** An engine that takes connections on `home`'s control socket and never answers, and the connections it holds. */
+async function silentEngine(home: string) {
+	const sockets: Socket[] = []
+	const closedSockets: Socket[] = []
+	const silent = createServer((socket) => {
+		sockets.push(socket)
+		socket.once('close', () => closedSockets.push(socket))
+		// Reads what comes, so the end of a dropped connection comes through.
+		socket.resume()
+	})
+	await new Promise<void>((resolve) => silent.listen(controlSocketPath(home), resolve))
+	onTestFinished(() => {
+		for (const socket of sockets) socket.destroy()
+		silent.close()
+	})
+	return { sockets, closedSockets }
+}
+
 describe.skipIf(process.platform === 'win32')('closing', () => {
-	test('closes promptly while a request to an engine that never answers is open', async () => {
+	test.each([
+		{ request: 'the runs', route: '/api/engine/runs', method: 'GET' },
+		{ request: 'a sign-in, which waits until it is done', route: '/api/engine/sign-ins/cloud', method: 'POST' },
+	])('closes promptly while $request waits on an engine that never answers, and drops that call', async ({ route, method }) => {
 		// Arrange
 		const { url, cookie, home, stopping, served } = await servedUi()
-		const sockets: Socket[] = []
-		const silent = createServer((socket) => sockets.push(socket))
-		await new Promise<void>((resolve) => silent.listen(controlSocketPath(home), resolve))
-		onTestFinished(() => {
-			for (const socket of sockets) socket.destroy()
-			silent.close()
-		})
-		const open = send(url, '/api/engine/runs', { headers: { cookie } }).catch((error: unknown) => error)
-		await expect.poll(() => sockets.length).toBe(1)
+		const engine = await silentEngine(home)
+		const open = send(url, route, method === 'GET' ? { headers: { cookie } } : { method, headers: { cookie, ...json }, body: '{}' }).catch(
+			(error: unknown) => error,
+		)
+		await expect.poll(() => engine.sockets.length).toBe(1)
 
 		// Act
 		const started = Date.now()
@@ -225,5 +259,27 @@ describe.skipIf(process.platform === 'win32')('closing', () => {
 		// Assert
 		expect(Date.now() - started).toBeLessThan(duration.of('2s').to('ms'))
 		expect(await open).toBeInstanceOf(Error)
+		await expect.poll(() => engine.closedSockets.length).toBe(1)
+	})
+
+	test('drops the call to the engine when the browser leaves', async () => {
+		// Arrange
+		const { url, cookie, home } = await servedUi()
+		const engine = await silentEngine(home)
+		const leaving = new AbortController()
+		const open = send(url, '/api/engine/sign-ins/cloud', {
+			method: 'POST',
+			headers: { cookie, ...json },
+			body: '{}',
+			abortSignal: leaving.signal,
+		}).catch((error: unknown) => error)
+		await expect.poll(() => engine.sockets.length).toBe(1)
+
+		// Act
+		leaving.abort()
+
+		// Assert
+		expect(await open).toBeInstanceOf(Error)
+		await expect.poll(() => engine.closedSockets.length).toBe(1)
 	})
 })

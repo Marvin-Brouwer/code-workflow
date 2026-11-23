@@ -31,7 +31,9 @@ export async function servedUi() {
 	const url = new URL(served.url)
 	const token = url.searchParams.get('token') ?? ''
 	const cookieName = accessCookieName(url.host)
-	return { home, served, stopping, url, token, cookieName, cookie: `${cookieName}=${token}` }
+	const swapped = await send(url, `/?token=${token}`)
+	const cookie = (swapped.headers['set-cookie']?.[0] ?? '').split(';')[0] ?? ''
+	return { home, served, stopping, url, token, cookieName, cookie }
 }
 
 /** What a request got back. */

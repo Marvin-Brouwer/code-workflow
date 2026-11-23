@@ -16,7 +16,7 @@ export interface ServeUiOptions {
 	readonly port: number
 	/** Whether to open the page in the browser once it's served. */
 	readonly open: boolean
-	/** Aborting it closes the server, with requests still open. */
+	/** Aborting it closes the server, even with requests still open. */
 	readonly abortSignal: AbortSignal
 }
 

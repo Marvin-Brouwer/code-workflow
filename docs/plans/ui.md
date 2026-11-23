@@ -133,9 +133,14 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 
 ## As built
 
-- `mesh-flow ui` loads `@mesh-flow/ui/server` from where it runs, as connectors are loaded, instead of the engine depending on the UI. The UI depends on the engine (its control client, settings functions and types), so the other way round would be a cycle, and an engine without a UI stays as it is.
-- The settings functions the CLI's provider commands had inline (`putProvider`, `setProviderKey`, `removeProvider`, `listProviders`) moved into the engine, so the CLI and the UI share them.
-- The page's Vite config is plain, with rooted's CSS loader and route discovery, not `rootedManifest` from `@rooted/application`: its PWA, SEO and pre-rendering are for public sites.
+- `mesh-flow ui` loads `@mesh-flow/ui/server` from where it runs, as connectors are loaded, instead
+  of the engine depending on the UI. The UI depends on the engine (its control client, settings
+  functions and types), so the other way round would be a cycle, and an engine without a UI stays as
+  it is.
+- The settings functions the CLI's provider commands had inline (`putProvider`, `setProviderKey`,
+  `removeProvider`, `listProviders`) moved into the engine, so the CLI and the UI share them.
+- The page's Vite config is plain, with rooted's CSS loader and route discovery, not
+  `rootedManifest` from `@rooted/application`: its PWA, SEO and pre-rendering are for public sites.
 
 ## Not in this step
 

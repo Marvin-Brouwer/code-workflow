@@ -5,7 +5,7 @@ import { EngineError } from '../engine/engine-error.mts'
 export interface ListedProvider {
 	readonly name: string
 	readonly kind: string
-	readonly baseUrl?: string
+	readonly baseUrl?: string | undefined
 	readonly hasKey: boolean
 }
 
@@ -14,9 +14,9 @@ export interface ProviderInput {
 	readonly name: string
 	readonly kind: string
 	/** Another base URL than the kind's, for a proxy or a compatible server. */
-	readonly baseUrl?: string
+	readonly baseUrl?: string | undefined
 	/** Its API key. Left out, the key it has stays. */
-	readonly key?: string
+	readonly key?: string | undefined
 }
 
 /** The providers in the order models are looked up, with whether each has a key. */
@@ -25,7 +25,7 @@ export async function listProviders(home: GatewayHome, abortSignal: AbortSignal)
 	return (await home.providers.list(abortSignal)).map(({ name, kind, baseUrl }) => ({
 		name,
 		kind,
-		...(baseUrl === undefined ? {} : { baseUrl }),
+		baseUrl,
 		hasKey: keys.has(providerCredential(name)),
 	}))
 }
@@ -37,8 +37,7 @@ export async function putProvider(home: GatewayHome, input: ProviderInput, abort
 	const name = ProviderName.safeParse(input.name)
 	if (!name.success)
 		throw new EngineError('invalid', `${input.name} isn't a provider name: ${name.error.issues.map(({ message }) => message).join(' ')}`)
-	const baseUrl = input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }
-	await home.providers.put({ name: name.data, kind: input.kind, ...baseUrl }, abortSignal)
+	await home.providers.put({ name: name.data, kind: input.kind, baseUrl: input.baseUrl }, abortSignal)
 	if (input.key !== undefined && input.key.length > 0) await home.credentials.set(providerCredential(name.data), input.key, abortSignal)
 }
 
