@@ -1,4 +1,4 @@
-import { fanOut } from '../engine/fan-out.mts'
+import { fanOut } from '../fan-out.mts'
 import type { RunId } from './run-id.mts'
 import type { RunStore } from './run-store.mts'
 

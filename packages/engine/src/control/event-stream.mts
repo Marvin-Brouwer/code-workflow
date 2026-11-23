@@ -9,7 +9,7 @@ export const streamHeartbeat: Duration = duration.of('15s')
  * How many messages may wait for a reader that is connected but doesn't read. Past it the stream
  * ends, and the reader connects again and starts over, rather than the engine holding them all.
  */
-const queueLimit = 1000
+export const streamQueueLimit = 1000
 
 /** One message of a stream. */
 export interface StreamMessage {
@@ -55,7 +55,7 @@ export function eventStream(context: Context, heartbeat: Duration, follow: (send
 		let waiting = 0
 		const send = async (message: StreamMessage) => {
 			if (controller.signal.aborted) return
-			if (waiting >= queueLimit) {
+			if (waiting >= streamQueueLimit) {
 				close()
 				return
 			}
