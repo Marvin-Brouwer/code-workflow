@@ -30,19 +30,22 @@ once.
 
 - Listens on `127.0.0.1`, on a free port (`--port` to pick one), serves the built UI and an API
   under `/api`, and opens the browser (`--no-open` to only print the URL).
-- **Access:** the URL carries a token made at start (`/?token=...`). The first request swaps it for
-  an `HttpOnly`, `SameSite=Strict` cookie, named after the port so two UIs don't overwrite each
-  other's, and redirects to drop it from the address bar. Every API call needs the cookie, and the
-  `Host` header must be the address it listens on. Browsers count every port on 127.0.0.1 as the
-  same site, so the cookie alone doesn't keep out a dev server's page on another port: a request
-  is refused unless its `Sec-Fetch-Site` is `same-origin` or `none` and its `Origin`, when it has
-  one, is the UI's own (a page on another port sends `same-site`, so that isn't enough), and a
-  request that changes something must send `Content-Type: application/json`. With that, another
-  site in the browser (DNS rebinding included) can't use it. This is the control socket's rule: only the user
-  who started it gets in. The same known gap applies too: the token is on the command line that
-  opens the browser, which other users of the machine can read, as they can reach the control
-  socket's named pipe on Windows. This is only the local way in: access is one middleware in front
-  of `/api`, and hosted (roadmap step 7) swaps it for a real sign-in per user. The UI itself only
+- **Access** is one middleware in front of `/api`:
+  - the URL carries a token made at start (`/?token=...`); the first request swaps it for an
+    `HttpOnly`, `SameSite=Strict` cookie, named after the port so two UIs don't overwrite each
+    other's, and redirects to drop it from the address bar; every API call needs the cookie;
+  - the `Host` header must be the address it listens on, against DNS rebinding;
+  - browsers count every port on 127.0.0.1 as the same site, so the cookie alone doesn't keep out a
+    dev server's page on another port: a request is refused unless its `Sec-Fetch-Site` is
+    `same-origin` or `none` (another port sends `same-site`) and its `Origin`, when it has one, is
+    the UI's own;
+  - a request that changes something must send `Content-Type: application/json`, which a plain
+    form on another site can't.
+
+  This is the control socket's rule: only the user who started it gets in. It has the same known
+  gap: the token is on the command line that opens the browser, which other users of the machine
+  can read, as they can reach the control socket's named pipe on Windows. It's only the local way
+  in: hosted (roadmap step 7) swaps the middleware for a real sign-in per user. The UI itself only
   knows it talks to `/api` with a cookie, so it doesn't change for that.
 - **Runs and apps** go to the running engine over its control socket, the same routes the CLI uses.
   When no engine runs, those pages say so and how to start it; settings still work.
