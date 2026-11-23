@@ -86,7 +86,7 @@ describe('gVisor backend, on a fake runsc', () => {
 	test('refuses to resume a pause made by another backend', async () => {
 		// Arrange
 		const { backend } = await backendOnFakeRunsc()
-		const paused: PausedSandbox = { backend: 'microsandbox', id: 'mesh-flow-0123456789ab', specification: specification, snapshot: 'x' }
+		const paused: PausedSandbox = { backend: 'microsandbox', id: 'mesh-flow-0123456789ab', specification, snapshot: 'x' }
 
 		// Act
 		const resuming = backend.resume(paused, timeout())
