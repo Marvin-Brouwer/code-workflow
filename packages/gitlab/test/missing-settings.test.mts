@@ -1,19 +1,22 @@
-import { openCredentialStore } from '@mesh-flow/gateway'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { openCredentialStore } from '@mesh-flow/gateway'
+import { describe, expect, onTestFinished, test } from 'vitest'
 import { connector } from '../src/host/connector.mts'
 
-const abortSignal = AbortSignal.timeout(5_000)
+const abortSignal = new AbortController().signal
+/** The key the test's credential store is sealed with: any 32 bytes. */
+const testKey = Buffer.alloc(32, 1)
 
 describe('the connector', () => {
 	test('says the token is missing until it is set', async () => {
 		// Arrange
 		const directory = await mkdtemp(path.join(tmpdir(), 'gitlab-settings-'))
+		onTestFinished(() => rm(directory, { recursive: true, force: true }))
 		const credentials = openCredentialStore(path.join(directory, 'credentials.json'), {
 			where: 'test',
-			read: async () => Buffer.alloc(32, 1),
+			read: async () => testKey,
 		})
 		const options = { directory, credentials }
 
