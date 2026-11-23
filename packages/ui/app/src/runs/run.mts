@@ -18,9 +18,7 @@ export interface RunPageOptions {
 	readonly id: string
 }
 
-/** Statuses in which a run goes no further unless someone restarts it. */
-const over: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped', 'restartable'])
-
+/** What a person can do to a run from its page, as the engine's routes of those names. */
 type RunAction = 'stop' | 'resume' | 'restart'
 
 /** What can be done to a run, and in which statuses the engine takes it. */
@@ -163,7 +161,7 @@ export const RunPage = component<RunPageOptions>({
 				element('h2', {
 					textContent: 'Steps',
 				}),
-				...stepsView(attemptsOf(events, over.has(record.status))),
+				...stepsView(attemptsOf(events, record.status)),
 			)
 		}
 

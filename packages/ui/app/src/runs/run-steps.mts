@@ -1,4 +1,4 @@
-import type { RunEvent } from '../_shared/runs.mts'
+import type { RunEvent, RunStatus } from '../_shared/runs.mts'
 
 /**
  * Where a step is: still going (running, waiting or paused, as the run is), done, failed, or
@@ -57,19 +57,24 @@ function attemptOf(event: RunEvent): string {
 	return event.id.split('-', 1)[0] ?? event.id
 }
 
+/** Statuses in which none of a run's steps go on: it's over, or can only be restarted. */
+const overStatuses: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped', 'restartable'])
+
 /**
  * The run's events by attempt, in the order the attempts ran. The current attempt is the one of the
- * latest event. `runOver` says the run is finished or restartable: then no attempt's steps go on, and
- * a step without an end is interrupted, as it is in every attempt but the current one.
+ * latest event, unless the run is `starting`, as it is after a restart, before its new attempt sent
+ * anything. A step without an end is interrupted, unless it's in the current attempt of a run that
+ * isn't over.
  */
-export function attemptsOf(events: readonly RunEvent[], runOver: boolean): Attempt[] {
+export function attemptsOf(events: readonly RunEvent[], status: RunStatus): Attempt[] {
 	const byAttempt = Map.groupBy(events, attemptOf)
 	const latest = events.at(-1)
-	const current = latest === undefined ? undefined : attemptOf(latest)
+	const current = latest === undefined || status === 'starting' ? undefined : attemptOf(latest)
+	const over = overStatuses.has(status)
 	return [...byAttempt].map(([id, attemptEvents]) => ({
 		id,
 		current: id === current,
-		steps: stepsOf(attemptEvents, runOver || id !== current),
+		steps: stepsOf(attemptEvents, over || id !== current),
 	}))
 }
 

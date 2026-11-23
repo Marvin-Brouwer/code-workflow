@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import type { RunEvent, RunRecord } from '../../app/src/_shared/runs.mts'
 import { runFeed } from '../../app/src/runs/run-feed.mts'
-import { shownAnswer } from '../../app/src/runs/answered-elsewhere.mts'
+import { shownAnswer } from '../../app/src/runs/shown-answer.mts'
 
 const at = '2026-11-23T08:00:00.000Z'
 

@@ -1,3 +1,4 @@
+import { fanOut } from '../engine/fan-out.mts'
 import type { RunId } from './run-id.mts'
 import type { RunStore } from './run-store.mts'
 
@@ -18,10 +19,10 @@ export interface WatchedRunStore {
  * write. A listener that reads the run then sees the change.
  */
 export function watchedRunStore(store: RunStore): WatchedRunStore {
-	const listeners = new Set<(run: RunId) => void>()
+	const written = fanOut<RunId>()
 	const after = async (run: RunId, writing: Promise<void>): Promise<void> => {
 		await writing
-		for (const listener of listeners) listener(run)
+		written.announce(run)
 	}
 	return {
 		store: Object.freeze<RunStore>({
@@ -31,21 +32,7 @@ export function watchedRunStore(store: RunStore): WatchedRunStore {
 			removeRun: (id) => after(id, store.removeRun(id)),
 		}),
 		writes: Object.freeze<RunWriteFeed>({
-			onChange(listener, abortSignal) {
-				if (abortSignal.aborted) return
-				// The same function twice is two listeners.
-				const own = (run: RunId) => {
-					listener(run)
-				}
-				listeners.add(own)
-				abortSignal.addEventListener(
-					'abort',
-					() => {
-						listeners.delete(own)
-					},
-					{ once: true },
-				)
-			},
+			onChange: written.onChange,
 		}),
 	}
 }

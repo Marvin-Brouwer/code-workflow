@@ -14,7 +14,7 @@ mesh-flow ui            # serves it on a free port and opens the browser
 mesh-flow ui --port 4800 --no-open
 ```
 
-The address it prints has a token that lets one browser in. Settings work without a running engine; runs and apps need `mesh-flow serve`. Ctrl+C stops it.
+The address it prints has a token that lets one browser in. Settings work without a running engine; runs and apps need `mesh-flow serve`. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
 
 To serve it from code of your own:
 

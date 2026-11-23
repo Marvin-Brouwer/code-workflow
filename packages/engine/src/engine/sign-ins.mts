@@ -3,6 +3,7 @@ import { abortable } from '@mesh-flow/sandbox'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { messageOf } from '../errors.mts'
 import { EngineError } from './engine-error.mts'
+import { fanOut } from './fan-out.mts'
 import { signInFailedLine, signInPromptMessage } from './sign-in-lines.mts'
 import { shownSignInPrompt, type SignInState } from './sign-in-state.mts'
 
@@ -97,10 +98,8 @@ export function openSignIns(options: SignInsOptions): SignIns {
 	const idle = options.idle ?? defaultIdle
 	const signInTo = new Map(options.connectors.flatMap(({ name, signIn }) => (signIn === undefined ? [] : [[name, signIn] as const])))
 	const underWay = new Map<string, SignIn>()
-	const listeners = new Set<(connector: string) => void>()
-	const changed = (connector: string) => {
-		for (const listener of listeners) listener(connector)
-	}
+	const changes = fanOut<string>()
+	const changed = changes.announce
 
 	/** Drops `signIn` from those under way, with its idle timer. */
 	const forget = (connector: string, signIn: SignIn) => {
@@ -185,21 +184,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 			}
 		},
 		list: () => [...underWay].map(([connector, { shown }]) => ({ connector, ...shown })),
-		onChange: (listener, abortSignal) => {
-			if (abortSignal.aborted) return
-			// The same function twice is two listeners.
-			const own = (connector: string) => {
-				listener(connector)
-			}
-			listeners.add(own)
-			abortSignal.addEventListener(
-				'abort',
-				() => {
-					listeners.delete(own)
-				},
-				{ once: true },
-			)
-		},
+		onChange: changes.onChange,
 		close: () => {
 			for (const [connector, signIn] of underWay) stop(connector, signIn, 'The engine is shutting down.')
 		},

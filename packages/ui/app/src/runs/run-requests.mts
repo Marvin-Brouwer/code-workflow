@@ -9,8 +9,8 @@ import { answerSchemaOf, RunRecord, type RunRequest } from '../_shared/runs.mts'
 import { SignInState } from '../_shared/settings.mts'
 import { signInLink } from '../_shared/sign-in-prompt.mts'
 import { ConnectorsRoute } from '../settings/_routes.mts'
-import { shownAnswer } from './answered-elsewhere.mts'
 import { shownTime } from './run-labels.mts'
+import { shownAnswer } from './shown-answer.mts'
 import styles from './run-requests.css'
 
 /** The run that waits, and what it waits on. */
