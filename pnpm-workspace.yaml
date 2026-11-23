@@ -4,5 +4,8 @@ packages:
   - 'packages/*'
   - 'examples/*'
 allowBuilds:
+  '@google/genai': true
   esbuild: true
+  koffi: true
+  protobufjs: true
 minimumReleaseAge: 1440
