@@ -127,7 +127,7 @@ function eachCommand<Made>(make: (commandArguments: readonly string[]) => Made):
 export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
 
 /**
- * A client for the repository at `options.cwd`. Every command on it is a {@link GitCommand}:
+ * A client for the repository at `options.workingDirectory`. Every command on it is a {@link GitCommand}:
  * awaited it runs and fails on a non-zero exit, `run()` hands the exit back, `attempt()` is best
  * effort, and in a template string it renders as the shell line.
  *
