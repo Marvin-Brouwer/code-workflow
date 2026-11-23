@@ -1,13 +1,16 @@
 import { choice, component } from '@rooted/components'
+import { z } from 'zod'
 import { send } from '../_shared/api.mts'
-import { credentialPath, NoContent } from '../_shared/settings.mts'
+import { CredentialName, credentialPath, NoContent } from '../_shared/settings.mts'
 import styles from './forms.css'
+import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
 import { submitForm } from './submit-form.mts'
 
+/** What the credential form sets, and what it does after. */
 export interface CredentialFormOptions {
 	/** The credential to set. Without it, the form asks for the name too. */
-	readonly name?: string
+	readonly name?: string | undefined
 	/**
 	 * A value of the right shape, such as `https://example.atlassian.net`. A credential with one is a
 	 * setting rather than a secret, so its value is shown as it's typed.
@@ -16,6 +19,9 @@ export interface CredentialFormOptions {
 	/** Called once the credential is set. */
 	readonly done?: (() => void) | undefined
 }
+
+/** How many random bytes "Generate" makes: as many as `mesh-flow credential set --generate`. */
+const generatedSecretBytes = 32
 
 /**
  * Sets a credential. The value goes in and never comes back. "Generate" fills in a random value,
@@ -26,10 +32,7 @@ export const CredentialForm = component<CredentialFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { name, example, done } = options
-		const status = element('p', {
-			classes: styles.status,
-			role: 'alert',
-		})
+		const status = formStatus(element)
 		const valueType = choice(example === undefined, 'password', 'text')
 		const value = element('input', {
 			name: 'value',
@@ -75,24 +78,18 @@ export const CredentialForm = component<CredentialFormOptions>({
 					element('label', {
 						children: ['Value', value],
 					}),
-					element('div', {
-						classes: styles.actions,
-						children: [
-							element('button', {
-								type: 'submit',
-								textContent: 'Set',
-							}),
-							generate,
-						],
-					}),
+					submitActions(element, 'Set', generate),
 					status,
 				],
 				on: {
 					submit: submitForm({
 						status,
 						abortSignal: signal,
-						send: (form, abortSignal) =>
-							send('PUT', credentialPath(name ?? formText(form, 'name')), { value: formText(form, 'value') }, NoContent, abortSignal),
+						send: async (form, abortSignal) => {
+							const checked = CredentialName.safeParse(name ?? formText(form, 'name'))
+							if (!checked.success) return { ok: false, error: z.prettifyError(checked.error) }
+							return send('PUT', credentialPath(checked.data), { value: formText(form, 'value') }, NoContent, abortSignal)
+						},
 						done() {
 							value.type = valueType
 							done?.()
@@ -104,7 +101,7 @@ export const CredentialForm = component<CredentialFormOptions>({
 	},
 })
 
-/** 32 random bytes as hex: a webhook secret or anything else nobody has to type. */
+/** Random bytes as hex: a webhook secret or anything else nobody has to type. */
 function randomSecret(): string {
-	return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+	return Array.from(crypto.getRandomValues(new Uint8Array(generatedSecretBytes)), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }

@@ -2,7 +2,7 @@ import type { TargetedEvent } from '@rooted/components/events'
 import type { Answer } from '../_shared/api.mts'
 
 /** What submitting a form does: send it, and say what went wrong in `status` when that fails. */
-export interface SubmitOptions {
+export interface SubmitFormOptions {
 	/** Where a refusal is shown. Emptied on the next try. */
 	readonly status: HTMLElement
 	readonly abortSignal: AbortSignal
@@ -25,7 +25,7 @@ export interface SubmitOptions {
  * })
  * ```
  */
-export function submitForm({ status, abortSignal, send, done }: SubmitOptions) {
+export function submitForm({ status, abortSignal, send, done }: SubmitFormOptions) {
 	return async (event: TargetedEvent<SubmitEvent, HTMLFormElement>): Promise<void> => {
 		event.preventDefault()
 		const form = event.currentTarget

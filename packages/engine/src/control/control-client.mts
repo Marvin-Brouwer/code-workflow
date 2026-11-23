@@ -4,9 +4,9 @@ import { MissingSetting } from '@mesh-flow/gateway'
 import { AppManifest, RuntimeEvent, type TriggerReference } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { SignInState } from '../engine/sign-in-state.mts'
-import { ShownConnector } from './control-api.mts'
 import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
+import { ShownConnector } from './shown-connector.mts'
 
 /** A deployed app as the control API shows it: its current version and what that declares. */
 export const DeployedApp = z.object({ name: z.string(), version: z.string(), manifest: AppManifest })

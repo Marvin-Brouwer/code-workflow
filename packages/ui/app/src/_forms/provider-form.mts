@@ -1,14 +1,16 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { read, send } from '../_shared/api.mts'
-import { NoContent, ProviderKind } from '../_shared/settings.mts'
+import { NoContent, ProviderKind, providerNamePattern } from '../_shared/settings.mts'
 import styles from './forms.css'
+import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
 import { submitForm } from './submit-form.mts'
 
+/** What the add-provider form is for, and what it does after. */
 export interface ProviderFormOptions {
 	/** The model it's for, when a run needs it: said above the form, since only the kind knows its models. */
-	readonly model?: string
+	readonly model?: string | undefined
 	/** Called once the provider is added. */
 	readonly done?: (() => void) | undefined
 }
@@ -19,10 +21,7 @@ export const ProviderForm = component<ProviderFormOptions>({
 	styles,
 	async onMount({ append, element, options, signal }) {
 		const { model, done } = options
-		const status = element('p', {
-			classes: styles.status,
-			role: 'alert',
-		})
+		const status = formStatus(element)
 		const kinds = await read('/settings/provider-kinds', z.array(ProviderKind), signal)
 		append(
 			element('form', {
@@ -46,7 +45,7 @@ export const ProviderForm = component<ProviderFormOptions>({
 							element('input', {
 								name: 'name',
 								required: true,
-								pattern: '[a-z0-9][\\w\\-]{0,63}',
+								pattern: providerNamePattern,
 								placeholder: 'anthropic',
 								autocomplete: 'off',
 							}),
@@ -87,13 +86,7 @@ export const ProviderForm = component<ProviderFormOptions>({
 							}),
 						],
 					}),
-					element('div', {
-						classes: styles.actions,
-						children: element('button', {
-							type: 'submit',
-							textContent: 'Add',
-						}),
-					}),
+					submitActions(element, 'Add'),
 					kinds.ok
 						? undefined
 						: element('p', {
@@ -108,7 +101,11 @@ export const ProviderForm = component<ProviderFormOptions>({
 						abortSignal: signal,
 						send: (form, abortSignal) => {
 							const baseUrl = formText(form, 'baseUrl')
-							const body = { kind: formText(form, 'kind'), key: formText(form, 'key'), baseUrl: baseUrl === '' ? undefined : baseUrl }
+							const body = {
+								kind: formText(form, 'kind'),
+								key: formText(form, 'key'),
+								baseUrl: baseUrl === '' ? undefined : baseUrl,
+							}
 							return send('PUT', `/settings/providers/${encodeURIComponent(formText(form, 'name'))}`, body, NoContent, abortSignal)
 						},
 						done,

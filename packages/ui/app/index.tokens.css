@@ -17,6 +17,7 @@
 	--line: 1px solid var(--color-line);
 
 	--page-width: 1100px;
+	--form-width: 32rem;
 }
 
 @media (prefers-color-scheme: dark) {

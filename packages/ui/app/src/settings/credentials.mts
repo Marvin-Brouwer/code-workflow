@@ -1,10 +1,11 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
+import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
 import { credentialPath, NoContent } from '../_shared/settings.mts'
+import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
-import { Table } from '../_layout/table.mts'
 import { SettingsMenu } from './settings-menu.mts'
 
 /** The credentials by name, never their values: set one, generate a webhook secret, remove one. */
@@ -34,21 +35,12 @@ export const CredentialsPage = component({
 						}),
 					}),
 					element('td', {
-						children: element('details', {
-							children: [
-								element('summary', {
-									textContent: 'Remove',
-								}),
-								element('button', {
-									type: 'button',
-									textContent: `Remove ${name}`,
-									on: {
-										click() {
-											void remove(name)
-										},
-									},
-								}),
-							],
+						children: create(ConfirmButton, {
+							summary: 'Remove',
+							label: `Remove ${name}`,
+							confirmed() {
+								void remove(name)
+							},
 						}),
 					}),
 				],
@@ -94,7 +86,7 @@ export const CredentialsPage = component({
 					element('p', {
 						classes: styles.muted,
 						textContent:
-							'For a webhook secret, Generate makes one: copy it into the webhook’s settings on the other side before you set it.',
+							"For a webhook secret, Generate makes one: copy it into the webhook's settings on the other side before you set it.",
 					}),
 					create(CredentialForm, {
 						done() {

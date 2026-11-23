@@ -1,10 +1,11 @@
-import { z } from 'zod'
-
 /**
  * What the settings and engine routes answer, as the page checks it. The page can't import these
  * from the engine and the gateway, which are Node packages, so they're written out again here; a
  * test holds them to the originals.
+ *
+ * @module
  */
+import { z } from 'zod'
 
 /** A provider kind the gateway knows, and how many models it has. */
 export const ProviderKind = z.object({ kind: z.string(), models: z.number() })
@@ -14,8 +15,12 @@ export type ProviderKind = z.infer<typeof ProviderKind>
 export const ListedProvider = z.object({ name: z.string(), kind: z.string(), baseUrl: z.string().optional(), hasKey: z.boolean() })
 export type ListedProvider = z.infer<typeof ListedProvider>
 
+/** The names `ProviderName` in `@mesh-flow/gateway` takes, as an input's `pattern`. */
+export const providerNamePattern = '[a-z0-9][\\w\\-]{0,63}'
+
 /** A connector package the engine loads. */
 export const ConnectorPackage = z.object({ package: z.string() })
+export type ConnectorPackage = z.infer<typeof ConnectorPackage>
 
 /** A connector the running engine loaded. */
 export const ShownConnector = z.object({ name: z.string(), package: z.string(), signsIn: z.boolean() })
@@ -46,6 +51,15 @@ export type MissingSetting = z.infer<typeof MissingSetting>
 
 /** A change the server answered without a body. */
 export const NoContent = z.undefined()
+
+/**
+ * A credential's name, as `CredentialName` in `@mesh-flow/gateway` takes it. The page checks it
+ * itself, since the address folds away a `.` or `..` part before the server sees it.
+ */
+export const CredentialName = z
+	.string()
+	.regex(/^[\w./-]{1,128}$/, 'Use 1 to 128 letters, digits, _, ., / or -.')
+	.refine((name) => !name.split('/').some((part) => part === '.' || part === '..'), 'No part of the name can be . or ..')
 
 /** The settings route of credential `name`, whose parts are split by `/` as the name's are. */
 export function credentialPath(name: string): string {

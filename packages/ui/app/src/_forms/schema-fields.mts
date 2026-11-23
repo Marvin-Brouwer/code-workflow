@@ -14,17 +14,19 @@ export type SchemaField = {
 	| { readonly kind: 'choice' | 'choices'; readonly options: readonly string[] }
 )
 
-const described = { title: z.string().optional(), description: z.string().optional() }
+const describedProperty = { title: z.string().optional(), description: z.string().optional() }
 const Options = z.array(z.string()).min(1)
 
 /** The property schemas a form has a field for: what `input.text/yesNo/choice/choices` make, and numbers. */
 const FlatProperty = z.union([
-	z.object({ type: z.literal('string'), enum: Options, ...described }).transform((property) => ({ ...property, kind: 'choice' as const })),
 	z
-		.object({ type: z.literal('array'), items: z.object({ type: z.literal('string'), enum: Options }), ...described })
+		.object({ type: z.literal('string'), enum: Options, ...describedProperty })
+		.transform((property) => ({ ...property, kind: 'choice' as const })),
+	z
+		.object({ type: z.literal('array'), items: z.object({ type: z.literal('string'), enum: Options }), ...describedProperty })
 		.transform((property) => ({ ...property, kind: 'choices' as const, enum: property.items.enum })),
 	z
-		.object({ type: z.enum(['string', 'number', 'integer', 'boolean']), enum: z.undefined().optional(), ...described })
+		.object({ type: z.enum(['string', 'number', 'integer', 'boolean']), enum: z.undefined().optional(), ...describedProperty })
 		.transform((property) => ({ ...property, kind: property.type === 'string' ? ('text' as const) : property.type })),
 ])
 
@@ -97,6 +99,7 @@ export function checkAgainst(schema: unknown, value: unknown): Answer<unknown> {
 	return checked.success ? { ok: true, value } : { ok: false, error: z.prettifyError(checked.error) }
 }
 
+/** A zod schema that checks what `schema` does, or `undefined` when zod can't read it. */
 function checkerOf(schema: unknown): z.ZodType | undefined {
 	try {
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a schema zod can't read throws, and is left to the server

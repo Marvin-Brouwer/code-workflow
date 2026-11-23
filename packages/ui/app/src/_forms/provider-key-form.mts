@@ -2,10 +2,13 @@ import { component } from '@rooted/components'
 import { send } from '../_shared/api.mts'
 import { NoContent } from '../_shared/settings.mts'
 import styles from './forms.css'
+import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
 import { submitForm } from './submit-form.mts'
 
+/** Whose key the form sets, and what it does after. */
 export interface ProviderKeyFormOptions {
+	/** The provider's name. */
 	readonly provider: string
 	/** Called once the key is set. */
 	readonly done?: (() => void) | undefined
@@ -17,10 +20,7 @@ export const ProviderKeyForm = component<ProviderKeyFormOptions>({
 	styles,
 	onMount({ append, element, options, signal }) {
 		const { provider, done } = options
-		const status = element('p', {
-			classes: styles.status,
-			role: 'alert',
-		})
+		const status = formStatus(element)
 		append(
 			element('form', {
 				classes: styles.form,
@@ -36,13 +36,7 @@ export const ProviderKeyForm = component<ProviderKeyFormOptions>({
 							}),
 						],
 					}),
-					element('div', {
-						classes: styles.actions,
-						children: element('button', {
-							type: 'submit',
-							textContent: 'Set key',
-						}),
-					}),
+					submitActions(element, 'Set key'),
 					status,
 				],
 				on: {

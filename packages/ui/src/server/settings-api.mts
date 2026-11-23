@@ -4,10 +4,12 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { jsonBody, pathParameters } from './checked-request.mts'
 
-const ProviderBody = z.object({ kind: z.string(), baseUrl: z.url().optional(), key: z.string().optional() })
-const KeyBody = z.object({ key: z.string().min(1) })
+/** A pasted secret without the spaces or line break around it, as the CLI reads one from stdin. */
+const Secret = z.string().trim()
+const ProviderBody = z.object({ kind: z.string(), baseUrl: z.url().optional(), key: Secret.min(1).optional() })
+const KeyBody = z.object({ key: Secret.min(1) })
 const OrderBody = z.object({ names: z.array(z.string()) })
-const SecretBody = z.object({ value: z.string().min(1) })
+const SecretBody = z.object({ value: Secret.min(1) })
 const CredentialRoute = z.object({ name: CredentialName })
 
 /** What the settings work on: the engine home's files, as the CLI's commands do. */

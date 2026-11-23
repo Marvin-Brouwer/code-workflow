@@ -1,8 +1,8 @@
-import { z } from 'zod'
 import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
 import { checkAgainst, fieldsOf, jsonOf, valueOf } from '../../app/src/_forms/schema-fields.mts'
 
-/** A JSON Schema as the engine sends it: a workflow's parameters, or an input request's fields. */
+/** A JSON Schema as the engine sends it, such as a workflow's parameters. */
 function jsonSchema(schema: z.ZodType): unknown {
 	return z.toJSONSchema(schema, { io: 'input' })
 }
