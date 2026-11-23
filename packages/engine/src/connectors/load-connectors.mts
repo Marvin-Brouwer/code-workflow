@@ -22,6 +22,7 @@ import {
 	type CredentialStore,
 	type HostTool,
 	type MissingSetting,
+	type MissingSettingsOptions,
 	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
@@ -86,7 +87,12 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		await mkdir(directory, { recursive: true, mode: 0o700 })
 		const credentials = connectorCredentials(options.credentials, host.name)
 		const hostOptions = { directory, credentials }
-		const settingsCheckOptions = { directory, credentials: Object.freeze({ get: options.credentials.get }) }
+		const settingsCheckOptions: MissingSettingsOptions = {
+			directory,
+			credentials: Object.freeze({
+				get: (credential: string, abortSignal: AbortSignal) => options.credentials.get(credential, abortSignal),
+			}),
+		}
 		const signInCount = { finished: 0 }
 		const tools = host.tools(hostOptions).map((tool) => withOwnSignIns(host.name, tool, signInCount))
 		for (const tool of tools) {

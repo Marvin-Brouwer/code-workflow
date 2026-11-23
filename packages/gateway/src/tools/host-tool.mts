@@ -132,8 +132,8 @@ export interface ConnectorHost {
 	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryTarget
 	/**
 	 * The settings the connector still needs, from the credentials it reads: each a line that says
-	 * how to set it, and what sets it, usually a credential (`missingCredentials`). `mesh-flow deploy`, a trigger and the UI's wizard report them
-	 * for an app that uses the connector.
+	 * how to set it, and what sets it, usually a credential (`missingCredentials`). `mesh-flow
+	 * deploy`, a trigger and the UI's wizard report them for an app that uses the connector.
 	 */
 	readonly missingSettings?: (options: MissingSettingsOptions, abortSignal: AbortSignal) => Promise<MissingSetting[]>
 }

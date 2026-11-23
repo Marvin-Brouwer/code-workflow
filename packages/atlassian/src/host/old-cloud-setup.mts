@@ -14,11 +14,12 @@ export async function hasOldCloudSetup(product: Product, credentials: Credential
 /** What to do about an old Cloud setup of `product`. */
 export function oldCloudSetupMessage(product: Product): string {
 	const cloud = cloudCredentialNames
-	const dataCenter = dataCenterCredentialNames(product)
+	const { url, token } = dataCenterCredentialNames(product)
+	const oldCloud = { url, email: oldCloudEmail(product), token }
 	return (
-		`${dataCenter.url} and ${oldCloudEmail(product)} are the Atlassian Cloud settings from before ${productNames[product]} and the other ` +
-		`products shared one site. Set ${cloud.url}, ${cloud.email} and ${cloud.token} instead, then remove ${dataCenter.url}, ` +
-		`${oldCloudEmail(product)} and ${dataCenter.token} with \`mesh-flow credential remove\`.`
+		`${oldCloud.url} and ${oldCloud.email} are the Atlassian Cloud settings from before ${productNames[product]} and the other ` +
+		`products shared one site. Set ${cloud.url}, ${cloud.email} and ${cloud.token} instead, then remove ${oldCloud.url}, ` +
+		`${oldCloud.email} and ${oldCloud.token} with \`mesh-flow credential remove\`.`
 	)
 }
 

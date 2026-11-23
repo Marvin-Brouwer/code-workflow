@@ -7,8 +7,9 @@ const exampleCloudEmail = 'bot@example.com'
 
 /**
  * What the connector still needs. A product with a Data Center site needs its token, unless it's
- * the old Cloud setup (`hasOldCloudSetup`), which has to move to the shared Cloud site first. Without any
- * Data Center site, the Cloud site is what's used, so its three settings are what's asked for.
+ * the old Cloud setup (`hasOldCloudSetup`), which has to move to the shared Cloud site first.
+ * Without any Data Center site, the Cloud site is what's used, so its three settings are what's
+ * asked for.
  * With one product on Data Center, the other product's Cloud settings aren't asked for: an app may
  * not use it, and a call to it says what to set.
  */
@@ -16,13 +17,13 @@ export async function missingSiteSettings(credentials: CredentialReader, abortSi
 	const urls = await Promise.all(products.map((product) => credentials.get(dataCenterCredentialNames(product).url, abortSignal)))
 	const onDataCenter = products.filter((_product, index) => urls[index] !== undefined)
 	if (onDataCenter.length > 0) {
-		const old = await Promise.all(onDataCenter.map((product) => hasOldCloudSetup(product, credentials, abortSignal)))
-		const toMove: MissingSetting[] = onDataCenter
-			.filter((_product, index) => old[index])
-			.map((product) => ({ message: oldCloudSetupMessage(product), fix: { kind: 'other' } }))
+		const hasOldSetup = await Promise.all(onDataCenter.map((product) => hasOldCloudSetup(product, credentials, abortSignal)))
+		const oldSetups = onDataCenter.filter((_product, index) => hasOldSetup[index])
+		const dataCenterProducts = onDataCenter.filter((_product, index) => !hasOldSetup[index])
+		const toMove = oldSetups.map((product): MissingSetting => ({ message: oldCloudSetupMessage(product), fix: { kind: 'other' } }))
 		const tokens = await missingCredentials(
 			credentials,
-			onDataCenter.filter((_product, index) => !old[index]).map((product) => ({ name: dataCenterCredentialNames(product).token })),
+			dataCenterProducts.map((product) => ({ name: dataCenterCredentialNames(product).token })),
 			abortSignal,
 		)
 		return [...toMove, ...tokens]
