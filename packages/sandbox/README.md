@@ -109,7 +109,7 @@ const vm = await abortable(createVm(), deadline, (late) => late.kill())
 
 ## Setting up E2B
 
-The E2B backend needs two things: an API key and a template for each image a spec names.
+The E2B backend needs two things: an API key and a template for each image a specification names.
 
 ### API key
 
@@ -136,7 +136,7 @@ await Template.build(template, 'mesh-flow-node-26', {
 })
 ```
 
-Then map the image to the template's name in `templates`: `{ 'node:26-slim': 'mesh-flow-node-26' }`. A spec with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
+Then map the image to the template's name in `templates`: `{ 'node:26-slim': 'mesh-flow-node-26' }`. A specification with an image that has no template is an error. `Template()` also starts from a Dockerfile or another template; see the [E2B docs](https://e2b.dev/docs).
 
 ### Self-hosted E2B
 
@@ -153,7 +153,7 @@ const backend = e2bBackend({ apiKey, domain: 'e2b.internal.example', templates: 
 - **The id stays the same** across a pause and resume. A sandbox runs once: resuming one that already runs, or is being resumed, is refused.
 - **A pause only resumes on the backend that made it.** Anything else is a `BackendMismatchError`.
 - **No network.** A sandbox has loopback and nothing else, on every backend: whatever it needs from outside comes from the host, through `exec` and `writeFile`. Package managers in it restore through a proxy the workflow runtime serves on loopback, which fetches through the gateway ([`@mesh-flow/core`](../core/README.md#packages)).
-- **Input is checked** with zod: the spec on `create` and the paused sandbox on `resume`, so a bad spec fails there and not inside a backend.
+- **Input is checked** with zod: the specification on `create` and the paused sandbox on `resume`, so a bad specification fails there and not inside a backend.
 - **Commands are argv arrays**, never a shell line. A non-zero exit code is a result, not an error.
 
 ## Where they differ

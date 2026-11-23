@@ -1,6 +1,6 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
 import { z } from 'zod'
-import type { ExitSpec } from '../exits/exit.mts'
+import type { ExitSpecification } from '../exits/exit.mts'
 import { counted } from '../render/counted.mts'
 import { renderValue } from '../render/to-prompt.mts'
 import { inEventOf } from '../run/run-events.mts'
@@ -14,11 +14,13 @@ import { findingsText, type RunGate, type Verdict } from './run-gate.mts'
 import { endingErrorResult, errorResult, finalResult, textResult } from './tool-result.mts'
 
 /** The agent's tools for a loop's exits. `gate` runs before an exit lets the agent finish. */
-export function exitTools(exits: readonly ExitSpec[], gate: RunGate, session: LoopSession): ToolRegistration[] {
-	return exits.map((spec) => {
-		if (spec.kind === 'propose') return proposeTool(spec.schema, gate, session)
-		if (spec.kind === 'fail') return failTool(session)
-		return spec.folder === undefined ? succeedTool(spec.schema, gate, session) : folderTool(spec.folder, gate, session)
+export function exitTools(exits: readonly ExitSpecification[], gate: RunGate, session: LoopSession): ToolRegistration[] {
+	return exits.map((specification) => {
+		if (specification.kind === 'propose') return proposeTool(specification.schema, gate, session)
+		if (specification.kind === 'fail') return failTool(session)
+		return specification.folder === undefined
+			? succeedTool(specification.schema, gate, session)
+			: folderTool(specification.folder, gate, session)
 	})
 }
 

@@ -13,9 +13,9 @@ import { deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 const never = () => new Promise<never>(() => undefined)
-const spec = { image: 'host', cpus: 1, memoryMb: 256 }
+const specification = { image: 'host', cpus: 1, memoryMb: 256 }
 const sandboxId = 'mesh-flow-000000000001'
-const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, spec })
+const pausesAtOnce: Sandbox['pause'] = () => Promise.resolve({ backend: 'gvisor', id: sandboxId, spec: specification })
 
 /** A backend that answers what the engine needs to start a run, with the parts given here. */
 function stubBackend(parts: {
@@ -134,7 +134,7 @@ describe('Engine.close', () => {
 		await engine.close(shortPauseDeadlines())
 
 		// Act
-		created.resolve(await stubBackend({}).backend.create(spec, signal))
+		created.resolve(await stubBackend({}).backend.create(specification, signal))
 		await delay(duration.of('100ms').to('ms'))
 
 		// Assert

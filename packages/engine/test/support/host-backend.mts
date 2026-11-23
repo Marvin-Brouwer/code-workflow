@@ -13,14 +13,14 @@ import type {
 	SandboxBackend,
 	StartInBackgroundOptions,
 } from '@mesh-flow/sandbox'
-import { SandboxSpec } from '@mesh-flow/sandbox'
+import { SandboxSpecification } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { hasErrorCode } from '../../src/errors.mts'
 
 const HostSandboxState = z.object({
 	state: z.enum(['running', 'paused']),
 	pids: z.array(z.int()),
-	spec: SandboxSpec,
+	specification: SandboxSpecification,
 })
 type HostSandboxState = z.infer<typeof HostSandboxState>
 
@@ -113,7 +113,7 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				for (const pid of state.pids) signalGroup(pid, 'SIGSTOP')
 				await writeState(id, { ...state, state: 'paused' })
 				running.delete(id)
-				return { backend: 'gvisor', id, spec: state.spec } satisfies PausedSandbox
+				return { backend: 'gvisor', id, spec: state.specification } satisfies PausedSandbox
 			},
 			async destroy() {
 				await remove(id)
@@ -124,12 +124,12 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 	return {
 		name: 'gvisor',
 		root,
-		async create(spec, signal) {
+		async create(specification, signal) {
 			signal.throwIfAborted()
 			if (closed) throw new Error('This sandbox backend is closed.')
 			const id = `mesh-flow-${randomBytes(6).toString('hex')}`
 			await mkdir(path.join(root, id, 'files'), { recursive: true })
-			await writeState(id, { state: 'running', pids: [], spec })
+			await writeState(id, { state: 'running', pids: [], specification })
 			return open(id)
 		},
 		async resume(paused, signal) {

@@ -20,7 +20,7 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['test/**/*.{test,spec}.mts'],
+		include: ['test/**/*.{test,specification}.mts'],
 		testTimeout: testTimeout.to('ms'),
 		hookTimeout: testTimeout.to('ms'),
 	},

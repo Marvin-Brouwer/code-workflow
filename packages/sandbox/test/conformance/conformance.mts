@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { BackendName } from '../../src/backend-name.mts'
 import type { SandboxBackend } from '../../src/sandbox-backend.mts'
 import type { Sandbox } from '../../src/sandbox.mts'
-import type { SandboxSpec } from '../../src/sandbox-spec.mts'
+import type { SandboxSpecification } from '../../src/sandbox-specification.mts'
 
 const stub = guestScript('stub.mts')
 const probe = guestScript('probe.mts')
@@ -60,7 +60,7 @@ async function stubState(sandbox: Sandbox, pid: number): Promise<string> {
  * @param image - An image with Node 26, such as `node:26-slim`.
  */
 export function describeConformance(name: BackendName, open: () => SandboxBackend, image: string): void {
-	const spec: SandboxSpec = { image, cpus: 1, memoryMb: 1024 }
+	const specification: SandboxSpecification = { image, cpus: 1, memoryMb: 1024 }
 
 	describe.skipIf(!conformanceEnabled(name))(`${name} conformance`, () => {
 		const backend = open()
@@ -73,7 +73,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test('a pending await resolves after pause and resume, in the same process, memory and stack', async () => {
 			// Arrange
-			const sandbox = await backend.create(spec, timeout())
+			const sandbox = await backend.create(specification, timeout())
 			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
 			await sandbox.startInBackground(['node', '/var/tmp/stub.mjs'], {
@@ -98,9 +98,9 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			expect(done.stack).toContain('at async workflow')
 		})
 
-		test('the spec environment reaches every command', async () => {
+		test('the specification environment reaches every command', async () => {
 			// Arrange
-			const sandbox = await backend.create({ ...spec, env: { MESH_FLOW_CHECK: 'present' } }, timeout())
+			const sandbox = await backend.create({ ...specification, env: { MESH_FLOW_CHECK: 'present' } }, timeout())
 			cleanUp(sandbox.id)
 
 			// Act
@@ -112,7 +112,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test('writes bytes as they are, every byte value, such as a package the engine staged', async () => {
 			// Arrange
-			const sandbox = await backend.create(spec, timeout())
+			const sandbox = await backend.create(specification, timeout())
 			cleanUp(sandbox.id)
 			const bytes = Uint8Array.from({ length: 256 }, (_value, index) => index)
 
@@ -131,7 +131,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test('reaches no host, but loopback works', async () => {
 			// Arrange
-			const sandbox = await backend.create(spec, timeout())
+			const sandbox = await backend.create(specification, timeout())
 			cleanUp(sandbox.id)
 			await sandbox.writeFile('/var/tmp/probe.mjs', probe, timeout())
 
@@ -145,7 +145,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 
 		test('list shows a paused sandbox until it is removed', async () => {
 			// Arrange
-			const sandbox = await backend.create(spec, timeout())
+			const sandbox = await backend.create(specification, timeout())
 			await sandbox.pause(timeout(duration.of('2m')))
 
 			// Act
@@ -161,7 +161,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 		test('close removes the sandboxes it still runs', async () => {
 			// Arrange
 			const own = open()
-			const sandbox = await own.create(spec, timeout())
+			const sandbox = await own.create(specification, timeout())
 
 			// Act
 			await own.close(timeout())

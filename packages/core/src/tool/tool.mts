@@ -12,7 +12,7 @@ export interface ToolContext {
 }
 
 /** What a tool is made of, for code that runs tools: the loop, and tools of other packages. */
-export interface ToolSpec {
+export interface ToolSpecification {
 	readonly name: string
 	readonly description: string | undefined
 	readonly input: z.ZodType
@@ -37,7 +37,7 @@ export class ToolInputError extends Error {
 	override readonly name = 'ToolInputError'
 }
 
-const toolSpec: unique symbol = Symbol.for('mesh-flow.tool')
+const toolSpecification: unique symbol = Symbol.for('mesh-flow.tool')
 
 /**
  * A capability an agent can call, and a function code can call. Interpolated in a loop's template
@@ -52,12 +52,12 @@ export interface Tool<Input = never, Output = unknown> {
 	(input: Input, context?: ToolContext): Promise<Output>
 	readonly name: string
 	readonly description: string | undefined
-	readonly [toolSpec]: ToolSpec
+	readonly [toolSpecification]: ToolSpecification
 }
 
 /** Any tool, whatever its input and output: what the type checks of templates look for. */
 export interface AnyTool {
-	readonly [toolSpec]: ToolSpec
+	readonly [toolSpecification]: ToolSpecification
 }
 
 /** Names that every model provider accepts for a tool. */
@@ -105,13 +105,13 @@ export function tool<Input extends z.ZodType, Output>(
 	return toolOf<z.input<Input>, Output>({ name, description: definition.description, input: definition.input, prepare })
 }
 
-/** The tool for a spec: a function that checks its input and runs, and the spec behind it. */
-export function toolOf<Input, Output>(spec: ToolSpec): Tool<Input, Output> {
-	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the spec's action returns what the tool's definition says
-	const prepare = spec.prepare as (input: unknown) => (context: ToolContext) => Promise<ToolOutcome<Output>>
-	const call = (input: Input, context?: ToolContext): Promise<Output> => callFromCode(spec.name, prepare, input, context)
-	Object.defineProperty(call, 'name', { value: spec.name })
-	return Object.assign(call, { description: spec.description, [toolSpec]: spec })
+/** The tool for a specification: a function that checks its input and runs, and the specification behind it. */
+export function toolOf<Input, Output>(specification: ToolSpecification): Tool<Input, Output> {
+	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the specification's action returns what the tool's definition says
+	const prepare = specification.prepare as (input: unknown) => (context: ToolContext) => Promise<ToolOutcome<Output>>
+	const call = (input: Input, context?: ToolContext): Promise<Output> => callFromCode(specification.name, prepare, input, context)
+	Object.defineProperty(call, 'name', { value: specification.name })
+	return Object.assign(call, { description: specification.description, [toolSpecification]: specification })
 }
 
 /** Throws when `name` isn't a tool name every model provider accepts. */
@@ -122,12 +122,12 @@ export function assertToolName(name: string): void {
 
 /** Whether a value is a tool made by {@link tool}. */
 export function isTool(value: unknown): value is Tool {
-	return typeof value === 'function' && toolSpec in value
+	return typeof value === 'function' && toolSpecification in value
 }
 
-/** The spec behind a tool. */
-export function specOf(value: Tool): ToolSpec {
-	return value[toolSpec]
+/** The specification behind a tool. */
+export function specificationOf(value: Tool): ToolSpecification {
+	return value[toolSpecification]
 }
 
 async function callFromCode<Output>(

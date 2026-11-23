@@ -3,7 +3,7 @@ import { mkdir, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
-import type { SandboxSpec } from '../sandbox-spec.mts'
+import type { SandboxSpecification } from '../sandbox-specification.mts'
 import { temporaryFileOf } from '../temporary-file.mts'
 import { newCheckpointName, partialCheckpoint, removeEarlierCheckpoints } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
@@ -13,12 +13,12 @@ import { runsc, runscOrThrow } from './runsc.mts'
 /** A running gVisor container. Its runsc container id is the sandbox id. */
 export class GvisorSandbox implements Sandbox {
 	readonly id: string
-	readonly #spec: SandboxSpec
+	readonly #specification: SandboxSpecification
 	readonly #context: GvisorContext
 
-	constructor(id: string, spec: SandboxSpec, context: GvisorContext) {
+	constructor(id: string, specification: SandboxSpecification, context: GvisorContext) {
 		this.id = id
-		this.#spec = spec
+		this.#specification = specification
 		this.#context = context
 		context.lifetime.track(id, (signal) => context.remove(id, signal))
 	}
@@ -73,7 +73,7 @@ export class GvisorSandbox implements Sandbox {
 		// deletes a leftover container record itself.
 		await runsc(this.#context.runsc, ['delete', '--force', this.id], { signal: bound }).catch(() => undefined)
 		await removeEarlierCheckpoints(checkpoints, name).catch(() => undefined)
-		return { backend: 'gvisor', id: this.id, spec: this.#spec, snapshot: name }
+		return { backend: 'gvisor', id: this.id, spec: this.#specification, snapshot: name }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

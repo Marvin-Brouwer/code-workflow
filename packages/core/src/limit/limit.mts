@@ -3,19 +3,19 @@ import { counted } from '../render/counted.mts'
 import { toPrompt } from '../render/to-prompt.mts'
 
 /** A loop-wide limit. */
-export interface LimitSpec {
+export interface LimitSpecification {
 	/** Model turns: each response of the model counts once. */
 	readonly turns?: number
 	/** The agent's own runtime. Time spent waiting on a human doesn't count. */
 	readonly time?: Duration
 }
 
-/** Where a limit keeps its spec, for the loop to read. */
-export const limitSpec: unique symbol = Symbol.for('mesh-flow.limit')
+/** Where a limit keeps its specification, for the loop to read. */
+export const limitSpecification: unique symbol = Symbol.for('mesh-flow.limit')
 
 /** A loop's limit, interpolated in its template. */
 export interface Limit {
-	readonly [limitSpec]: LimitSpec
+	readonly [limitSpecification]: LimitSpecification
 	[toPrompt](): string
 }
 
@@ -31,21 +31,21 @@ export interface Limit {
  * `
  * ```
  */
-export function limit(spec: LimitSpec): Limit {
-	if (spec.turns !== undefined && !(Number.isInteger(spec.turns) && spec.turns > 0)) {
-		throw new RangeError(`limit turns is ${String(spec.turns)}: use a whole number above 0.`)
+export function limit(specification: LimitSpecification): Limit {
+	if (specification.turns !== undefined && !(Number.isInteger(specification.turns) && specification.turns > 0)) {
+		throw new RangeError(`limit turns is ${String(specification.turns)}: use a whole number above 0.`)
 	}
-	if (spec.time?.to('ms') === 0) throw new RangeError('limit time is 0ms: use a duration above zero.')
-	if (spec.turns === undefined && spec.time === undefined) throw new Error('limit needs turns, time or both.')
-	return Object.freeze({ [limitSpec]: spec, [toPrompt]: () => limitLine(spec) })
+	if (specification.time?.to('ms') === 0) throw new RangeError('limit time is 0ms: use a duration above zero.')
+	if (specification.turns === undefined && specification.time === undefined) throw new Error('limit needs turns, time or both.')
+	return Object.freeze({ [limitSpecification]: specification, [toPrompt]: () => limitLine(specification) })
 }
 
 /** Whether a value is a limit. */
 export function isLimit(value: unknown): value is Limit {
-	return typeof value === 'object' && value !== null && limitSpec in value
+	return typeof value === 'object' && value !== null && limitSpecification in value
 }
 
-function limitLine({ turns, time }: LimitSpec): string {
+function limitLine({ turns, time }: LimitSpecification): string {
 	const parts = [
 		turns === undefined ? undefined : counted(turns, 'model turn'),
 		time === undefined ? undefined : `${time.toString()} of work`,

@@ -16,7 +16,7 @@ import {
 	type WakeRequest,
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
-import { abortable, SandboxSpec, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
+import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
 import type { AppStore } from '../apps/app-store.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
@@ -304,7 +304,7 @@ export class Engine {
 		if (listed === undefined) {
 			throw new EngineError('not-found', `Version ${deployed.version} of ${options.app} has no ${kind} trigger ${triggerId}.`)
 		}
-		const sandbox = SandboxSpec.safeParse(deployed.manifest.description.sandbox)
+		const sandbox = SandboxSpecification.safeParse(deployed.manifest.description.sandbox)
 		if (!sandbox.success) {
 			throw new EngineError(
 				'invalid',

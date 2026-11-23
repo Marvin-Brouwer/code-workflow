@@ -40,7 +40,7 @@ const capabilities = [
  * Writes an OCI bundle (`config.json`) around a shared root filesystem. A restore needs the same
  * bundle as the run it continues, so it stays until the sandbox is removed.
  *
- * Written here rather than with `runsc spec`, because with `sudo runsc` that file would belong to
+ * Written here rather than with `runsc specification`, because with `sudo runsc` that file would belong to
  * root.
  */
 export async function writeBundle(directory: string, options: BundleOptions): Promise<void> {

@@ -11,7 +11,7 @@ export default defineConfig({
 		alias: { '@mesh-flow/duration': fileURLToPath(new URL('../duration/src/_module/duration.mts', import.meta.url)) },
 	},
 	test: {
-		include: ['test/**/*.{test,spec}.mts'],
+		include: ['test/**/*.{test,specification}.mts'],
 		// gVisor is Linux only, and its unit tests run POSIX shell scripts.
 		exclude: [...configDefaults.exclude, ...(process.platform === 'win32' ? ['test/gvisor/**', 'test/conformance/gvisor.spec.mts'] : [])],
 		// The conformance suite starts real sandboxes; a pause writes all memory to disk first.
