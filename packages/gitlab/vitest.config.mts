@@ -25,7 +25,7 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['test/**/*.{test,specification}.mts'],
+		include: ['test/**/*.{test,spec}.mts'],
 		// Each test pushes and opens merge requests through a gateway with real git, which takes over
 		// 30 seconds for the longest ones on a busy Windows runner, where every git process is slow to start.
 		testTimeout: testTimeout.to('ms'),

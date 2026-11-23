@@ -22,7 +22,7 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['test/**/*.{test,specification}.mts'],
+		include: ['test/**/*.{test,spec}.mts'],
 		testTimeout: testTimeout.to('ms'),
 		hookTimeout: testTimeout.to('ms'),
 	},

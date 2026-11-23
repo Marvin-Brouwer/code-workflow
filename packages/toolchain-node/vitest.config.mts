@@ -14,6 +14,6 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['test/**/*.{test,specification}.mts'],
+		include: ['test/**/*.{test,spec}.mts'],
 	},
 })

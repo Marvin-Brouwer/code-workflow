@@ -18,7 +18,7 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['test/**/*.{test,specification}.mts'],
+		include: ['test/**/*.{test,spec}.mts'],
 		unstubEnvs: true,
 		testTimeout: testTimeout.to('ms'),
 		hookTimeout: testTimeout.to('ms'),

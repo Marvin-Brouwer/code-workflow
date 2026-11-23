@@ -11,7 +11,7 @@ export default defineConfig({
 		alias: { '@mesh-flow/duration': fileURLToPath(new URL('../duration/src/_module/duration.mts', import.meta.url)) },
 	},
 	test: {
-		include: ['test/**/*.{test,specification}.mts'],
+		include: ['test/**/*.{test,spec}.mts'],
 		testTimeout: testTimeout.to('ms'),
 		hookTimeout: testTimeout.to('ms'),
 	},

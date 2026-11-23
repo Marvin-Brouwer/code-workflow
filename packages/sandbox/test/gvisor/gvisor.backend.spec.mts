@@ -53,7 +53,7 @@ describe('gVisor backend, on a fake runsc', () => {
 		const listedRunning = await backend.list(timeout())
 
 		// Assert
-		expect(paused).toMatchObject({ backend: 'gvisor', id: sandbox.id, specification })
+		expect(paused).toMatchObject({ backend: 'gvisor', id: sandbox.id, spec: specification })
 		expect(listedPaused).toEqual([{ id: sandbox.id, state: 'paused' }])
 		expect(resumed.id).toBe(sandbox.id)
 		expect(listedRunning).toEqual([{ id: sandbox.id, state: 'running' }])
