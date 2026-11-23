@@ -91,7 +91,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 				await writeBundle(paths.bundle, {
 					rootfs,
 					init: initCommand(),
-					env: { ...specification.env },
+					environment: { ...specification.env },
 					cpus: specification.cpus,
 					memoryMb: specification.memoryMb,
 				})

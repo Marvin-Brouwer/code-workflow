@@ -66,7 +66,11 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<GitClient> {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
 		// The credential travels as `GIT_CONFIG_*` environment, so it never shows in a process list.
-		const git = gitClient({ cwd: clone, env: await options.credentialEnvironment(context), abortSignal: context.abortSignal })
+		const git = gitClient({
+			workingDirectory: clone,
+			environment: await options.credentialEnvironment(context),
+			abortSignal: context.abortSignal,
+		})
 		await git.init({ bare: true, quiet: true })
 		const url = await options.remoteUrl(repository, context)
 		const remotes = (await git.remotes()).stdout.split('\n').map((line) => line.trim())

@@ -12,7 +12,7 @@ It's what the connectors build on, on the host and in the sandbox alike. Workflo
 import { gitClient } from '@mesh-flow/git'
 
 const git = gitClient({
-	cwd: '/work/app',
+	workingDirectory: '/work/app',
 	gitConfig: { 'user.name': 'mesh-flow', 'user.email': 'mesh-flow@users.noreply.github.com' },
 	abortSignal,
 })
@@ -42,7 +42,7 @@ The questions a workflow asks are there as functions: `hasReference`, `hasLocalB
 ```ts
 import { basicAuthHeaderEnvironment, gitClient } from '@mesh-flow/git'
 
-const git = gitClient({ cwd: clone, env: basicAuthHeaderEnvironment('x-access-token', token), abortSignal })
+const git = gitClient({ workingDirectory: clone, environment: basicAuthHeaderEnvironment('x-access-token', token), abortSignal })
 await git.fetch('origin', ['+refs/heads/*:refs/heads/*'], { prune: true, quiet: true })
 ```
 

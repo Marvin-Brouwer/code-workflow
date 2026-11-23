@@ -36,8 +36,8 @@ export class MicrosandboxSandbox implements Sandbox {
 		const [program, ...commandArguments] = command
 		const handle = await abortable(
 			this.#sandbox.execStreamWith(program, (builder) => {
-				const withArguments = builder.args(commandArguments).envs({ ...options.env })
-				return options.cwd === undefined ? withArguments : withArguments.cwd(options.cwd)
+				const withArguments = builder.args(commandArguments).envs({ ...options.environment })
+				return options.workingDirectory === undefined ? withArguments : withArguments.cwd(options.workingDirectory)
 			}),
 			signal,
 			(late) => late.kill(),

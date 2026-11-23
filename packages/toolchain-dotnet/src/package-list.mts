@@ -41,10 +41,10 @@ type PackageList = z.infer<typeof PackageList>
  * throws with the end of its output: what's in the packages can't be told then.
  */
 export async function listPackages(target: string, options: readonly string[], abortSignal: AbortSignal): Promise<PackageList> {
-	const cwd = workingDirectoryOf(target)
-	const restored = await runDotnet(['restore', target, ...quietArguments], { cwd, abortSignal })
+	const workingDirectory = workingDirectoryOf(target)
+	const restored = await runDotnet(['restore', target, ...quietArguments], { workingDirectory, abortSignal })
 	if (!restored.succeeded) throw new Error(`dotnet restore failed:\n${outputTail(restored)}`)
-	const listed = await runDotnet(['list', target, 'package', ...options, '--format', 'json'], { cwd, abortSignal })
+	const listed = await runDotnet(['list', target, 'package', ...options, '--format', 'json'], { workingDirectory, abortSignal })
 	if (!listed.succeeded) throw new Error(`dotnet list package failed:\n${outputTail(listed)}`)
 	return PackageList.parse(parsedJson(listed.stdout, () => `dotnet list package wrote no JSON:\n${outputTail(listed)}`))
 }

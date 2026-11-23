@@ -51,7 +51,8 @@ export interface TreeStateOptions {
  */
 export async function treeState(directory: string, defaultBranch: string, options: TreeStateOptions): Promise<TreeState> {
 	const { abortSignal } = options
-	const git = async (commandArguments: readonly string[]) => (await gitCommand(commandArguments, { cwd: directory, abortSignal })).stdout
+	const git = async (commandArguments: readonly string[]) =>
+		(await gitCommand(commandArguments, { workingDirectory: directory, abortSignal })).stdout
 	const head = await git(['rev-parse', 'HEAD'])
 	const base = await mergeBase(directory, defaultBranch, abortSignal)
 	const diff = await git(['diff', '--binary', base])
@@ -68,6 +69,6 @@ export async function treeState(directory: string, defaultBranch: string, option
 
 /** The commit the checkout's branch left `origin/<defaultBranch>` at: what its changes are against. */
 async function mergeBase(directory: string, defaultBranch: string, abortSignal: AbortSignal): Promise<string> {
-	const { stdout } = await gitCommand(['merge-base', `origin/${defaultBranch}`, 'HEAD'], { cwd: directory, abortSignal })
+	const { stdout } = await gitCommand(['merge-base', `origin/${defaultBranch}`, 'HEAD'], { workingDirectory: directory, abortSignal })
 	return stdout.trim()
 }

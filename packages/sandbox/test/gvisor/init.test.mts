@@ -53,8 +53,8 @@ describe('jobScript', () => {
 		const job = path.join(directory, 'job.sh')
 		const log = path.join(directory, 'job.log')
 		const script = jobScript(['sh', '-c', 'echo "$1|$NAME|$PWD"', 'sh', "it's $HOME"], {
-			env: { NAME: 'a "quoted" value' },
-			cwd: directory,
+			environment: { NAME: 'a "quoted" value' },
+			workingDirectory: directory,
 			logFile: log,
 		})
 		await writeFile(job, script)
@@ -81,7 +81,9 @@ describe('jobScript', () => {
 
 	test('refuses an environment variable name the shell would read as code', () => {
 		// Act and assert
-		expect(() => jobScript(['true'], { env: { 'A=$(reboot)': 'x' } })).toThrow('A=$(reboot) is not a valid environment variable name.')
+		expect(() => jobScript(['true'], { environment: { 'A=$(reboot)': 'x' } })).toThrow(
+			'A=$(reboot) is not a valid environment variable name.',
+		)
 	})
 })
 
@@ -101,7 +103,7 @@ describe('submitJobCommand', () => {
 	test('hands the job to init', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		const { job, fifo, command } = await submission(directory, { cwd: directory, logFile: path.join(directory, 'job.log') })
+		const { job, fifo, command } = await submission(directory, { workingDirectory: directory, logFile: path.join(directory, 'job.log') })
 		const reading = readFile(fifo, 'utf8')
 
 		// Act
@@ -114,7 +116,7 @@ describe('submitJobCommand', () => {
 	test('fails, and removes the job, when its directory is missing', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		const { job, command } = await submission(directory, { cwd: path.join(directory, 'missing') })
+		const { job, command } = await submission(directory, { workingDirectory: path.join(directory, 'missing') })
 
 		// Act
 		const submitting = run(...command)

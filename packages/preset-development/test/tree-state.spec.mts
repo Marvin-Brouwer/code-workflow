@@ -44,7 +44,8 @@ describe('treeState', () => {
 		// Arrange
 		const repository = await gitCheckout()
 		const abortSignal = stateTimeout.toAbortSignal()
-		const git = async (...commandArguments: string[]) => gitCommand(commandArguments, { cwd: repository.directory, abortSignal })
+		const git = async (...commandArguments: string[]) =>
+			gitCommand(commandArguments, { workingDirectory: repository.directory, abortSignal })
 		await git('switch', '--quiet', '--create', 'feature/KEY-1')
 		await writeFile(path.join(repository.directory, 'README.md'), '# api\n\nThe change.\n')
 		await commit(repository.directory, 'The change', abortSignal)

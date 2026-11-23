@@ -14,7 +14,7 @@ describe('localGit', () => {
 		})
 		const git = localGit(await temporaryDirectory(), new AbortController().signal)
 		await git.init({ branch: 'main', quiet: true })
-		await writeFile(path.join(git.cwd, 'README.md'), '# Example\n')
+		await writeFile(path.join(git.workingDirectory, 'README.md'), '# Example\n')
 		await git.add()
 
 		// Act

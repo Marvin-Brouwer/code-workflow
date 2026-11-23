@@ -78,7 +78,7 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			await sandbox.writeFile('/var/tmp/stub.mjs', stub, timeout())
 			await sandbox.startInBackground(['node', '/var/tmp/stub.mjs'], {
 				signal: timeout(),
-				env: { STATE_DIR: stateDirectory },
+				environment: { STATE_DIR: stateDirectory },
 				logFile: stubLog,
 			})
 			const waiting = await pollJson(Waiting, sandbox, `${stateDirectory}/waiting.json`)
@@ -104,7 +104,10 @@ export function describeConformance(name: BackendName, open: () => SandboxBacken
 			cleanUp(sandbox.id)
 
 			// Act
-			const result = await sandbox.exec(['sh', '-c', 'echo "$MESH_FLOW_CHECK $EXTRA"'], { signal: timeout(), env: { EXTRA: 'too' } })
+			const result = await sandbox.exec(['sh', '-c', 'echo "$MESH_FLOW_CHECK $EXTRA"'], {
+				signal: timeout(),
+				environment: { EXTRA: 'too' },
+			})
 
 			// Assert
 			expect(result.stdout.trim()).toBe('present too')

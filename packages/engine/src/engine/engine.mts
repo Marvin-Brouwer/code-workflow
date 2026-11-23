@@ -549,7 +549,7 @@ export class Engine {
 			entry: app.entry,
 			layout: this.#layout,
 			start,
-			env: { [runIdEnvironmentVariable]: id },
+			environment: { [runIdEnvironmentVariable]: id },
 			grant,
 		}
 		await setUpRuntime(sandbox, channel, setup, abortSignal)

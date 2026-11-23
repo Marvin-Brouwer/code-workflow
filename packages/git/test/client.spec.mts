@@ -21,7 +21,7 @@ const stopAfter = duration.of('200ms')
 /** A repository with one commit on `main`. */
 async function repository(abortSignal = new AbortController().signal) {
 	const directory = await temporaryDirectory()
-	const git = gitClient({ cwd: directory, gitConfig: identity, abortSignal })
+	const git = gitClient({ workingDirectory: directory, gitConfig: identity, abortSignal })
 	await git.init({ branch: 'main', quiet: true })
 	await writeFile(path.join(directory, 'README.md'), '# Example\n')
 	await git.add()
@@ -69,9 +69,9 @@ describe('gitClient', () => {
 
 		// Act
 		await git.checkoutOrCreate('fix/7', 'main')
-		await writeFile(path.join(git.cwd, 'fix.txt'), 'fixed\n')
+		await writeFile(path.join(git.workingDirectory, 'fix.txt'), 'fixed\n')
 		const dirty = await git.dirtyFiles()
-		await writeFile(path.join(git.cwd, 'README.md'), '# Changed\n')
+		await writeFile(path.join(git.workingDirectory, 'README.md'), '# Changed\n')
 		const changed = await git.hasChanges()
 		await git.discardChanges()
 		const changedAfterDiscard = await git.hasChanges('README.md')
@@ -85,7 +85,11 @@ describe('gitClient', () => {
 		expect(changed).toBe(true)
 		expect(changedAfterDiscard).toBe(false)
 		// Read without the client's own `-c user.name`, which would win over the file.
-		expect((await gitClient({ cwd: git.cwd, abortSignal: new AbortController().signal }).config('user.name')).stdout.trim()).toBe('Someone')
+		expect(
+			(
+				await gitClient({ workingDirectory: git.workingDirectory, abortSignal: new AbortController().signal }).config('user.name')
+			).stdout.trim(),
+		).toBe('Someone')
 		expect(await git.currentBranch()).toBe('main')
 		expect(await git.conflictedFiles()).toEqual([])
 	})
@@ -108,13 +112,13 @@ describe('gitClient', () => {
 		const abortSignal = new AbortController().signal
 		const upstream = await repository(abortSignal)
 		const cloned = path.join(await temporaryDirectory(), 'clone')
-		await gitClient({ cwd: path.dirname(cloned), abortSignal }).clone(upstream.cwd, cloned, { quiet: true })
-		const clone = gitClient({ cwd: cloned, gitConfig: identity, abortSignal })
-		const fetched = gitClient({ cwd: await temporaryDirectory(), gitConfig: identity, abortSignal })
+		await gitClient({ workingDirectory: path.dirname(cloned), abortSignal }).clone(upstream.workingDirectory, cloned, { quiet: true })
+		const clone = gitClient({ workingDirectory: cloned, gitConfig: identity, abortSignal })
+		const fetched = gitClient({ workingDirectory: await temporaryDirectory(), gitConfig: identity, abortSignal })
 		await fetched.init({ quiet: true })
-		await fetched.remoteAdd('origin', upstream.cwd)
+		await fetched.remoteAdd('origin', upstream.workingDirectory)
 		await fetched.fetch('origin', ['+refs/heads/*:refs/remotes/origin/*'], { quiet: true })
-		const empty = gitClient({ cwd: await temporaryDirectory(), abortSignal })
+		const empty = gitClient({ workingDirectory: await temporaryDirectory(), abortSignal })
 		await empty.init({ quiet: true })
 
 		// Act
@@ -132,14 +136,14 @@ describe('gitClient', () => {
 		const abortSignal = new AbortController().signal
 		const upstream = await repository(abortSignal)
 		await upstream.checkout('fix/7', { create: true, quiet: true })
-		await writeFile(path.join(upstream.cwd, 'fix.txt'), 'pushed\n')
+		await writeFile(path.join(upstream.workingDirectory, 'fix.txt'), 'pushed\n')
 		await upstream.add()
 		await upstream.commit({ message: 'Pushed work', quiet: true })
 		const pushed = (await upstream.revParse('HEAD')).stdout.trim()
 		await upstream.checkout('main', { quiet: true })
 		const cloned = path.join(await temporaryDirectory(), 'clone')
-		await gitClient({ cwd: path.dirname(cloned), abortSignal }).clone(upstream.cwd, cloned, { quiet: true })
-		const clone = gitClient({ cwd: cloned, gitConfig: identity, abortSignal })
+		await gitClient({ workingDirectory: path.dirname(cloned), abortSignal }).clone(upstream.workingDirectory, cloned, { quiet: true })
+		const clone = gitClient({ workingDirectory: cloned, gitConfig: identity, abortSignal })
 
 		// Act
 		await clone.checkoutOrCreate('fix/7')
@@ -152,17 +156,17 @@ describe('gitClient', () => {
 	test('sees staged changes and reads status paths as git wrote them', async () => {
 		// Arrange
 		const git = await repository()
-		await writeFile(path.join(git.cwd, 'README.md'), '# Staged\n')
+		await writeFile(path.join(git.workingDirectory, 'README.md'), '# Staged\n')
 		await git.add('README.md')
-		await writeFile(path.join(git.cwd, 'with space.txt'), 'new\n')
-		await writeFile(path.join(git.cwd, 'café.txt'), 'new\n')
+		await writeFile(path.join(git.workingDirectory, 'with space.txt'), 'new\n')
+		await writeFile(path.join(git.workingDirectory, 'café.txt'), 'new\n')
 
 		// Act
 		const staged = await git.hasChanges()
 		const dirty = await git.dirtyFiles()
 		await git.discardChanges()
 		const afterDiscard = await git.hasChanges()
-		await writeFile(path.join(git.cwd, 'README.md'), '# Unstaged\n')
+		await writeFile(path.join(git.workingDirectory, 'README.md'), '# Unstaged\n')
 		const unstaged = await git.dirtyFiles()
 		await git.discardChanges('README.md')
 
@@ -208,8 +212,8 @@ describe('gitClient', () => {
 		})
 		const stop = new AbortController()
 		const git = gitClient({
-			cwd: await temporaryDirectory(),
-			env: basicAuthHeaderEnvironment('x-access-token', 'ghp_test'),
+			workingDirectory: await temporaryDirectory(),
+			environment: basicAuthHeaderEnvironment('x-access-token', 'ghp_test'),
 			abortSignal: stop.signal,
 		})
 		await git.init({ bare: true, quiet: true })

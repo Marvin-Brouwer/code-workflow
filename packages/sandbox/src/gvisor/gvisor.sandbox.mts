@@ -24,8 +24,8 @@ export class GvisorSandbox implements Sandbox {
 	}
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
-		const flags = Object.entries(options.env ?? {}).map(([key, value]) => `--env=${key}=${value}`)
-		if (options.cwd !== undefined) flags.push(`--cwd=${options.cwd}`)
+		const flags = Object.entries(options.environment ?? {}).map(([key, value]) => `--env=${key}=${value}`)
+		if (options.workingDirectory !== undefined) flags.push(`--cwd=${options.workingDirectory}`)
 		return runsc(this.#context.runsc, ['exec', ...flags, this.id, ...command], {
 			signal: this.#context.lifetime.bind(options.signal),
 		})

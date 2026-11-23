@@ -55,7 +55,7 @@ const sandbox = await backend.create(
 	signal,
 )
 
-const result = await sandbox.exec(['npm', 'test'], { signal, cwd: '/work' })
+const result = await sandbox.exec(['npm', 'test'], { signal, workingDirectory: '/work' })
 if (result.exitCode !== 0) throw new Error(result.stderr)
 
 await sandbox.writeFile('/srv/runtime.mjs', runtimeSource, signal)

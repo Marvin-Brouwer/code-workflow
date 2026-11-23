@@ -4,11 +4,11 @@ import { gitCommand, type GitCommand, type GitCommandOptions } from './command.m
 /** What `gitClient` takes. */
 export interface GitClientOptions {
 	/** The repository, or the directory a `clone` or `init` makes one in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** Git config for every command, as `-c key=value`, such as `{ 'user.name': 'mesh-flow' }`. Never written to `.git/config`. */
 	readonly gitConfig?: Readonly<Record<string, string>>
 	/** On top of the process's environment, for every command, such as `basicAuthHeaderEnvironment(...)` for a credential. */
-	readonly env?: Readonly<Record<string, string>>
+	readonly environment?: Readonly<Record<string, string>>
 	/**
 	 * When aborted, every git invocation this client spawns is killed, and the call rejects with
 	 * the signal's reason. One place for cancellation: callers give the signal once, here, not at
@@ -31,7 +31,7 @@ export type RawGit = {
 /** A git repository to work in: every command, and the questions a workflow asks about a checkout. */
 export interface GitClient extends ClientCommands {
 	/** The repository the client works in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** Whether `ref` names a commit: a branch, a tag, `HEAD`, or `refs/remotes/origin/main`. */
 	readonly hasReference: (reference: string) => Promise<boolean>
 	/** Whether there is a local branch `name`. */
@@ -132,7 +132,7 @@ export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
  * effort, and in a template string it renders as the shell line.
  *
  * ```ts
- * const git = gitClient({ cwd: checkout, abortSignal })
+ * const git = gitClient({ workingDirectory: checkout, abortSignal })
  * await git.fetch('origin', ['main'])
  * await git.checkoutOrCreate('fix/7')
  * const { stdout } = await git.revParse('HEAD')
@@ -140,10 +140,10 @@ export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
  */
 export function gitClient(options: GitClientOptions): GitClient {
 	const commandOptions: GitCommandOptions = {
-		cwd: options.cwd,
+		workingDirectory: options.workingDirectory,
 		abortSignal: options.abortSignal,
 		prefix: Object.entries({ ...platformConfig, ...options.gitConfig }).flatMap(([key, value]) => ['-c', `${key}=${value}`]),
-		...(options.env === undefined ? {} : { env: options.env }),
+		environment: options.environment,
 	}
 	const client = eachCommand((commandArguments) => gitCommand(commandArguments, commandOptions))
 
@@ -159,7 +159,7 @@ export function gitClient(options: GitClientOptions): GitClient {
 
 	return Object.freeze<GitClient>({
 		...client,
-		cwd: options.cwd,
+		workingDirectory: options.workingDirectory,
 		hasReference: hasReference,
 		hasLocalBranch,
 		hasRemoteBranch,

@@ -6,9 +6,9 @@ export type Command = readonly [program: string, ...commandArguments: string[]]
 export interface ExecOptions {
 	readonly signal: AbortSignal
 	/** Added to the sandbox's own environment for this command. */
-	readonly env?: Readonly<Record<string, string>>
+	readonly environment?: Readonly<Record<string, string>> | undefined
 	/** The directory the command runs in. Default: the image's working directory. */
-	readonly cwd?: string
+	readonly workingDirectory?: string | undefined
 }
 
 export interface StartInBackgroundOptions extends ExecOptions {

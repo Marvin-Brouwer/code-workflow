@@ -42,7 +42,7 @@ export async function runTests({ target, filter, abortSignal }: RunTestsOptions)
 				...(filter === undefined ? [] : ['--filter', filter]),
 				...quietBuildArguments,
 			],
-			{ cwd: workingDirectoryOf(target), abortSignal },
+			{ workingDirectory: workingDirectoryOf(target), abortSignal },
 		)
 		const files = (await readdir(resultsDirectory, { recursive: true })).filter((file) => file.endsWith('.trx'))
 		const outcome = outcomeOf(await Promise.all(files.map((file) => readFile(path.join(resultsDirectory, file), 'utf8'))))

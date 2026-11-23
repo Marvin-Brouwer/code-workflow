@@ -121,7 +121,7 @@ describe('codeReview', () => {
 		expect(await run.result).toEqual([{ source: 'code review: src/Refunds.cs:12', message: 'The refund is never saved.' }])
 		const prompt = textOf(model.requests[0])
 		const { stdout: base } = await gitCommand(['rev-parse', 'origin/main'], {
-			cwd: repository.directory,
+			workingDirectory: repository.directory,
 			abortSignal: checkTimeout.toAbortSignal(),
 		})
 		expect(prompt).toContain(`git diff ${base.trim()}`)

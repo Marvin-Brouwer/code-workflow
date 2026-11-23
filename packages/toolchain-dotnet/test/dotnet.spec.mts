@@ -428,8 +428,8 @@ describe('runDotnet', () => {
 
 		// Act
 		await Promise.all([
-			runDotnet(['build'], { cwd: directory, ...toolContext() }),
-			runDotnet(['build'], { cwd: directory, ...toolContext() }),
+			runDotnet(['build'], { workingDirectory: directory, ...toolContext() }),
+			runDotnet(['build'], { workingDirectory: directory, ...toolContext() }),
 		])
 
 		// Assert
@@ -441,8 +441,8 @@ describe('runDotnet', () => {
 		const directory = await temporaryDirectory()
 		const cli = await fakeDotnet({ build: { hold } })
 		const controller = new AbortController()
-		const first = runDotnet(['build'], { cwd: directory, ...toolContext() })
-		const second = runDotnet(['build', 'second'], { cwd: directory, abortSignal: controller.signal })
+		const first = runDotnet(['build'], { workingDirectory: directory, ...toolContext() })
+		const second = runDotnet(['build', 'second'], { workingDirectory: directory, abortSignal: controller.signal })
 
 		// Act
 		controller.abort(new Error('The run stopped.'))
@@ -461,7 +461,7 @@ describe('runDotnet', () => {
 			const pidFile = path.join(directory, 'child.pid')
 			await fakeDotnet({ build: { hang: true, stubbornChildPidFile: pidFile } })
 			const controller = new AbortController()
-			const running = runDotnet(['build'], { cwd: directory, abortSignal: controller.signal })
+			const running = runDotnet(['build'], { workingDirectory: directory, abortSignal: controller.signal })
 			const child = Number(await written(pidFile))
 			onTestFinished(async () => {
 				if (await isRunning(child)) process.kill(child, 'SIGKILL')
@@ -486,7 +486,7 @@ describe('runDotnet', () => {
 			const pidFile = path.join(directory, 'dotnet.pid')
 			await fakeDotnet({ build: { hang: true, ignoresStop: true, pidFile } })
 			const controller = new AbortController()
-			const running = runDotnet(['build'], { cwd: directory, abortSignal: controller.signal })
+			const running = runDotnet(['build'], { workingDirectory: directory, abortSignal: controller.signal })
 			const dotnetPid = Number(await written(pidFile))
 
 			// Act

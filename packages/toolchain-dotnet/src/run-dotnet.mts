@@ -13,7 +13,7 @@ export interface DotnetResult {
 /** What `runDotnet` takes besides the arguments. */
 export interface RunDotnetOptions {
 	/** The directory `dotnet` runs in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** Aborting it kills `dotnet` and the processes it started, and rejects the call with the signal's reason. */
 	readonly abortSignal: AbortSignal
 }
@@ -60,7 +60,7 @@ const inTurn = oneAtATime()
  * such as `verify` running the tests and the security check side by side.
  */
 export function runDotnet(commandArguments: readonly string[], options: RunDotnetOptions): Promise<DotnetResult> {
-	const resolved = path.resolve(options.cwd)
+	const resolved = path.resolve(options.workingDirectory)
 	const key = pathsIgnoreCase ? resolved.toLowerCase() : resolved
 	return inTurn(key, options.abortSignal, () => spawnDotnet(commandArguments, options))
 }
@@ -73,7 +73,7 @@ async function spawnDotnet(commandArguments: readonly string[], options: RunDotn
 	const { abortSignal } = options
 	abortSignal.throwIfAborted()
 	const subprocess = execa('dotnet', commandArguments, {
-		cwd: options.cwd,
+		cwd: options.workingDirectory,
 		env: dotnetEnvironment,
 		stdin: 'ignore',
 		maxBuffer: maxOutputBytes,

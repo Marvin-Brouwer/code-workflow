@@ -73,8 +73,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 		const map = (value: string) => value.replaceAll(hostSandboxRoot, `${files}/`)
 		const mapOptions = (options: ExecOptions): ExecOptions => ({
 			signal: options.signal,
-			...(options.cwd === undefined ? {} : { cwd: map(options.cwd) }),
-			env: Object.fromEntries(Object.entries(options.env ?? {}).map(([key, value]) => [key, map(value)])),
+			workingDirectory: options.workingDirectory === undefined ? undefined : map(options.workingDirectory),
+			environment: Object.fromEntries(Object.entries(options.environment ?? {}).map(([key, value]) => [key, map(value)])),
 		})
 		return {
 			id,
@@ -85,8 +85,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				const log = openSync(map(options.logFile ?? '/dev/null'), 'a')
 				const [program, ...commandArguments] = command.map(map)
 				const child = spawn(program ?? 'false', commandArguments, {
-					cwd: mapped.cwd,
-					env: { ...process.env, ...mapped.env },
+					cwd: mapped.workingDirectory,
+					env: { ...process.env, ...mapped.environment },
 					detached: true,
 					stdio: ['ignore', log, log],
 				})
@@ -181,7 +181,7 @@ function execOnHost(command: Command, options: ExecOptions): Promise<ExecResult>
 		execFile(
 			program,
 			commandArguments,
-			{ cwd: options.cwd, env: { ...process.env, ...options.env }, signal: options.signal },
+			{ cwd: options.workingDirectory, env: { ...process.env, ...options.environment }, signal: options.signal },
 			(error, stdout, stderr) => {
 				if (error && typeof error.code !== 'number') reject(error)
 				else resolve({ exitCode: typeof error?.code === 'number' ? error.code : 0, stdout, stderr })

@@ -100,12 +100,12 @@ function checkoutOf(name: string, branch: string, defaultBranch: string, folderP
  * something else of the workflow's, which is never touched.
  */
 async function existingCheckout(git: GitClient): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
-	const present = await stat(git.cwd).then(
+	const present = await stat(git.workingDirectory).then(
 		() => true,
 		() => false,
 	)
 	if (!present) return 'absent'
-	const hasGitDirectory = await stat(path.join(git.cwd, '.git')).then(
+	const hasGitDirectory = await stat(path.join(git.workingDirectory, '.git')).then(
 		() => true,
 		() => false,
 	)

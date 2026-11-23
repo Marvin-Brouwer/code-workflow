@@ -19,5 +19,5 @@ const committerEnvironment = Object.freeze({
  * fetching and pushing go through the host. Aborting the signal kills whatever runs.
  */
 export function localGit(directory: string, abortSignal: AbortSignal): GitClient {
-	return gitClient({ cwd: directory, env: committerEnvironment, abortSignal })
+	return gitClient({ workingDirectory: directory, environment: committerEnvironment, abortSignal })
 }

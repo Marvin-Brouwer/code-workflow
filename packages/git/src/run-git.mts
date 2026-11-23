@@ -18,9 +18,9 @@ export interface GitResult {
 /** What `runGit` takes besides the arguments. */
 export interface RunGitOptions {
 	/** The directory git runs in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** On top of the process's environment. Credentials go here, never in the arguments: a process list shows arguments. */
-	readonly env?: Readonly<Record<string, string>>
+	readonly environment?: Readonly<Record<string, string>> | undefined
 	/** Aborting it kills git and the helpers it started, and rejects the call with the signal's reason. */
 	readonly abortSignal: AbortSignal
 }
@@ -41,8 +41,8 @@ export async function runGit(commandArguments: readonly string[], options: RunGi
 	const { abortSignal } = options
 	abortSignal.throwIfAborted()
 	const subprocess = execa('git', commandArguments, {
-		cwd: options.cwd,
-		env: { GIT_TERMINAL_PROMPT: '0', ...options.env },
+		cwd: options.workingDirectory,
+		env: { GIT_TERMINAL_PROMPT: '0', ...options.environment },
 		stdin: 'ignore',
 		maxBuffer: maxOutputBytes,
 		reject: false,

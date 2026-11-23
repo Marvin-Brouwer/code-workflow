@@ -31,8 +31,8 @@ export class E2bSandbox implements Sandbox {
 		try {
 			// E2B runs a command line through a shell, so the arguments are quoted for it.
 			const result = await this.#sandbox.commands.run(quote(command), {
-				envs: { ...options.env },
-				...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+				envs: { ...options.environment },
+				...(options.workingDirectory === undefined ? {} : { cwd: options.workingDirectory }),
 				// No time limit of its own: the signal decides how long a command may take.
 				timeoutMs: 0,
 				signal,
