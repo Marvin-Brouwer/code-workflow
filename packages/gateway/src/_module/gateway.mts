@@ -59,6 +59,7 @@ export {
 	type ConnectorHostOptions,
 	type HostTool,
 	type HostToolContext,
+	type MissingSettingsOptions,
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
 export { loginCommand, SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'

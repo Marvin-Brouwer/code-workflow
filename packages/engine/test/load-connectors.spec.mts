@@ -93,7 +93,7 @@ describe('loadConnectors', () => {
 		expect(await credentials.get('cloud/session', abortSignal)).toBe('token')
 	})
 
-	test("carries a connector's registries and settings check, each with the connector's own credentials", async () => {
+	test("carries a connector's registries and settings check", async () => {
 		// Arrange
 		const withRegistries = `export const connector = {
 	name: 'cloud',
@@ -119,6 +119,27 @@ describe('loadConnectors', () => {
 		// Assert
 		expect(where).toEqual({ url: 'https://packages.cloud.example/npm/left-pad', headers: { authorization: 'Bearer cloud-token' } })
 		expect(missing).toEqual([{ message: 'Set cloud/start-url.', fix: { kind: 'credential', name: 'cloud/start-url' } }])
+	})
+
+	test("lets a connector's settings check read credentials outside its own, such as Atlassian's jira/url", async () => {
+		// Arrange
+		const readsOtherNames = `export const connector = {
+	name: 'wiki',
+	tools: () => [],
+	missingSettings: async ({ credentials }, abortSignal) => ((await credentials.get('pages/url', abortSignal)) === undefined ? [{ message: 'Set pages/url.', fix: { kind: 'credential', name: 'pages/url' } }] : []),
+}
+`
+		const from = await installed({ wiki: readsOtherNames })
+		const directory = await temporaryDirectory()
+		const credentials = await credentialStore()
+		await credentials.set('pages/url', 'https://pages.example.com', abortSignal)
+
+		// Act
+		const [wiki] = await loadConnectors({ connectors: [{ package: 'wiki' }], from, directory, credentials })
+		const missing = await wiki?.missingSettings?.(abortSignal)
+
+		// Assert
+		expect(missing).toEqual([])
 	})
 
 	test("runs a tool once more when its connector's sign-in finished while it ran", async () => {

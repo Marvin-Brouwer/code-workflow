@@ -4,14 +4,14 @@ import { confluenceHostTools } from './confluence/confluence-host-tools.mts'
 import type { AtlassianHostOptions } from './host-options.mts'
 import { jiraApi } from './jira/jira-api.mts'
 import { jiraHostTools } from './jira/jira-host-tools.mts'
-import { missingSiteSettings } from './site.mts'
+import { missingSiteSettings } from './missing-site-settings.mts'
 
 /**
  * The host halves of every Jira and Confluence tool, with each product's site and token read from
  * the gateway's credential store on every call (see `cloudCredentialNames` and
- * `dataCenterCredentialNames`). The engine loads them
- * itself with `mesh-flow connector add @mesh-flow/atlassian`; call this when you embed a gateway of
- * your own, or to test a workflow against a fake site.
+ * `dataCenterCredentialNames`). The engine loads them itself with
+ * `mesh-flow connector add @mesh-flow/atlassian`; call this when you embed a gateway of your own,
+ * or to test a workflow against a fake site.
  *
  * @param options - What the tools send requests with, and how they retry. Defaults: the global
  * `fetch` and `defaultFetchRetry`.
@@ -39,6 +39,13 @@ export function atlassianHostTools(options: AtlassianHostOptions = {}): HostTool
  * echo 'https://example.atlassian.net' | mesh-flow credential set atlassian/url
  * echo 'bot@example.com' | mesh-flow credential set atlassian/email
  * mesh-flow credential set atlassian/token < api-token.txt
+ * ```
+ *
+ * @example Data Center, per product
+ * ```sh
+ * mesh-flow connector add @mesh-flow/atlassian
+ * echo 'https://jira.example.com' | mesh-flow credential set jira/url
+ * mesh-flow credential set jira/token < personal-access-token.txt
  * ```
  */
 export const connector: ConnectorHost = connectorHost('atlassian', () => atlassianHostTools(), {
