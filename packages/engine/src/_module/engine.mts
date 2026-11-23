@@ -23,13 +23,12 @@ export { runEventStream, type RunEventSource } from '../control/run-events.mts'
 export { Engine, type CloseDeadlines, type EngineOptions, type StartRunOptions } from '../engine/engine.mts'
 export { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 export { defaultSandboxLayout, type SandboxLayout } from '../engine/sandbox-layout.mts'
+export { SignInState } from '../engine/sign-in-state.mts'
 export { RunId } from '../runs/run-id.mts'
 export { RunApp, RunRecord, RunStatus } from '../runs/run-record.mts'
 export { openRunStore, runDirectory, type LoadedRuns, type RunStore } from '../runs/run-store.mts'
 export { gatewayDirectory, openEngineGatewayHome, type EngineGatewayOptions } from '../serve/engine-gateway.mts'
 export { serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
-export { handleShutdown, type HandleShutdownOptions, type ShutdownProcess } from '../shutdown/handle-shutdown.mts'
-export { uiEntry, type ServedUi, type ServeUi, type ServeUiOptions } from '../ui/ui-host.mts'
 export {
 	listProviders,
 	putProvider,
@@ -38,4 +37,5 @@ export {
 	type ListedProvider,
 	type ProviderInput,
 } from '../settings/providers.mts'
-export { SignInState } from '../engine/sign-in-state.mts'
+export { handleShutdown, type HandleShutdownOptions, type ShutdownProcess } from '../shutdown/handle-shutdown.mts'
+export { uiEntry, type ServedUi, type ServeUi, type ServeUiOptions } from '../ui/ui-host.mts'
