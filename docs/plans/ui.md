@@ -188,7 +188,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 - Overrides of static config, and team-level providers.
 - The flight data recorder, and the natural views of
   [design section 10](../design.md#10-ui-contract) (lanes for `inDependencyOrder`, a feed for
-  review handling), which can come later as first-party renderers in `@mesh-flow/ui`: the run view is the event tree as a list.
+  review handling), which can come later as first-party renderers in `@mesh-flow/ui`: the run
+  view is the event tree as a list.
 - Remote access. The UI is for the machine the engine runs on, as the control socket is.
 
 ## Tests
