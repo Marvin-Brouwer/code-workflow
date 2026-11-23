@@ -161,7 +161,7 @@ Stacked PRs, each on the one before:
 2. Structured missing settings in the engine and the connectors; tool results and `describe` in
    the event tree.
 3. `mesh-flow ui`: the server, access, the settings and runs API, and the engine's
-   `GET /apps/:name/missing`, so the wizard can ask before it starts anything. `@mesh-flow/ui` as an empty
-   rooted app with the shell, so the command has something to serve.
+   `GET /apps/:name/missing`, so the wizard can ask before it starts anything. `@mesh-flow/ui` as
+   an empty rooted app with the shell, so the command has something to serve.
 4. Settings pages and the wizard's forms.
 5. Apps, the start page with the wizard, and the run view.
