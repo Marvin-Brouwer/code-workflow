@@ -5,7 +5,7 @@ import { EngineError } from '../engine/engine-error.mts'
 export interface ListedProvider {
 	readonly name: string
 	readonly kind: string
-	readonly baseUrl?: string
+	readonly baseUrl?: string | undefined
 	readonly hasKey: boolean
 }
 
@@ -14,9 +14,9 @@ export interface ProviderInput {
 	readonly name: string
 	readonly kind: string
 	/** Another base URL than the kind's, for a proxy or a compatible server. */
-	readonly baseUrl?: string
+	readonly baseUrl?: string | undefined
 	/** Its API key. Left out, the key it has stays. */
-	readonly key?: string
+	readonly key?: string | undefined
 }
 
 /** The providers in the order models are looked up, with whether each has a key. */

@@ -10,7 +10,7 @@ export interface ProviderFormOptions {
 	/** The model it's for, when a run needs it: said above the form, since only the kind knows its models. */
 	readonly model?: string
 	/** Called once the provider is added. */
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /** Adds a model provider: its name, which kind it is, its key and, for a proxy, its base URL. */
@@ -108,10 +108,10 @@ export const ProviderForm = component<ProviderFormOptions>({
 						abortSignal: signal,
 						send: (form, abortSignal) => {
 							const baseUrl = formText(form, 'baseUrl')
-							const body = { kind: formText(form, 'kind'), key: formText(form, 'key'), ...(baseUrl === '' ? {} : { baseUrl }) }
+							const body = { kind: formText(form, 'kind'), key: formText(form, 'key'), baseUrl: baseUrl === '' ? undefined : baseUrl }
 							return send('PUT', `/settings/providers/${encodeURIComponent(formText(form, 'name'))}`, body, NoContent, abortSignal)
 						},
-						...(done === undefined ? {} : { done }),
+						done,
 					}),
 				},
 			}),

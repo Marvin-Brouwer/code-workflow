@@ -11,7 +11,7 @@ export interface SchemaFormOptions {
 	readonly submitLabel: string
 	/** Sends the value, once it fits the schema. */
 	readonly send: (value: unknown, abortSignal: AbortSignal) => Promise<Answer<unknown>>
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /**
@@ -151,7 +151,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 							const checked = checkAgainst(schema, value.value)
 							return checked.ok ? send(checked.value, abortSignal) : checked
 						},
-						...(done === undefined ? {} : { done }),
+						done,
 					}),
 				},
 			}),

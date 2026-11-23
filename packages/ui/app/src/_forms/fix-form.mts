@@ -7,7 +7,7 @@ import { ProviderKeyForm } from './provider-key-form.mts'
 export interface FixFormOptions {
 	readonly setting: MissingSetting
 	/** Called once the form set it. */
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /**
@@ -20,23 +20,22 @@ export const FixForm = component<FixFormOptions>({
 	onMount({ append, element, create, options }) {
 		const { setting, done } = options
 		const { fix } = setting
-		const then = done === undefined ? {} : { done }
 		const form = () => {
 			if (fix.kind === 'provider')
 				return create(ProviderForm, {
 					model: fix.model,
-					...then,
+					done,
 				})
 			if (fix.kind === 'provider-key')
 				return create(ProviderKeyForm, {
 					provider: fix.provider,
-					...then,
+					done,
 				})
 			if (fix.kind === 'credential')
 				return create(CredentialForm, {
 					name: fix.name,
-					...(fix.example === undefined ? {} : { example: fix.example }),
-					...then,
+					example: fix.example,
+					done,
 				})
 			return undefined
 		}

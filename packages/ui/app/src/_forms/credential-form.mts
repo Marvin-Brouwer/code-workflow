@@ -12,9 +12,9 @@ export interface CredentialFormOptions {
 	 * A value of the right shape, such as `https://example.atlassian.net`. A credential with one is a
 	 * setting rather than a secret, so its value is shown as it's typed.
 	 */
-	readonly example?: string
+	readonly example?: string | undefined
 	/** Called once the credential is set. */
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /**

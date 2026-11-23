@@ -25,7 +25,7 @@ export function settingsApi({ gatewayHome, connectors }: SettingsApiOptions): Ho
 	api.get('/providers', async (c) => c.json(await listProviders(await gatewayHome(c.req.raw.signal), c.req.raw.signal)))
 	api.put('/providers/:name', async (c) => {
 		const { kind, baseUrl, key } = ProviderBody.parse(await c.req.json())
-		const input = { name: c.req.param('name'), kind, ...(baseUrl === undefined ? {} : { baseUrl }), ...(key === undefined ? {} : { key }) }
+		const input = { name: c.req.param('name'), kind, baseUrl, key }
 		await putProvider(await gatewayHome(c.req.raw.signal), input, c.req.raw.signal)
 		return c.body(null, 204)
 	})

@@ -18,8 +18,7 @@ export function runsApi(client: ControlClient): Hono {
 		const run = c.req.param('run')
 		const abortSignal = c.req.raw.signal
 		if (c.req.header('accept')?.includes('text/event-stream') !== true) return c.json(await client.events(run, abortSignal))
-		const lastEventId = c.req.header('last-event-id')
-		return streamed(await client.followRun(run, { ...(lastEventId === undefined ? {} : { lastEventId }), abortSignal }))
+		return streamed(await client.followRun(run, { lastEventId: c.req.header('last-event-id'), abortSignal }))
 	})
 	api.post('/runs/:run/answers/:request', async (c) => {
 		const { value } = AnswerBody.parse(await c.req.json())

@@ -9,7 +9,7 @@ export interface SubmitOptions {
 	/** Sends what the form holds. A refusal is an answer, shown in `status`. */
 	readonly send: (form: FormData, abortSignal: AbortSignal) => Promise<Answer<unknown>>
 	/** Called after it was sent, such as to show the change. */
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /**

@@ -8,7 +8,7 @@ import { submitForm } from './submit-form.mts'
 export interface ProviderKeyFormOptions {
 	readonly provider: string
 	/** Called once the key is set. */
-	readonly done?: () => void
+	readonly done?: (() => void) | undefined
 }
 
 /** Sets a provider's API key. It goes in and never comes back. */
@@ -57,7 +57,7 @@ export const ProviderKeyForm = component<ProviderKeyFormOptions>({
 								NoContent,
 								abortSignal,
 							),
-						...(done === undefined ? {} : { done }),
+						done,
 					}),
 				},
 			}),

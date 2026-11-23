@@ -55,7 +55,7 @@ export interface ControlClient {
 	 * answered. With `lastEventId`, only the events after it. It ends when the engine closes, the
 	 * run is removed or `abortSignal` aborts.
 	 */
-	followRun(run: string, options: { readonly lastEventId?: string; readonly abortSignal: AbortSignal }): Promise<Readable>
+	followRun(run: string, options: { readonly lastEventId?: string | undefined; readonly abortSignal: AbortSignal }): Promise<Readable>
 	/** The connectors the engine loaded, and whether each signs in. */
 	connectors(abortSignal: AbortSignal): Promise<ShownConnector[]>
 	/** The sign-ins under way, with where to sign in. */
