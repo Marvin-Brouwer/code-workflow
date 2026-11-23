@@ -86,6 +86,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 		await mkdir(directory, { recursive: true, mode: 0o700 })
 		const credentials = connectorCredentials(options.credentials, host.name)
 		const hostOptions = { directory, credentials }
+		const settingsCheckOptions = { directory, credentials: Object.freeze({ get: options.credentials.get }) }
 		const signInCount = { finished: 0 }
 		const tools = host.tools(hostOptions).map((tool) => withOwnSignIns(host.name, tool, signInCount))
 		for (const tool of tools) {
@@ -111,7 +112,7 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 				? {}
 				: {
 						missingSettings: async (abortSignal: AbortSignal) =>
-							checkedMissingSettings(host.name, await missingSettings(hostOptions, abortSignal)),
+							checkedMissingSettings(host.name, await missingSettings(settingsCheckOptions, abortSignal)),
 					}),
 		})
 	}

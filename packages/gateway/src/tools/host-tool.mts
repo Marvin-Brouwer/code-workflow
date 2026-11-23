@@ -101,6 +101,16 @@ export interface ConnectorHostOptions {
 }
 
 /**
+ * What a connector's settings check gets: its directory, and every credential to read, not only
+ * its own, since a connector may read settings under other names, as Atlassian reads `jira/url`.
+ * It reads, as its tools do through their context, and changes nothing.
+ */
+export interface MissingSettingsOptions {
+	readonly directory: string
+	readonly credentials: CredentialReader
+}
+
+/**
  * The host half of a connector package, as its `host` entry point exports it: a name, the host
  * tools it brings, and, for a service with sessions, a `signIn`. The engine loads the connectors
  * the user added and gives every run the tools of them its app lists.
@@ -121,12 +131,11 @@ export interface ConnectorHost {
 	 */
 	readonly registries?: (options: ConnectorHostOptions) => ResolveRegistryTarget
 	/**
-	 * The settings the connector still needs, from its own credentials, made with the same options
-	 * as its tools: each a line that says how to set it, and what sets it, usually a credential
-	 * (`missingCredentials`). `mesh-flow deploy`, a trigger and the UI's wizard report them
+	 * The settings the connector still needs, from the credentials it reads: each a line that says
+	 * how to set it, and what sets it, usually a credential (`missingCredentials`). `mesh-flow deploy`, a trigger and the UI's wizard report them
 	 * for an app that uses the connector.
 	 */
-	readonly missingSettings?: (options: ConnectorHostOptions, abortSignal: AbortSignal) => Promise<MissingSetting[]>
+	readonly missingSettings?: (options: MissingSettingsOptions, abortSignal: AbortSignal) => Promise<MissingSetting[]>
 }
 
 /** What else a connector's host half brings besides its tools. */
