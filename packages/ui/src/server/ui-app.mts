@@ -13,6 +13,7 @@ import type { GatewayHome } from '@mesh-flow/gateway'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
+import { pageHeaders } from './page-headers.mts'
 import { runsApi } from './runs-api.mts'
 import { settingsApi } from './settings-api.mts'
 import { uiAccess } from './ui-access.mts'
@@ -42,6 +43,7 @@ export function uiApp(options: UiAppOptions): Hono {
 	const index = path.join(options.assets, 'index.html')
 	if (!existsSync(index)) throw new Error(`The UI isn't built: there is no ${index}. Build it with \`pnpm --filter @mesh-flow/ui build\`.`)
 	const app = new Hono()
+	app.use(pageHeaders())
 	app.use(uiAccess({ token: options.token, host: options.host }))
 	app.get('/api/engine/status', async (c) => c.json({ running: await engineAnswers(options.socketPath) }))
 	app.route('/api/engine', runsApi(options.client))

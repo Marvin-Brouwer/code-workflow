@@ -11,7 +11,7 @@ const json = { 'content-type': 'application/json' }
 describe('access', () => {
 	test('swaps the token for a cookie and drops it from the address', async () => {
 		// Arrange
-		const { url, token } = await servedUi()
+		const { url, token, cookieName } = await servedUi()
 
 		// Act
 		const swapped = await send(url, `/runs/?token=${token}`)
@@ -19,19 +19,19 @@ describe('access', () => {
 		// Assert
 		expect(swapped.status).toBe(303)
 		expect(swapped.headers['location']).toBe('/runs/')
-		expect(swapped.headers['set-cookie']).toEqual([`mesh-flow-ui=${token}; Path=/; HttpOnly; SameSite=Strict`])
+		expect(swapped.headers['set-cookie']).toEqual([`${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict`])
 	})
 
 	test.each([
-		{ request: 'another token', route: '/?token=not-it', headers: {}, status: 401 },
-		{ request: 'no cookie', route: '/api/settings/providers', headers: {}, status: 401 },
-		{ request: 'another cookie', route: '/api/settings/providers', headers: { cookie: 'mesh-flow-ui=not-it' }, status: 401 },
-	])('refuses $request', async ({ route, headers, status }) => {
+		{ request: 'another token', route: '/?token=not-it', cookie: undefined, status: 401 },
+		{ request: 'no cookie', route: '/api/settings/providers', cookie: undefined, status: 401 },
+		{ request: 'another cookie', route: '/api/settings/providers', cookie: 'not-it', status: 401 },
+	])('refuses $request', async ({ route, cookie, status }) => {
 		// Arrange
-		const { url } = await servedUi()
+		const { url, cookieName } = await servedUi()
 
 		// Act
-		const refused = await send(url, route, { headers })
+		const refused = await send(url, route, { headers: cookie === undefined ? {} : { cookie: `${cookieName}=${cookie}` } })
 
 		// Assert
 		expect(refused.status).toBe(status)
@@ -46,6 +46,49 @@ describe('access', () => {
 
 		// Assert
 		expect(refused.status).toBe(403)
+	})
+
+	test.each([
+		{ request: 'a page on another port, which the browser counts as the same site', headers: { 'sec-fetch-site': 'same-site' } },
+		{ request: 'another site', headers: { 'sec-fetch-site': 'cross-site' } },
+		{ request: 'another origin, by its Origin', headers: { origin: 'http://127.0.0.1:5173' } },
+	])('refuses a request from $request, even with the cookie', async ({ headers }) => {
+		// Arrange
+		const { url, cookie } = await servedUi()
+
+		// Act
+		const refused = await send(url, '/api/settings/providers', { headers: { cookie, ...headers } })
+
+		// Assert
+		expect(refused.status).toBe(403)
+	})
+
+	test("lets in the UI's own page and the user opening its address", async () => {
+		// Arrange
+		const { url, cookie } = await servedUi()
+
+		// Act
+		const fromPage = await send(url, '/api/settings/providers', {
+			headers: { cookie, 'sec-fetch-site': 'same-origin', origin: `http://${url.host}` },
+		})
+		const opened = await send(url, '/', { headers: { cookie, 'sec-fetch-site': 'none' } })
+
+		// Assert
+		expect(fromPage.status).toBe(200)
+		expect(opened.status).toBe(200)
+	})
+
+	test('names its cookie after its port, so two UIs keep their own', async () => {
+		// Arrange
+		const first = await servedUi()
+		const second = await servedUi()
+
+		// Act
+		const refused = await send(second.url, '/api/settings/providers', { headers: { cookie: first.cookie } })
+
+		// Assert
+		expect(first.cookieName).not.toBe(second.cookieName)
+		expect(refused.status).toBe(401)
 	})
 
 	test("refuses a change that isn't JSON, as a form on another site would send it", async () => {
@@ -65,6 +108,18 @@ describe('access', () => {
 })
 
 describe('the page', () => {
+	test('may run only its own scripts, in no frame', async () => {
+		// Arrange
+		const { url, cookie } = await servedUi()
+
+		// Act
+		const page = await send(url, '/', { headers: { cookie } })
+
+		// Assert
+		expect(page.headers['content-security-policy']).toContain("script-src 'self'")
+		expect(page.headers['content-security-policy']).toContain("frame-ancestors 'none'")
+	})
+
 	test("answers a page's path with index.html, for the page's own router", async () => {
 		// Arrange
 		const { url, cookie } = await servedUi()
