@@ -3,6 +3,7 @@ import { href, navigate } from '@rooted/router'
 import { SchemaForm } from '../_forms/schema-form.mts'
 import { send } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
+import { noAppText } from '../_shared/no-app-text.mts'
 import { RunRecord } from '../_shared/runs.mts'
 import { readTheApp } from '../_shared/the-app.mts'
 import { RunRoute } from '../runs/_routes.mts'
@@ -35,9 +36,13 @@ export const StartPage = component<StartPageOptions>({
 			return
 		}
 		const app = theApp.value
+		if (app === undefined) {
+			content.replaceChildren(noAppText(element))
+			return
+		}
 		const trigger = userTriggersOf(app).find(({ id }) => id === triggerId)
-		const workflow = app?.manifest.description.workflows.find(({ name }) => name === trigger?.workflow)
-		if (app === undefined || workflow === undefined) {
+		const workflow = app.manifest.description.workflows.find(({ name }) => name === trigger?.workflow)
+		if (workflow === undefined) {
 			content.replaceChildren(errorText(element, `There is no button ${triggerId}.`))
 			return
 		}

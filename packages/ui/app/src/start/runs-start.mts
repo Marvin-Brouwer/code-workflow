@@ -1,4 +1,4 @@
-import { component } from '@rooted/components'
+import { choice, component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { read } from '../_shared/api.mts'
@@ -27,9 +27,7 @@ export const RunsStart = component({
 				classes: styles.bar,
 				role: 'status',
 				children: [
-					count === 1
-						? 'The app still needs 1 setting before a run can start. '
-						: `The app still needs ${count} settings before a run can start. `,
+					`The app still needs ${count} ${choice(count === 1, 'setting', 'settings')} before a run can start. `,
 					create(Link, {
 						href: href.for(SetupRoute),
 						children: 'Set them up',
@@ -46,7 +44,7 @@ export const RunsStart = component({
 			newRunSlot.replaceChildren(
 				element('p', {
 					children: create(Link, {
-						href: others.length === 0 ? href.for(StartRoute, { trigger: only.id }) : href.for(NewRunRoute),
+						href: choice(others.length === 0, href.for(StartRoute, { trigger: only.id }), href.for(NewRunRoute)),
 						children: 'New run',
 					}),
 				}),
@@ -77,8 +75,9 @@ export const RunsStart = component({
 		}
 
 		const refresh = refresher(show, signal)
-		onChange(() => {
-			refresh()
+		// A run's status doesn't change what the app needs. A deploy sends no change: it shows on a reconnect or a reload.
+		onChange((change) => {
+			if (change.kind !== 'run') refresh()
 		}, signal)
 		refresh()
 	},

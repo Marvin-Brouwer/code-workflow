@@ -5,7 +5,7 @@ import { Table } from '../_layout/table.mts'
 import { read } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { noAppText } from '../_shared/no-app-text.mts'
-import type { DeployedApp, TriggerDescription } from '../_shared/runs.mts'
+import type { TriggerDescription } from '../_shared/runs.mts'
 import { readTheApp } from '../_shared/the-app.mts'
 import { shownTime } from '../runs/run-labels.mts'
 import { CredentialsRoute } from '../settings/_routes.mts'
@@ -35,7 +35,7 @@ export const TriggersPage = component({
 		}
 		const secrets = new Set(credentials.ok ? credentials.value : [])
 
-		const detail = (deployed: DeployedApp, trigger: TriggerDescription) => {
+		const detail = (trigger: TriggerDescription) => {
 			if (trigger.kind === 'user')
 				return create(Link, {
 					href: href.for(StartRoute, { trigger: trigger.id }),
@@ -45,7 +45,7 @@ export const TriggersPage = component({
 				return element('code', {
 					textContent: trigger.cron,
 				})
-			const name = `webhook/${deployed.name}/${trigger.id}`
+			const name = `webhook/${app.name}/${trigger.id}`
 			if (secrets.has(name))
 				return element('span', {
 					textContent: 'Secret set',
@@ -84,7 +84,7 @@ export const TriggersPage = component({
 								textContent: trigger.workflow,
 							}),
 							element('td', {
-								children: detail(app, trigger),
+								children: detail(trigger),
 							}),
 						],
 					}),

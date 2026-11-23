@@ -44,12 +44,13 @@ once.
 
   This is the control socket's rule: only the user who started it gets in. The token only goes to
   the terminal, never on a command line other users could read. The control socket's known gap
-  stays: on Windows other users can reach its named pipe. It's only the local way
-  in: hosted (roadmap step 7) swaps the middleware for a real sign-in per user. The UI itself only
-  knows it talks to `/api` with a cookie, so it doesn't change for that.
-- **Runs and triggers** go to the running engine over its control socket, the same routes the CLI uses.
-  When no engine runs, those pages say so and how to start it; settings still work. mesh-flow runs
-  one app, so the UI shows the first app the engine lists until the engine knows that too (#57).
+  stays: on Windows other users can reach its named pipe. It's only the local way in: hosted
+  (roadmap step 7) swaps the middleware for a real sign-in per user. The UI itself only knows it
+  talks to `/api` with a cookie, so it doesn't change for that.
+- **Runs and triggers** go to the running engine over its control socket, the same routes the CLI
+  uses. When no engine runs, those pages say so and how to start it; settings still work. mesh-flow
+  runs one app, so the UI shows the first app the engine lists until the engine knows that too
+  (#57).
 - **Settings** use the gateway home directly, through the same functions the CLI commands call
   (`providers.put/order/remove`, `credentials.set/remove/names`). No second implementation.
 - Takes a required `AbortSignal` like everything else, and Ctrl+C closes it promptly, even with

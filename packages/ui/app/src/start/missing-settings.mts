@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { FixForm } from '../_forms/fix-form.mts'
 import { read } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
+import { refresher } from '../_shared/refresher.mts'
 import type { DeployedApp } from '../_shared/runs.mts'
 import { MissingSetting } from '../_shared/settings.mts'
 import { missingPath } from '../_shared/the-app.mts'
@@ -20,12 +21,12 @@ export interface MissingSettingsOptions {
  */
 export const MissingSettings = component<MissingSettingsOptions>({
 	name: 'missing-settings',
-	async onMount({ append, element, create, options, signal }) {
+	onMount({ append, element, create, options, signal }) {
 		const { app, complete } = options
 		const content = append(element('div'))
-		const show = async (): Promise<void> => {
-			const missing = await read(missingPath(app), z.array(MissingSetting), signal)
-			if (signal.aborted) return
+		const show = async (abortSignal: AbortSignal): Promise<void> => {
+			const missing = await read(missingPath(app), z.array(MissingSetting), abortSignal)
+			if (abortSignal.aborted) return
 			if (!missing.ok) {
 				content.replaceChildren(errorText(element, missing.error))
 				return
@@ -44,7 +45,7 @@ export const MissingSettings = component<MissingSettingsOptions>({
 						children: create(FixForm, {
 							setting,
 							done() {
-								void show()
+								refresh()
 							},
 						}),
 					}),
@@ -54,12 +55,14 @@ export const MissingSettings = component<MissingSettingsOptions>({
 					textContent: 'Check again',
 					on: {
 						click() {
-							void show()
+							refresh()
 						},
 					},
 				}),
 			)
 		}
-		await show()
+		// A set and a Check again close together check once after the other, so an older answer never shows last.
+		const refresh = refresher(show, signal)
+		refresh()
 	},
 })

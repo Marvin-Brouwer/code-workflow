@@ -1,6 +1,7 @@
 import { component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
 import { errorText } from '../_shared/error-text.mts'
+import { noAppText } from '../_shared/no-app-text.mts'
 import { readTheApp } from '../_shared/the-app.mts'
 import { StartRoute } from './_routes.mts'
 import { userTriggersOf } from './user-triggers.mts'
@@ -19,7 +20,12 @@ export const NewRunPage = component({
 			append(errorText(element, theApp.error))
 			return
 		}
-		const triggers = userTriggersOf(theApp.value)
+		const app = theApp.value
+		if (app === undefined) {
+			append(noAppText(element))
+			return
+		}
+		const triggers = userTriggersOf(app)
 		if (triggers.length === 0) {
 			append(
 				element('p', {
