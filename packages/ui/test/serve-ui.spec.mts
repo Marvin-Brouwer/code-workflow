@@ -156,6 +156,23 @@ describe('settings', () => {
 		expect(await gatewayHome.credentials.get('github/token', abortSignal)).toBe('ghp-secret')
 	})
 
+	test('stores a pasted secret without the spaces and line break around it, as the CLI does', async () => {
+		// Arrange
+		const { url, cookie, home } = await servedUi()
+
+		// Act
+		const set = await send(url, '/api/settings/credentials/github/token', {
+			method: 'PUT',
+			headers: { cookie, ...json },
+			body: JSON.stringify({ value: '  ghp-secret \n' }),
+		})
+
+		// Assert
+		expect(set.status).toBe(204)
+		const gatewayHome = await openEngineGatewayHome(home, abortSignal, { keychain: false })
+		expect(await gatewayHome.credentials.get('github/token', abortSignal)).toBe('ghp-secret')
+	})
+
 	test('adds a provider with its key, and lists it with the key set', async () => {
 		// Arrange
 		const { url, cookie } = await servedUi()
@@ -192,6 +209,8 @@ describe('settings', () => {
 		{ request: "a body that doesn't fit", route: '/api/settings/providers/work/key', method: 'PUT', body: '{}' },
 		{ request: "a body that isn't JSON", route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": ' },
 		{ request: "a name that isn't a credential's", route: '/api/settings/credentials/no-slash', method: 'DELETE', body: '{}' },
+		{ request: 'a secret of only spaces', route: '/api/settings/credentials/github/token', method: 'PUT', body: '{"value": "   "}' },
+		{ request: 'a key of only spaces', route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": " \\n"}' },
 	])('answers $request with 400', async ({ route, method, body }) => {
 		// Arrange
 		const { url, cookie } = await servedUi()

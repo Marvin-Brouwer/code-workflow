@@ -1,6 +1,6 @@
 import { component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
-import { ConnectorsRoute, CredentialsRoute, ProvidersRoute } from './_routes.mts'
+import { settingsPages } from './settings-pages.mts'
 import styles from './settings.css'
 
 /** Links between the settings pages. */
@@ -14,11 +14,12 @@ export const SettingsMenu = component({
 				aria: {
 					label: 'Settings',
 				},
-				children: [
-					create(Link, { href: href.for(ProvidersRoute), children: 'Providers' }),
-					create(Link, { href: href.for(CredentialsRoute), children: 'Credentials' }),
-					create(Link, { href: href.for(ConnectorsRoute), children: 'Connectors' }),
-				],
+				children: settingsPages.map(({ route, label }) =>
+					create(Link, {
+						href: href.for(route),
+						children: label,
+					}),
+				),
 			}),
 		)
 	},

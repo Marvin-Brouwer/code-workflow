@@ -1,10 +1,16 @@
-import { component } from '@rooted/components'
+import { component, optional } from '@rooted/components'
 import { z } from 'zod'
-import { read, send } from '../_shared/api.mts'
+import { Table } from '../_layout/table.mts'
+import { read, send, type Answer } from '../_shared/api.mts'
 import { poll } from '../_shared/poll.mts'
 import { ConnectorPackage, ShownConnector, SignInState } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
+
+/** Whether `url` is a web address, and so safe to link to. */
+function isWebAddress(url: string): boolean {
+	return URL.parse(url)?.protocol.startsWith('http') === true
+}
 
 /**
  * The connector packages the engine loads, and with a running engine, the connectors it loaded and
@@ -14,18 +20,18 @@ export const ConnectorsPage = component({
 	name: 'connectors-page',
 	styles,
 	async onMount({ append, element, create, signal }) {
-		const packages = element('div', { classes: styles.section })
-		const loaded = element('div', { classes: styles.section })
-		const signIns = element('div', { classes: styles.section })
-		const status = element('p', { role: 'status' })
-
-		const table = (headings: readonly string[], rows: HTMLElement[]) =>
-			element('table', {
-				children: [
-					element('thead', { children: element('tr', { children: headings.map((heading) => element('th', { textContent: heading })) }) }),
-					element('tbody', { children: rows }),
-				],
-			})
+		const packages = element('div', {
+			classes: styles.section,
+		})
+		const loaded = element('div', {
+			classes: styles.section,
+		})
+		const signIns = element('div', {
+			classes: styles.section,
+		})
+		const status = element('p', {
+			role: 'status',
+		})
 
 		const signIn = async (connector: string) => {
 			status.textContent = `Waiting for you to sign in to ${connector}: the code shows below.`
@@ -34,94 +40,159 @@ export const ConnectorsPage = component({
 			status.textContent = answer.ok ? `Signed in to ${connector}.` : answer.error
 		}
 
-		const showPackages = async () => {
-			const listed = await read('/settings/connectors', z.array(ConnectorPackage), signal)
-			packages.replaceChildren(
-				!listed.ok
-					? element('p', { role: 'alert', textContent: listed.error })
-					: listed.value.length === 0
-						? element('p', { textContent: 'No connector packages yet.' })
-						: table(
-								['Package'],
-								listed.value.map(({ package: name }) =>
-									element('tr', { children: element('td', { children: element('code', { textContent: name }) }) }),
-								),
-							),
-			)
+		const packagesView = (listed: Answer<ConnectorPackage[]>) => {
+			if (!listed.ok)
+				return element('p', {
+					role: 'alert',
+					textContent: listed.error,
+				})
+			if (listed.value.length === 0)
+				return element('p', {
+					textContent: 'No connector packages yet.',
+				})
+			return create(Table, {
+				headings: ['Package'],
+				rows: listed.value.map(({ package: name }) =>
+					element('tr', {
+						children: element('td', {
+							children: element('code', {
+								textContent: name,
+							}),
+						}),
+					}),
+				),
+			})
 		}
 
-		const showLoaded = async () => {
-			const connectors = await read('/engine/connectors', z.array(ShownConnector), signal)
-			loaded.replaceChildren(
-				!connectors.ok
-					? element('p', { classes: styles.muted, textContent: connectors.error })
-					: connectors.value.length === 0
-						? element('p', { textContent: 'The engine loaded no connectors.' })
-						: table(
-								['Name', 'Package', ''],
-								connectors.value.map(({ name, package: from, signsIn }) =>
-									element('tr', {
-										children: [
-											element('td', { textContent: name }),
-											element('td', { children: element('code', { textContent: from }) }),
-											element('td', {
-												children: signsIn
-													? element('button', {
-															type: 'button',
-															textContent: 'Sign in',
-															on: {
-																click() {
-																	void signIn(name)
-																},
-															},
-														})
-													: undefined,
-											}),
-										],
-									}),
-								),
-							),
-			)
+		const loadedRow = ({ name, package: from, signsIn }: ShownConnector) =>
+			element('tr', {
+				children: [
+					element('td', {
+						textContent: name,
+					}),
+					element('td', {
+						children: element('code', {
+							textContent: from,
+						}),
+					}),
+					element('td', {
+						children: optional(
+							signsIn,
+							element('button', {
+								type: 'button',
+								textContent: 'Sign in',
+								on: {
+									click() {
+										void signIn(name)
+									},
+								},
+							}),
+						),
+					}),
+				],
+			})
+
+		const loadedView = (connectors: Answer<ShownConnector[]>) => {
+			if (!connectors.ok)
+				return element('p', {
+					classes: styles.muted,
+					textContent: connectors.error,
+				})
+			if (connectors.value.length === 0)
+				return element('p', {
+					textContent: 'The engine loaded no connectors.',
+				})
+			return create(Table, {
+				headings: ['Name', 'Package', ''],
+				rows: connectors.value.map(loadedRow),
+			})
+		}
+
+		const signInAt = (prompt: SignInState['prompt']) => {
+			if (prompt === undefined) return 'Waiting for a code'
+			if (!isWebAddress(prompt.url)) return prompt.url
+			return element('a', {
+				href: prompt.url,
+				target: '_blank',
+				rel: 'noreferrer',
+				textContent: prompt.url,
+			})
 		}
 
 		const signInRow = ({ connector, prompt, error }: SignInState) =>
 			element('tr', {
 				children: [
-					element('td', { textContent: connector }),
+					element('td', {
+						textContent: connector,
+					}),
+					element('td', {
+						children: signInAt(prompt),
+					}),
 					element('td', {
 						children:
 							prompt === undefined
-								? 'Waiting for a code'
-								: element('a', { href: prompt.url, target: '_blank', rel: 'noreferrer', textContent: prompt.url }),
+								? undefined
+								: element('code', {
+										textContent: prompt.code,
+									}),
 					}),
-					element('td', { children: prompt === undefined ? undefined : element('code', { textContent: prompt.code }) }),
-					element('td', { textContent: prompt === undefined ? '' : new Date(prompt.expiresAt).toLocaleTimeString() }),
-					element('td', { textContent: error ?? '' }),
+					element('td', {
+						textContent: prompt === undefined ? '' : new Date(prompt.expiresAt).toLocaleTimeString(),
+					}),
+					element('td', {
+						textContent: error ?? '',
+					}),
 				],
 			})
 
+		const signInsView = (underWay: Answer<SignInState[]>) => {
+			if (!underWay.ok || underWay.value.length === 0)
+				return element('p', {
+					classes: styles.muted,
+					textContent: 'No sign-ins under way.',
+				})
+			return create(Table, {
+				headings: ['Connector', 'Sign in at', 'Code', 'Until', 'Last try'],
+				rows: underWay.value.map(signInRow),
+			})
+		}
+
+		const showPackages = async () => {
+			packages.replaceChildren(packagesView(await read('/settings/connectors', z.array(ConnectorPackage), signal)))
+		}
+		const showLoaded = async () => {
+			loaded.replaceChildren(loadedView(await read('/engine/connectors', z.array(ShownConnector), signal)))
+		}
 		const showSignIns = async (abortSignal: AbortSignal) => {
-			const underWay = await read('/engine/sign-ins', z.array(SignInState), abortSignal)
-			signIns.replaceChildren(
-				!underWay.ok || underWay.value.length === 0
-					? element('p', { classes: styles.muted, textContent: 'No sign-ins under way.' })
-					: table(['Connector', 'Sign in at', 'Code', 'Until', 'Last try'], underWay.value.map(signInRow)),
-			)
+			signIns.replaceChildren(signInsView(await read('/engine/sign-ins', z.array(SignInState), abortSignal)))
 		}
 
 		append(
 			create(SettingsMenu),
-			element('h1', { textContent: 'Connectors' }),
-			element('p', {
-				textContent:
-					'A connector is a package installed where the engine runs: add one with `mesh-flow connector add <package>` and start the engine again.',
+			element('h1', {
+				textContent: 'Connectors',
 			}),
-			element('h2', { textContent: 'Packages' }),
+			element('p', {
+				children: [
+					'A connector is a package installed where the engine runs: add one with ',
+					element('code', {
+						textContent: 'mesh-flow connector add <package>',
+					}),
+					' and start the engine again.',
+				],
+			}),
+			element('h2', {
+				textContent: 'Packages',
+			}),
 			packages,
-			element('h2', { textContent: 'Loaded by the engine' }),
+			element('h2', {
+				textContent: 'Loaded by the engine',
+			}),
 			loaded,
 			status,
-			element('h2', { textContent: 'Sign-ins under way' }),
+			element('h2', {
+				textContent: 'Sign-ins under way',
+			}),
 			signIns,
 		)
 		await Promise.all([showPackages(), showLoaded()])

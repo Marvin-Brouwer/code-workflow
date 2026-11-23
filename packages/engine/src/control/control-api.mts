@@ -6,6 +6,7 @@ import type { AppStore, AppVersion } from '../apps/app-store.mts'
 import { AppName } from '../apps/names.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
+import type { ShownConnector } from './shown-connector.mts'
 
 /** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
 export const StartRunBody = z.object({ app: AppName, trigger: TriggerRef, input: z.unknown().optional() })
@@ -25,9 +26,13 @@ function shownApp({ name, version, manifest }: AppVersion) {
 	return { name, version, manifest }
 }
 
-/** A connector the engine loaded, as the control API shows it: its name, its package, and whether it signs in. */
-export const ShownConnector = z.object({ name: z.string(), package: z.string(), signsIn: z.boolean() })
-export type ShownConnector = z.infer<typeof ShownConnector>
+/** What the control API answers for, besides the engine's runs. */
+export interface ControlApiOptions {
+	/** The deployed apps. Without them, there are no app routes. */
+	readonly apps?: ControlApps | undefined
+	/** The connectors the engine loaded, for `GET /connectors`. */
+	readonly connectors?: readonly ShownConnector[] | undefined
+}
 
 /** The body of `POST /runs/:run/answers/:request`. */
 export const AnswerBody = z.object({ value: z.unknown() }).refine((body) => 'value' in body, { message: 'An answer needs a value.' })
@@ -55,7 +60,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  *
  * Errors come back as `{ error }`, with 404, 409 or 400 for what the engine refused.
  */
-export function controlApi(engine: Engine, apps?: ControlApps, connectors: readonly ShownConnector[] = []): Hono {
+export function controlApi(engine: Engine, { apps, connectors = [] }: ControlApiOptions = {}): Hono {
 	const api = new Hono()
 
 	api.get('/runs', (c) => c.json(engine.list()))
