@@ -1,27 +1,32 @@
 import { duration, type Duration } from '@mesh-flow/duration'
 
-/** How often pages that change look again. */
-export const pollEvery: Duration = duration.of('2s')
+/** How often pages that change check again. */
+export const pollInterval: Duration = duration.of('2s')
 
 /**
- * Runs `look` now and again every `every` after the last one settled, until `abortSignal` aborts,
+ * Runs `check` now and again `interval` after the last one settled, until `abortSignal` aborts,
  * such as the component's `signal` when it unmounts. Polling for now; server-sent events can take
  * its place behind the same data.
  */
-export function poll(look: (abortSignal: AbortSignal) => Promise<void>, abortSignal: AbortSignal, every: Duration = pollEvery): void {
+export function poll(
+	check: (abortSignal: AbortSignal) => Promise<void>,
+	abortSignal: AbortSignal,
+	interval: Duration = pollInterval,
+): void {
+	let timer: ReturnType<typeof setTimeout> | undefined
+	abortSignal.addEventListener(
+		'abort',
+		() => {
+			clearTimeout(timer)
+		},
+		{ once: true },
+	)
 	const next = async (): Promise<void> => {
-		await look(abortSignal)
+		await check(abortSignal)
 		if (abortSignal.aborted) return
-		const timer = setTimeout(() => {
+		timer = setTimeout(() => {
 			void next()
-		}, every.to('ms'))
-		abortSignal.addEventListener(
-			'abort',
-			() => {
-				clearTimeout(timer)
-			},
-			{ once: true },
-		)
+		}, interval.to('ms'))
 	}
 	if (!abortSignal.aborted) void next()
 }

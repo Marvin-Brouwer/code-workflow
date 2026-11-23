@@ -10,10 +10,11 @@ import {
 	openEngineGatewayHome,
 	type ServedUi,
 	type ServeUi,
+	type ServeUiOptions,
 } from '@mesh-flow/engine'
 import open from 'open'
-import { newAccessToken } from './ui-access.mts'
-import { uiApp } from './ui-app.mts'
+import { newSecret } from './ui-access.mts'
+import { assertBuilt, uiApp } from './ui-app.mts'
 
 /** The address the UI listens on: this machine only. */
 const loopback = '127.0.0.1'
@@ -24,7 +25,7 @@ export const defaultAssets = path.join(path.dirname(fileURLToPath(import.meta.re
 /**
  * Serves the UI for an engine's home on 127.0.0.1, as `mesh-flow ui` does: the page, and its API
  * over the engine's control socket and the home's settings. The address it gives has the token that
- * lets one browser in. Aborting `abortSignal` closes it, with requests still open.
+ * lets one browser in. Aborting `abortSignal` closes it, even with requests still open.
  *
  * @example
  * ```ts
@@ -44,28 +45,28 @@ export const defaultAssets = path.join(path.dirname(fileURLToPath(import.meta.re
 export const serveUi: ServeUi = async (options) => serveUiFrom(defaultAssets, options)
 
 /** {@link serveUi} with the page from `assets`, such as a test's. */
-export async function serveUiFrom(assets: string, options: Parameters<ServeUi>[0]): Promise<ServedUi> {
+export async function serveUiFrom(assets: string, options: ServeUiOptions): Promise<ServedUi> {
 	const { home, keychain, port, abortSignal } = options
 	abortSignal.throwIfAborted()
+	assertBuilt(assets)
 	const socketPath = controlSocketPath(home)
-	const token = newAccessToken()
+	const token = newSecret()
 	let listener: ReturnType<typeof getRequestListener> | undefined
 	const server = createServer((request, response) => {
 		if (listener === undefined) response.writeHead(503).end()
 		else void listener(request, response)
 	})
 	const address = await listen(server, port)
-	listener = getRequestListener(
-		uiApp({
-			assets,
-			token,
-			host: address,
-			socketPath,
-			client: controlClient(socketPath),
-			gatewayHome: (signal) => openEngineGatewayHome(home, signal, { keychain }),
-			connectors: openConnectorSettings(path.join(home, connectorSettingsFileName)),
-		}).fetch,
-	)
+	const app = uiApp({
+		assets,
+		token,
+		host: address,
+		socketPath,
+		client: controlClient(socketPath),
+		gatewayHome: (gatewayAbortSignal) => openEngineGatewayHome(home, gatewayAbortSignal, { keychain }),
+		connectors: openConnectorSettings(path.join(home, connectorSettingsFileName)),
+	})
+	listener = getRequestListener(app.fetch)
 	const closed = new Promise<void>((resolve) => {
 		const close = () => {
 			server.close(() => {
@@ -77,7 +78,8 @@ export async function serveUiFrom(assets: string, options: Parameters<ServeUi>[0
 		else abortSignal.addEventListener('abort', close, { once: true })
 	})
 	const url = `http://${address}/?token=${token}`
-	if (options.open) await open(url)
+	// The address is printed as well, so a browser that won't open leaves the UI usable.
+	if (options.open) await open(url).catch(() => undefined)
 	return { url, closed }
 }
 

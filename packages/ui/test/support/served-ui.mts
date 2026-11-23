@@ -5,6 +5,7 @@ import path from 'node:path'
 import { duration } from '@mesh-flow/duration'
 import { onTestFinished } from 'vitest'
 import { serveUiFrom } from '../../src/_module/server.mts'
+import { accessCookieName } from '../../src/server/ui-access.mts'
 
 /** A fresh directory, removed when the test ends. */
 export async function temporaryDirectory(): Promise<string> {
@@ -29,7 +30,10 @@ export async function servedUi() {
 	})
 	const url = new URL(served.url)
 	const token = url.searchParams.get('token') ?? ''
-	return { home, served, stopping, url, token, cookie: `mesh-flow-ui=${token}` }
+	const cookieName = accessCookieName(url.host)
+	const swapped = await send(url, `/?token=${token}`)
+	const cookie = (swapped.headers['set-cookie']?.[0] ?? '').split(';')[0] ?? ''
+	return { home, served, stopping, url, token, cookieName, cookie }
 }
 
 /** What a request got back. */
