@@ -87,18 +87,18 @@ export async function standInEngine(home: string) {
 	}
 
 	const api = new Hono()
-	api.get('/apps', (c) => c.json([app]))
-	api.get('/apps/:name/missing', async (c) => {
-		const gatewayHome = await openEngineGatewayHome(home, c.req.raw.signal, { keychain: false })
-		const names = await gatewayHome.credentials.names(c.req.raw.signal)
-		return c.json(
+	api.get('/apps', (context) => context.json([app]))
+	api.get('/apps/:name/missing', async (context) => {
+		const gatewayHome = await openEngineGatewayHome(home, context.req.raw.signal, { keychain: false })
+		const names = await gatewayHome.credentials.names(context.req.raw.signal)
+		return context.json(
 			names.includes('github/token')
 				? []
 				: [{ message: 'Set github/token: `mesh-flow credential set github/token`', fix: { kind: 'credential', name: 'github/token' } }],
 		)
 	})
-	api.post('/runs', async (c) => {
-		const { input } = z.object({ input: z.object({ issue: z.number() }) }).parse(await c.req.json())
+	api.post('/runs', async (context) => {
+		const { input } = z.object({ input: z.object({ issue: z.number() }) }).parse(await context.req.json())
 		const run: StandInRun = {
 			id: `run-${String(runs.size + 1).padStart(12, '0')}`,
 			status: 'running',
@@ -113,18 +113,18 @@ export async function standInEngine(home: string) {
 		event(run, 'input', root, { question: 'Which die is wrong?' })
 		run.pending = [{ kind: 'input', id: 'input-1', question: 'Which die is wrong?', fields: { answer: { type: 'string' } } }]
 		changed(run)
-		return c.json(record(run), 201)
+		return context.json(record(run), 201)
 	})
-	api.get('/runs', (c) => c.json([...runs.values()].map(record)))
-	api.get('/runs/:run', (c) => c.json(record(found(c.req.param('run')))))
-	api.get('/runs/:run/events', (c) =>
-		c.req.header('accept')?.includes('text/event-stream') === true
-			? followRun(c, c.req.param('run'))
-			: c.json(found(c.req.param('run')).events),
+	api.get('/runs', (context) => context.json([...runs.values()].map(record)))
+	api.get('/runs/:run', (context) => context.json(record(found(context.req.param('run')))))
+	api.get('/runs/:run/events', (context) =>
+		context.req.header('accept')?.includes('text/event-stream') === true
+			? followRun(context, context.req.param('run'))
+			: context.json(found(context.req.param('run')).events),
 	)
-	api.post('/runs/:run/answers/:request', async (c) => {
-		const run = found(c.req.param('run'))
-		const { value } = z.object({ value: z.object({ answer: z.string() }) }).parse(await c.req.json())
+	api.post('/runs/:run/answers/:request', async (context) => {
+		const run = found(context.req.param('run'))
+		const { value } = z.object({ value: z.object({ answer: z.string() }) }).parse(await context.req.json())
 		const input = String(run.events.find(({ type }) => type === 'input')?.id)
 		event(run, 'input-answered', input, { request: 'input-1' })
 		event(run, 'input-succeeded', input)
@@ -132,10 +132,10 @@ export async function standInEngine(home: string) {
 		run.pending = []
 		run.status = 'succeeded'
 		changed(run)
-		return c.json(record(run))
+		return context.json(record(run))
 	})
-	api.get('/sign-ins', (c) => c.json([]))
-	api.get('/connectors', (c) => c.json([]))
+	api.get('/sign-ins', (context) => context.json([]))
+	api.get('/connectors', (context) => context.json([]))
 	const onRunChange = (listener: (id: string) => void, abortSignal: AbortSignal) => {
 		listeners.add(listener)
 		abortSignal.addEventListener(

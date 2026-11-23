@@ -31,20 +31,20 @@ export interface UiAccessOptions {
  * It's the local way in. Hosted, a sign-in per user takes its place in front of the same routes.
  */
 export function uiAccess({ token, host }: UiAccessOptions): MiddlewareHandler {
-	return async (c, next) => {
-		if (c.req.header('host') !== host) return c.text('This address is not the one the UI listens on.', 403)
-		const offered = c.req.query('token')
+	return async (context, next) => {
+		if (context.req.header('host') !== host) return context.text('This address is not the one the UI listens on.', 403)
+		const offered = context.req.query('token')
 		if (offered !== undefined) {
-			if (!sameSecret(offered, token)) return c.text('That token is not the one `mesh-flow ui` printed.', 401)
-			setCookie(c, accessCookie, token, { httpOnly: true, sameSite: 'Strict', path: '/' })
-			const url = new URL(c.req.url)
+			if (!sameSecret(offered, token)) return context.text('That token is not the one `mesh-flow ui` printed.', 401)
+			setCookie(context, accessCookie, token, { httpOnly: true, sameSite: 'Strict', path: '/' })
+			const url = new URL(context.req.url)
 			url.searchParams.delete('token')
-			return c.redirect(`${url.pathname}${url.search}`, 303)
+			return context.redirect(`${url.pathname}${url.search}`, 303)
 		}
-		const held = getCookie(c, accessCookie)
-		if (held === undefined || !sameSecret(held, token)) return c.text('Open the address `mesh-flow ui` printed.', 401)
-		if (c.req.method !== 'GET' && c.req.header('content-type')?.startsWith('application/json') !== true)
-			return c.json({ error: 'Send changes as JSON.' }, 415)
+		const held = getCookie(context, accessCookie)
+		if (held === undefined || !sameSecret(held, token)) return context.text('Open the address `mesh-flow ui` printed.', 401)
+		if (context.req.method !== 'GET' && context.req.header('content-type')?.startsWith('application/json') !== true)
+			return context.json({ error: 'Send changes as JSON.' }, 415)
 		await next()
 		return undefined
 	}
@@ -52,7 +52,7 @@ export function uiAccess({ token, host }: UiAccessOptions): MiddlewareHandler {
 
 /** Compares two secrets in a time that doesn't tell how much of them matched. */
 function sameSecret(given: string, expected: string): boolean {
-	const a = Buffer.from(given)
-	const b = Buffer.from(expected)
-	return a.length === b.length && timingSafeEqual(a, b)
+	const givenBytes = Buffer.from(given)
+	const expectedBytes = Buffer.from(expected)
+	return givenBytes.length === expectedBytes.length && timingSafeEqual(givenBytes, expectedBytes)
 }

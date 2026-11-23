@@ -19,17 +19,17 @@ export interface EventSender {
 }
 
 /**
- * Answers `c` with server-sent events: `follow` sends what it follows until the stream ends, and a
+ * Answers `context` with server-sent events: `follow` sends what it follows until the stream ends, and a
  * `heartbeat` event goes out every `heartbeat` between.
  */
-export function eventStream(c: Context, heartbeat: Duration, follow: (sender: EventSender) => void): Response {
-	return streamSSE(c, async (stream) => {
+export function eventStream(context: Context, heartbeat: Duration, follow: (sender: EventSender) => void): Response {
+	return streamSSE(context, async (stream) => {
 		const controller = new AbortController()
 		const close = () => {
 			controller.abort()
 		}
 		stream.onAbort(close)
-		c.req.raw.signal.addEventListener('abort', close, { once: true })
+		context.req.raw.signal.addEventListener('abort', close, { once: true })
 		// One write at a time. A write to a reader that went away fails; the abort above ends the stream.
 		let writing = Promise.resolve()
 		const send = (event: string, data: unknown, id?: string) => {

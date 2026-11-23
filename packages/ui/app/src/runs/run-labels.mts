@@ -13,7 +13,9 @@ export function needsSomeone(record: RunRecord): boolean {
 
 /** The runs in the order the list shows them: those that need someone first, then the latest change first. */
 export function inListOrder(records: readonly RunRecord[]): RunRecord[] {
-	return records.toSorted((a, b) => Number(needsSomeone(b)) - Number(needsSomeone(a)) || b.updatedAt.localeCompare(a.updatedAt))
+	return records.toSorted(
+		(first, second) => Number(needsSomeone(second)) - Number(needsSomeone(first)) || second.updatedAt.localeCompare(first.updatedAt),
+	)
 }
 
 /** A step's status as the bar shows it. */

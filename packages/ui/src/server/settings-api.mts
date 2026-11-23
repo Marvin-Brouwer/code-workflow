@@ -21,40 +21,44 @@ export interface SettingsApiOptions {
  */
 export function settingsApi({ gatewayHome, connectors }: SettingsApiOptions): Hono {
 	const api = new Hono()
-	api.get('/provider-kinds', (c) => c.json(knownKinds()))
-	api.get('/providers', async (c) => c.json(await listProviders(await gatewayHome(c.req.raw.signal), c.req.raw.signal)))
-	api.put('/providers/:name', async (c) => {
-		const { kind, baseUrl, key } = ProviderBody.parse(await c.req.json())
-		const input = { name: c.req.param('name'), kind, baseUrl, key }
-		await putProvider(await gatewayHome(c.req.raw.signal), input, c.req.raw.signal)
-		return c.body(null, 204)
+	api.get('/provider-kinds', (context) => context.json(knownKinds()))
+	api.get('/providers', async (context) =>
+		context.json(await listProviders(await gatewayHome(context.req.raw.signal), context.req.raw.signal)),
+	)
+	api.put('/providers/:name', async (context) => {
+		const { kind, baseUrl, key } = ProviderBody.parse(await context.req.json())
+		const input = { name: context.req.param('name'), kind, baseUrl, key }
+		await putProvider(await gatewayHome(context.req.raw.signal), input, context.req.raw.signal)
+		return context.body(null, 204)
 	})
-	api.put('/providers/:name/key', async (c) => {
-		const { key } = KeyBody.parse(await c.req.json())
-		await setProviderKey(await gatewayHome(c.req.raw.signal), c.req.param('name'), key, c.req.raw.signal)
-		return c.body(null, 204)
+	api.put('/providers/:name/key', async (context) => {
+		const { key } = KeyBody.parse(await context.req.json())
+		await setProviderKey(await gatewayHome(context.req.raw.signal), context.req.param('name'), key, context.req.raw.signal)
+		return context.body(null, 204)
 	})
-	api.delete('/providers/:name', async (c) => {
-		await removeProvider(await gatewayHome(c.req.raw.signal), c.req.param('name'), c.req.raw.signal)
-		return c.body(null, 204)
+	api.delete('/providers/:name', async (context) => {
+		await removeProvider(await gatewayHome(context.req.raw.signal), context.req.param('name'), context.req.raw.signal)
+		return context.body(null, 204)
 	})
-	api.put('/provider-order', async (c) => {
-		const { names } = OrderBody.parse(await c.req.json())
-		await (await gatewayHome(c.req.raw.signal)).providers.order(names, c.req.raw.signal)
-		return c.body(null, 204)
+	api.put('/provider-order', async (context) => {
+		const { names } = OrderBody.parse(await context.req.json())
+		await (await gatewayHome(context.req.raw.signal)).providers.order(names, context.req.raw.signal)
+		return context.body(null, 204)
 	})
-	api.get('/credentials', async (c) => c.json(await (await gatewayHome(c.req.raw.signal)).credentials.names(c.req.raw.signal)))
-	api.put('/credentials/:name{.+}', async (c) => {
-		const name = CredentialName.parse(c.req.param('name'))
-		const { value } = SecretBody.parse(await c.req.json())
-		await (await gatewayHome(c.req.raw.signal)).credentials.set(name, value, c.req.raw.signal)
-		return c.body(null, 204)
+	api.get('/credentials', async (context) =>
+		context.json(await (await gatewayHome(context.req.raw.signal)).credentials.names(context.req.raw.signal)),
+	)
+	api.put('/credentials/:name{.+}', async (context) => {
+		const name = CredentialName.parse(context.req.param('name'))
+		const { value } = SecretBody.parse(await context.req.json())
+		await (await gatewayHome(context.req.raw.signal)).credentials.set(name, value, context.req.raw.signal)
+		return context.body(null, 204)
 	})
-	api.delete('/credentials/:name{.+}', async (c) => {
-		const name = c.req.param('name')
-		const removed = await (await gatewayHome(c.req.raw.signal)).credentials.remove(name, c.req.raw.signal)
-		return removed ? c.body(null, 204) : c.json({ error: `There is no credential ${name}.` }, 404)
+	api.delete('/credentials/:name{.+}', async (context) => {
+		const name = context.req.param('name')
+		const removed = await (await gatewayHome(context.req.raw.signal)).credentials.remove(name, context.req.raw.signal)
+		return removed ? context.body(null, 204) : context.json({ error: `There is no credential ${name}.` }, 404)
 	})
-	api.get('/connectors', async (c) => c.json(await connectors.list(c.req.raw.signal)))
+	api.get('/connectors', async (context) => context.json(await connectors.list(context.req.raw.signal)))
 	return api
 }

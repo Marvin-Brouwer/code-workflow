@@ -21,12 +21,12 @@ export interface RunEventSource {
  * ends when the run is removed.
  */
 export function runEventStream(source: RunEventSource, heartbeat: Duration = streamHeartbeat) {
-	return (c: Context, run: string): Response => {
+	return (context: Context, run: string): Response => {
 		// Before the stream starts, so a run there is none of is answered as an error.
 		const { id } = source.get(run)
-		const resumeAfter = Number(c.req.header('last-event-id'))
+		const resumeAfter = Number(context.req.header('last-event-id'))
 		let sent = Number.isSafeInteger(resumeAfter) && resumeAfter > 0 ? resumeAfter : 0
-		return eventStream(c, heartbeat, ({ send, close, closed }) => {
+		return eventStream(context, heartbeat, ({ send, close, closed }) => {
 			let shownRecord = ''
 			const sendWhatChanged = async () => {
 				const record = source.get(id)

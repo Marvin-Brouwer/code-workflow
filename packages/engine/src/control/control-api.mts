@@ -61,63 +61,63 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
 export function controlApi(engine: Engine, apps?: ControlApps, connectors: readonly ShownConnector[] = []): Hono {
 	const api = new Hono()
 
-	api.get('/runs', (c) => c.json(engine.list()))
-	api.post('/runs', async (c) => {
-		const { app, trigger, input } = StartRunBody.parse(await c.req.json())
-		return c.json(await engine.startRun({ app, trigger, input, abortSignal: c.req.raw.signal }), 201)
+	api.get('/runs', (context) => context.json(engine.list()))
+	api.post('/runs', async (context) => {
+		const { app, trigger, input } = StartRunBody.parse(await context.req.json())
+		return context.json(await engine.startRun({ app, trigger, input, abortSignal: context.req.raw.signal }), 201)
 	})
-	api.get('/runs/:run', (c) => c.json(engine.get(c.req.param('run'))))
+	api.get('/runs/:run', (context) => context.json(engine.get(context.req.param('run'))))
 	const followRun = runEventStream(engine)
-	api.get('/runs/:run/events', async (c) =>
-		c.req.header('accept')?.includes('text/event-stream') === true
-			? followRun(c, c.req.param('run'))
-			: c.json(await engine.events(c.req.param('run'))),
+	api.get('/runs/:run/events', async (context) =>
+		context.req.header('accept')?.includes('text/event-stream') === true
+			? followRun(context, context.req.param('run'))
+			: context.json(await engine.events(context.req.param('run'))),
 	)
-	api.post('/runs/:run/answers/:request', async (c) => {
-		const { value } = AnswerBody.parse(await c.req.json())
-		return c.json(await engine.answer(c.req.param('run'), c.req.param('request'), value, c.req.raw.signal))
+	api.post('/runs/:run/answers/:request', async (context) => {
+		const { value } = AnswerBody.parse(await context.req.json())
+		return context.json(await engine.answer(context.req.param('run'), context.req.param('request'), value, context.req.raw.signal))
 	})
-	api.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
-	api.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
-	api.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
+	api.post('/runs/:run/stop', async (context) => context.json(await engine.stop(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/resume', async (context) => context.json(await engine.resume(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/restart', async (context) => context.json(await engine.restart(context.req.param('run'), context.req.raw.signal)))
 	api.get('/events', engineEvents(engine))
-	api.get('/connectors', (c) => c.json(connectors))
-	api.get('/sign-ins', (c) => c.json(engine.signIns()))
-	api.post('/sign-ins/:connector', async (c) => {
-		const connector = c.req.param('connector')
-		await engine.waitForSignIn(connector, c.req.raw.signal)
-		return c.json({ signedIn: connector })
+	api.get('/connectors', (context) => context.json(connectors))
+	api.get('/sign-ins', (context) => context.json(engine.signIns()))
+	api.post('/sign-ins/:connector', async (context) => {
+		const connector = context.req.param('connector')
+		await engine.waitForSignIn(connector, context.req.raw.signal)
+		return context.json({ signedIn: connector })
 	})
 
 	if (apps !== undefined) {
 		const { store, changed } = apps
-		api.get('/apps', (c) => c.json(store.list().map(shownApp)))
-		api.get('/apps/:name/missing', async (c) => {
-			const name = c.req.param('name')
+		api.get('/apps', (context) => context.json(store.list().map(shownApp)))
+		api.get('/apps/:name/missing', async (context) => {
+			const name = context.req.param('name')
 			const deployed = store.current(name)
 			if (deployed === undefined) throw new EngineError('not-found', `There is no app ${name}.`)
-			return c.json(await engine.missingSettings(deployed.manifest.description, c.req.raw.signal))
+			return context.json(await engine.missingSettings(deployed.manifest.description, context.req.raw.signal))
 		})
-		api.put('/apps/:name', async (c) => {
-			const { tarball } = DeployBody.parse(await c.req.json())
-			const deployed = await store.deploy(c.req.param('name'), tarball, c.req.raw.signal)
+		api.put('/apps/:name', async (context) => {
+			const { tarball } = DeployBody.parse(await context.req.json())
+			const deployed = await store.deploy(context.req.param('name'), tarball, context.req.raw.signal)
 			changed()
-			const missing = await engine.missingSettings(deployed.manifest.description, c.req.raw.signal)
-			return c.json({ ...shownApp(deployed), missing })
+			const missing = await engine.missingSettings(deployed.manifest.description, context.req.raw.signal)
+			return context.json({ ...shownApp(deployed), missing })
 		})
-		api.delete('/apps/:name', async (c) => {
-			const name = c.req.param('name')
+		api.delete('/apps/:name', async (context) => {
+			const name = context.req.param('name')
 			if (!AppName.safeParse(name).success) throw new EngineError('invalid', `${name} isn't an app name.`)
-			if (!(await store.remove(name, c.req.raw.signal))) throw new EngineError('not-found', `There is no app ${name}.`)
+			if (!(await store.remove(name, context.req.raw.signal))) throw new EngineError('not-found', `There is no app ${name}.`)
 			changed()
-			return c.json({ removed: name })
+			return context.json({ removed: name })
 		})
 	}
 
-	api.onError((error, c) => {
-		if (error instanceof EngineError) return c.json({ error: error.message }, statusOf[error.code])
-		if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: `Bad request: ${error.message}` }, 400)
-		return c.json({ error: error.message }, 500)
+	api.onError((error, context) => {
+		if (error instanceof EngineError) return context.json({ error: error.message }, statusOf[error.code])
+		if (error instanceof z.ZodError || error instanceof SyntaxError) return context.json({ error: `Bad request: ${error.message}` }, 400)
+		return context.json({ error: error.message }, 500)
 	})
 	return api
 }

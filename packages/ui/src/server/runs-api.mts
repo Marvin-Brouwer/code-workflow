@@ -8,35 +8,37 @@ import { Hono } from 'hono'
  */
 export function runsApi(client: ControlClient): Hono {
 	const api = new Hono()
-	api.get('/runs', async (c) => c.json(await client.list(c.req.raw.signal)))
-	api.post('/runs', async (c) => {
-		const { app, trigger, input } = StartRunBody.parse(await c.req.json())
-		return c.json(await client.startRun({ app, trigger, input, abortSignal: c.req.raw.signal }), 201)
+	api.get('/runs', async (context) => context.json(await client.list(context.req.raw.signal)))
+	api.post('/runs', async (context) => {
+		const { app, trigger, input } = StartRunBody.parse(await context.req.json())
+		return context.json(await client.startRun({ app, trigger, input, abortSignal: context.req.raw.signal }), 201)
 	})
-	api.get('/runs/:run', async (c) => c.json(await client.get(c.req.param('run'), c.req.raw.signal)))
-	api.get('/runs/:run/events', async (c) => {
-		const run = c.req.param('run')
-		const abortSignal = c.req.raw.signal
-		if (c.req.header('accept')?.includes('text/event-stream') !== true) return c.json(await client.events(run, abortSignal))
-		return streamed(await client.followRun(run, { lastEventId: c.req.header('last-event-id'), abortSignal }))
+	api.get('/runs/:run', async (context) => context.json(await client.get(context.req.param('run'), context.req.raw.signal)))
+	api.get('/runs/:run/events', async (context) => {
+		const run = context.req.param('run')
+		const abortSignal = context.req.raw.signal
+		if (context.req.header('accept')?.includes('text/event-stream') !== true) return context.json(await client.events(run, abortSignal))
+		return streamed(await client.followRun(run, { lastEventId: context.req.header('last-event-id'), abortSignal }))
 	})
-	api.post('/runs/:run/answers/:request', async (c) => {
-		const { value } = AnswerBody.parse(await c.req.json())
-		return c.json(await client.answer(c.req.param('run'), c.req.param('request'), value, c.req.raw.signal))
+	api.post('/runs/:run/answers/:request', async (context) => {
+		const { value } = AnswerBody.parse(await context.req.json())
+		return context.json(await client.answer(context.req.param('run'), context.req.param('request'), value, context.req.raw.signal))
 	})
-	api.post('/runs/:run/stop', async (c) => c.json(await client.stop(c.req.param('run'), c.req.raw.signal)))
-	api.post('/runs/:run/resume', async (c) => c.json(await client.resume(c.req.param('run'), c.req.raw.signal)))
-	api.post('/runs/:run/restart', async (c) => c.json(await client.restart(c.req.param('run'), c.req.raw.signal)))
-	api.get('/events', async (c) => streamed(await client.followEngine(c.req.raw.signal)))
-	api.get('/connectors', async (c) => c.json(await client.connectors(c.req.raw.signal)))
-	api.get('/sign-ins', async (c) => c.json(await client.signIns(c.req.raw.signal)))
-	api.post('/sign-ins/:connector', async (c) => {
-		const connector = c.req.param('connector')
-		await client.waitForSignIn(connector, c.req.raw.signal)
-		return c.json({ signedIn: connector })
+	api.post('/runs/:run/stop', async (context) => context.json(await client.stop(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/resume', async (context) => context.json(await client.resume(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/restart', async (context) => context.json(await client.restart(context.req.param('run'), context.req.raw.signal)))
+	api.get('/events', async (context) => streamed(await client.followEngine(context.req.raw.signal)))
+	api.get('/connectors', async (context) => context.json(await client.connectors(context.req.raw.signal)))
+	api.get('/sign-ins', async (context) => context.json(await client.signIns(context.req.raw.signal)))
+	api.post('/sign-ins/:connector', async (context) => {
+		const connector = context.req.param('connector')
+		await client.waitForSignIn(connector, context.req.raw.signal)
+		return context.json({ signedIn: connector })
 	})
-	api.get('/apps', async (c) => c.json(await client.apps(c.req.raw.signal)))
-	api.get('/apps/:name/missing', async (c) => c.json(await client.missingSettings(c.req.param('name'), c.req.raw.signal)))
+	api.get('/apps', async (context) => context.json(await client.apps(context.req.raw.signal)))
+	api.get('/apps/:name/missing', async (context) =>
+		context.json(await client.missingSettings(context.req.param('name'), context.req.raw.signal)),
+	)
 	return api
 }
 

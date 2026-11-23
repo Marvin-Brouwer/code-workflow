@@ -43,17 +43,18 @@ export function uiApp(options: UiAppOptions): Hono {
 	if (!existsSync(index)) throw new Error(`The UI isn't built: there is no ${index}. Build it with \`pnpm --filter @mesh-flow/ui build\`.`)
 	const app = new Hono()
 	app.use(uiAccess({ token: options.token, host: options.host }))
-	app.get('/api/engine/status', async (c) => c.json({ running: await engineAnswers(options.socketPath) }))
+	app.get('/api/engine/status', async (context) => context.json({ running: await engineAnswers(options.socketPath) }))
 	app.route('/api/engine', runsApi(options.client))
 	app.route('/api/settings', settingsApi(options))
-	app.all('/api/*', (c) => c.json({ error: `There is no ${c.req.method} ${c.req.path}.` }, 404))
+	app.all('/api/*', (context) => context.json({ error: `There is no ${context.req.method} ${context.req.path}.` }, 404))
 	app.use(serveStatic({ root: options.assets }))
 	app.get('*', serveStatic({ root: options.assets, path: 'index.html' }))
-	app.onError((error, c) => {
-		if (error instanceof ControlError) return c.json({ error: error.message }, error.status === undefined ? 503 : toStatus(error.status))
-		if (error instanceof EngineError) return c.json({ error: error.message }, statusOf[error.code])
-		if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: `Bad request: ${error.message}` }, 400)
-		return c.json({ error: error.message }, 500)
+	app.onError((error, context) => {
+		if (error instanceof ControlError)
+			return context.json({ error: error.message }, error.status === undefined ? 503 : toStatus(error.status))
+		if (error instanceof EngineError) return context.json({ error: error.message }, statusOf[error.code])
+		if (error instanceof z.ZodError || error instanceof SyntaxError) return context.json({ error: `Bad request: ${error.message}` }, 400)
+		return context.json({ error: error.message }, 500)
 	})
 	return app
 }

@@ -97,7 +97,9 @@ function followedRun() {
 		onRunChange: changes.listen,
 	}
 	const follow = runEventStream(source, duration.of('1h'))
-	const app = new Hono().get('/runs/:run/events', (c) => follow(c, c.req.param('run'))).onError((error, c) => c.text(error.message, 404))
+	const app = new Hono()
+		.get('/runs/:run/events', (context) => follow(context, context.req.param('run')))
+		.onError((error, context) => context.text(error.message, 404))
 	return {
 		app,
 		changes,

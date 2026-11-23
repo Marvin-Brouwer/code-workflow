@@ -17,8 +17,8 @@ export interface EngineEventSource {
  * everything anew.
  */
 export function engineEvents(source: EngineEventSource, heartbeat: Duration = streamHeartbeat) {
-	return (c: Context) =>
-		eventStream(c, heartbeat, ({ send, closed }) => {
+	return (context: Context) =>
+		eventStream(context, heartbeat, ({ send, closed }) => {
 			source.onRunChange((id) => {
 				send('run', { id })
 			}, closed)
