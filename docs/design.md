@@ -37,8 +37,8 @@ Every decision is tested against these:
 ## 3. Architecture
 
 ```text
-web UI (separate project)
-   │  HTTP + SSE
+web UI (`@mesh-flow/ui`, served by `mesh-flow ui`)
+   │  HTTP: runs and apps through the engine's control API, settings on the gateway home
 host
    ├─ engine:  runs, sandbox lifecycle (create, snapshot, resume), input requests, notifications
    └─ gateway: runs credentialed tools and holds every credential (models, AWS, git, Jira, GitLab)
