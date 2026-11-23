@@ -13,9 +13,12 @@
 		"format": "oxfmt",
 		"format:check": "oxfmt --check",
 		"lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives",
-		"typecheck": "pnpm -r typecheck"
+		"typecheck": "pnpm -r typecheck",
+		"start:github-issue": "node scripts/start-example.mts github-issue",
+		"start:big-repo": "node scripts/start-example.mts big-repo"
 	},
 	"devDependencies": {
+		"@types/node": "^26.6.6",
 		"oxfmt": "0.77.0",
 		"oxlint": "1.91.0",
 		"oxlint-tsgolint": "7.0.2006",
