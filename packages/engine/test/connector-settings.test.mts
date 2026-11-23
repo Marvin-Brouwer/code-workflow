@@ -23,6 +23,17 @@ describe('openConnectorSettings', () => {
 		expect(removedAgain).toBe(false)
 	})
 
+	test('makes the home when there is none yet', async () => {
+		// Arrange
+		const settings = openConnectorSettings(path.join(await temporaryDirectory(), 'home', 'connectors.json'))
+
+		// Act
+		await settings.add('@mesh-flow/github', abortSignal)
+
+		// Assert
+		expect(await settings.list(abortSignal)).toEqual([{ package: '@mesh-flow/github' }])
+	})
+
 	test('refuses what is not a package name', async () => {
 		// Arrange
 		const settings = openConnectorSettings(path.join(await temporaryDirectory(), 'connectors.json'))
