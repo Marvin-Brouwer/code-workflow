@@ -305,9 +305,10 @@ export default defineMeshFlow({
 - **An engine runs one app.** One workflow repo, with one `defineMeshFlow` entry, per engine:
   no app names in routes, secrets or run records. A deploy of another app replaces the current
   version; runs keep the version they started on.
-- **Deployed versions are immutable.** The engine keeps each version it was given, named by the
-  hash of its tarball, and one current version. Webhooks and schedules follow the current
-  version; a run copies its version, so a restart runs the code it first ran.
+- **A deployed version is immutable, and a run keeps its own copy.** A version is named by the
+  hash of its tarball. Webhooks and schedules follow the current version; a run copies its version
+  when it starts, so a restart runs the code it first ran. The engine keeps only the current
+  version on disk, and removes an older one once no run is copying it.
 - **A webhook trigger starts a run; an external event wakes one.** Events a running run waits for
   (review comments in `github.review`) arrive through the same ingress and signature check, but
   go to the run that waits for them, not to a trigger.

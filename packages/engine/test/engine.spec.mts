@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { duration } from '@mesh-flow/duration'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/app/app-store.mts'
+import { openDeployment } from '../src/app/deployment.mts'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore, runDirectory, type RunStore } from '../src/runs/run-store.mts'
@@ -26,17 +26,18 @@ interface OpenEngineOptions {
 	readonly wrapStore?: (store: RunStore) => RunStore
 }
 
-/** An engine on the host backend, with its own app store, closed when the test ends. */
+/** An engine on the host backend, with its own deployment, closed when the test ends. */
 async function openEngine({ home, wrap = (backend) => backend, wrapStore = (store) => store }: OpenEngineOptions = {}) {
 	const directory = home ?? (await temporaryDirectory())
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
 	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
-	const app = await openAppStore(path.join(directory, 'app'), signal)
+	const deployment = await openDeployment(path.join(directory, 'app'), signal)
+	onTestFinished(() => deployment.close())
 	const log = vi.fn<(message: string) => void>()
-	const engine = await Engine.open({ backend, store, app, layout: hostSandboxLayout, log }, signal)
+	const engine = await Engine.open({ backend, store, deployment, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))
-	return { engine, backend, store, app, log, home: directory }
+	return { engine, backend, store, deployment, log, home: directory }
 }
 
 async function untilStatus(engine: Engine, id: string, status: RunStatus): Promise<RunRecord> {
@@ -69,8 +70,8 @@ mailbox.send({ type: 'succeeded' })
 describe.skipIf(process.platform !== 'linux')('Engine', () => {
 	test('runs a workflow to the end, keeps its events and removes its sandbox', async () => {
 		// Arrange
-		const { app, engine, backend } = await openEngine()
-		await deployTestApp(app, {
+		const { deployment, engine, backend } = await openEngine()
+		await deployTestApp(deployment, {
 			hello: runtimeScript(
 				`event('root', 'workflow-started')\nevent('child', 'log', { parentId: 'root' })\nmailbox.send({ type: 'succeeded' })`,
 			),
@@ -92,8 +93,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('starts one run for a key, also when it is asked twice at once', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 		const options = { ...userRun('hello'), key: 'webhook team/hello/1', abortSignal: signal }
 
 		// Act
@@ -108,9 +109,9 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('gives the entry file the workflow and its parameters, also on a restart', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
+		const { deployment, engine } = await openEngine()
 		await deployTestApp(
-			app,
+			deployment,
 			{
 				main: runtimeScript(
 					`const start = await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: JSON.stringify(start) })`,
@@ -140,8 +141,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('relays an input request and its answer', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
@@ -156,8 +157,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('refuses a second answer to a request while the first is on its way', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
@@ -171,8 +172,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('refuses an answer to a request the run does not wait for', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
@@ -185,8 +186,8 @@ describe.skipIf(process.platform !== 'linux')('Engine', () => {
 
 	test('answers a wake request on its own clock', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, {
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, {
 			later: runtimeScript(`
 const at = new Date(Date.now() + 300).toISOString()
 mailbox.send({ type: 'request', request: { kind: 'wake', id: 'later', at } })
@@ -206,10 +207,10 @@ mailbox.send({ type: 'succeeded' })
 
 	test('keeps how a run ended when removing its sandbox fails', async () => {
 		// Arrange
-		const { app, engine, log } = await openEngine({
+		const { deployment, engine, log } = await openEngine({
 			wrap: (backend) => ({ ...backend, remove: () => Promise.reject(new Error('device busy')) }),
 		})
-		await deployTestApp(app, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
+		await deployTestApp(deployment, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 
 		// Act
 		const { id } = await engine.startRun({ ...userRun('hello'), abortSignal: signal })
@@ -225,8 +226,8 @@ mailbox.send({ type: 'succeeded' })
 	test('does not let a wake of a failed attempt answer the restarted one', async () => {
 		// Arrange
 		const marker = path.join(await temporaryDirectory(), 'attempted')
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, {
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, {
 			later: runtimeScript(`
 const { existsSync, writeFileSync } = await import('node:fs')
 const restarted = existsSync(${JSON.stringify(marker)})
@@ -259,8 +260,8 @@ if (!restarted) {
 
 	test('fails a run whose runtime reports a failure', async () => {
 		// Arrange
-		const { app, engine, backend } = await openEngine()
-		await deployTestApp(app, {
+		const { deployment, engine, backend } = await openEngine()
+		await deployTestApp(deployment, {
 			broken: runtimeScript(`mailbox.send({ type: 'failed', error: 'The plan was rejected.' })`),
 		})
 
@@ -278,8 +279,8 @@ if (!restarted) {
 
 	test('fails a run whose runtime exits without an outcome, with the end of its log', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { crash: runtimeScript(`console.error('out of cheese')\nprocess.exit(2)`) })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { crash: runtimeScript(`console.error('out of cheese')\nprocess.exit(2)`) })
 
 		// Act
 		const { id } = await engine.startRun({ ...userRun('crash'), abortSignal: signal })
@@ -309,7 +310,7 @@ if (!restarted) {
 		// Arrange
 		const empty = await openEngine()
 		const deployed = await openEngine()
-		const { version } = await deployTestApp(deployed.app, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
+		const { version } = await deployTestApp(deployed.deployment, { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) })
 
 		// Act
 		const undeployed = empty.engine.startRun({ ...userRun('hello'), abortSignal: signal })
@@ -326,8 +327,8 @@ if (!restarted) {
 
 	test('stops a run and removes its sandbox', async () => {
 		// Arrange
-		const { app, engine, backend } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine, backend } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		const sandbox = engine.get(id).sandbox?.id ?? ''
@@ -346,8 +347,8 @@ if (!restarted) {
 
 	test('finishes stopping a run when the caller stops waiting', async () => {
 		// Arrange
-		const { app, engine, backend } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine, backend } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 
@@ -362,11 +363,44 @@ if (!restarted) {
 		})
 	})
 
+	test('starts a run whole from the version it copies while another is deployed, then removes that version', async () => {
+		// Arrange
+		const copying = deferred<undefined>()
+		const copyStarted = deferred<undefined>()
+		const { deployment, engine } = await openEngine({
+			wrapStore: (store) => ({
+				...store,
+				saveApp: async (id, tarball, abortSignal) => {
+					copyStarted.resolve(undefined)
+					await copying.promise
+					return store.saveApp(id, tarball, abortSignal)
+				},
+			}),
+		})
+		const first = await deployTestApp(deployment, { ask: askAndEcho })
+
+		// Act
+		const starting = engine.startRun({ ...userRun('ask'), abortSignal: signal })
+		await copyStarted.promise
+		await deployTestApp(deployment, { ask: askAndEcho, other: runtimeScript('') })
+		const keptWhileCopying = existsSync(first.tarball)
+		copying.resolve(undefined)
+		const { id } = await starting
+		await untilPending(engine, id, 'story')
+
+		// Assert
+		expect(keptWhileCopying).toBe(true)
+		expect(engine.get(id).app.version).toBe(first.version)
+		await vi.waitFor(() => {
+			expect(existsSync(path.dirname(first.tarball))).toBe(false)
+		})
+	})
+
 	test('keeps a run stopped that was stopped while its restart was being saved', async () => {
 		// Arrange
 		const held = deferred<undefined>()
 		let holding = false
-		const { app, engine, backend } = await openEngine({
+		const { deployment, engine, backend } = await openEngine({
 			wrapStore: (store) => ({
 				...store,
 				save: async (record) => {
@@ -375,7 +409,7 @@ if (!restarted) {
 				},
 			}),
 		})
-		await deployTestApp(app, { ask: askAndEcho })
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
@@ -399,7 +433,7 @@ if (!restarted) {
 	test('refuses a second resume while the first is under way', async () => {
 		// Arrange
 		const first = await openEngine()
-		await deployTestApp(first.app, { ask: askAndEcho })
+		await deployTestApp(first.deployment, { ask: askAndEcho })
 		const { id } = await first.engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
@@ -416,7 +450,7 @@ if (!restarted) {
 	test('pauses a waiting run on close and resumes it after a restart of the engine', async () => {
 		// Arrange
 		const first = await openEngine()
-		await deployTestApp(first.app, { ask: askAndEcho })
+		await deployTestApp(first.deployment, { ask: askAndEcho })
 		const { id } = await first.engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(first.engine, id, 'story')
 		await first.engine.close(deadlines())
@@ -434,12 +468,12 @@ if (!restarted) {
 
 	test('restarts a stopped run from the top, with the code it first ran', async () => {
 		// Arrange
-		const { app, engine } = await openEngine()
-		await deployTestApp(app, { ask: askAndEcho })
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(deployment, { ask: askAndEcho })
 		const { id } = await engine.startRun({ ...userRun('ask'), abortSignal: signal })
 		await untilPending(engine, id, 'story')
 		await engine.stop(id, signal)
-		await deployTestApp(app, { ask: runtimeScript(`mailbox.send({ type: 'failed', error: 'the new version' })`) })
+		await deployTestApp(deployment, { ask: runtimeScript(`mailbox.send({ type: 'failed', error: 'the new version' })`) })
 
 		// Act
 		await engine.restart(id, signal)

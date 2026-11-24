@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
-import type { AppVersion } from '../app/app-store.mts'
+import type { DeploymentVersion } from '../app/deployment.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
@@ -18,8 +18,8 @@ export interface SchedulerOptions {
 
 /** Starts schedule runs on the wall clock, for the schedules it was last given. */
 export interface Scheduler {
-	/** Follows this app version's schedules from now on: new ones are armed, changed or gone ones disarmed. */
-	update(app: AppVersion | undefined): void
+	/** Follows this deployed version's schedules from now on: new ones are armed, changed or gone ones disarmed. */
+	update(deployed: DeploymentVersion | undefined): void
 	/** Stops every timer, and arms none from then on. Runs that were started go on. */
 	close(): void
 }
@@ -99,22 +99,22 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	}
 
 	return Object.freeze({
-		update(app) {
+		update(deployed) {
 			if (closed) return
-			const schedules = (app?.manifest.description.triggers ?? []).filter(
+			const schedules = (deployed?.manifest.description.triggers ?? []).filter(
 				(trigger): trigger is ScheduleDescription => trigger.kind === 'schedule',
 			)
 			for (const [name, current] of armed) {
 				// A new version may have changed the schedule's workflow or parameters: armed again.
-				if (app?.version === current.version && schedules.some((schedule) => schedule.id === name)) continue
+				if (deployed?.version === current.version && schedules.some((schedule) => schedule.id === name)) continue
 				current.controller.abort()
 				armed.delete(name)
 			}
-			if (app === undefined) return
+			if (deployed === undefined) return
 			for (const schedule of schedules) {
 				if (armed.has(schedule.id)) continue
 				const controller = new AbortController()
-				armed.set(schedule.id, { version: app.version, controller })
+				armed.set(schedule.id, { version: deployed.version, controller })
 				arm(schedule, controller.signal)
 			}
 		},

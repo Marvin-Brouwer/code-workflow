@@ -12,12 +12,13 @@ import {
 	type RuntimeEvent,
 	type RuntimeMessage,
 	type RuntimeRequest,
+	type TriggerDescription,
 	type TriggerReference,
 	type WakeRequest,
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
-import { noAppMessage, type AppStore } from '../app/app-store.mts'
+import { noAppMessage, type Deployment, type DeploymentVersion } from '../app/deployment.mts'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
@@ -48,7 +49,7 @@ export interface EngineOptions {
 	/** Where the run records are kept. */
 	readonly store: RunStore
 	/** The deployed app runs start from. */
-	readonly app: AppStore
+	readonly deployment: Deployment
 	/** Where things go inside a sandbox. */
 	readonly layout?: SandboxLayout
 	/** Where the engine reports what it did on its own, such as reconciling. Default: nowhere. */
@@ -127,8 +128,8 @@ export const startRunTimeout = duration.of('1m')
  * @example
  * ```ts
  * const store = openRunStore(path.join(home, 'runs'))
- * const app = await openAppStore(path.join(home, 'app'), abortSignal)
- * const engine = await Engine.open({ backend, store, app }, abortSignal)
+ * const deployment = await openDeployment(path.join(home, 'app'), abortSignal)
+ * const engine = await Engine.open({ backend, store, deployment }, abortSignal)
  * const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: duration.of('30s').toAbortSignal(), backend: duration.of('1m').toAbortSignal() })
@@ -138,7 +139,7 @@ export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
 	readonly #writes: RunWriteFeed
-	readonly #app: AppStore
+	readonly #deployment: Deployment
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
@@ -159,7 +160,7 @@ export class Engine {
 		const watched = watchedRunStore(options.store)
 		this.#store = watched.store
 		this.#writes = watched.writes
-		this.#app = options.app
+		this.#deployment = options.deployment
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
@@ -293,9 +294,16 @@ export class Engine {
 		return [...models, ...toolsWithoutConnector, ...this.#gateway.missingRegistries(registries), ...settings]
 	}
 
-	async #create(options: StartRunOptions): Promise<RunRecord> {
-		const waitSignal = this.#withLifetime(options.abortSignal)
-		const deployed = this.#app.current()
+	/**
+	 * Checks that `deployed` lists the trigger and that the app can run now, then copies its tarball
+	 * next to the run's record, so the run keeps its code when the app is deployed again.
+	 */
+	async #prepareRunApp(
+		id: RunId,
+		deployed: DeploymentVersion | undefined,
+		options: StartRunOptions,
+		waitSignal: AbortSignal,
+	): Promise<{ app: RunApp; listed: TriggerDescription }> {
 		if (deployed === undefined) throw new EngineError('not-found', noAppMessage)
 		const { kind, id: triggerId } = options.trigger
 		const listed = deployed.manifest.description.triggers.find((known) => known.kind === kind && known.id === triggerId)
@@ -313,6 +321,10 @@ export class Engine {
 				`The app can't run now, so no run was started:\n${missing.map(({ message }) => message).join('\n')}`,
 			)
 		}
+		await this.#store.saveApp(id, deployed.tarball, waitSignal).catch(async (error: unknown) => {
+			await this.#store.removeRun(id).catch(() => undefined)
+			throw error
+		})
 		const app: RunApp = {
 			version: deployed.version,
 			entry: deployed.manifest.entry,
@@ -320,15 +332,17 @@ export class Engine {
 			tools: deployed.manifest.description.tools,
 			registries: [...deployed.manifest.description.sandbox.registries],
 		}
+		return { app, listed }
+	}
+
+	async #create(options: StartRunOptions): Promise<RunRecord> {
+		const waitSignal = this.#withLifetime(options.abortSignal)
 		const id = newRunId()
-		// A copy of its own, so the run keeps its code when the app is deployed again.
-		await this.#store.saveApp(id, deployed.tarball, waitSignal).catch(async (error: unknown) => {
-			await this.#store.removeRun(id).catch(() => undefined)
-			throw error
-		})
+		// Held until the run has its copy, so a deploy meanwhile doesn't remove the version under it.
+		const { app, listed } = await this.#deployment.withCurrent((deployed) => this.#prepareRunApp(id, deployed, options, waitSignal))
 		waitSignal.throwIfAborted()
 		// Only the kind and the id, whatever else the caller's object holds: this goes into the record.
-		const trigger: TriggerReference = { kind, id: triggerId }
+		const trigger: TriggerReference = { kind: options.trigger.kind, id: options.trigger.id }
 		const start: RunStart = {
 			mode: 'run',
 			workflow: listed.workflow,

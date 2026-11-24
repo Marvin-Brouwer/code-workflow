@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import type { AppVersion } from '../src/app/app-store.mts'
+import type { DeploymentVersion } from '../src/app/deployment.mts'
 import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
@@ -12,7 +12,7 @@ const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workf
 const everyOtherSecond = { kind: 'schedule' as const, id: 'report */2 * * * * *', workflow: 'report', cron: '*/2 * * * * *' }
 
 /** Version `version` of the app, listing `triggers`. */
-function appVersion(version: string, triggers: TriggerDescription[] = [everySecond]): AppVersion {
+function appVersion(version: string, triggers: TriggerDescription[] = [everySecond]): DeploymentVersion {
 	return {
 		version,
 		manifest: {
