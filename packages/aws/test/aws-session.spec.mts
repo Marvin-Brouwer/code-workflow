@@ -115,9 +115,13 @@ describe('the AWS session', () => {
 		refreshes.release()
 
 		// Assert
-		await vi.waitFor(async () => {
-			expect(await storedSession(credentials)).toMatchObject({ accessToken: 'access-3', refreshToken: 'refresh-4' })
-		})
+		// A sealed write behind the store's file lock can take over a second on a slow Windows runner, past waitFor's default.
+		await vi.waitFor(
+			async () => {
+				expect(await storedSession(credentials)).toMatchObject({ accessToken: 'access-3', refreshToken: 'refresh-4' })
+			},
+			{ timeout: promptly.to('ms') },
+		)
 		expect((await session().roleCredentials(abortSignal)).accessKeyId).toMatch(/^key-/)
 	})
 

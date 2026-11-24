@@ -1,7 +1,9 @@
 import { z } from 'zod'
+import { callOutcome } from '../run/call-outcome.mts'
 import { inEventOf } from '../run/run-events.mts'
 import { findScope } from '../run/run-scope.mts'
 import { untilAborted } from '../run/until-aborted.mts'
+import { titleOf } from './title-of.mts'
 
 /** What a tool's action gets besides its input. */
 export interface ToolContext {
@@ -19,9 +21,15 @@ export interface ToolSpec {
 	 * {@link ToolInputError} when the input doesn't fit, so a caller can tell a bad input from a
 	 * failing action.
 	 */
-	readonly prepare: (input: unknown) => (context: ToolContext) => Promise<unknown>
+	readonly prepare: (input: unknown) => (context: ToolContext) => Promise<ToolOutcome<unknown>>
 	/** Set for a stub of a host tool: it runs on the host, through the gateway, and a loop that has it opens an endpoint for it. */
 	readonly runsOnHost?: true
+}
+
+/** What a tool call returned, and the line that titles it in the run view, from the tool's `describe`. */
+export interface ToolOutcome<Output> {
+	readonly output: Output
+	readonly title: string | undefined
 }
 
 /** A tool's input didn't fit its schema. From code that fails the call; from an agent it goes back to the agent. */
@@ -76,13 +84,23 @@ export function tool<Input extends z.ZodType, Output>(
 		readonly description?: string
 		readonly input: Input
 		readonly action: (input: z.output<Input>, context: ToolContext) => Promise<Output>
+		/**
+		 * A line that says what a call did, such as `Collected issue #63`, to title it in the run
+		 * view. Without it, or when it throws, the call is titled by the tool's name. It runs after
+		 * every call, so keep it to reading its arguments.
+		 */
+		readonly describe?: (input: z.output<Input>, output: Output) => string
 	},
 ): Tool<z.input<Input>, Output> {
 	assertToolName(name)
+	const { describe } = definition
 	const prepare = (input: unknown) => {
 		const parsed = definition.input.safeParse(input)
 		if (!parsed.success) throw new ToolInputError(`The input of ${name} doesn't fit:\n${z.prettifyError(parsed.error)}`)
-		return (context: ToolContext): Promise<Output> => definition.action(parsed.data, context)
+		return async (context: ToolContext): Promise<ToolOutcome<Output>> => {
+			const output = await definition.action(parsed.data, context)
+			return { output, title: titleOf(describe, parsed.data, output) }
+		}
 	}
 	return toolOf<z.input<Input>, Output>({ name, description: definition.description, input: definition.input, prepare })
 }
@@ -90,7 +108,7 @@ export function tool<Input extends z.ZodType, Output>(
 /** The tool for a spec: a function that checks its input and runs, and the spec behind it. */
 export function toolOf<Input, Output>(spec: ToolSpec): Tool<Input, Output> {
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the spec's action returns what the tool's definition says
-	const prepare = spec.prepare as (input: unknown) => (context: ToolContext) => Promise<Output>
+	const prepare = spec.prepare as (input: unknown) => (context: ToolContext) => Promise<ToolOutcome<Output>>
 	const call = (input: Input, context?: ToolContext): Promise<Output> => callFromCode(spec.name, prepare, input, context)
 	Object.defineProperty(call, 'name', { value: spec.name })
 	return Object.assign(call, { description: spec.description, [toolSpec]: spec })
@@ -114,7 +132,7 @@ export function specOf(value: Tool): ToolSpec {
 
 async function callFromCode<Output>(
 	name: string,
-	prepare: (input: unknown) => (context: ToolContext) => Promise<Output>,
+	prepare: (input: unknown) => (context: ToolContext) => Promise<ToolOutcome<Output>>,
 	input: unknown,
 	context: ToolContext | undefined,
 ): Promise<Output> {
@@ -122,6 +140,7 @@ async function callFromCode<Output>(
 	const abortSignal = context?.abortSignal ?? scope?.run.abortSignal
 	if (abortSignal === undefined) throw new Error(`Tool ${name} was called outside a workflow run: pass { abortSignal }.`)
 	const call = async () => untilAborted(prepare(input)({ abortSignal }), abortSignal)
-	if (scope === undefined) return call()
-	return inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, call)
+	if (scope === undefined) return (await call()).output
+	const { output } = await inEventOf(scope, 'tool-call', { tool: name, from: 'code', input }, call, callOutcome)
+	return output
 }

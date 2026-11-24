@@ -45,6 +45,8 @@ export {
 } from '../providers/provider-settings.mts'
 export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
+export { missingCredentials, type WantedCredential } from '../settings/missing-credentials.mts'
+export { MissingSetting, SettingFix } from '../settings/missing-setting.mts'
 export type { ConnectorSignIn, ConnectorSignInContext, SignInPrompt } from '../tools/connector-sign-in.mts'
 export {
 	connectorHost,

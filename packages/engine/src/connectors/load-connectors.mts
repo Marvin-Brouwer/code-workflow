@@ -21,12 +21,14 @@ import {
 	type ConnectorSignInContext,
 	type CredentialStore,
 	type HostTool,
+	type MissingSetting,
 	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
 import { ConnectorName } from '@mesh-flow/protocol'
 import { resolve } from 'import-meta-resolve'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
+import { checkedMissingSettings } from './checked-missing-settings.mts'
 import type { ConnectorSetting } from './connector-settings.mts'
 
 /** The subpath of a connector package that exports its host half. */
@@ -55,8 +57,8 @@ export interface LoadedConnector {
 	readonly signIn?: (context: SignInContext) => Promise<void>
 	/** How the gateway reaches the connector's package registries, when it has any. */
 	readonly registries?: ResolveRegistryTarget
-	/** The settings the connector still needs, each as a line that says how to set it. */
-	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<string[]>
+	/** The settings the connector still needs, each a line that says how to set it, and what sets it. */
+	readonly missingSettings?: (abortSignal: AbortSignal) => Promise<MissingSetting[]>
 }
 
 /** What `loadConnectors` takes. */
@@ -107,7 +109,10 @@ export async function loadConnectors(options: LoadConnectorsOptions): Promise<Lo
 			...(registries === undefined ? {} : { registries: withOwnRegistrySignIns(host.name, registries(hostOptions), signInCount) }),
 			...(missingSettings === undefined
 				? {}
-				: { missingSettings: (abortSignal: AbortSignal) => missingSettings(hostOptions, abortSignal) }),
+				: {
+						missingSettings: async (abortSignal: AbortSignal) =>
+							checkedMissingSettings(host.name, await missingSettings(hostOptions, abortSignal)),
+					}),
 		})
 	}
 	return loaded

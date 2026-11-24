@@ -496,15 +496,22 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect(missing).toHaveLength(2)
-		expect(missing[0]).toContain('No model providers are set up')
-		expect(missing[1]).toContain('host tools githubComment')
+		expect(missing[0]).toMatchObject({ fix: { kind: 'provider', model: 'claude-opus-5-5' } })
+		expect(missing[0]?.message).toContain('No model providers are set up')
+		expect(missing[1]).toMatchObject({ fix: { kind: 'connector-for-tools', tools: ['githubComment'] } })
+		expect(missing[1]?.message).toContain('host tools githubComment')
 	})
 
 	test("lists what the connectors behind the app's registries still need, and a registry whose connector isn't loaded", async () => {
 		// Arrange
 		const registry = { connector: 'cloud', name: 'cloud packages', host: 'packages.cloud.example', paths: ['/npm/packages/'], settings: {} }
 		const connectorSettings = vi.fn<ConnectorSettingsCheck>(() =>
-			Promise.resolve(['Set the cloud start URL: `mesh-flow credential set cloud/start-url`.']),
+			Promise.resolve([
+				{
+					message: 'Set the cloud start URL: `mesh-flow credential set cloud/start-url`.',
+					fix: { kind: 'credential', name: 'cloud/start-url' },
+				},
+			]),
 		)
 		const { engine, apps } = await openEngine({ connectorSettings })
 		const deployed = await deployTestApp(
@@ -517,7 +524,10 @@ mailbox.send({ type: 'succeeded' })
 		const missing = await engine.missingSettings(deployed.manifest.description, abortSignal)
 
 		// Assert
-		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud'), expect.stringContaining('cloud start URL')])
+		expect(missing.map(({ fix }) => fix)).toEqual([
+			{ kind: 'connector', connector: 'cloud' },
+			{ kind: 'credential', name: 'cloud/start-url' },
+		])
 		expect(connectorSettings).toHaveBeenCalledWith({ tools: ['echo'], registries: [npmRegistry, registry] }, abortSignal)
 	})
 

@@ -17,18 +17,30 @@ export function emitEvent(scope: Scope, type: string, fields: EventFields = {}):
 
 /**
  * Runs `body` as a node of the event tree: one `type` event first, then `<type>-succeeded` or
- * `<type>-failed` under it. Events that `body` sends go under the node too.
+ * `<type>-failed` under it. Events that `body` sends go under the node too. `succeeded` gives the
+ * fields of the `-succeeded` event from what `body` returned.
  */
-export async function inEvent<T>(type: string, fields: EventFields, body: (scope: Scope) => Promise<T>): Promise<T> {
-	return inEventOf(currentScope(type), type, fields, body)
+export async function inEvent<T>(
+	type: string,
+	fields: EventFields,
+	body: (scope: Scope) => Promise<T>,
+	succeeded?: (value: T) => EventFields,
+): Promise<T> {
+	return inEventOf(currentScope(type), type, fields, body, succeeded)
 }
 
 /** {@link inEvent} under a scope that isn't the current one, such as a loop's from inside a tool call. */
-export async function inEventOf<T>(parent: Scope, type: string, fields: EventFields, body: (scope: Scope) => Promise<T>): Promise<T> {
+export async function inEventOf<T>(
+	parent: Scope,
+	type: string,
+	fields: EventFields,
+	body: (scope: Scope) => Promise<T>,
+	succeeded?: (value: T) => EventFields,
+): Promise<T> {
 	const scope: Scope = { ...parent, eventId: emitEvent(parent, type, fields) }
 	try {
 		const value = await inScope(scope, () => body(scope))
-		emitEvent(scope, `${type}-succeeded`)
+		emitEvent(scope, `${type}-succeeded`, succeeded?.(value))
 		return value
 	} catch (error) {
 		emitEvent(scope, `${type}-failed`, { error: describeError(error) })

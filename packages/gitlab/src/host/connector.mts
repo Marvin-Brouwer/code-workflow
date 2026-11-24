@@ -1,11 +1,12 @@
 import { gitHostTools } from '@mesh-flow/code-repository/host'
-import { connectorHost, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
+import { connectorHost, missingCredentials, type ConnectorHost, type HostTool } from '@mesh-flow/gateway'
 import { cloneRepository, pushBundle } from '../tools/git-tools.mts'
 import { gitlabApi, type GitlabApiOptions } from './api.mts'
 import { gitRemote, type GitRemoteOptions } from './git-remote.mts'
 import { mergeRequestHostTools } from './merge-request-tools.mts'
 import { pipelineHostTools } from './pipeline-tools.mts'
 import { searchHostTools } from './search-tools.mts'
+import { tokenCredential } from './site.mts'
 
 /** What the GitLab host tools run on. */
 export interface GitlabHostOptions extends GitlabApiOptions, GitRemoteOptions {}
@@ -56,4 +57,7 @@ export function gitlabHostTools(options: GitlabHostOptions): HostTool[] {
  * echo 'https://gitlab.example.com' | mesh-flow credential set gitlab/url   # not for gitlab.com
  * ```
  */
-export const connector: ConnectorHost = connectorHost('gitlab', ({ directory }) => gitlabHostTools({ directory }))
+export const connector: ConnectorHost = connectorHost('gitlab', ({ directory }) => gitlabHostTools({ directory }), {
+	// The URL has a default, gitlab.com, so only the token is ever missing.
+	missingSettings: ({ credentials }, abortSignal) => missingCredentials(credentials, [{ name: tokenCredential }], abortSignal),
+})

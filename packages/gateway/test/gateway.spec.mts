@@ -516,8 +516,8 @@ describe('model calls', () => {
 
 		// Assert
 		expect(unavailable).toEqual([
-			expect.stringContaining('mesh-flow provider key spare'),
-			'None of the providers (work, spare) offers model no-such-model.',
+			{ message: expect.stringContaining('mesh-flow provider key spare') as unknown, fix: { kind: 'provider-key', provider: 'spare' } },
+			{ message: 'None of the providers (work, spare) offers model no-such-model.', fix: { kind: 'provider', model: 'no-such-model' } },
 		])
 	})
 })
@@ -1011,7 +1011,12 @@ describe('package calls', () => {
 		const { answer } = await fetchPath('/npm/packages/left-pad')
 
 		// Assert
-		expect(missing).toEqual([expect.stringContaining('cloud packages needs connector cloud')])
+		expect(missing).toEqual([
+			{
+				message: expect.stringContaining('cloud packages needs connector cloud') as unknown,
+				fix: { kind: 'connector', connector: 'cloud' },
+			},
+		])
 		expect(errorOf(answer)).toContain("needs connector cloud, which isn't loaded")
 		expect(sent).not.toHaveBeenCalled()
 	})
