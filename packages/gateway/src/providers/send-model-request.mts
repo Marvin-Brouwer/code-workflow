@@ -1,7 +1,7 @@
 import type { ModelRequest, ModelResponse } from '@mesh-flow/protocol'
 import { modelApi } from './model-apis.mts'
-import { withoutTrailingSlash } from './without-trailing-slash.mts'
 import type { OfferedModel } from './offering-provider.mts'
+import { withoutTrailingSlash } from './without-trailing-slash.mts'
 
 /** The provider's base URL for a model: the config's override, or pi-ai's. */
 function baseUrlOf({ provider, model }: OfferedModel): string {
