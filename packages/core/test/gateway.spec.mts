@@ -327,17 +327,15 @@ describe('gateway', () => {
 		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'claude-opus-5-5': { requests: 1, inputTokens: 10, outputTokens: 4 } })
 	})
 
-	test('runs a model of a compatible server the config describes, at its base URL with its key', async () => {
+	test('runs a model a compatible server lists, at its base URL with its key', async () => {
 		// Arrange
-		const sent = vi.fn<typeof fetch>(() =>
-			Promise.resolve(new Response(chatCompletionsStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
-		)
-		const litellm = {
-			name: 'team-litellm',
-			kind: 'openai-compatible',
-			baseUrl: 'https://litellm.example.com/v1',
-			models: [{ id: 'team-model', contextWindow: 32_000, maxTokens: 4_000, reasoning: false }],
-		}
+		// The server lists its models first, when the loop picks one, then answers the model call.
+		const sent = vi
+			.fn<typeof fetch>(() =>
+				Promise.resolve(new Response(chatCompletionsStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
+			)
+			.mockResolvedValueOnce(Response.json({ data: [{ id: 'team-model' }] }))
+		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
 		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
 		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
 		const helper = agent({ model: 'team-model' })
@@ -347,7 +345,7 @@ describe('gateway', () => {
 
 		// Assert
 		expect(await run.result).toBe('Paris')
-		const [url, init] = sent.mock.calls[0] ?? []
+		const [url, init] = sent.mock.calls[1] ?? []
 		expect(url).toEqual(new URL('https://litellm.example.com/v1/chat/completions'))
 		expect(init?.headers).toMatchObject({ authorization: 'Bearer sk-litellm' })
 		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'team-model': { requests: 1, inputTokens: 10, outputTokens: 4 } })

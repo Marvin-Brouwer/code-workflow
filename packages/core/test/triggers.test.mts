@@ -174,12 +174,11 @@ describe('defineMeshFlow', () => {
 		])
 	})
 
-	test("describes a compatible server's models, with defaults for what the config leaves out", () => {
+	test('describes a compatible server by its name and base URL', () => {
 		// Act
 		const provider = openAiCompatible({
 			name: 'team-litellm',
 			baseUrl: 'https://litellm.example.com/v1',
-			models: [{ id: 'team-model' }, { id: 'team-thinker', contextWindow: 200_000, maxTokens: 32_000, reasoning: true }],
 		})
 
 		// Assert
@@ -187,10 +186,6 @@ describe('defineMeshFlow', () => {
 			name: 'team-litellm',
 			kind: 'openai-compatible',
 			baseUrl: 'https://litellm.example.com/v1',
-			models: [
-				{ id: 'team-model', contextWindow: 128_000, maxTokens: 16_384, reasoning: false },
-				{ id: 'team-thinker', contextWindow: 200_000, maxTokens: 32_000, reasoning: true },
-			],
 		})
 	})
 

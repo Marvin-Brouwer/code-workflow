@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
 	isConnectorRegistry,
+	openAiCompatibleKind,
 	registryKey,
 	stagedFileName,
 	uniqueRegistries,
@@ -26,7 +27,8 @@ import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/f
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential } from './providers/provider-credential.mts'
-import { chosenModel, notOfferedMessage, offeringProvider, type ModelChoice } from './providers/resolve-model.mts'
+import { chosenModel, notOfferedMessage, offeringProvider, type ModelChoice, type ServedModels } from './providers/resolve-model.mts'
+import { servedModels } from './providers/served-models.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
@@ -177,19 +179,18 @@ function setKeyHint(provider: string): string {
  * Says why none of an agent's models can run, when no provider with a key offers one: the first
  * provider that offers one has no key, or no provider in the config offers any.
  */
-function unavailableMessage(providers: readonly ModelProviderDescription[], modelIds: readonly string[]): string {
-	const keyless = offeringProvider(providers, modelIds, () => true)
+function unavailableMessage(providers: readonly ModelProviderDescription[], modelIds: readonly string[], served: ServedModels): string {
+	const keyless = offeringProvider(providers, modelIds, () => true, served)
 	if (keyless === undefined) return modelIds.map((modelId) => notOfferedMessage(providers, modelId)).join(' ')
 	return `Provider ${keyless.provider.name} offers model ${keyless.model.id} but has no API key. ${setKeyHint(keyless.provider.name)}`
 }
 
-/** A model choice as the sandbox gets it: for a compatible server, with the model as the config describes it. */
+/** A model choice as the sandbox gets it: for a compatible server, which pi-ai doesn't know, with the model described. */
 function resolvedModel({ provider, model }: ModelChoice): ResolvedModel {
-	const compatible = provider.models?.find((described) => described.id === model.id)
 	const resolved: ResolvedModel = { provider: provider.name, kind: provider.kind, model: model.id }
-	return compatible === undefined || provider.baseUrl === undefined
-		? resolved
-		: { ...resolved, compatible: { baseUrl: provider.baseUrl, model: compatible } }
+	if (provider.kind !== openAiCompatibleKind || provider.baseUrl === undefined) return resolved
+	const { id, contextWindow, maxTokens, reasoning } = model
+	return { ...resolved, compatible: { baseUrl: provider.baseUrl, model: { id, contextWindow, maxTokens, reasoning } } }
 }
 
 /** What a call that failed answers: why, and whether another try, or a sign-in first, may help. */
@@ -252,8 +253,9 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'open') return { result: await openLoop(runId, call.tools, abortSignal) }
 		if (call.type === 'close') return { result: await closeLoop(runId, call.endpoint, abortSignal) }
 		if (call.type === 'resolve-model') {
-			const choice = offeringProvider(state.providers, call.models, await keyCheck(abortSignal))
-			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models))
+			const served = await servedModelsOf(state.providers, abortSignal)
+			const choice = offeringProvider(state.providers, call.models, await keyCheck(abortSignal), served)
+			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models, served))
 			return { result: resolvedModel(choice) }
 		}
 		if (call.type === 'package') {
@@ -303,6 +305,14 @@ export function openGateway(options: GatewayOptions): Gateway {
 			abortSignal,
 		)
 
+	/** The models the app's compatible servers with a key offer now, each asked with its key. */
+	const servedModelsOf = (providers: readonly ModelProviderDescription[], abortSignal: AbortSignal) =>
+		servedModels(
+			providers,
+			{ keyOf: (provider) => options.credentials.get(providerCredential(provider), abortSignal), fetchFromHost },
+			abortSignal,
+		)
+
 	/** Whether a provider, by name, has a key now. */
 	const keyCheck = async (abortSignal: AbortSignal): Promise<(provider: string) => boolean> => {
 		const names = new Set(await options.credentials.names(abortSignal))
@@ -315,11 +325,16 @@ export function openGateway(options: GatewayOptions): Gateway {
 		abortSignal: AbortSignal,
 	) => {
 		const hasKey = await keyCheck(abortSignal)
+		// A server that can't list its models now counts as offering them: the loop that needs one says why it can't.
+		const served = await servedModelsOf(providers, abortSignal).catch((): ServedModels => {
+			abortSignal.throwIfAborted()
+			return new Map()
+		})
 		const missing = agentModels.flatMap((modelIds): MissingSetting[] => {
-			if (offeringProvider(providers, modelIds, hasKey) !== undefined) return []
-			const keyless = offeringProvider(providers, modelIds, () => true)
+			if (offeringProvider(providers, modelIds, hasKey, served) !== undefined) return []
+			const keyless = offeringProvider(providers, modelIds, () => true, served)
 			const fix: SettingFix = keyless === undefined ? { kind: 'other' } : { kind: 'provider-key', provider: keyless.provider.name }
-			return [{ message: unavailableMessage(providers, modelIds), fix }]
+			return [{ message: unavailableMessage(providers, modelIds, served), fix }]
 		})
 		// Two agents that need the same key say so once.
 		return [...new Map(missing.map((setting) => [setting.message, setting])).values()]

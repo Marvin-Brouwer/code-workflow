@@ -17,8 +17,10 @@ export default defineMeshFlow({
 		name: 'node:26-bookworm',
 		registries: [npmRegistry],
 	}),
-	// The agents run on Anthropic. Each user sets its key: `mesh-flow provider key anthropic`.
-	modelProviders: [anthropicClaude],
+	modelProviders: [
+		// The agents run on Anthropic. Each user sets its key: `mesh-flow provider key anthropic`.
+		anthropicClaude,
+	],
 	workflows: [
 		// A button in the UI, with the issue as its form.
 		userTrigger(fixIssue),

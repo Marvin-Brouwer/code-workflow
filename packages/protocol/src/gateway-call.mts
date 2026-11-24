@@ -54,7 +54,7 @@ export const ResolvedModel = z.object({
 	/** The pi-ai provider it is, such as `anthropic`, whose SDK makes the request in the sandbox. */
 	kind: z.string().min(1),
 	model: z.string().min(1),
-	/** For a compatible server, which pi-ai doesn't know: its base URL and the model as the config describes it. */
+	/** For a compatible server, which pi-ai doesn't know: its base URL and the model, as the server lists it. */
 	compatible: z.object({ baseUrl: z.url(), model: CompatibleModel }).optional(),
 })
 export type ResolvedModel = z.infer<typeof ResolvedModel>

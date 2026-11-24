@@ -69,43 +69,24 @@ export const xAi = factoryOf('xai')
  */
 export const githubCopilot = factoryOf('github-copilot')
 
-/** A model a compatible server offers, as {@link openAiCompatible} takes it. */
-export interface CompatibleModelOptions {
-	/** The model id the server takes, and agents name. */
-	readonly id: string
-	/** How many tokens the model's context holds: a loop that outgrows it fails. Default: 128,000. */
-	readonly contextWindow?: number
-	/** How many tokens one answer may have. Default: 16,384. */
-	readonly maxTokens?: number
-	/** Whether the model thinks before it answers, so an agent's `reasoning` applies. Default: no. */
-	readonly reasoning?: boolean
-}
-
 /** What {@link openAiCompatible} takes. */
 export interface OpenAiCompatibleOptions {
 	/** The provider's name, which its key is set under. */
 	readonly name: string
 	/** Where the server's API is, such as `https://litellm.example.com/v1`. */
 	readonly baseUrl: string
-	/** The models it offers. pi-ai doesn't know them, so the config says what they are. */
-	readonly models: readonly [CompatibleModelOptions, ...CompatibleModelOptions[]]
 }
-
-const defaultContextWindow = 128_000
-const defaultMaxTokens = 16_384
 
 /**
  * A server that speaks OpenAI's Chat Completions API with models of its own, such as a LiteLLM
- * proxy, vLLM or Ollama. Its usage is counted, but without a price.
+ * proxy, vLLM or Ollama. The server says which models it offers (`GET <baseUrl>/models`), when a
+ * loop picks its model. Its usage is counted, but without a price.
  *
  * ```ts
  * modelProviders: [
  * 	openAiCompatible({
  * 		name: 'team-litellm',
  * 		baseUrl: 'https://litellm.example.com/v1',
- * 		models: [
- * 			{ id: 'claude-sonnet-5-5', contextWindow: 200_000, reasoning: true },
- * 		],
  * 	}),
  * ]
  * ```
@@ -116,12 +97,6 @@ export function openAiCompatible(options: OpenAiCompatibleOptions): ModelProvide
 			name: options.name,
 			kind: openAiCompatibleKind,
 			baseUrl: options.baseUrl,
-			models: options.models.map((model) => ({
-				id: model.id,
-				contextWindow: model.contextWindow ?? defaultContextWindow,
-				maxTokens: model.maxTokens ?? defaultMaxTokens,
-				reasoning: model.reasoning ?? false,
-			})),
 		}),
 	)
 }

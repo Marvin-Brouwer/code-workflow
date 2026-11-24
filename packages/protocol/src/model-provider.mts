@@ -6,7 +6,10 @@ export const ProviderName = z.string().regex(/^[a-z0-9][\w-]{0,63}$/, 'Use 1 to 
 /** The kind of a server that speaks OpenAI's Chat Completions API with models of its own, such as a LiteLLM proxy. */
 export const openAiCompatibleKind = 'openai-compatible'
 
-/** A model a compatible server offers, which pi-ai's catalog doesn't know, so the config describes it. */
+/**
+ * A model a compatible server offers, as the gateway hands it to the sandbox: the server lists the
+ * id, and the rest comes from pi-ai's catalog when it knows the id, else from defaults.
+ */
 export const CompatibleModel = z.object({
 	/** The model id the server takes, and agents name. */
 	id: z.string().min(1),
@@ -22,7 +25,7 @@ export type CompatibleModel = z.infer<typeof CompatibleModel>
 /**
  * One model provider the app's config declares: which pi-ai provider it is, and where it is, when
  * that's a proxy or a compatible server. Only its key is per user, in the gateway's credential store.
- * A provider of kind {@link openAiCompatibleKind} has a base URL and lists its models.
+ * A provider of kind {@link openAiCompatibleKind} has a base URL; the server lists its models.
  */
 export const ModelProviderDescription = z
 	.object({
@@ -31,16 +34,10 @@ export const ModelProviderDescription = z
 		kind: z.string().min(1),
 		/** Overrides the kind's base URL, for a proxy or a compatible server. */
 		baseUrl: z.url().optional(),
-		/** The models of a compatible server. Only for kind {@link openAiCompatibleKind}. */
-		models: z.array(CompatibleModel).min(1).optional(),
 	})
-	.refine(
-		(provider) =>
-			provider.kind === openAiCompatibleKind
-				? provider.baseUrl !== undefined && provider.models !== undefined
-				: provider.models === undefined,
-		{ message: `A provider of kind ${openAiCompatibleKind} has a base URL and lists its models; any other kind lists none.` },
-	)
+	.refine((provider) => provider.kind !== openAiCompatibleKind || provider.baseUrl !== undefined, {
+		message: `A provider of kind ${openAiCompatibleKind} has a base URL.`,
+	})
 export type ModelProviderDescription = z.infer<typeof ModelProviderDescription>
 
 /** An agent's model ids, in the order they're tried: the first one a provider with a key offers is used. */

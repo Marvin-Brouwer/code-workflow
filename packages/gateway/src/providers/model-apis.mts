@@ -1,6 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
-import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
+import type { ModelProviderDescription } from '@mesh-flow/protocol'
 
 /** How the gateway sends requests of one model API: the paths a model call may take, and how the key goes along. */
 interface ModelApi {
@@ -35,27 +35,37 @@ let catalog: ReadonlyMap<string, readonly Model<Api>[]> | undefined
  * those of `anthropic`. `undefined` for a kind pi-ai doesn't know.
  */
 export function modelsOfKind(kind: string): readonly Model<Api>[] | undefined {
-	catalog ??= new Map(builtinProviders().map((provider) => [provider.id, provider.getModels().filter((model) => modelApis[model.api])]))
-	return catalog.get(kind)
+	return catalogOfKinds().get(kind)
 }
 
+/** pi-ai's models the gateway can send, by provider kind. */
+function catalogOfKinds(): ReadonlyMap<string, readonly Model<Api>[]> {
+	catalog ??= new Map(builtinProviders().map((provider) => [provider.id, provider.getModels().filter((model) => modelApis[model.api])]))
+	return catalog
+}
+
+/** What a model of a compatible server gets when pi-ai's catalog doesn't know its id. */
+const compatibleDefaults = { contextWindow: 128_000, maxTokens: 16_384, reasoning: false }
+
 /**
- * The models `provider` offers that the gateway can send: its kind's from pi-ai's catalog, or, for a
- * compatible server, the ones the config describes, on OpenAI's Chat Completions API with no price.
- * `undefined` for a kind pi-ai doesn't know.
+ * Model `modelId` of the compatible server `provider`, on OpenAI's Chat Completions API with no
+ * price. The server only lists ids, so its context window, answer size and whether it reasons come
+ * from pi-ai's catalog when a kind there knows the id, else from defaults.
  */
-export function modelsOfProvider(provider: ModelProviderDescription): readonly Model<Api>[] | undefined {
-	if (provider.kind !== openAiCompatibleKind) return modelsOfKind(provider.kind)
-	const baseUrl = provider.baseUrl ?? ''
-	return (provider.models ?? []).map((model) => ({
-		...model,
-		name: model.id,
+export function compatibleModel(provider: ModelProviderDescription, modelId: string): Model<Api> {
+	const known = [...catalogOfKinds().values()].flat().find((model) => model.id === modelId) ?? compatibleDefaults
+	return {
+		id: modelId,
+		name: modelId,
 		api: 'openai-completions',
 		provider: provider.name,
-		baseUrl,
+		baseUrl: provider.baseUrl ?? '',
+		contextWindow: known.contextWindow,
+		maxTokens: known.maxTokens,
+		reasoning: known.reasoning,
 		input: ['text'],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-	}))
+	}
 }
 
 /** The kinds of provider the gateway can send for, with how many models each offers. */

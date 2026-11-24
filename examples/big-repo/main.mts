@@ -29,24 +29,12 @@ export default defineMeshFlow({
 		memoryMb: 4096,
 		registries: [nugetOrg, awsCodeArtifacts],
 	}),
-	// The agents run on the team's LiteLLM proxy first, then on GitHub Copilot. Each user sets the
-	// keys they have: `mesh-flow provider key team-litellm`.
+	// The agents run on the team's LiteLLM proxy first, which lists its own models, then on GitHub
+	// Copilot. Each user sets the keys they have: `mesh-flow provider key team-litellm`.
 	modelProviders: [
 		openAiCompatible({
 			name: 'team-litellm',
 			baseUrl: 'https://litellm.example.com/v1',
-			models: [
-				{
-					id: 'claude-opus-5-5',
-					contextWindow: 200_000,
-					reasoning: true,
-				},
-				{
-					id: 'claude-sonnet-5-5',
-					contextWindow: 200_000,
-					reasoning: true,
-				},
-			],
 		}),
 		githubCopilot,
 	],

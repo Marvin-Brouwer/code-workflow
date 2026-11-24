@@ -21,7 +21,6 @@ export {
 	openAiCompatible,
 	openRouter,
 	xAi,
-	type CompatibleModelOptions,
 	type ModelProvider,
 	type ModelProviderFactory,
 	type ModelProviderOptions,
