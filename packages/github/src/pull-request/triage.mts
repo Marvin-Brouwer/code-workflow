@@ -2,13 +2,13 @@ import { isGoneReply, triageItems, type PlannedChange as SharedPlannedChange, ty
 import type { Agent, Limit } from '@mesh-flow/core'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { ReviewItemId, type PullRequestRef, type ReviewItem } from '../tools/pull-request-tools.mts'
+import { ReviewItemId, type PullRequestReference, type ReviewItem } from '../tools/pull-request-tools.mts'
 import { githubTerms } from './github-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
 export interface TriageOptions {
 	/** The pull request the items are on. */
-	readonly pullRequest: PullRequestRef
+	readonly pullRequest: PullRequestReference
 	/** The items to sort, as `review` hands them to its `comments` handler. */
 	readonly comments: readonly ReviewItem[]
 	/** The limit of the loop. Default: 10 minutes. */
@@ -65,7 +65,7 @@ export function triage(agent: Agent, repository: Repository, options: TriageOpti
 }
 
 /** How `triage` replies on GitHub. */
-function githubTriage(pullRequest: PullRequestRef): TriageCodeHost<ReviewItem> {
+function githubTriage(pullRequest: PullRequestReference): TriageCodeHost<ReviewItem> {
 	return {
 		terms: githubTerms,
 		itemId: ReviewItemId,

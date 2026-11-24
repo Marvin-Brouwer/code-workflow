@@ -4,11 +4,11 @@ import { gitCommand, type GitCommand, type GitCommandOptions } from './command.m
 /** What `gitClient` takes. */
 export interface GitClientOptions {
 	/** The repository, or the directory a `clone` or `init` makes one in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** Git config for every command, as `-c key=value`, such as `{ 'user.name': 'mesh-flow' }`. Never written to `.git/config`. */
 	readonly gitConfig?: Readonly<Record<string, string>>
-	/** On top of the process's environment, for every command, such as `basicAuthHeaderEnv(...)` for a credential. */
-	readonly env?: Readonly<Record<string, string>>
+	/** On top of the process's environment, for every command, such as `basicAuthHeaderEnvironment(...)` for a credential. */
+	readonly environment?: Readonly<Record<string, string>>
 	/**
 	 * When aborted, every git invocation this client spawns is killed, and the call rejects with
 	 * the signal's reason. One place for cancellation: callers give the signal once, here, not at
@@ -20,20 +20,20 @@ export interface GitClientOptions {
 
 /** Each command of {@link commands}, as a {@link GitCommand} the client runs or renders. */
 export type ClientCommands = {
-	readonly [Name in keyof Commands]: (...args: Parameters<Commands[Name]>) => GitCommand
+	readonly [Name in keyof Commands]: (...commandArguments: Parameters<Commands[Name]>) => GitCommand
 }
 
 /** Each command of {@link commands}, rendered as a shell line. Nothing runs. */
 export type RawGit = {
-	readonly [Name in keyof Commands]: (...args: Parameters<Commands[Name]>) => string
+	readonly [Name in keyof Commands]: (...commandArguments: Parameters<Commands[Name]>) => string
 }
 
 /** A git repository to work in: every command, and the questions a workflow asks about a checkout. */
 export interface GitClient extends ClientCommands {
 	/** The repository the client works in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** Whether `ref` names a commit: a branch, a tag, `HEAD`, or `refs/remotes/origin/main`. */
-	readonly hasRef: (ref: string) => Promise<boolean>
+	readonly hasReference: (reference: string) => Promise<boolean>
 	/** Whether there is a local branch `name`. */
 	readonly hasLocalBranch: (name: string) => Promise<boolean>
 	/** Whether `remote` (default `origin`) has a branch `name` as far as the repository knows. */
@@ -105,18 +105,18 @@ function statusEntries(output: string): string[] {
 }
 
 /** Every command as a function of its arguments, each passing its arguments on as they are. */
-function eachCommand<Made>(make: (args: readonly string[]) => Made): {
-	readonly [Name in keyof Commands]: (...args: Parameters<Commands[Name]>) => Made
+function eachCommand<Made>(make: (commandArguments: readonly string[]) => Made): {
+	readonly [Name in keyof Commands]: (...commandArguments: Parameters<Commands[Name]>) => Made
 } {
 	const made = Object.fromEntries(
 		Object.entries(commands).map(([name, build]) => [
 			name,
 			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- each entry has its own parameters; here the arguments pass as they are
-			(...args: unknown[]) => make((build as (...args: unknown[]) => string[])(...args)),
+			(...commandArguments: unknown[]) => make((build as (...commandArguments: unknown[]) => string[])(...commandArguments)),
 		]),
 	)
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built from `commands`, whose keys and parameters it mirrors
-	return made as { readonly [Name in keyof Commands]: (...args: Parameters<Commands[Name]>) => Made }
+	return made as { readonly [Name in keyof Commands]: (...commandArguments: Parameters<Commands[Name]>) => Made }
 }
 
 /**
@@ -127,12 +127,12 @@ function eachCommand<Made>(make: (args: readonly string[]) => Made): {
 export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
 
 /**
- * A client for the repository at `options.cwd`. Every command on it is a {@link GitCommand}:
+ * A client for the repository at `options.workingDirectory`. Every command on it is a {@link GitCommand}:
  * awaited it runs and fails on a non-zero exit, `run()` hands the exit back, `attempt()` is best
  * effort, and in a template string it renders as the shell line.
  *
  * ```ts
- * const git = gitClient({ cwd: checkout, abortSignal })
+ * const git = gitClient({ workingDirectory: checkout, abortSignal })
  * await git.fetch('origin', ['main'])
  * await git.checkoutOrCreate('fix/7')
  * const { stdout } = await git.revParse('HEAD')
@@ -140,16 +140,16 @@ export const rawGit: RawGit = Object.freeze(eachCommand(formatCommand))
  */
 export function gitClient(options: GitClientOptions): GitClient {
 	const commandOptions: GitCommandOptions = {
-		cwd: options.cwd,
+		workingDirectory: options.workingDirectory,
 		abortSignal: options.abortSignal,
 		prefix: Object.entries({ ...platformConfig, ...options.gitConfig }).flatMap(([key, value]) => ['-c', `${key}=${value}`]),
-		...(options.env === undefined ? {} : { env: options.env }),
+		environment: options.environment,
 	}
-	const client = eachCommand((args) => gitCommand(args, commandOptions))
+	const client = eachCommand((commandArguments) => gitCommand(commandArguments, commandOptions))
 
-	const hasRef = async (ref: string) => (await client.revParse('--verify', '--quiet', ref).run()).ok
-	const hasLocalBranch = (name: string) => hasRef(`refs/heads/${name}`)
-	const hasRemoteBranch = (name: string, remote = defaultRemote) => hasRef(`refs/remotes/${remote}/${name}`)
+	const hasReference = async (reference: string) => (await client.revParse('--verify', '--quiet', reference).run()).ok
+	const hasLocalBranch = (name: string) => hasReference(`refs/heads/${name}`)
+	const hasRemoteBranch = (name: string, remote = defaultRemote) => hasReference(`refs/remotes/${remote}/${name}`)
 	const defaultBranch = async (remote = defaultRemote) => {
 		const recorded = await client.symbolicRef(`refs/remotes/${remote}/HEAD`).run()
 		if (recorded.ok) return recorded.stdout.trim().replace(`refs/remotes/${remote}/`, '')
@@ -159,8 +159,8 @@ export function gitClient(options: GitClientOptions): GitClient {
 
 	return Object.freeze<GitClient>({
 		...client,
-		cwd: options.cwd,
-		hasRef,
+		workingDirectory: options.workingDirectory,
+		hasReference: hasReference,
 		hasLocalBranch,
 		hasRemoteBranch,
 		defaultBranch,

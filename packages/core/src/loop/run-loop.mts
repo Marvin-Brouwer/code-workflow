@@ -18,7 +18,7 @@ import {
 import { CodingTools } from '@earendil-works/pi-durable/tools'
 import { z } from 'zod'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
-import type { ExitSpec } from '../exits/exit.mts'
+import type { ExitSpecification } from '../exits/exit.mts'
 import type { Endpoint } from '../gateway/gateway-client.mts'
 import { callOutcome } from '../run/call-outcome.mts'
 import { emitEvent, inEvent } from '../run/run-events.mts'
@@ -229,8 +229,8 @@ async function openLoopEndpoint(
 	abortSignal: AbortSignal,
 ): Promise<Endpoint | undefined> {
 	const hostTools = uniqueTools([...(system?.tools ?? []), ...template.tools])
-		.filter((spec) => spec.runsOnHost === true)
-		.map((spec) => spec.name)
+		.filter((specification) => specification.runsOnHost === true)
+		.map((specification) => specification.name)
 	if (hostTools.length === 0) return undefined
 	const { gateway } = scope.run
 	if (gateway === undefined) throw new Error(`${hostTools.join(', ')} run on the host, through the gateway, and this run has none.`)
@@ -241,7 +241,7 @@ async function openLoopEndpoint(
 function loopTools(
 	template: LoopTemplate,
 	system: LoopTemplate | undefined,
-	handIns: readonly ExitSpec[],
+	handIns: readonly ExitSpecification[],
 	session: LoopSession,
 ): ToolRegistration[] {
 	const gate = runGateOf(template.gate, session)
@@ -256,7 +256,7 @@ function loopTools(
 				]
 			: []
 	return [
-		...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((spec) => agentTool(spec, session)),
+		...uniqueTools([...(system?.tools ?? []), ...template.tools]).map((specification) => agentTool(specification, session)),
 		...exitTools(template.exits, gate, session),
 		...verifyHandIn,
 	]
@@ -344,7 +344,8 @@ function keptValue(kept: StoredResult, template: LoopTemplate): unknown {
 }
 
 function folderOf(template: LoopTemplate): WorkspaceFolder | undefined {
-	for (const spec of template.exits) if (spec.kind === 'succeed' && spec.folder !== undefined) return spec.folder
+	for (const specification of template.exits)
+		if (specification.kind === 'succeed' && specification.folder !== undefined) return specification.folder
 	return undefined
 }
 
@@ -377,12 +378,12 @@ function textOf(message: AssistantMessage): string {
 }
 
 /** The exits the agent finishes with: all but `fail`. */
-function handInExits(template: LoopTemplate): readonly ExitSpec[] {
-	return template.exits.filter((spec) => spec.kind !== 'fail')
+function handInExits(template: LoopTemplate): readonly ExitSpecification[] {
+	return template.exits.filter((specification) => specification.kind !== 'fail')
 }
 
 /** What the agent is reminded to call: its hand-in exits, or `verify` when that's the hand-in. */
-function exitNames(handIns: readonly ExitSpec[]): string[] {
+function exitNames(handIns: readonly ExitSpecification[]): string[] {
 	return handIns.length === 0 ? ['verify'] : handIns.map(exitName)
 }
 

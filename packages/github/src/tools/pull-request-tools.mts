@@ -4,14 +4,14 @@ import { RepositoryName } from '../repository-name.mts'
 import { PostedComment } from './issue-tools.mts'
 
 /** Names a pull request: its repository and number. */
-export const PullRequestRef = z.object({
+export const PullRequestReference = z.object({
 	repository: RepositoryName,
 	number: z.int().positive(),
 })
-export type PullRequestRef = z.infer<typeof PullRequestRef>
+export type PullRequestReference = z.infer<typeof PullRequestReference>
 
 /** A pull request as GitHub has it. */
-export const PullRequestData = PullRequestRef.extend({
+export const PullRequestData = PullRequestReference.extend({
 	title: z.string(),
 	url: z.url(),
 	state: z.enum(['open', 'closed']),
@@ -83,7 +83,7 @@ export const openPullRequest = {
 export const updatePullRequest = {
 	name: 'githubUpdatePullRequest',
 	description: "Changes a pull request's title and description on GitHub",
-	input: PullRequestRef.extend({
+	input: PullRequestReference.extend({
 		title: z.string().min(1),
 		body: z.string(),
 		describedSha: Sha.optional(),
@@ -113,7 +113,7 @@ export const findPullRequest = {
 export const getPullRequest = {
 	name: 'githubPullRequest',
 	description: 'Reads a pull request on GitHub',
-	input: PullRequestRef,
+	input: PullRequestReference,
 	output: PullRequestData,
 }
 
@@ -126,7 +126,7 @@ export const getPullRequest = {
 export const reviewActivity = {
 	name: 'githubReviewActivity',
 	description: 'Lists what reviewers said on a pull request since a moment, oldest first',
-	input: PullRequestRef.extend({ since: z.iso.datetime().optional() }),
+	input: PullRequestReference.extend({ since: z.iso.datetime().optional() }),
 	output: z.object({
 		items: z.array(ReviewItem),
 		/** The moment of the latest item seen so far: the `since` of the next call. Absent until an item was seen. */
@@ -148,7 +148,7 @@ export type ReplyOutcome = z.infer<typeof ReplyOutcome>
 export const replyToReviewItem = {
 	name: 'githubReply',
 	description: 'Replies to a review item on a pull request: in the thread of a comment on a line, or on the conversation otherwise',
-	input: PullRequestRef.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
+	input: PullRequestReference.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
 	output: ReplyOutcome,
 }
 
@@ -164,7 +164,7 @@ export const replyToReviewItem = {
 export const showBeingRead = {
 	name: 'githubShowBeingRead',
 	description: 'Shows the reviewer that review items on a pull request are being read',
-	input: PullRequestRef.extend({
+	input: PullRequestReference.extend({
 		items: z.array(
 			ReviewItem.pick({ id: true, url: true, body: true, at: true, verdict: true }).extend({
 				/** For a comment on a line that replies to another: the thread's first comment, which replies go to. */
@@ -187,7 +187,7 @@ export const ChecksStatus = z.enum(['none', 'pending', 'completed'])
 export type ChecksStatus = z.infer<typeof ChecksStatus>
 
 /** Reads the checks and statuses on a commit on the host. */
-export const checksOnRef = {
+export const checksOnReference = {
 	name: 'githubChecks',
 	description: 'The checks and statuses on a commit of a GitHub repository',
 	input: z.object({ repository: RepositoryName, ref: Sha }),

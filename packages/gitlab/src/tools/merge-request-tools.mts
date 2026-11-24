@@ -3,14 +3,14 @@ import { z } from 'zod'
 import { ProjectPath } from '../project-path.mts'
 
 /** Names a merge request: its project and its iid, the number it goes by in the project, as in `!7`. */
-export const MergeRequestRef = z.object({
+export const MergeRequestReference = z.object({
 	repository: ProjectPath,
 	number: z.int().positive(),
 })
-export type MergeRequestRef = z.infer<typeof MergeRequestRef>
+export type MergeRequestReference = z.infer<typeof MergeRequestReference>
 
 /** A merge request as GitLab has it. */
-export const MergeRequestData = MergeRequestRef.extend({
+export const MergeRequestData = MergeRequestReference.extend({
 	title: z.string(),
 	url: z.url(),
 	state: z.enum(['open', 'closed']),
@@ -79,7 +79,7 @@ export const openMergeRequest = {
 export const updateMergeRequest = {
 	name: 'gitlabUpdateMergeRequest',
 	description: "Changes a merge request's title and description on GitLab",
-	input: MergeRequestRef.extend({
+	input: MergeRequestReference.extend({
 		title: z.string().min(1),
 		body: z.string(),
 		describedSha: Sha.optional(),
@@ -110,7 +110,7 @@ export const findMergeRequest = {
 export const getMergeRequest = {
 	name: 'gitlabMergeRequest',
 	description: 'Reads a merge request on GitLab',
-	input: MergeRequestRef,
+	input: MergeRequestReference,
 	output: MergeRequestData,
 }
 
@@ -123,7 +123,7 @@ export const getMergeRequest = {
 export const reviewActivity = {
 	name: 'gitlabReviewActivity',
 	description: 'Lists what reviewers said on a merge request since a moment, oldest first',
-	input: MergeRequestRef.extend({ since: z.iso.datetime({ offset: true }).optional() }),
+	input: MergeRequestReference.extend({ since: z.iso.datetime({ offset: true }).optional() }),
 	output: z.object({
 		items: z.array(ReviewItem),
 		/** The moment of the latest item seen so far: the `since` of the next call. Absent until an item was seen. */
@@ -148,7 +148,7 @@ export type ReplyOutcome = z.infer<typeof ReplyOutcome>
 export const replyToReviewItem = {
 	name: 'gitlabReply',
 	description: "Replies to a review item on a merge request, in the item's thread",
-	input: MergeRequestRef.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
+	input: MergeRequestReference.extend({ item: ReviewItemId, body: z.string().min(1), stage: ReplyStage.optional() }),
 	output: ReplyOutcome,
 }
 
@@ -161,7 +161,7 @@ export const replyToReviewItem = {
 export const showBeingRead = {
 	name: 'gitlabShowBeingRead',
 	description: 'Shows the reviewer that review items on a merge request are being read',
-	input: MergeRequestRef.extend({ items: z.array(ReviewItemId) }),
+	input: MergeRequestReference.extend({ items: z.array(ReviewItemId) }),
 	output: z.object({
 		shown: z.array(ReviewItemId),
 		answered: z.array(ReviewItemId).describe('Items the run answered already, such as before it started over'),

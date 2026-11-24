@@ -15,7 +15,7 @@ import type { Octokit } from '@octokit/rest'
 import { z } from 'zod'
 import { splitRepositoryName } from '../repository-name.mts'
 import {
-	checksOnRef,
+	checksOnReference,
 	type ChecksStatus,
 	findPullRequest,
 	getPullRequest,
@@ -232,7 +232,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						url: comment.html_url,
 						at: comment.created_at,
 					})),
-			].toSorted((a, b) => a.at.localeCompare(b.at))
+			].toSorted((first, second) => first.at.localeCompare(second.at))
 			// The clock is GitHub's, never the host's: the two can disagree, and a comment made while the lists were read must come next time.
 			const until = later(since, items.at(-1)?.at)
 			return { items, ...(until === undefined ? {} : { until }) }
@@ -264,7 +264,7 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 			return showItemsBeingRead(comments, toShow, { runId: context.runId, abortSignal: context.abortSignal, failsCall: refusedToken })
 		}),
 
-		hostTool(checksOnRef, async ({ repository, ref }, context) => {
+		hostTool(checksOnReference, async ({ repository, ref }, context) => {
 			const client = await api(context)
 			const where = splitRepositoryName(repository)
 			const [runs, combined] = await Promise.all([

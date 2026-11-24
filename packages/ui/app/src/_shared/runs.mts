@@ -45,7 +45,10 @@ export const RunRecord = z.looseObject({
 })
 export type RunRecord = z.infer<typeof RunRecord>
 
-/** One node of a run's event tree: its own fields besides these depend on its type. */
+/**
+ * One node of a run's event tree, as `RuntimeEvent` in `@mesh-flow/protocol`: its own fields besides
+ * these depend on its type.
+ */
 export const RunEvent = z.looseObject({ id: z.string(), parentId: z.string().optional(), type: z.string(), at: z.string() })
 export type RunEvent = z.infer<typeof RunEvent>
 

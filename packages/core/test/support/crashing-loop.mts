@@ -7,7 +7,7 @@ import { memoryChannel } from './memory-channel.mts'
 import { neverAnswers, scriptedModel } from './scripted-model.mts'
 
 /**
- * Started as its own process by the agent store spec, which kills it: runs a loop on the store in
+ * Started as its own process by the agent store specification, which kills it: runs a loop on the store in
  * `argv[3]` whose model request never answers, and prints {@link askedMarker} once the model has the request.
  */
 const [workspace, agentStore] = process.argv.slice(2)

@@ -145,9 +145,9 @@ async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tar
 const noStatus = '000'
 
 /** Runs curl with `args` through the proxy, and resolves to the status it got, `000` when it got none. */
-async function curlStatus(environment: PackageEnvironment, home: string, args: readonly string[]): Promise<string> {
+async function curlStatus(environment: PackageEnvironment, home: string, commandArguments: readonly string[]): Promise<string> {
 	// curl prints the status and fails on a refused tunnel alike; either way, stdout has the status.
-	const result: unknown = await run('curl', ['--silent', '--output', '/dev/null', '--write-out', '%{http_code}', ...args], {
+	const result: unknown = await run('curl', ['--silent', '--output', '/dev/null', '--write-out', '%{http_code}', ...commandArguments], {
 		env: childEnvironment(environment, home),
 	}).catch((error: unknown) => error)
 	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : noStatus

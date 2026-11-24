@@ -1,14 +1,7 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
-import {
-	ControlError,
-	EngineError,
-	engineAnswers,
-	type ConnectorSettings,
-	type ControlClient,
-	type EngineErrorCode,
-} from '@mesh-flow/engine'
+import { ControlError, EngineError, engineAnswers, engineErrorStatus, type ConnectorSettings, type ControlClient } from '@mesh-flow/engine'
 import type { GatewayHome } from '@mesh-flow/gateway'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -32,8 +25,6 @@ export interface UiAppOptions {
 	readonly connectors: ConnectorSettings
 }
 
-const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 404, conflict: 409, invalid: 400, unavailable: 503 }
-
 /**
  * The UI as one Hono app: access first, then `/api/engine` (runs, apps and sign-ins, from the
  * running engine), `/api/settings` (on the home's files) and the page itself, with every other
@@ -53,7 +44,7 @@ export function uiApp(options: UiAppOptions): Hono {
 	app.onError((error, context) => {
 		if (error instanceof ControlError)
 			return context.json({ error: error.message }, error.status === undefined ? 503 : toStatus(error.status))
-		if (error instanceof EngineError) return context.json({ error: error.message }, statusOf[error.code])
+		if (error instanceof EngineError) return context.json({ error: error.message }, engineErrorStatus[error.code])
 		if (error instanceof HTTPException) return error.getResponse()
 		return context.json({ error: error.message }, 500)
 	})

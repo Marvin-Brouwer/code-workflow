@@ -55,7 +55,7 @@ const updateTool = tool('dotnetUpdatePackages', {
 	}),
 	action: async ({ directory, packages }, { abortSignal }): Promise<readonly UpdatedReference[]> => {
 		if (packages.length === 0) return []
-		const cwd = workingDirectoryOf(directory)
+		const workingDirectory = workingDirectoryOf(directory)
 		const list = await listPackages(directory, [], abortSignal)
 		const updates: UpdatedReference[] = []
 		for (const project of list.projects) {
@@ -64,7 +64,10 @@ const updateTool = tool('dotnetUpdatePackages', {
 				const current = referenced.find((listed) => sameId(listed.id, wanted.name))
 				if (current === undefined || asksFor(current.requestedVersion, wanted.version)) continue
 				// One at a time: `dotnet add` writes the project file, or Directory.Packages.props under central package management.
-				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], { cwd, abortSignal })
+				const added = await runDotnet(['add', project.path, 'package', current.id, '--version', wanted.version], {
+					workingDirectory,
+					abortSignal,
+				})
 				if (!added.succeeded) throw new Error(`dotnet add package ${current.id} ${wanted.version} failed:\n${outputTail(added)}`)
 				updates.push({
 					projectPath: project.path,

@@ -148,8 +148,8 @@ export async function fakeGithub(): Promise<FakeGithub> {
 		return made
 	}
 	const issueOf = (name: string, number: number, fields: Partial<FakeIssue> = {}): FakeIssue => {
-		const repo = repository(name)
-		const known = repo.issues.get(number)
+		const fakeRepository = repository(name)
+		const known = fakeRepository.issues.get(number)
 		if (known !== undefined) return Object.assign(known, fields)
 		const made: FakeIssue = {
 			number,
@@ -163,12 +163,12 @@ export async function fakeGithub(): Promise<FakeGithub> {
 			comments: [],
 			...fields,
 		}
-		repo.issues.set(number, made)
+		fakeRepository.issues.set(number, made)
 		return made
 	}
 	const pullOf = (name: string, number: number, fields: Partial<FakePullRequest> = {}): FakePullRequest => {
-		const repo = repository(name)
-		const known = repo.pulls.get(number)
+		const fakeRepository = repository(name)
+		const known = fakeRepository.pulls.get(number)
 		if (known !== undefined) return Object.assign(known, fields)
 		const made: FakePullRequest = {
 			number,
@@ -184,7 +184,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
 			reviews: [],
 			...fields,
 		}
-		repo.pulls.set(number, made)
+		fakeRepository.pulls.set(number, made)
 		return made
 	}
 
@@ -261,8 +261,11 @@ export async function fakeGithub(): Promise<FakeGithub> {
 	})
 	/** Every comment on the repository's issues and pull request conversations. */
 	const issueCommentsOf = (name: string): FakeComment[] => {
-		const repo = repository(name)
-		return [...[...repo.issues.values()].flatMap((issue) => issue.comments), ...[...repo.pulls.values()].flatMap((pull) => pull.comments)]
+		const fakeRepository = repository(name)
+		return [
+			...[...fakeRepository.issues.values()].flatMap((issue) => issue.comments),
+			...[...fakeRepository.pulls.values()].flatMap((pull) => pull.comments),
+		]
 	}
 	/** Every comment on a line of the repository's pull requests. */
 	const reviewCommentsOf = (name: string): FakeReviewComment[] =>

@@ -1,7 +1,7 @@
 import { NotByConnector } from '@mesh-flow/code-repository'
 import { webhook, type WebhookSignature, type WebhookTrigger, type Workflow } from '@mesh-flow/core'
 import { z } from 'zod'
-import type { IssueRef } from './tools/issue-tools.mts'
+import type { IssueReference } from './tools/issue-tools.mts'
 
 /** How GitHub signs a delivery: the hex HMAC-SHA256 of the body in `x-hub-signature-256`, after `sha256=`. */
 export const signature: WebhookSignature = Object.freeze({ scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' })
@@ -155,7 +155,7 @@ export type PullRequestReviewCommentCreated = z.infer<typeof pullRequestReviewCo
 
 /** A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional. */
 export type TakesIssue<Shape extends z.ZodRawShape> =
-	{ readonly issue: z.input<typeof IssueRef> } extends z.input<z.ZodObject<Shape>> ? Workflow<Shape> : never
+	{ readonly issue: z.input<typeof IssueReference> } extends z.input<z.ZodObject<Shape>> ? Workflow<Shape> : never
 
 /** The name of a label, as GitHub takes it and as it fits in a webhook's name. */
 const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes.')
@@ -194,6 +194,6 @@ export function onIssueLabeled<Shape extends z.ZodRawShape>(workflow: TakesIssue
 		issue: { repository: event.repository.full_name, number: event.issue.number },
 	}))
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- TakesIssue has checked that { issue } is enough to start it
-	const takingIssue = workflow as unknown as Workflow<{ issue: typeof IssueRef }>
+	const takingIssue = workflow as unknown as Workflow<{ issue: typeof IssueReference }>
 	return webhook(takingIssue, schema, { name: `${workflow.name}-labeled-${checked}`, ...triggerOptions })
 }

@@ -1,13 +1,13 @@
 import { PageId } from '../tools/page-tools.mts'
 
 /** A page, by its id, its URL, or as collected. */
-export type PageRef = string | { readonly id: string }
+export type PageReference = string | { readonly id: string }
 
 /** Where a page's id is in its URL: `/pages/12345/Title` on Cloud and in newer Data Center, `?pageId=12345` in older. */
 const idInUrl = [/\/pages\/(\d+)(?:[/?#]|$)/, /[?&]pageId=(\d+)/]
 
 /** The page's id, from an id or a page URL, or an error saying what to give instead. */
-export function pageIdOf(page: PageRef): PageId {
+export function pageIdOf(page: PageReference): PageId {
 	if (typeof page !== 'string') return PageId.parse(page.id)
 	const trimmed = page.trim()
 	if (PageId.safeParse(trimmed).success) return trimmed

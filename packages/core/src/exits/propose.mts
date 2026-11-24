@@ -13,6 +13,6 @@ import { makeExit, type Exit } from './exit.mts'
  * `
  * ```
  */
-export function propose<T extends z.ZodType>(schema: T): Exit<z.output<T>> {
+export function propose<Schema extends z.ZodType>(schema: Schema): Exit<z.output<Schema>> {
 	return makeExit({ kind: 'propose', schema })
 }

@@ -1,6 +1,6 @@
 import { duration } from '@mesh-flow/duration'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { SandboxSpec } from '../../src/sandbox-spec.mts'
+import type { SandboxSpecification } from '../../src/sandbox-specification.mts'
 
 interface FakeVm {
 	readonly name: string
@@ -36,7 +36,7 @@ vi.mock('microsandbox', () => ({
 
 const { microsandboxBackend } = await import('../../src/microsandbox/microsandbox.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
+const specification: SandboxSpecification = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 describe('microsandbox backend, on a fake SDK', () => {
 	beforeEach(() => {
@@ -46,7 +46,7 @@ describe('microsandbox backend, on a fake SDK', () => {
 	test('close waits for a create the SDK finishes late, and removes the VM it made', async () => {
 		// Arrange
 		const backend = microsandboxBackend()
-		const creating = backend.create(spec, new AbortController().signal)
+		const creating = backend.create(specification, new AbortController().signal)
 		creating.catch(() => undefined)
 		const vm: FakeVm = { name: 'mesh-flow-0123456789ab', kill: vi.fn(() => Promise.resolve()) }
 
@@ -75,7 +75,7 @@ describe('microsandbox backend, on a fake SDK', () => {
 		const builder = vi.spyOn(sdk.Sandbox, 'builder')
 
 		// Act
-		const creating = backend.create(spec, duration.of('1s').toAbortSignal())
+		const creating = backend.create(specification, duration.of('1s').toAbortSignal())
 
 		// Assert
 		await expect(creating).rejects.toThrow('closed')
@@ -85,7 +85,7 @@ describe('microsandbox backend, on a fake SDK', () => {
 	test('close settles when the SDK never finishes a create, once its signal aborts', async () => {
 		// Arrange
 		const backend = microsandboxBackend()
-		const creating = backend.create(spec, new AbortController().signal)
+		const creating = backend.create(specification, new AbortController().signal)
 		creating.catch(() => undefined)
 
 		// Act

@@ -7,7 +7,7 @@ export interface BundleOptions {
 	/** The container's init. It must keep running: when it exits, the container stops. */
 	readonly init: readonly string[]
 	/** On top of the image's environment. */
-	readonly env: Readonly<Record<string, string>>
+	readonly environment: Readonly<Record<string, string>>
 	readonly cpus: number
 	readonly memoryMb: number
 }
@@ -49,8 +49,8 @@ export async function writeBundle(directory: string, options: BundleOptions): Pr
 		process: {
 			user: { uid: 0, gid: 0 },
 			args: options.init,
-			env: environment(options.rootfs.env, options.env),
-			cwd: options.rootfs.workingDir,
+			env: environment(options.rootfs.environment, options.environment),
+			cwd: options.rootfs.workingDirectory,
 			capabilities: { bounding: capabilities, effective: capabilities, inheritable: capabilities, permitted: capabilities },
 			rlimits: [{ type: 'RLIMIT_NOFILE', hard: 1024, soft: 1024 }],
 		},
@@ -77,12 +77,12 @@ export async function writeBundle(directory: string, options: BundleOptions): Pr
 }
 
 /** The image's `KEY=value` entries with `env` on top, each key once, and a `PATH` either way. */
-function environment(image: readonly string[], env: Readonly<Record<string, string>>): string[] {
+function environment(image: readonly string[], extra: Readonly<Record<string, string>>): string[] {
 	const merged = new Map<string, string>([['PATH', defaultPath]])
 	for (const entry of image) {
 		const separator = entry.indexOf('=')
 		if (separator > 0) merged.set(entry.slice(0, separator), entry.slice(separator + 1))
 	}
-	for (const [key, value] of Object.entries(env)) merged.set(key, value)
+	for (const [key, value] of Object.entries(extra)) merged.set(key, value)
 	return [...merged].map(([key, value]) => `${key}=${value}`)
 }

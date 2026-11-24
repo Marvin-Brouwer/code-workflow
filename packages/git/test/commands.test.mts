@@ -4,7 +4,7 @@ import { commands, formatCommand } from '../src/commands.mts'
 describe('commands', () => {
 	test('build the arguments of a command from its options', () => {
 		// Act
-		const args = [
+		const commandArguments = [
 			commands.init({ bare: true, quiet: true }),
 			commands.clone('../app.bundle', 'app', { branch: 'main', quiet: true }),
 			commands.fetch('origin', ['+refs/heads/*:refs/heads/*'], { prune: true, quiet: true }),
@@ -18,7 +18,7 @@ describe('commands', () => {
 		]
 
 		// Assert
-		expect(args).toEqual([
+		expect(commandArguments).toEqual([
 			['init', '--quiet', '--bare'],
 			['clone', '--quiet', '--branch', 'main', '../app.bundle', 'app'],
 			['fetch', '--quiet', '--prune', 'origin', '+refs/heads/*:refs/heads/*'],

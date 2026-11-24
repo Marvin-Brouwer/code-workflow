@@ -3,7 +3,7 @@ import { abortable } from '../abortable.mts'
 import type { BackendLifetime } from '../backend-lifetime.mts'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
-import type { SandboxSpec } from '../sandbox-spec.mts'
+import type { SandboxSpecification } from '../sandbox-specification.mts'
 import { startInOwnSession } from '../start-in-own-session.mts'
 import { temporaryFileOf } from '../temporary-file.mts'
 import { snapshotName, snapshotsOf } from './snapshots.mts'
@@ -17,12 +17,12 @@ import { removeSandbox, removeSandboxAndSnapshots, removeSnapshot } from './vms.
  */
 export class MicrosandboxSandbox implements Sandbox {
 	readonly #sandbox: MicrosandboxSdkSandbox
-	readonly #spec: SandboxSpec
+	readonly #specification: SandboxSpecification
 	readonly #lifetime: BackendLifetime
 
-	constructor(sandbox: MicrosandboxSdkSandbox, spec: SandboxSpec, lifetime: BackendLifetime) {
+	constructor(sandbox: MicrosandboxSdkSandbox, specification: SandboxSpecification, lifetime: BackendLifetime) {
 		this.#sandbox = sandbox
-		this.#spec = spec
+		this.#specification = specification
 		this.#lifetime = lifetime
 		lifetime.track(this.id, (signal) => abortable(lifetime.keep(removeSandboxAndSnapshots(sandbox.name)), signal))
 	}
@@ -33,11 +33,11 @@ export class MicrosandboxSandbox implements Sandbox {
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
 		const signal = this.#lifetime.bind(options.signal)
-		const [program, ...args] = command
+		const [program, ...commandArguments] = command
 		const handle = await abortable(
 			this.#sandbox.execStreamWith(program, (builder) => {
-				const withArgs = builder.args(args).envs({ ...options.env })
-				return options.cwd === undefined ? withArgs : withArgs.cwd(options.cwd)
+				const withArguments = builder.args(commandArguments).envs({ ...options.environment })
+				return options.workingDirectory === undefined ? withArguments : withArguments.cwd(options.workingDirectory)
 			}),
 			signal,
 			(late) => late.kill(),
@@ -83,7 +83,7 @@ export class MicrosandboxSandbox implements Sandbox {
 		this.#lifetime.untrack(this.id)
 		// Housekeeping only: neither a failure nor an abort here may lose the pause that just worked.
 		await abortable(removeEarlierSnapshots(this.id, name), bound).catch(() => undefined)
-		return { backend: 'microsandbox', id: this.id, spec: this.#spec, snapshot: snapshot.reference }
+		return { backend: 'microsandbox', id: this.id, specification: this.#specification, snapshot: snapshot.reference }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

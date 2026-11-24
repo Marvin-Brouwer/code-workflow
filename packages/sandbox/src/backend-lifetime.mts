@@ -29,7 +29,7 @@ export class BackendLifetime {
 	}
 
 	/** Work that has to finish before `close` returns, such as removing a sandbox that came too late. */
-	keep<T>(work: Promise<T>): Promise<T> {
+	keep<Result>(work: Promise<Result>): Promise<Result> {
 		this.#pending.add(work)
 		const forget = () => this.#pending.delete(work)
 		work.then(forget, forget)
@@ -57,7 +57,7 @@ export class BackendLifetime {
 	 * Runs `start` for a sandbox that must not run twice, such as a resume. Throws when it already
 	 * runs here, or another start of it is still going.
 	 */
-	async startOnce<T>(id: string, start: () => Promise<T>): Promise<T> {
+	async startOnce<Result>(id: string, start: () => Promise<Result>): Promise<Result> {
 		if (this.#running.has(id) || this.#starting.has(id)) throw new Error(`The sandbox ${id} is already running.`)
 		this.#starting.add(id)
 		try {

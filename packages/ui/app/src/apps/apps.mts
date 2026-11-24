@@ -3,6 +3,7 @@ import { href, Link } from '@rooted/router'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { DeployedApp, type TriggerDescription } from '../_shared/runs.mts'
 import { shownTime } from '../runs/run-labels.mts'
 import { CredentialsRoute } from '../settings/_routes.mts'
@@ -25,12 +26,7 @@ export const AppsPage = component({
 			read('/settings/credentials', z.array(z.string()), signal),
 		])
 		if (!apps.ok) {
-			append(
-				element('p', {
-					role: 'alert',
-					textContent: apps.error,
-				}),
-			)
+			append(errorText(element, apps.error))
 			return
 		}
 		if (apps.value.length === 0) {

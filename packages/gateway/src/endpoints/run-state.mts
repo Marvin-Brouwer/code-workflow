@@ -58,11 +58,11 @@ const RunIdText = z.string().regex(/^[\w-]{1,64}$/)
 export interface RunStates {
 	readonly load: (runId: string, abortSignal: AbortSignal) => Promise<RunState | undefined>
 	/** Changes a run's state. `change` gets it as it is now; what it returns is saved, `undefined` removes it. */
-	readonly update: <T>(
+	readonly update: <Result>(
 		runId: string,
-		change: (state: RunState | undefined) => { readonly state: RunState | undefined; readonly value: T },
+		change: (state: RunState | undefined) => { readonly state: RunState | undefined; readonly value: Result },
 		abortSignal: AbortSignal,
-	) => Promise<T>
+	) => Promise<Result>
 }
 
 /** The run states in `directory`. */

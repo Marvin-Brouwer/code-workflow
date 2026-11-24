@@ -1,6 +1,6 @@
 import type { Exit, Gate } from './exit.mts'
 
-type IsAny<T> = 0 extends 1 & T ? true : false
+type IsAny<Candidate> = 0 extends 1 & Candidate ? true : false
 
 /** The exits among the interpolated values. An `any` value is skipped rather than taken as an exit. */
 type ExitsIn<Values extends readonly unknown[]> = {
@@ -8,7 +8,7 @@ type ExitsIn<Values extends readonly unknown[]> = {
 }[number]
 
 /** Distributes over a union of exits, so `Exit<A> | Exit<B>` gives `A | B`. */
-type ResultOfExit<E> = E extends Exit<infer T> ? T : never
+type ResultOfExit<Candidate> = Candidate extends Exit<infer Result> ? Result : never
 
 /** The exits that finish with a result. `fail` (an `Exit<never>`) never does. */
 type FinishingIn<Values extends readonly unknown[]> = Exclude<ExitsIn<Values>, Gate | Exit<never>>

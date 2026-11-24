@@ -13,14 +13,14 @@ import type {
 	SandboxBackend,
 	StartInBackgroundOptions,
 } from '@mesh-flow/sandbox'
-import { SandboxSpec } from '@mesh-flow/sandbox'
+import { SandboxSpecification } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { hasErrorCode } from '../../src/errors.mts'
 
 const HostSandboxState = z.object({
 	state: z.enum(['running', 'paused']),
 	pids: z.array(z.int()),
-	spec: SandboxSpec,
+	specification: SandboxSpecification,
 })
 type HostSandboxState = z.infer<typeof HostSandboxState>
 
@@ -73,8 +73,8 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 		const map = (value: string) => value.replaceAll(hostSandboxRoot, `${files}/`)
 		const mapOptions = (options: ExecOptions): ExecOptions => ({
 			signal: options.signal,
-			...(options.cwd === undefined ? {} : { cwd: map(options.cwd) }),
-			env: Object.fromEntries(Object.entries(options.env ?? {}).map(([key, value]) => [key, map(value)])),
+			workingDirectory: options.workingDirectory === undefined ? undefined : map(options.workingDirectory),
+			environment: Object.fromEntries(Object.entries(options.environment ?? {}).map(([key, value]) => [key, map(value)])),
 		})
 		return {
 			id,
@@ -83,10 +83,10 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				options.signal.throwIfAborted()
 				const mapped = mapOptions(options)
 				const log = openSync(map(options.logFile ?? '/dev/null'), 'a')
-				const [program, ...args] = command.map(map)
-				const child = spawn(program ?? 'false', args, {
-					cwd: mapped.cwd,
-					env: { ...process.env, ...mapped.env },
+				const [program, ...commandArguments] = command.map(map)
+				const child = spawn(program ?? 'false', commandArguments, {
+					cwd: mapped.workingDirectory,
+					env: { ...process.env, ...mapped.environment },
 					detached: true,
 					stdio: ['ignore', log, log],
 				})
@@ -113,7 +113,7 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 				for (const pid of state.pids) signalGroup(pid, 'SIGSTOP')
 				await writeState(id, { ...state, state: 'paused' })
 				running.delete(id)
-				return { backend: 'gvisor', id, spec: state.spec } satisfies PausedSandbox
+				return { backend: 'gvisor', id, specification: state.specification } satisfies PausedSandbox
 			},
 			async destroy() {
 				await remove(id)
@@ -124,12 +124,12 @@ export function hostBackend(root: string): SandboxBackend & { readonly root: str
 	return {
 		name: 'gvisor',
 		root,
-		async create(spec, signal) {
+		async create(specification, signal) {
 			signal.throwIfAborted()
 			if (closed) throw new Error('This sandbox backend is closed.')
 			const id = `mesh-flow-${randomBytes(6).toString('hex')}`
 			await mkdir(path.join(root, id, 'files'), { recursive: true })
-			await writeState(id, { state: 'running', pids: [], spec })
+			await writeState(id, { state: 'running', pids: [], specification })
 			return open(id)
 		},
 		async resume(paused, signal) {
@@ -176,12 +176,12 @@ function signalGroup(pid: number, signal: NodeJS.Signals): void {
 }
 
 function execOnHost(command: Command, options: ExecOptions): Promise<ExecResult> {
-	const [program, ...args] = command
+	const [program, ...commandArguments] = command
 	return new Promise((resolve, reject) => {
 		execFile(
 			program,
-			args,
-			{ cwd: options.cwd, env: { ...process.env, ...options.env }, signal: options.signal },
+			commandArguments,
+			{ cwd: options.workingDirectory, env: { ...process.env, ...options.environment }, signal: options.signal },
 			(error, stdout, stderr) => {
 				if (error && typeof error.code !== 'number') reject(error)
 				else resolve({ exitCode: typeof error?.code === 'number' ? error.code : 0, stdout, stderr })

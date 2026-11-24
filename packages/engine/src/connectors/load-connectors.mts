@@ -153,7 +153,12 @@ function withOwnRegistrySignIns(connector: string, resolveTarget: ResolveRegistr
  *   before the session was written: it runs once more before it asks for another sign-in. Work
  *   that asks for one has changed nothing yet, so running it again is safe.
  */
-async function withOwnSignInRules<T>(connector: string, what: string, signInCount: SignInCount, work: () => Promise<T>): Promise<T> {
+async function withOwnSignInRules<Result>(
+	connector: string,
+	what: string,
+	signInCount: SignInCount,
+	work: () => Promise<Result>,
+): Promise<Result> {
 	const finishedBefore = signInCount.finished
 	try {
 		return await ownSignInsOnly(connector, what, work)
@@ -164,7 +169,7 @@ async function withOwnSignInRules<T>(connector: string, what: string, signInCoun
 }
 
 /** Runs `work`, and turns its ask for a sign-in to another connector's service into a plain failure. */
-async function ownSignInsOnly<T>(connector: string, what: string, work: () => Promise<T>): Promise<T> {
+async function ownSignInsOnly<Result>(connector: string, what: string, work: () => Promise<Result>): Promise<Result> {
 	try {
 		return await work()
 	} catch (error) {

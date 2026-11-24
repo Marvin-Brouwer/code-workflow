@@ -123,14 +123,14 @@ async function servePackages(
  * run was fired by hand with parameters of its own.
  */
 async function begin(app: MeshFlowApp, request: Extract<RunStart, { mode: 'run' }>, abortSignal: AbortSignal): Promise<Begun> {
-	const { trigger: ref } = request
-	if (ref === undefined || ref.kind === 'user') return { workflow: workflowNamed(request.workflow), parameters: request.input }
+	const { trigger: reference } = request
+	if (reference === undefined || reference.kind === 'user') return { workflow: workflowNamed(request.workflow), parameters: request.input }
 	const trigger = app.triggers.find(
-		(candidate): candidate is ScheduleTrigger | WebhookTrigger => candidate.kind === ref.kind && candidate.id === ref.id,
+		(candidate): candidate is ScheduleTrigger | WebhookTrigger => candidate.kind === reference.kind && candidate.id === reference.id,
 	)
-	if (trigger === undefined) throw new Error(`The app has no ${ref.kind} trigger ${ref.id} any more.`)
+	if (trigger === undefined) throw new Error(`The app has no ${reference.kind} trigger ${reference.id} any more.`)
 	if (trigger.workflow.name !== request.workflow)
-		throw new Error(`The ${ref.kind} trigger ${ref.id} starts ${trigger.workflow.name}, not ${request.workflow}.`)
+		throw new Error(`The ${reference.kind} trigger ${reference.id} starts ${trigger.workflow.name}, not ${request.workflow}.`)
 	if (trigger.kind === 'schedule') return { workflow: trigger.workflow, parameters: request.input ?? trigger.parameters }
 	// A `.refine` or `.transform` can wait on anything; a stop doesn't wait for it.
 	const parsed = await untilAborted(trigger.schema.safeParseAsync(request.input), abortSignal)

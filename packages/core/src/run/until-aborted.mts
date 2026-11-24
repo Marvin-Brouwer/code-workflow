@@ -3,7 +3,7 @@
  * promise goes on; this only stops waiting for it, so work that ignores its signal can't hold up a
  * stop. For packages that run in the sandbox; `@mesh-flow/gateway` has its own for the host.
  */
-export async function untilAborted<T>(promise: Promise<T>, abortSignal: AbortSignal): Promise<T> {
+export async function untilAborted<Result>(promise: Promise<Result>, abortSignal: AbortSignal): Promise<Result> {
 	// Nobody waits for the work any more: its own failure, such as the stop it saw too, is no rejection to report.
 	promise.catch(() => undefined)
 	abortSignal.throwIfAborted()

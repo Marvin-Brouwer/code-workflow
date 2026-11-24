@@ -33,6 +33,14 @@
 				"typescript/prefer-nullish-coalescing": "off",
 				"typescript/no-deprecated": "off"
 			}
+		},
+		{
+			// Proofs of concept stay as they were written.
+			"files": ["pocs/**"],
+			"rules": {
+				"eslint/id-length": "off",
+				"unicorn-js/name-replacements": "off"
+			}
 		}
 	],
 	"rules": {
@@ -53,6 +61,37 @@
 		"typescript/no-unnecessary-condition": "error",
 		"typescript/prefer-nullish-coalescing": "error",
 		"typescript/prefer-optional-chain": "error",
-		"typescript/switch-exhaustiveness-check": "error"
-	}
+		"typescript/switch-exhaustiveness-check": "error",
+		"eslint/id-length": [
+			"error",
+			{
+				"min": 2,
+				"exceptions": ["z", "_"],
+				"properties": "never"
+			}
+		],
+		"unicorn-js/name-replacements": [
+			"error",
+			{
+				"replacements": {
+					// unicorn would shorten these to app_ and config_; we spell words out.
+					"application": false,
+					"applications": false,
+					"configuration": false,
+					// id-length already reports it.
+					"e": false
+				},
+				// Names from other packages that we have to use as they are. One of our own only once the maintainer approved it.
+				"allowList": {
+					"searchParams": true
+				}
+			}
+		]
+	},
+	"jsPlugins": [
+		{
+			"name": "unicorn-js",
+			"specifier": "eslint-plugin-unicorn"
+		}
+	]
 }

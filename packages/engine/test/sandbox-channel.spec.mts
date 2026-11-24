@@ -66,7 +66,7 @@ describe.skipIf(process.platform !== 'linux')('SandboxChannel', () => {
 	test('says the runtime is gone when its process has exited with nothing more to say', async () => {
 		// Arrange
 		const { channel } = await channelOnHost()
-		await channel.startRuntime(['true'], { signal, cwd: '/sandbox/mailbox', env: {} })
+		await channel.startRuntime(['true'], { signal, workingDirectory: '/sandbox/mailbox', environment: {} })
 
 		// Act
 		const delivery = await poll()

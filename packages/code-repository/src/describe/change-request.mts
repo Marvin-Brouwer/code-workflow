@@ -17,7 +17,7 @@ export interface ChangeRequest {
 }
 
 /** Names a pull or merge request: its repository and number. */
-export interface ChangeRequestRef {
+export interface ChangeRequestReference {
 	readonly repository: string
 	readonly number: number
 }

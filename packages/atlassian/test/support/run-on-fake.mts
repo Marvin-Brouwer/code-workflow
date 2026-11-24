@@ -20,7 +20,7 @@ export interface Arrangement {
  * Runs `body` on a gateway with `settings`, against a fake holding `arrangement`, and returns the
  * fake, the started run and its result.
  */
-export async function runOnFake<T>(settings: Readonly<Record<string, string>>, arrangement: Arrangement, body: () => Promise<T>) {
+export async function runOnFake<Result>(settings: Readonly<Record<string, string>>, arrangement: Arrangement, body: () => Promise<Result>) {
 	const fake = fakeAtlassian()
 	for (const issue of arrangement.issues ?? []) fake.issues.set(issue.key, issue)
 	for (const page of arrangement.pages ?? []) fake.pages.set(page.id, page)

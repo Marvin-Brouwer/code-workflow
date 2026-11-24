@@ -48,9 +48,9 @@ function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provide
 	const inner = builtinProviders().find((provider) => provider.id === choice.kind)
 	if (inner === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${choice.kind}.`)
 	const asInner = <TApi extends Api>(model: Model<TApi>): Model<TApi> => ({ ...model, provider: inner.id })
-	const options = <T extends ProviderRequestOptions<never>>(model: Model<Api>, given: T | undefined): T =>
+	const options = <Options extends ProviderRequestOptions<never>>(model: Model<Api>, given: Options | undefined): Options =>
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the options are the caller's, with the key and fetch replaced
-		({ ...given, apiKey: noKey, fetch: fetchThroughGateway(choice.provider, model, gateway) }) as T
+		({ ...given, apiKey: noKey, fetch: fetchThroughGateway(choice.provider, model, gateway) }) as Options
 	return {
 		id: choice.provider,
 		name: choice.provider,

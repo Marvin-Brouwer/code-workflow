@@ -9,7 +9,7 @@ import {
 import { wait, type ToolContext } from '@mesh-flow/core'
 import { duration, type Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
-import type { MergeRequestRef } from '../tools/merge-request-tools.mts'
+import type { MergeRequestReference } from '../tools/merge-request-tools.mts'
 import type { PackageType, PublishedPackage } from '../tools/pipeline-tools.mts'
 
 /** How long GitLab may take to process uploaded packages, when no duration is given. */
@@ -81,7 +81,7 @@ async function processedPackages(
  * ```
  */
 export async function publishedPackages(
-	on: MergeRequestRef,
+	on: MergeRequestReference,
 	type: PackageType,
 	options: PublishedPackagesOptions = {},
 	context?: ToolContext,

@@ -1,6 +1,6 @@
 import type { ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable'
 import { z } from 'zod'
-import type { ExitSpec } from '../exits/exit.mts'
+import type { ExitSpecification } from '../exits/exit.mts'
 import { counted } from '../render/counted.mts'
 import { renderValue } from '../render/to-prompt.mts'
 import { inEventOf } from '../run/run-events.mts'
@@ -14,11 +14,13 @@ import { findingsText, type RunGate, type Verdict } from './run-gate.mts'
 import { endingErrorResult, errorResult, finalResult, textResult } from './tool-result.mts'
 
 /** The agent's tools for a loop's exits. `gate` runs before an exit lets the agent finish. */
-export function exitTools(exits: readonly ExitSpec[], gate: RunGate, session: LoopSession): ToolRegistration[] {
-	return exits.map((spec) => {
-		if (spec.kind === 'propose') return proposeTool(spec.schema, gate, session)
-		if (spec.kind === 'fail') return failTool(session)
-		return spec.folder === undefined ? succeedTool(spec.schema, gate, session) : folderTool(spec.folder, gate, session)
+export function exitTools(exits: readonly ExitSpecification[], gate: RunGate, session: LoopSession): ToolRegistration[] {
+	return exits.map((specification) => {
+		if (specification.kind === 'propose') return proposeTool(specification.schema, gate, session)
+		if (specification.kind === 'fail') return failTool(session)
+		return specification.folder === undefined
+			? succeedTool(specification.schema, gate, session)
+			: folderTool(specification.folder, gate, session)
 	})
 }
 
@@ -39,9 +41,9 @@ function succeedTool(schema: z.ZodType | undefined, gate: RunGate, session: Loop
 		schema === undefined
 			? 'Finish the task, once the work is done.'
 			: 'Finish the task with its result, once the work is done. The arguments are the result.'
-	return exitTool('succeed', description, parameters, session, (args) => {
+	return exitTool('succeed', description, parameters, session, (toolArguments) => {
 		if (schema === undefined) return handIn(gate, session, async () => undefined)
-		const parsed = schema.safeParse(unwrap(args))
+		const parsed = schema.safeParse(unwrap(toolArguments))
 		if (!parsed.success)
 			return Promise.resolve(errorResult(`The result doesn't fit:\n${z.prettifyError(parsed.error)}\nFix it and call succeed again.`))
 		return handIn(gate, session, async () => parsed.data)
@@ -69,8 +71,8 @@ function proposeTool(schema: z.ZodType, gate: RunGate, session: LoopSession): To
 	const { parameters, unwrap } = toolParameters(schema)
 	const description =
 		'Propose your result to a human. The arguments are the proposal. Approved, the task is done. Rejected, you get their feedback: revise and propose again.'
-	return exitTool('propose', description, parameters, session, async (args) => {
-		const parsed = schema.safeParse(unwrap(args))
+	return exitTool('propose', description, parameters, session, async (toolArguments) => {
+		const parsed = schema.safeParse(unwrap(toolArguments))
 		if (!parsed.success) return errorResult(`The proposal doesn't fit:\n${z.prettifyError(parsed.error)}\nFix it and propose again.`)
 		const verdict = await gate()
 		if (!verdict.passed) return rejectedResult(verdict)
@@ -91,8 +93,11 @@ function failTool(session: LoopSession): ToolRegistration {
 		"Give up on the task, with the reason. Only when it can't be done.",
 		toolParameters(z.object({ reason: z.string().describe('Why the task cannot be done') })).parameters,
 		session,
-		async (args) => {
-			const reason = typeof args === 'object' && args !== null && 'reason' in args ? String(args.reason) : 'no reason given'
+		async (toolArguments) => {
+			const reason =
+				typeof toolArguments === 'object' && toolArguments !== null && 'reason' in toolArguments
+					? String(toolArguments.reason)
+					: 'no reason given'
 			session.finish({ kind: 'error', error: new AgentGaveUp(reason) }, 'round')
 			return finalResult(textResult('Understood. The task ends here.'))
 		},
@@ -117,7 +122,7 @@ function exitTool(
 	description: string,
 	parameters: Record<string, unknown>,
 	session: LoopSession,
-	execute: (args: unknown) => Promise<ToolExecutionResult>,
+	execute: (toolArguments: unknown) => Promise<ToolExecutionResult>,
 ): ToolRegistration {
 	return {
 		name,
@@ -126,10 +131,10 @@ function exitTool(
 		// Never run twice: a hand-in may ask a human.
 		replay: 'unsafe',
 		executionMode: 'sequential',
-		execute: (args) =>
-			inEventOf(session.scope, 'exit-call', { exit: name, input: args }, async () => {
+		execute: (toolArguments) =>
+			inEventOf(session.scope, 'exit-call', { exit: name, input: toolArguments }, async () => {
 				try {
-					return await execute(args)
+					return await execute(toolArguments)
 				} catch (error) {
 					// A check, a folder listing or a human wait that throws fails the loop, like any tool's throw.
 					session.finish({ kind: 'error', error }, 'round')

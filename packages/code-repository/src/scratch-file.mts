@@ -6,7 +6,7 @@ import path from 'node:path'
 const scratchPrefix = 'mesh-flow-code-repository-'
 
 /** Runs `use` with the path of `fileName` in a fresh directory, which is removed afterwards. */
-export async function withScratchFile<T>(fileName: string, use: (file: string) => Promise<T>): Promise<T> {
+export async function withScratchFile<Result>(fileName: string, use: (file: string) => Promise<Result>): Promise<Result> {
 	const scratch = await mkdtemp(path.join(tmpdir(), scratchPrefix))
 	try {
 		return await use(path.join(scratch, fileName))

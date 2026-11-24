@@ -9,7 +9,7 @@ import { fenced } from './fenced.mts'
 import { filesInPrompt, type ChangeRequestLayout } from './repository-files.mts'
 
 /** How a code host's connector reads what `describeChange` needs: its pull or merge requests, and where their templates are. */
-export interface DescribeCodeHost<Repository extends Checkout, Request extends ChangeRequest, Ref> {
+export interface DescribeCodeHost<Repository extends Checkout, Request extends ChangeRequest, Reference> {
 	readonly terms: CodeHostTerms
 	readonly layout: ChangeRequestLayout
 	/** What the agent finishes with, within the code host's limits: see `changeTextSchema`. */
@@ -19,17 +19,17 @@ export interface DescribeCodeHost<Repository extends Checkout, Request extends C
 	/** The open pull or merge request of the checkout's branch onto the default branch, when it has one. */
 	readonly findOpen: (repository: Repository) => Promise<Request | undefined>
 	/** A pull or merge request as it is now. */
-	readonly read: (ref: Ref) => Promise<Request>
+	readonly read: (reference: Reference) => Promise<Request>
 	/** The commit the branch is at: the checkout's `HEAD`, or with `pushed` the branch as it was last pushed. */
 	readonly head: (repository: Repository, pushed: boolean) => Promise<string>
 }
 
 /** What `describeChange` takes besides the agent, the checkout and the code host. */
-export interface DescribeChangeOptions<Ref, Closes> {
+export interface DescribeChangeOptions<Reference, Closes> {
 	/** What the branch resolves, such as an issue, which the agent reads for the why, and which the result closes. */
 	readonly closes?: Closes
 	/** The pull or merge request the branch already has, to describe again. */
-	readonly request?: Ref
+	readonly request?: Reference
 	/** The limit of the loop. Default: 10 minutes. */
 	readonly limit?: Limit
 }
@@ -46,11 +46,11 @@ const customaryTitleCharacters = 72
  * that lint its commit messages or titles. `closes` renders in the prompt where the agent
  * reads it, so it has to be a value that renders, such as an issue.
  */
-export async function describeChange<Repository extends Checkout, Request extends ChangeRequest, Ref, Closes>(
+export async function describeChange<Repository extends Checkout, Request extends ChangeRequest, Reference, Closes>(
 	agent: Agent,
 	repository: Repository,
-	codeHost: DescribeCodeHost<Repository, Request, Ref>,
-	options: DescribeChangeOptions<Ref, Closes> = {},
+	codeHost: DescribeCodeHost<Repository, Request, Reference>,
+	options: DescribeChangeOptions<Reference, Closes> = {},
 ): Promise<ChangeContent<Closes>> {
 	// Without one named, the branch's open request all the same: a run that starts over after a
 	// round of review starts from the text that was reviewed, not from nothing.
@@ -73,12 +73,12 @@ function basedOnField(current: ChangeRequest | undefined): { basedOn?: BasedOn }
 }
 
 /** The request `ref` names, which has to be the one of the checkout's branch onto the default branch. */
-async function branchRequest<Repository extends Checkout, Request extends ChangeRequest, Ref>(
-	ref: Ref,
+async function branchRequest<Repository extends Checkout, Request extends ChangeRequest, Reference>(
+	reference: Reference,
 	repository: Repository,
-	codeHost: DescribeCodeHost<Repository, Request, Ref>,
+	codeHost: DescribeCodeHost<Repository, Request, Reference>,
 ): Promise<Request> {
-	const current = await codeHost.read(ref)
+	const current = await codeHost.read(reference)
 	if (!codeHost.sameRepository(current.repository, repository.name) || current.head.branch !== repository.branch)
 		throw new Error(
 			`${current.url} is the ${codeHost.terms.request} of ${current.head.branch}, not of ${repository.name} ${repository.branch}.`,

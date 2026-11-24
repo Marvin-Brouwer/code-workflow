@@ -4,7 +4,7 @@ import { sameRepositoryName } from '../repository-name.mts'
 import { push } from '../repository/push.mts'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import type { PullRequestData, PullRequestRef } from '../tools/pull-request-tools.mts'
+import type { PullRequestData, PullRequestReference } from '../tools/pull-request-tools.mts'
 import { closingField } from './closing-reference.mts'
 import type { PullRequestContent, PullRequestText } from './pull-request-text.mts'
 
@@ -53,12 +53,12 @@ export interface PullRequest extends PullRequestData {
 export async function openPullRequest(repository: Repository, content: PullRequestContent, context?: ToolContext): Promise<PullRequest> {
 	const { basedOn } = content
 	if (basedOn !== undefined) {
-		const ref = { repository: basedOn.repository, number: basedOn.number }
+		const reference = { repository: basedOn.repository, number: basedOn.number }
 		// Merged or closed meanwhile: nothing to push to, and its text stays.
-		const current = await pullRequest(ref, context)
+		const current = await pullRequest(reference, context)
 		if (current.state === 'closed') return current
 		const pushed = await push(repository)({ message: content.title }, context)
-		return updatePullRequest(ref, { ...content, describedSha: content.describedSha ?? pushed.head }, context)
+		return updatePullRequest(reference, { ...content, describedSha: content.describedSha ?? pushed.head }, context)
 	}
 	const { head } = await push(repository)({ message: content.title }, context)
 	const data = await stubs.openPullRequest(
@@ -91,7 +91,7 @@ export interface UpdatedPullRequest extends PullRequest {
  *
  * Pushes nothing: push first when the text describes new commits.
  *
- * @param ref - The pull request: anything with its `repository` and `number`, such as one
+ * @param reference - The pull request: anything with its `repository` and `number`, such as one
  * `openPullRequest` gave.
  * @param content - The new title and description, and optionally the issue it closes. Text written
  * from another pull request than `ref` is refused. Leaving out `closes` takes an existing `Fixes`
@@ -123,27 +123,27 @@ export interface UpdatedPullRequest extends PullRequest {
  * ```
  */
 export async function updatePullRequest(
-	ref: PullRequestRef,
+	reference: PullRequestReference,
 	content: PullRequestContent,
 	context?: ToolContext,
 ): Promise<UpdatedPullRequest> {
 	const { basedOn } = content
-	if (basedOn !== undefined && (!sameRepositoryName(basedOn.repository, ref.repository) || basedOn.number !== ref.number))
+	if (basedOn !== undefined && (!sameRepositoryName(basedOn.repository, reference.repository) || basedOn.number !== reference.number))
 		throw new Error(
-			`The text was written from ${basedOn.repository}#${String(basedOn.number)}, not from ${ref.repository}#${String(ref.number)}.`,
+			`The text was written from ${basedOn.repository}#${String(basedOn.number)}, not from ${reference.repository}#${String(reference.number)}.`,
 		)
 	let lastSeen: PullRequestText | undefined = basedOn
 	for (;;) {
-		const decision = await decideOnEdit(() => pullRequest(ref, context), content, lastSeen)
+		const decision = await decideOnEdit(() => pullRequest(reference, context), content, lastSeen)
 		if ('kept' in decision) return Object.freeze({ ...decision.kept, skipped: 'edited' as const })
 		const { skipped, ...data } = await stubs.updatePullRequest(
 			{
-				repository: ref.repository,
-				number: ref.number,
+				repository: reference.repository,
+				number: reference.number,
 				title: content.title,
 				body: content.description,
 				...(content.describedSha === undefined ? {} : { describedSha: content.describedSha }),
-				...closingField(content.closes, ref.repository),
+				...closingField(content.closes, reference.repository),
 				...(decision.seen === undefined ? {} : { seen: decision.seen }),
 			},
 			context,
@@ -158,7 +158,7 @@ export async function updatePullRequest(
  * Reads a pull request as it is now: its title, description, state, whether it was merged, and its
  * head commit and branch.
  *
- * @param ref - The pull request: anything with its `repository` and `number`.
+ * @param reference - The pull request: anything with its `repository` and `number`.
  * @param context - Leave it out in workflow code, where the run's signal stops the call. Pass the
  * context a tool's action got when you call this from a tool of your own.
  * @returns The pull request, which renders as its URL in a prompt.
@@ -170,8 +170,8 @@ export async function updatePullRequest(
  * if (current.merged) await github.close(issue)
  * ```
  */
-export async function pullRequest(ref: PullRequestRef, context?: ToolContext): Promise<PullRequest> {
-	return pullRequestOf(await stubs.getPullRequest({ repository: ref.repository, number: ref.number }, context))
+export async function pullRequest(reference: PullRequestReference, context?: ToolContext): Promise<PullRequest> {
+	return pullRequestOf(await stubs.getPullRequest({ repository: reference.repository, number: reference.number }, context))
 }
 
 /** The open pull request of the checkout's branch onto the default branch, when it has one. */

@@ -48,7 +48,7 @@ export const build = tool('dotnetBuild', {
 	}),
 	action: async ({ directory, configuration }, { abortSignal }): Promise<BuildResult> => {
 		const result = await runDotnet(['build', directory, '--configuration', configuration, ...quietBuildArguments], {
-			cwd: workingDirectoryOf(directory),
+			workingDirectory: workingDirectoryOf(directory),
 			abortSignal,
 		})
 		const diagnostics = diagnosticsIn(result.stdout)

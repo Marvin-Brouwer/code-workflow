@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { pageIdOf } from '../src/page/page-ref.mts'
+import { pageIdOf } from '../src/page/page-reference.mts'
 
 describe('pageIdOf', () => {
 	test.each([

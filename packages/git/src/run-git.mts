@@ -18,9 +18,9 @@ export interface GitResult {
 /** What `runGit` takes besides the arguments. */
 export interface RunGitOptions {
 	/** The directory git runs in. */
-	readonly cwd: string
+	readonly workingDirectory: string
 	/** On top of the process's environment. Credentials go here, never in the arguments: a process list shows arguments. */
-	readonly env?: Readonly<Record<string, string>>
+	readonly environment?: Readonly<Record<string, string>> | undefined
 	/** Aborting it kills git and the helpers it started, and rejects the call with the signal's reason. */
 	readonly abortSignal: AbortSignal
 }
@@ -37,12 +37,12 @@ const maxOutputBytes = 16 * 1024 * 1024
  * group of its own, which is what a stop goes to: killing git alone leaves `git-remote-https`
  * holding the pipes, and the call would never settle.
  */
-export async function runGit(args: readonly string[], options: RunGitOptions): Promise<GitResult> {
+export async function runGit(commandArguments: readonly string[], options: RunGitOptions): Promise<GitResult> {
 	const { abortSignal } = options
 	abortSignal.throwIfAborted()
-	const subprocess = execa('git', args, {
-		cwd: options.cwd,
-		env: { GIT_TERMINAL_PROMPT: '0', ...options.env },
+	const subprocess = execa('git', commandArguments, {
+		cwd: options.workingDirectory,
+		env: { GIT_TERMINAL_PROMPT: '0', ...options.environment },
 		stdin: 'ignore',
 		maxBuffer: maxOutputBytes,
 		reject: false,
@@ -75,7 +75,7 @@ export async function runGit(args: readonly string[], options: RunGitOptions): P
 			exitCode: result.exitCode,
 			stdout: result.stdout,
 			stderr: result.stderr,
-			command: ['git', ...args],
+			command: ['git', ...commandArguments],
 		}
 	} catch (error) {
 		if (abortSignal.aborted) throw stoppedWith(abortSignal)

@@ -2,6 +2,6 @@
 export const origin = 'origin'
 
 /** Where a checkout tracks a branch as the remote has it. */
-export function trackingRef(branch: string): string {
+export function trackingReference(branch: string): string {
 	return `refs/remotes/${origin}/${branch}`
 }

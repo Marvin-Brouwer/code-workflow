@@ -2,13 +2,13 @@ import { isGoneReply, triageItems, type PlannedChange as SharedPlannedChange, ty
 import type { Agent, Limit } from '@mesh-flow/core'
 import type { Repository } from '../repository/repository.mts'
 import { stubs } from '../stubs.mts'
-import { ReviewItemId, type MergeRequestRef, type ReviewItem } from '../tools/merge-request-tools.mts'
+import { ReviewItemId, type MergeRequestReference, type ReviewItem } from '../tools/merge-request-tools.mts'
 import { gitlabTerms } from './gitlab-terms.mts'
 
 /** What `triage` takes besides the agent and the checkout. */
 export interface TriageOptions {
 	/** The merge request the items are on. */
-	readonly mergeRequest: MergeRequestRef
+	readonly mergeRequest: MergeRequestReference
 	/** The items to sort, as `review` hands them to its `comments` handler. */
 	readonly comments: readonly ReviewItem[]
 	/** The limit of the loop. Default: 10 minutes. */
@@ -59,7 +59,7 @@ export function triage(agent: Agent, repository: Repository, options: TriageOpti
 }
 
 /** How `triage` replies on GitLab. */
-function gitlabTriage(mergeRequest: MergeRequestRef): TriageCodeHost<ReviewItem> {
+function gitlabTriage(mergeRequest: MergeRequestReference): TriageCodeHost<ReviewItem> {
 	return {
 		terms: gitlabTerms,
 		itemId: ReviewItemId,

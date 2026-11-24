@@ -11,6 +11,6 @@ export { chooseBackend, type BackendChoice, type ChooseBackendOptions } from '..
 export { detectHost, type Host, type KvmAccess } from '../host.mts'
 export { PausedSandbox } from '../paused-sandbox.mts'
 export type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
-export { SandboxSpec } from '../sandbox-spec.mts'
+export { SandboxSpecification } from '../sandbox-specification.mts'
 export type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
 export { temporaryFileOf } from '../temporary-file.mts'

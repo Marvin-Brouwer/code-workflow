@@ -59,6 +59,6 @@ export async function issueAttachments(
 }
 
 /** The id of the attachment an image in rendered rich text shows, by its address: its content or its thumbnail. */
-export function attachmentIdOf(src: string): string | undefined {
-	return /\/(?:attachment(?:\/content)?|thumbnail)\/(\d+)(?:[/?#]|$)/.exec(src)?.[1]
+export function attachmentIdOf(source: string): string | undefined {
+	return /\/(?:attachment(?:\/content)?|thumbnail)\/(\d+)(?:[/?#]|$)/.exec(source)?.[1]
 }

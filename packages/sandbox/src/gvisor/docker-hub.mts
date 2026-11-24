@@ -61,7 +61,7 @@ export async function openRepository(name: string, signal: AbortSignal): Promise
 /** The manifest for this machine's architecture, also when the reference names an index. */
 export async function platformManifest(repository: Repository, reference: string, signal: AbortSignal): Promise<Manifest> {
 	const architecture = process.arch === 'arm64' ? 'arm64' : 'amd64'
-	const manifestUrl = (ref: string) => `${registry}/v2/${repository.name}/manifests/${ref}`
+	const manifestUrl = (manifestReference: string) => `${registry}/v2/${repository.name}/manifests/${manifestReference}`
 	let body: unknown = await (await get(repository, manifestUrl(reference), signal, manifestMediaTypes)).json()
 	const index = Index.safeParse(body)
 	if (index.success) {

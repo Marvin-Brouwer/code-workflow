@@ -94,9 +94,9 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 	const created = vi.fn()
 	const backend = wrap({
 		...host,
-		create: (spec, createSignal) => {
+		create: (specification, createSignal) => {
 			created()
-			return host.create(spec, createSignal)
+			return host.create(specification, createSignal)
 		},
 	})
 	const log = vi.fn<(message: string) => void>()

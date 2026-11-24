@@ -10,8 +10,8 @@ import { temporaryDirectory } from '../support/temporary-directory.mts'
 const execFileAsync = promisify(execFile)
 
 /** Runs a command on the host. A command that blocks on the FIFO fails after a few seconds. */
-function run(program: string, args: readonly string[]) {
-	return execFileAsync(program, args, { timeout: duration.of('5s').to('ms') })
+function run(program: string, commandArguments: readonly string[]) {
+	return execFileAsync(program, commandArguments, { timeout: duration.of('5s').to('ms') })
 }
 
 /** What a command that had to fail wrote to stderr. */
@@ -42,8 +42,8 @@ async function submission(
 	const fifo = path.join(directory, 'start')
 	await writeFile(job, 'true\n')
 	if (withFifo) await run('mkfifo', [fifo])
-	const [program, ...args] = submitJobCommand(job, options)
-	return { job, fifo, command: [program, args.map((arg) => (arg === jobFifo ? fifo : arg))] }
+	const [program, ...commandArguments] = submitJobCommand(job, options)
+	return { job, fifo, command: [program, commandArguments.map((argument) => (argument === jobFifo ? fifo : argument))] }
 }
 
 describe('jobScript', () => {
@@ -53,8 +53,8 @@ describe('jobScript', () => {
 		const job = path.join(directory, 'job.sh')
 		const log = path.join(directory, 'job.log')
 		const script = jobScript(['sh', '-c', 'echo "$1|$NAME|$PWD"', 'sh', "it's $HOME"], {
-			env: { NAME: 'a "quoted" value' },
-			cwd: directory,
+			environment: { NAME: 'a "quoted" value' },
+			workingDirectory: directory,
 			logFile: log,
 		})
 		await writeFile(job, script)
@@ -81,18 +81,20 @@ describe('jobScript', () => {
 
 	test('refuses an environment variable name the shell would read as code', () => {
 		// Act and assert
-		expect(() => jobScript(['true'], { env: { 'A=$(reboot)': 'x' } })).toThrow('A=$(reboot) is not a valid environment variable name.')
+		expect(() => jobScript(['true'], { environment: { 'A=$(reboot)': 'x' } })).toThrow(
+			'A=$(reboot) is not a valid environment variable name.',
+		)
 	})
 })
 
 describe('initCommand', () => {
 	test('is a script the shell accepts', async () => {
 		// Act
-		const [program, flag, script, ...args] = initCommand()
+		const [program, flag, script, ...commandArguments] = initCommand()
 
 		// Assert
 		expect([program, flag]).toEqual(['sh', '-c'])
-		expect(args).toEqual([])
+		expect(commandArguments).toEqual([])
 		await expect(run('sh', ['-n', '-c', script ?? ''])).resolves.toBeDefined()
 	})
 })
@@ -101,7 +103,7 @@ describe('submitJobCommand', () => {
 	test('hands the job to init', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		const { job, fifo, command } = await submission(directory, { cwd: directory, logFile: path.join(directory, 'job.log') })
+		const { job, fifo, command } = await submission(directory, { workingDirectory: directory, logFile: path.join(directory, 'job.log') })
 		const reading = readFile(fifo, 'utf8')
 
 		// Act
@@ -114,7 +116,7 @@ describe('submitJobCommand', () => {
 	test('fails, and removes the job, when its directory is missing', async () => {
 		// Arrange
 		const directory = await temporaryDirectory()
-		const { job, command } = await submission(directory, { cwd: path.join(directory, 'missing') })
+		const { job, command } = await submission(directory, { workingDirectory: path.join(directory, 'missing') })
 
 		// Act
 		const submitting = run(...command)

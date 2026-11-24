@@ -5,8 +5,12 @@
  * finishes after the abort, its value goes to `discard`, so a sandbox that was created too late
  * can still be removed instead of leaking.
  */
-export function abortable<T>(work: Promise<T>, signal: AbortSignal, discard?: (late: T) => Promise<unknown>): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
+export function abortable<Result>(
+	work: Promise<Result>,
+	signal: AbortSignal,
+	discard?: (late: Result) => Promise<unknown>,
+): Promise<Result> {
+	return new Promise<Result>((resolve, reject) => {
 		const onAbort = () => {
 			reject(abortReason(signal))
 			work

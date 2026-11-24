@@ -1,4 +1,4 @@
-import { TriggerRef } from '@mesh-flow/protocol'
+import { TriggerReference } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
@@ -16,7 +16,7 @@ import type { ShownConnector } from './shown-connector.mts'
  */
 export const StartRunBody = z.object({
 	app: AppName,
-	trigger: TriggerRef,
+	trigger: TriggerReference,
 	input: z.unknown().optional(),
 	key: z.string().min(1).max(200).optional(),
 })
@@ -47,7 +47,13 @@ export interface ControlApiOptions {
 /** The body of `POST /runs/:run/answers/:request`. */
 export const AnswerBody = z.object({ value: z.unknown() }).refine((body) => 'value' in body, { message: 'An answer needs a value.' })
 
-const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 404, conflict: 409, invalid: 400, unavailable: 503 }
+/** The HTTP status an engine error is answered with, here and wherever the engine's answers are passed on. */
+export const engineErrorStatus: Record<EngineErrorCode, ContentfulStatusCode> = {
+	'not-found': 404,
+	conflict: 409,
+	invalid: 400,
+	unavailable: 503,
+}
 
 /**
  * The engine's control API, which the CLI talks to over the engine's local socket:
@@ -128,7 +134,7 @@ export function controlApi(engine: Engine, { apps, connectors = [] }: ControlApi
 	}
 
 	api.onError((error, context) => {
-		if (error instanceof EngineError) return context.json({ error: error.message }, statusOf[error.code])
+		if (error instanceof EngineError) return context.json({ error: error.message }, engineErrorStatus[error.code])
 		if (error instanceof z.ZodError || error instanceof SyntaxError) return context.json({ error: `Bad request: ${error.message}` }, 400)
 		return context.json({ error: error.message }, 500)
 	})

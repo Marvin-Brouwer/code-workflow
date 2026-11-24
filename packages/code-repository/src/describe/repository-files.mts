@@ -39,36 +39,36 @@ const commitlintConfig = /^(\.commitlintrc(\.(json|ya?ml|[cm]?js|[cm]?ts))?|comm
 const lintsInCi = /commitlint|semantic-pull-request|pr-title|pull-request-title|mr-title|merge-request-title/i
 
 /** The paths at `ref` where a template or a lint setting can be: the entries of the root, and of the layout's folders, one level each. */
-export async function filesAt(git: GitClient, ref: string, layout: ChangeRequestLayout): Promise<string[]> {
-	const root = entries((await git.lsTree('-z', '--name-only', ref)).stdout)
+export async function filesAt(git: GitClient, reference: string, layout: ChangeRequestLayout): Promise<string[]> {
+	const root = entries((await git.lsTree('-z', '--name-only', reference)).stdout)
 	const inFolders = await entriesOf(
 		git,
-		ref,
+		reference,
 		root.filter((entry) => layout.folders.has(entry.toLowerCase())),
 	)
 	const inSubfolders = await entriesOf(
 		git,
-		ref,
+		reference,
 		inFolders.filter((entry) => layout.subfolders.has(entry.toLowerCase())),
 	)
 	return [...root, ...inFolders, ...inSubfolders]
 }
 
 /** The entries right in `folders` at `ref`, not in their subfolders. */
-async function entriesOf(git: GitClient, ref: string, folders: readonly string[]): Promise<string[]> {
+async function entriesOf(git: GitClient, reference: string, folders: readonly string[]): Promise<string[]> {
 	if (folders.length === 0) return []
-	return entries((await git.lsTree('-z', '--name-only', ref, '--', ...folders.map((folder) => `${folder}/`))).stdout)
+	return entries((await git.lsTree('-z', '--name-only', reference, '--', ...folders.map((folder) => `${folder}/`))).stdout)
 }
 
 /** The pull or merge request templates at `ref`, as the layout finds them. */
 export async function templatesAt(
 	git: GitClient,
-	ref: string,
+	reference: string,
 	files: readonly string[],
 	layout: ChangeRequestLayout,
 ): Promise<RepositoryFile[]> {
 	const templates = files.filter((file) => layout.isTemplate(file.toLowerCase()))
-	return Promise.all(templates.map((file) => readFileAt(git, ref, file)))
+	return Promise.all(templates.map((file) => readFileAt(git, reference, file)))
 }
 
 /**
@@ -77,16 +77,16 @@ export async function templatesAt(
  */
 export async function lintSettingsAt(
 	git: GitClient,
-	ref: string,
+	reference: string,
 	files: readonly string[],
 	layout: ChangeRequestLayout,
 ): Promise<RepositoryFile[]> {
 	const commitlintPaths = files.filter((file) => commitlintConfig.test(file.toLowerCase()))
 	const ciPaths = files.filter((file) => layout.isCiFile(file))
 	const [commitlintFiles, inPackage, ciFiles] = await Promise.all([
-		Promise.all(commitlintPaths.map((file) => readFileAt(git, ref, file))),
-		files.includes(packageFile) ? textAt(git, ref, packageFile).then(commitlintInPackage) : undefined,
-		Promise.all(ciPaths.map((file) => readFileAt(git, ref, file))),
+		Promise.all(commitlintPaths.map((file) => readFileAt(git, reference, file))),
+		files.includes(packageFile) ? textAt(git, reference, packageFile).then(commitlintInPackage) : undefined,
+		Promise.all(ciPaths.map((file) => readFileAt(git, reference, file))),
 	])
 	return [
 		...commitlintFiles,
@@ -119,11 +119,11 @@ function commitlintInPackage(text: string): string | undefined {
 }
 
 /** A file at `ref`, cut off when it's too long for a prompt. */
-async function readFileAt(git: GitClient, ref: string, file: string): Promise<RepositoryFile> {
-	return { path: file, text: capped(await textAt(git, ref, file), 'the file goes on') }
+async function readFileAt(git: GitClient, reference: string, file: string): Promise<RepositoryFile> {
+	return { path: file, text: capped(await textAt(git, reference, file), 'the file goes on') }
 }
 
 /** A file's text at `ref`. */
-async function textAt(git: GitClient, ref: string, file: string): Promise<string> {
-	return (await git.show(`${ref}:${file}`)).stdout
+async function textAt(git: GitClient, reference: string, file: string): Promise<string> {
+	return (await git.show(`${reference}:${file}`)).stdout
 }

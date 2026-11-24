@@ -12,15 +12,15 @@ const setupTimeout = duration.of('10s')
 /** Commits every change to tracked files, as a test's own committer. */
 export async function commit(directory: string, message: string, abortSignal: AbortSignal): Promise<void> {
 	const identity = ['-c', 'user.name=test', '-c', 'user.email=test@example.com']
-	await gitCommand([...identity, 'commit', '--quiet', '--all', '--message', message], { cwd: directory, abortSignal })
+	await gitCommand([...identity, 'commit', '--quiet', '--all', '--message', message], { workingDirectory: directory, abortSignal })
 }
 
 /** A git repository with one commit that `origin/main` points at, as a fresh checkout has, rendering as its directory. */
 export async function gitCheckout(): Promise<ReviewedCheckout> {
 	const directory = await temporaryDirectory()
 	const abortSignal = setupTimeout.toAbortSignal()
-	const git = async (...args: string[]) => {
-		await gitCommand(args, { cwd: directory, abortSignal })
+	const git = async (...commandArguments: string[]) => {
+		await gitCommand(commandArguments, { workingDirectory: directory, abortSignal })
 	}
 	await git('init', '--quiet', '--initial-branch=main')
 	await writeFile(path.join(directory, 'README.md'), '# api\n')

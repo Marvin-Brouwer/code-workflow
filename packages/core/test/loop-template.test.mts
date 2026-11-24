@@ -23,8 +23,8 @@ describe('readTemplate', () => {
 
 		// Assert
 		expect(template.text).toBe('Use `search`, then `succeed`, or `fail`.')
-		expect(template.tools.map((spec) => spec.name)).toEqual(['search'])
-		expect(template.exits.map((spec) => spec.kind)).toEqual(['succeed', 'fail'])
+		expect(template.tools.map((specification) => specification.name)).toEqual(['search'])
+		expect(template.exits.map((specification) => specification.kind)).toEqual(['succeed', 'fail'])
 	})
 
 	test('renders values that render themselves, and nested prompts with their tools', async () => {

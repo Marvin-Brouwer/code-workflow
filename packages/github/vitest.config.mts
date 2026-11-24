@@ -4,8 +4,11 @@ import { duration } from '../duration/src/_module/duration.mts'
 
 const source = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
 
-/** How long a test, or a hook, may take. */
-const testTimeout = duration.of('30s')
+/**
+ * How long a test, or a hook, may take. The functional tests run git against a local remote many
+ * times, which takes up to half a minute on a Windows runner, so they get as long as GitLab's do.
+ */
+const testTimeout = duration.of('1m')
 
 export default defineConfig({
 	resolve: {

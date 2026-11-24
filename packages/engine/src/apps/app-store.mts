@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { AppManifest, appManifestFile } from '@mesh-flow/protocol'
-import { SandboxSpec } from '@mesh-flow/sandbox'
+import { SandboxSpecification } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
 import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
@@ -79,7 +79,7 @@ export async function openAppStore(
 	}
 	let writing: Promise<unknown> = Promise.resolve()
 	let closed = false
-	const queued = <T,>(write: () => Promise<T>): Promise<T> => {
+	const queued = <Result,>(write: () => Promise<Result>): Promise<Result> => {
 		if (closed) return Promise.reject(new EngineError('conflict', 'The engine is shutting down.'))
 		const next = writing.then(write)
 		writing = next.catch(() => undefined)
@@ -173,7 +173,7 @@ async function manifestIn(tarball: string): Promise<AppManifest> {
 	if (text === undefined) throw new EngineError('invalid', `The app has no ${appManifestFile}: deploy what mesh-flow build wrote.`)
 	const parsed = AppManifest.safeParse(parseJsonOrUndefined(text))
 	if (!parsed.success) throw new EngineError('invalid', `The app's ${appManifestFile} isn't valid:\n${z.prettifyError(parsed.error)}`)
-	const sandbox = SandboxSpec.safeParse(parsed.data.description.sandbox)
+	const sandbox = SandboxSpecification.safeParse(parsed.data.description.sandbox)
 	if (!sandbox.success)
 		throw new EngineError('invalid', `The app's sandbox isn't one the engine can make:\n${z.prettifyError(sandbox.error)}`)
 	return parsed.data

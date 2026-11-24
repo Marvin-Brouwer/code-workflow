@@ -1,5 +1,5 @@
 /** A person a mention in rich text names: as the link says, before the site is asked who it is. */
-export interface MentionRef {
+export interface MentionReference {
 	readonly name: string
 	/** The account id, on Cloud. */
 	readonly accountId?: string | undefined
@@ -31,18 +31,18 @@ const profilePage = 'ViewProfile.jspa'
 const relativeLinkBase = 'https://site.invalid'
 
 /** One key per person a mention can name, by account id, username or, without either, the name. */
-export function mentionKey(mention: MentionRef): string {
+export function mentionKey(mention: MentionReference): string {
 	if (mention.accountId !== undefined) return `account:${mention.accountId}`
 	return mention.username === undefined ? `name:${mention.name}` : `user:${mention.username}`
 }
 
 /** The account id or username a mention holds, which the site knows the person by. */
-export function mentionIdOf(mention: MentionRef): string | undefined {
+export function mentionIdOf(mention: MentionReference): string | undefined {
 	return mention.accountId ?? mention.username
 }
 
 /** A mention as the link holds it, for a person the site wasn't asked about or couldn't tell about. */
-export function linkedPerson(mention: MentionRef): Person {
+export function linkedPerson(mention: MentionReference): Person {
 	return { name: mention.name, id: mentionIdOf(mention) }
 }
 
@@ -60,7 +60,7 @@ export function mentionText(person: Person): string {
  * mention with a class, and put the account id (Cloud) or username (Data Center) in an attribute
  * or the profile link.
  */
-export function mentionRefOf(node: RenderedNode): MentionRef | undefined {
+export function mentionReferenceOf(node: RenderedNode): MentionReference | undefined {
 	if (node.nodeName !== 'A') return undefined
 	const classes = (node.getAttribute('class') ?? '').split(/\s+/)
 	const accountId = node.getAttribute('data-account-id') ?? undefined

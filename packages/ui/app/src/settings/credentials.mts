@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
 import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
+import { errorText } from '../_shared/error-text.mts'
 import { credentialPath, NoContent } from '../_shared/settings.mts'
 import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
@@ -47,11 +48,7 @@ export const CredentialsPage = component({
 			})
 
 		const view = (names: Answer<string[]>) => {
-			if (!names.ok)
-				return element('p', {
-					role: 'alert',
-					textContent: names.error,
-				})
+			if (!names.ok) return errorText(element, names.error)
 			if (names.value.length === 0)
 				return element('p', {
 					textContent: 'No credentials yet.',

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { stubs } from '../stubs.mts'
 import type { PageData } from '../tools/page-tools.mts'
 import { pageMarkdownOf } from './markdown.mts'
-import { pageIdOf, type PageRef } from './page-ref.mts'
+import { pageIdOf, type PageReference } from './page-reference.mts'
 
 /** Where collected pages are dumped, for agents to read. */
 const pagesFolder = workspace.folder('confluence', { description: 'the Confluence pages this run read, one Markdown file each' })
@@ -52,7 +52,7 @@ export interface ConfluencePage extends PageData {
  * await developer.loop`Implement ${story} in ${repository}. Follow ${guidelines} while you work.`
  * ```
  */
-export async function collect(page: PageRef, context?: ToolContext): Promise<ConfluencePage> {
+export async function collect(page: PageReference, context?: ToolContext): Promise<ConfluencePage> {
 	const data = await stubs.getPage({ id: pageIdOf(page) }, context)
 	const file = workspace.file(`${pagesFolder.path}/${data.id}.md`)
 	await file.write(pageMarkdownOf(data))

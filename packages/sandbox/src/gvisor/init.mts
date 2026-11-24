@@ -30,8 +30,8 @@ const environmentName = /^[A-Za-z_][A-Za-z0-9_]*$/
 /** The script init runs for a job. It removes itself first, so jobs leave nothing behind. */
 export function jobScript(command: Command, options: Omit<StartInBackgroundOptions, 'signal'>): string {
 	const lines = ['rm -f -- "$0"']
-	if (options.cwd !== undefined) lines.push(`cd -- ${quote([options.cwd])} || exit 1`)
-	for (const [name, value] of Object.entries(options.env ?? {})) {
+	if (options.workingDirectory !== undefined) lines.push(`cd -- ${quote([options.workingDirectory])} || exit 1`)
+	for (const [name, value] of Object.entries(options.environment ?? {})) {
 		if (!environmentName.test(name)) throw new Error(`${name} is not a valid environment variable name.`)
 		lines.push(`export ${name}=${quote([value])}`)
 	}
@@ -51,5 +51,5 @@ export function submitJobCommand(job: string, options: Omit<StartInBackgroundOpt
 		'{ [ -z "$cwd" ] || cd -- "$cwd"; } && : >> "$log" || { rm -f -- "$job"; exit 1; }',
 		`printf '%s\\n' "$job" > "$fifo"`,
 	].join('\n')
-	return ['sh', '-c', script, 'sh', job, jobFifo, options.logFile ?? '/dev/null', options.cwd ?? '']
+	return ['sh', '-c', script, 'sh', job, jobFifo, options.logFile ?? '/dev/null', options.workingDirectory ?? '']
 }

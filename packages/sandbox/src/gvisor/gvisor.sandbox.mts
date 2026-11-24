@@ -3,7 +3,7 @@ import { mkdir, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PausedSandbox } from '../paused-sandbox.mts'
 import type { Command, ExecOptions, ExecResult, Sandbox, StartInBackgroundOptions } from '../sandbox.mts'
-import type { SandboxSpec } from '../sandbox-spec.mts'
+import type { SandboxSpecification } from '../sandbox-specification.mts'
 import { temporaryFileOf } from '../temporary-file.mts'
 import { newCheckpointName, partialCheckpoint, removeEarlierCheckpoints } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
@@ -13,19 +13,19 @@ import { runsc, runscOrThrow } from './runsc.mts'
 /** A running gVisor container. Its runsc container id is the sandbox id. */
 export class GvisorSandbox implements Sandbox {
 	readonly id: string
-	readonly #spec: SandboxSpec
+	readonly #specification: SandboxSpecification
 	readonly #context: GvisorContext
 
-	constructor(id: string, spec: SandboxSpec, context: GvisorContext) {
+	constructor(id: string, specification: SandboxSpecification, context: GvisorContext) {
 		this.id = id
-		this.#spec = spec
+		this.#specification = specification
 		this.#context = context
 		context.lifetime.track(id, (signal) => context.remove(id, signal))
 	}
 
 	async exec(command: Command, options: ExecOptions): Promise<ExecResult> {
-		const flags = Object.entries(options.env ?? {}).map(([key, value]) => `--env=${key}=${value}`)
-		if (options.cwd !== undefined) flags.push(`--cwd=${options.cwd}`)
+		const flags = Object.entries(options.environment ?? {}).map(([key, value]) => `--env=${key}=${value}`)
+		if (options.workingDirectory !== undefined) flags.push(`--cwd=${options.workingDirectory}`)
 		return runsc(this.#context.runsc, ['exec', ...flags, this.id, ...command], {
 			signal: this.#context.lifetime.bind(options.signal),
 		})
@@ -73,7 +73,7 @@ export class GvisorSandbox implements Sandbox {
 		// deletes a leftover container record itself.
 		await runsc(this.#context.runsc, ['delete', '--force', this.id], { signal: bound }).catch(() => undefined)
 		await removeEarlierCheckpoints(checkpoints, name).catch(() => undefined)
-		return { backend: 'gvisor', id: this.id, spec: this.#spec, snapshot: name }
+		return { backend: 'gvisor', id: this.id, specification: this.#specification, snapshot: name }
 	}
 
 	destroy(signal: AbortSignal): Promise<void> {

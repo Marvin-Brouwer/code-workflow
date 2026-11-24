@@ -1,7 +1,7 @@
 import { request } from 'node:http'
 import type { Readable } from 'node:stream'
 import { MissingSetting } from '@mesh-flow/gateway'
-import { AppManifest, RuntimeEvent, type TriggerRef } from '@mesh-flow/protocol'
+import { AppManifest, RuntimeEvent, type TriggerReference } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { SignInState } from '../engine/sign-in-state.mts'
 import { hasErrorCode } from '../errors.mts'
@@ -37,7 +37,7 @@ export interface ControlClient {
 	/** Starts a run through one of an app's triggers, with its parameters or a webhook's payload. Without them, a schedule runs with its own. */
 	startRun(options: {
 		readonly app: string
-		readonly trigger: TriggerRef
+		readonly trigger: TriggerReference
 		readonly input?: unknown
 		/** Names the start, so sending it again returns the run it started instead of a second one. */
 		readonly key?: string | undefined
@@ -119,16 +119,16 @@ function runStreamHeaders(lastEventId: string | undefined): Record<string, strin
 }
 
 /** One request to the control API, with the response checked against `schema`. */
-function call<T>(
+function call<Result>(
 	socketPath: string,
-	schema: z.ZodType<T>,
+	schema: z.ZodType<Result>,
 	method: string,
 	route: string,
 	body: unknown,
 	abortSignal: AbortSignal,
-): Promise<T> {
+): Promise<Result> {
 	const payload = body === undefined ? undefined : JSON.stringify(body)
-	return new Promise<T>((resolve, reject) => {
+	return new Promise<Result>((resolve, reject) => {
 		const outgoing = request(
 			{
 				socketPath,

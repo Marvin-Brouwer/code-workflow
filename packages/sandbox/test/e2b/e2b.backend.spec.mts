@@ -1,6 +1,6 @@
 import { duration } from '@mesh-flow/duration'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { SandboxSpec } from '../../src/sandbox-spec.mts'
+import type { SandboxSpecification } from '../../src/sandbox-specification.mts'
 
 const sdk = vi.hoisted(() => {
 	const kill = vi.fn((_options: { signal: AbortSignal }) => Promise.resolve())
@@ -25,7 +25,7 @@ vi.mock('e2b', () => ({
 
 const { e2bBackend } = await import('../../src/e2b/e2b.backend.mts')
 
-const spec: SandboxSpec = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
+const specification: SandboxSpecification = { image: 'node:26-slim', cpus: 1, memoryMb: 512 }
 
 describe('E2B backend, on a fake SDK', () => {
 	beforeEach(() => {
@@ -35,7 +35,7 @@ describe('E2B backend, on a fake SDK', () => {
 	test('close kills the sandboxes it still runs', async () => {
 		// Arrange
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: { 'node:26-slim': 'node-26' } })
-		await backend.create(spec, duration.of('1s').toAbortSignal())
+		await backend.create(specification, duration.of('1s').toAbortSignal())
 
 		// Act
 		await backend.close(duration.of('1s').toAbortSignal())
@@ -49,7 +49,7 @@ describe('E2B backend, on a fake SDK', () => {
 		const backend = e2bBackend({ apiKey: 'e2b_test', templates: {} })
 
 		// Act
-		const creating = backend.create(spec, duration.of('1s').toAbortSignal())
+		const creating = backend.create(specification, duration.of('1s').toAbortSignal())
 
 		// Assert
 		await expect(creating).rejects.toThrow("No E2B template is configured for the image 'node:26-slim'.")

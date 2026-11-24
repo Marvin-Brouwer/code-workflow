@@ -14,7 +14,7 @@ export interface RuntimeSetup {
 	/** What the app is to do. */
 	readonly start: RunStart
 	/** Extra environment for the runtime, such as the run id. */
-	readonly env: Readonly<Record<string, string>>
+	readonly environment: Readonly<Record<string, string>>
 	/** The grant of the run's gateway endpoint, when the engine has a gateway. */
 	readonly grant: RunGrant | undefined
 }
@@ -35,5 +35,5 @@ export async function setUpRuntime(
 	await uploadApp(sandbox, setup.tarball, layout.app, abortSignal)
 	await channel.writeStart(setup.start, abortSignal)
 	if (setup.grant !== undefined) await channel.writeGrant(setup.grant, abortSignal)
-	await channel.startRuntime(['node', setup.entry], { signal: abortSignal, cwd: layout.app, env: setup.env })
+	await channel.startRuntime(['node', setup.entry], { signal: abortSignal, workingDirectory: layout.app, environment: setup.environment })
 }

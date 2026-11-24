@@ -12,15 +12,16 @@ export function jsonSchemaOf(schema: z.core.$ZodType): Record<string, unknown> {
  */
 export interface ToolParameters {
 	readonly parameters: Record<string, unknown>
-	readonly unwrap: (args: unknown) => unknown
+	readonly unwrap: (toolArguments: unknown) => unknown
 }
 
 /** The tool parameters for an input schema, and how to take the input out of the arguments again. */
 export function toolParameters(schema: z.ZodType | undefined): ToolParameters {
 	if (schema === undefined) return { parameters: { type: 'object', properties: {} }, unwrap: () => undefined }
-	if (schema instanceof z.ZodObject) return { parameters: jsonSchemaOf(schema), unwrap: (args) => args }
+	if (schema instanceof z.ZodObject) return { parameters: jsonSchemaOf(schema), unwrap: (toolArguments) => toolArguments }
 	return {
 		parameters: jsonSchemaOf(z.object({ value: schema })),
-		unwrap: (args) => (typeof args === 'object' && args !== null && 'value' in args ? args.value : undefined),
+		unwrap: (toolArguments) =>
+			typeof toolArguments === 'object' && toolArguments !== null && 'value' in toolArguments ? toolArguments.value : undefined,
 	}
 }

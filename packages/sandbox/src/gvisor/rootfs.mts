@@ -15,12 +15,12 @@ export const imageMarker = '.mesh-flow-image'
 export interface Rootfs {
 	readonly path: string
 	/** `KEY=value` entries from the image config, `PATH` among them. */
-	readonly env: readonly string[]
-	readonly workingDir: string
+	readonly environment: readonly string[]
+	readonly workingDirectory: string
 }
 
 /** What the marker holds. */
-const ImageInfo = z.object({ image: z.string(), env: z.array(z.string()), workingDir: z.string() })
+const ImageInfo = z.object({ image: z.string(), environment: z.array(z.string()), workingDirectory: z.string() })
 type ImageInfo = z.infer<typeof ImageInfo>
 
 const ImageConfig = z.object({
@@ -88,7 +88,7 @@ export async function prepareRootfs(images: string, image: string, signal: Abort
 			await applyLayer(archive, partial, signal)
 		}
 		const { config } = ImageConfig.parse(JSON.parse((await blob(repository, manifest.config.digest, signal)).toString('utf8')))
-		const info: ImageInfo = { image, env: config?.Env ?? [], workingDir: nonEmpty(config?.WorkingDir) ?? '/' }
+		const info: ImageInfo = { image, environment: config?.Env ?? [], workingDirectory: nonEmpty(config?.WorkingDir) ?? '/' }
 		await writeFile(path.join(partial, imageMarker), JSON.stringify(info))
 		await rm(target, { recursive: true, force: true })
 		await rename(partial, target)
@@ -100,7 +100,7 @@ export async function prepareRootfs(images: string, image: string, signal: Abort
 }
 
 function rootfsOf(target: string, info: ImageInfo): Rootfs {
-	return { path: target, env: info.env, workingDir: info.workingDir }
+	return { path: target, environment: info.environment, workingDirectory: info.workingDirectory }
 }
 
 /** Image configs leave `WorkingDir` out, or set it to `''`, when it's the root. */

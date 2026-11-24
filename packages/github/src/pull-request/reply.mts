@@ -1,7 +1,7 @@
 import { replyTool, type ReplyInput } from '@mesh-flow/code-repository'
 import type { Tool } from '@mesh-flow/core'
 import { stubs } from '../stubs.mts'
-import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/pull-request-tools.mts'
+import { ReviewItemId, type PullRequestReference, type ReplyOutcome } from '../tools/pull-request-tools.mts'
 
 /**
  * The tool that replies to a review item on a pull request: in the thread of a comment on a line,
@@ -29,7 +29,7 @@ import { ReviewItemId, type PullRequestRef, type ReplyOutcome } from '../tools/p
  * await reviewer.loop`Handle ${comments} on ${pullRequest}. Reply to each with ${github.reply(pullRequest)}.`
  * ```
  */
-export function reply(on: PullRequestRef): Tool<ReplyInput, ReplyOutcome> {
+export function reply(on: PullRequestReference): Tool<ReplyInput, ReplyOutcome> {
 	return replyTool({
 		on: `pull request ${on.repository}#${String(on.number)}`,
 		item: ReviewItemId,

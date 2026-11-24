@@ -1,7 +1,7 @@
 import type { BackendName } from './backend-name.mts'
 import type { PausedSandbox } from './paused-sandbox.mts'
 import type { Sandbox } from './sandbox.mts'
-import type { SandboxSpec } from './sandbox-spec.mts'
+import type { SandboxSpecification } from './sandbox-specification.mts'
 
 /** A sandbox a backend still holds, found by {@link SandboxBackend.list}. */
 export interface HeldSandbox {
@@ -18,7 +18,7 @@ export interface HeldSandbox {
 export interface SandboxBackend {
 	readonly name: BackendName
 	/** Starts a new sandbox. Every call makes a new one, with a new id. */
-	create(spec: SandboxSpec, signal: AbortSignal): Promise<Sandbox>
+	create(specification: SandboxSpecification, signal: AbortSignal): Promise<Sandbox>
 	/**
 	 * Starts a paused sandbox again, with the same id. Throws a `BackendMismatchError` when another
 	 * backend made the pause, and refuses a sandbox that is already running here.

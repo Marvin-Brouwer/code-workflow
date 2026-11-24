@@ -9,7 +9,7 @@ import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import { assertSandboxId, isSandboxId, newSandboxId } from '../sandbox-id.mts'
 import type { Sandbox } from '../sandbox.mts'
-import { SandboxSpec } from '../sandbox-spec.mts'
+import { SandboxSpecification } from '../sandbox-specification.mts'
 import { writeBundle } from './bundle.mts'
 import { hasCheckpoint, isCheckpointName } from './checkpoint.mts'
 import type { GvisorContext } from './gvisor.context.mts'
@@ -80,27 +80,27 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 	return {
 		name: 'gvisor',
 
-		async create(input: SandboxSpec, signal: AbortSignal): Promise<Sandbox> {
-			const spec = SandboxSpec.parse(input)
+		async create(input: SandboxSpecification, signal: AbortSignal): Promise<Sandbox> {
+			const specification = SandboxSpecification.parse(input)
 			const bound = lifetime.bind(signal)
 			const id = newSandboxId()
 			const paths = layout.sandbox(id)
-			const rootfs = await images.get(spec.image, bound)
+			const rootfs = await images.get(specification.image, bound)
 			try {
 				await mkdir(paths.directory, { recursive: true })
 				await writeBundle(paths.bundle, {
 					rootfs,
 					init: initCommand(),
-					env: { ...spec.env },
-					cpus: spec.cpus,
-					memoryMb: spec.memoryMb,
+					environment: { ...specification.environment },
+					cpus: specification.cpus,
+					memoryMb: specification.memoryMb,
 				})
 				await runscOrThrow(config, ['run', '--detach', `--bundle=${paths.bundle}`, id], { signal: bound, logFile: paths.log })
 			} catch (error) {
 				await cleanUp((cleanupSignal) => removeFromDisk(id, cleanupSignal))
 				throw error
 			}
-			return new GvisorSandbox(id, spec, context)
+			return new GvisorSandbox(id, specification, context)
 		},
 
 		async resume(input: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
@@ -128,7 +128,7 @@ export function gvisorBackend(options: GvisorBackendOptions): SandboxBackend {
 					await cleanUp((cleanupSignal) => stopContainer(paused.id, cleanupSignal))
 					throw error
 				}
-				return new GvisorSandbox(paused.id, paused.spec, context)
+				return new GvisorSandbox(paused.id, paused.specification, context)
 			})
 		},
 

@@ -15,8 +15,8 @@ export interface GitRemoteOptions {
 	 * which the connector has checked, so none of them can leave `directory`.
 	 */
 	readonly cloneSegments: (repository: string) => readonly string[]
-	/** Git's environment for a call, which carries the credential, such as `basicAuthHeaderEnv`. */
-	readonly credentialEnv: (context: HostToolContext) => Promise<Readonly<Record<string, string>>>
+	/** Git's environment for a call, which carries the credential, such as `basicAuthHeaderEnvironment`. */
+	readonly credentialEnvironment: (context: HostToolContext) => Promise<Readonly<Record<string, string>>>
 }
 
 /** A repository's clone on the host, kept between calls, that pushes and fetches with the credential. */
@@ -57,7 +57,7 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	 * mirror fetch in the middle of a push would reset the branch the push is about to send.
 	 */
 	const onClone = oneAtATime()
-	function withClone<T>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<T>): Promise<T> {
+	function withClone<Result>(repository: string, context: HostToolContext, use: (git: GitClient) => Promise<Result>): Promise<Result> {
 		const clone = cloneOf(repository)
 		return onClone(clone, context.abortSignal, () => openClone(clone, repository, context).then(use))
 	}
@@ -66,7 +66,11 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 	async function openClone(clone: string, repository: string, context: HostToolContext): Promise<GitClient> {
 		await mkdir(clone, { recursive: true, mode: 0o700 })
 		// The credential travels as `GIT_CONFIG_*` environment, so it never shows in a process list.
-		const git = gitClient({ cwd: clone, env: await options.credentialEnv(context), abortSignal: context.abortSignal })
+		const git = gitClient({
+			workingDirectory: clone,
+			environment: await options.credentialEnvironment(context),
+			abortSignal: context.abortSignal,
+		})
 		await git.init({ bare: true, quiet: true })
 		const url = await options.remoteUrl(repository, context)
 		const remotes = (await git.remotes()).stdout.split('\n').map((line) => line.trim())
@@ -81,9 +85,9 @@ export function gitRemote(options: GitRemoteOptions): GitRemote {
 				await git.remoteSetHead(origin)
 				const defaultBranch = await git.defaultBranch(origin)
 				const exists = branch !== defaultBranch && (await git.hasLocalBranch(branch))
-				const refs = exists ? [defaultBranch, branch] : [defaultBranch]
+				const references = exists ? [defaultBranch, branch] : [defaultBranch]
 				const bundle = await withScratchFile('clone.bundle', async (file) => {
-					await git.bundleCreate(file, refs, { quiet: true })
+					await git.bundleCreate(file, references, { quiet: true })
 					return readFile(file)
 				})
 				return { bundle, defaultBranch, branchExists: exists || branch === defaultBranch }

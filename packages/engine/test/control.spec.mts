@@ -174,7 +174,7 @@ describe.skipIf(process.platform !== 'linux')('the mesh-flow command with an eng
 			errors.mockRestore()
 			process.exitCode = undefined
 		})
-		const command = (...args: string[]) => main(['node', 'mesh-flow', '--home', home, ...args])
+		const command = (...commandArguments: string[]) => main(['node', 'mesh-flow', '--home', home, ...commandArguments])
 
 		// Act
 		await command('deploy', folder, '--app', testAppName)

@@ -57,6 +57,6 @@ export function currentScope(what: string): Scope {
 }
 
 /** Runs `body` in `scope`. */
-export function inScope<T>(scope: Scope, body: () => T): T {
+export function inScope<Result>(scope: Scope, body: () => Result): Result {
 	return storage.run(scope, body)
 }

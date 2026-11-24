@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Sha } from '../checkout/bundle-schemas.mts'
 import type { Checkout } from '../checkout/checkout.mts'
 import { localGit } from '../checkout/local-git.mts'
-import { trackingRef } from '../checkout/tracking.mts'
+import { trackingReference } from '../checkout/tracking.mts'
 import { filePathOf } from '../file-path.mts'
 import { capped } from './capped.mts'
 import { pascalCase, type CodeHostTerms } from './change-request.mts'
@@ -59,7 +59,7 @@ export function readBrief(repository: Checkout, terms: CodeHostTerms, layout: Ch
 		input: z.object({ head: Sha }),
 		action: async ({ head }, { abortSignal }): Promise<ChangeBrief> => {
 			const git = localGit(repository.directory, abortSignal)
-			const target = trackingRef(repository.defaultBranch)
+			const target = trackingReference(repository.defaultBranch)
 			const log = (await git.log('--reverse', `--format=${commitLogFormat}`, `${target}..${head}`)).stdout
 			if (log.trim() === '')
 				throw new Error(`${repository.branch} has no commits on top of ${repository.defaultBranch}: there is nothing to describe.`)

@@ -9,19 +9,19 @@ import { z } from 'zod'
  *
  * @example
  * ```ts
- * const spec: SandboxSpec = {
+ * const specification: SandboxSpecification = {
  * 	image: 'node:26-slim',
  * 	cpus: 2,
  * 	memoryMb: 2048,
  * }
  * ```
  */
-export const SandboxSpec = z.object({
+export const SandboxSpecification = z.object({
 	/** An OCI image reference. On E2B, the backend maps it to a template. */
 	image: z.string().min(1),
 	cpus: z.int().positive(),
 	memoryMb: z.int().positive(),
 	/** Environment for every command in the sandbox. Never put a credential here. */
-	env: z.record(z.string(), z.string()).readonly().optional(),
+	environment: z.record(z.string(), z.string()).readonly().optional(),
 })
-export type SandboxSpec = z.infer<typeof SandboxSpec>
+export type SandboxSpecification = z.infer<typeof SandboxSpecification>

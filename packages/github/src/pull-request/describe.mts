@@ -3,7 +3,7 @@ import type { Agent, Limit } from '@mesh-flow/core'
 import type { Issue } from '../issue/issue.mts'
 import { sameRepositoryName } from '../repository-name.mts'
 import type { Repository } from '../repository/repository.mts'
-import type { PullRequestRef } from '../tools/pull-request-tools.mts'
+import type { PullRequestReference } from '../tools/pull-request-tools.mts'
 import { githubTerms } from './github-terms.mts'
 import { githubLayout } from './layout.mts'
 import { PullRequestText, type PullRequestContent } from './pull-request-text.mts'
@@ -21,7 +21,7 @@ export interface DescribeOptions {
 	 * and description, for the branch as it was last pushed, and no loop runs when they already
 	 * cover that commit. It has to be the pull request of the checkout's branch onto the default branch.
 	 */
-	readonly pullRequest?: PullRequestRef
+	readonly pullRequest?: PullRequestReference
 	/** The limit of the loop. Default: 10 minutes. */
 	readonly limit?: Limit
 }
@@ -87,12 +87,12 @@ export function describe(agent: Agent, repository: Repository, options: Describe
 }
 
 /** How `describe` reads GitHub. */
-const githubDescribe: DescribeCodeHost<Repository, PullRequest, PullRequestRef> = {
+const githubDescribe: DescribeCodeHost<Repository, PullRequest, PullRequestReference> = {
 	terms: githubTerms,
 	layout: githubLayout,
 	text: PullRequestText,
 	sameRepository: sameRepositoryName,
 	findOpen: (repository) => findOpenPullRequest(repository),
-	read: (ref) => pullRequest(ref),
+	read: (reference) => pullRequest(reference),
 	head: (repository, pushed) => branchHeadTool(githubTerms, repository)({ pushed }),
 }

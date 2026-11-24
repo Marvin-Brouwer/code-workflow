@@ -78,7 +78,7 @@ async function openEngine({
 	})
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend: SandboxBackend =
-		sandboxes === undefined ? host : { ...host, create: async (...args) => sandboxes(await host.create(...args)) }
+		sandboxes === undefined ? host : { ...host, create: async (...parameters) => sandboxes(await host.create(...parameters)) }
 	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(

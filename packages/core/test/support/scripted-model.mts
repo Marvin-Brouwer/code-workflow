@@ -38,8 +38,8 @@ export function scriptedModel(steps: readonly FauxResponseStep[]): ScriptedModel
 }
 
 /** A turn that calls one tool. */
-export function callsTool(name: string, args: Parameters<typeof fauxToolCall>[1] = {}): AssistantMessage {
-	return fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: 'toolUse' })
+export function callsTool(name: string, toolArguments: Parameters<typeof fauxToolCall>[1] = {}): AssistantMessage {
+	return fauxAssistantMessage([fauxToolCall(name, toolArguments)], { stopReason: 'toolUse' })
 }
 
 /** A turn that answers with text. */

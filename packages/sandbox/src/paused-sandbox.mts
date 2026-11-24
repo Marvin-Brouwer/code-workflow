@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { BackendName } from './backend-name.mts'
-import { SandboxSpec } from './sandbox-spec.mts'
+import { SandboxSpecification } from './sandbox-specification.mts'
 
 /**
  * A sandbox paused to disk: plain JSON, so the engine can keep it in a run record and read it
@@ -11,7 +11,8 @@ import { SandboxSpec } from './sandbox-spec.mts'
 export const PausedSandbox = z.object({
 	backend: BackendName,
 	id: z.string().min(1),
-	spec: SandboxSpec,
+	/** What the sandbox was made with. */
+	specification: SandboxSpecification,
 	/** The backend's own name for the saved state: a microsandbox snapshot or a gVisor checkpoint. */
 	snapshot: z.string().min(1).optional(),
 })

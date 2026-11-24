@@ -5,7 +5,7 @@ import { BackendLifetime } from '../backend-lifetime.mts'
 import { PausedSandbox } from '../paused-sandbox.mts'
 import type { HeldSandbox, SandboxBackend } from '../sandbox-backend.mts'
 import type { Sandbox } from '../sandbox.mts'
-import { SandboxSpec } from '../sandbox-spec.mts'
+import { SandboxSpecification } from '../sandbox-specification.mts'
 import { E2bSandbox } from './e2b.sandbox.mts'
 
 /** Metadata on every sandbox this package creates, so `list` finds only those. */
@@ -18,8 +18,8 @@ export interface E2bBackendOptions {
 	/** The domain of a self-hosted E2B deployment. Leave it out for E2B Cloud. */
 	readonly domain?: string
 	/**
-	 * The E2B template to use for each image a spec can name. E2B builds sandboxes from templates,
-	 * not from images, and a template fixes CPUs and memory: `cpus` and `memoryMb` in the spec
+	 * The E2B template to use for each image a specification can name. E2B builds sandboxes from templates,
+	 * not from images, and a template fixes CPUs and memory: `cpus` and `memoryMb` in the specification
 	 * aren't used here.
 	 */
 	readonly templates: Readonly<Record<string, string>>
@@ -47,20 +47,20 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 	return {
 		name: 'e2b',
 
-		async create(input: SandboxSpec, signal: AbortSignal): Promise<Sandbox> {
-			const spec = SandboxSpec.parse(input)
-			const template = options.templates[spec.image]
-			if (template === undefined) throw new Error(`No E2B template is configured for the image '${spec.image}'.`)
+		async create(input: SandboxSpecification, signal: AbortSignal): Promise<Sandbox> {
+			const specification = SandboxSpecification.parse(input)
+			const template = options.templates[specification.image]
+			if (template === undefined) throw new Error(`No E2B template is configured for the image '${specification.image}'.`)
 			const sandbox = await E2bSdkSandbox.create(template, {
 				...connection,
 				metadata: ownerMetadata,
-				envs: { ...spec.env },
+				envs: { ...specification.environment },
 				timeoutMs: timeout.to('ms'),
 				lifecycle: { onTimeout: 'pause' },
 				allowInternetAccess: false,
 				signal: lifetime.bind(signal),
 			})
-			return new E2bSandbox(sandbox, spec, lifetime)
+			return new E2bSandbox(sandbox, specification, lifetime)
 		},
 
 		async resume(input: PausedSandbox, signal: AbortSignal): Promise<Sandbox> {
@@ -69,7 +69,7 @@ export function e2bBackend(options: E2bBackendOptions): SandboxBackend {
 			const bound = lifetime.bind(signal)
 			return lifetime.startOnce(paused.id, async () => {
 				const sandbox = await E2bSdkSandbox.connect(paused.id, { ...connection, timeoutMs: timeout.to('ms'), signal: bound })
-				return new E2bSandbox(sandbox, paused.spec, lifetime)
+				return new E2bSandbox(sandbox, paused.specification, lifetime)
 			})
 		},
 

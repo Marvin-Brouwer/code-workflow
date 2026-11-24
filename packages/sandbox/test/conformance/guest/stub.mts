@@ -12,7 +12,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const stateDir = process.env.STATE_DIR ?? '/var/tmp/conformance'
+const stateDirectory = process.env.STATE_DIR ?? '/var/tmp/conformance'
 const memoryMb = Number(process.env.STUB_MEMORY_MB ?? '128')
 
 /** How often to look for the state file again: in milliseconds, since this runs in the sandbox without the workspace's packages. */
@@ -35,8 +35,8 @@ async function waitForFile(file: string): Promise<unknown> {
 }
 
 async function input(): Promise<{ answer: unknown; stack: string | undefined }> {
-	await writeFile(`${stateDir}/waiting.json`, JSON.stringify({ pid: process.pid, token, checksum: checksum() }))
-	const answer = await waitForFile(`${stateDir}/answer.json`)
+	await writeFile(`${stateDirectory}/waiting.json`, JSON.stringify({ pid: process.pid, token, checksum: checksum() }))
+	const answer = await waitForFile(`${stateDirectory}/answer.json`)
 	return { answer, stack: new Error('resumed').stack }
 }
 
@@ -47,8 +47,8 @@ async function loop(): ReturnType<typeof input> {
 
 async function workflow(): Promise<void> {
 	const result = await loop()
-	await writeFile(`${stateDir}/done.json`, JSON.stringify({ pid: process.pid, token, checksum: checksum(), ...result }))
+	await writeFile(`${stateDirectory}/done.json`, JSON.stringify({ pid: process.pid, token, checksum: checksum(), ...result }))
 }
 
-await mkdir(stateDir, { recursive: true })
+await mkdir(stateDirectory, { recursive: true })
 await workflow()

@@ -4,7 +4,7 @@ import { toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
 import type { GitClient } from '@mesh-flow/git'
 import { withScratchFile } from '../scratch-file.mts'
 import { localGit } from './local-git.mts'
-import { origin, trackingRef } from './tracking.mts'
+import { origin, trackingReference } from './tracking.mts'
 
 /**
  * A checkout of a code host's repository in the workspace, on a branch. In a prompt it renders as
@@ -100,12 +100,12 @@ function checkoutOf(name: string, branch: string, defaultBranch: string, folderP
  * something else of the workflow's, which is never touched.
  */
 async function existingCheckout(git: GitClient): Promise<'absent' | 'checkout' | 'broken' | 'other'> {
-	const present = await stat(git.cwd).then(
+	const present = await stat(git.workingDirectory).then(
 		() => true,
 		() => false,
 	)
 	if (!present) return 'absent'
-	const hasGitDirectory = await stat(path.join(git.cwd, '.git')).then(
+	const hasGitDirectory = await stat(path.join(git.workingDirectory, '.git')).then(
 		() => true,
 		() => false,
 	)
@@ -113,13 +113,13 @@ async function existingCheckout(git: GitClient): Promise<'absent' | 'checkout' |
 	// `.git` as git names it: the folder is a repository of its own, not a folder in some other one.
 	const gitDirectory = await git.revParse('--git-dir').run()
 	const works = gitDirectory.ok && gitDirectory.stdout.trim() === '.git'
-	return works && (await git.hasRef('HEAD')) ? 'checkout' : 'broken'
+	return works && (await git.hasReference('HEAD')) ? 'checkout' : 'broken'
 }
 
 /** Puts the checkout on `branch`: as it is when it's there, made from what the remote has otherwise. */
 async function switchTo(git: GitClient, branch: string, defaultBranch: string): Promise<void> {
 	if ((await git.currentBranch()) === branch) return
-	const tracked = trackingRef(branch)
-	const from = (await git.hasRef(tracked)) ? tracked : trackingRef(defaultBranch)
+	const tracked = trackingReference(branch)
+	const from = (await git.hasReference(tracked)) ? tracked : trackingReference(defaultBranch)
 	await git.checkoutOrCreate(branch, from)
 }

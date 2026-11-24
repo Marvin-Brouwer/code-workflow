@@ -82,7 +82,7 @@ function gatewayChannel(gateway: Gateway, runId: string, lifetime: AbortSignal):
 }
 
 /** A run of `body` as a workflow on `gateway`, in a workspace of its own. */
-export interface TestRun<T> {
+export interface TestRun<Result> {
 	/** The id the gateway knows the run by, which the connector signs its posts with. */
 	readonly runId: string
 	readonly workspace: string
@@ -92,7 +92,7 @@ export interface TestRun<T> {
 	readonly controller: AbortController
 	readonly outcome: Promise<RunOutcome>
 	/** What the body returned, or why it threw. */
-	readonly result: Promise<T>
+	readonly result: Promise<Result>
 }
 
 /** How a test run answers what it asks a person. */
@@ -113,11 +113,11 @@ export function askedForInput(messages: readonly RuntimeMessage[]): boolean {
  * wake at once, so a polling loop runs on, and every `input` request with the next of `inputs`.
  * The run is stopped when the test ends.
  */
-export async function runOnGateway<T>(
+export async function runOnGateway<Result>(
 	gateway: Gateway,
-	body: (context: { abortSignal: AbortSignal }) => Promise<T>,
+	body: (context: { abortSignal: AbortSignal }) => Promise<Result>,
 	{ inputs = [], onInput }: TestRunOptions = {},
-): Promise<TestRun<T>> {
+): Promise<TestRun<Result>> {
 	const inputQueue = [...inputs]
 	let asked = 0
 	const workspace = path.join(await temporaryDirectory(), 'workspace')
@@ -158,7 +158,7 @@ export async function runOnGateway<T>(
 	}
 	const runId = `run-${String(Date.now())}`
 	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, controller.signal)
-	const { promise: result, resolve, reject } = Promise.withResolvers<T>()
+	const { promise: result, resolve, reject } = Promise.withResolvers<Result>()
 	result.catch(() => undefined)
 	const definition = workflow('test', async ({ abortSignal }) => {
 		try {

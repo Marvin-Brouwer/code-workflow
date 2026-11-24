@@ -2,11 +2,11 @@ import { z } from 'zod'
 import { RepositoryName } from '../repository-name.mts'
 
 /** Names an issue: its repository and number. What a workflow takes as a parameter. */
-export const IssueRef = z.object({
+export const IssueReference = z.object({
 	repository: RepositoryName,
 	number: z.int().positive(),
 })
-export type IssueRef = z.infer<typeof IssueRef>
+export type IssueReference = z.infer<typeof IssueReference>
 
 /** An issue as GitHub has it. */
 export const IssueData = z.object({
@@ -30,7 +30,7 @@ export type PostedComment = z.infer<typeof PostedComment>
 export const getIssue = {
 	name: 'githubIssue',
 	description: 'Reads a GitHub issue',
-	input: IssueRef,
+	input: IssueReference,
 	output: IssueData,
 }
 
@@ -38,7 +38,7 @@ export const getIssue = {
 export const commentOnIssue = {
 	name: 'githubCommentIssue',
 	description: 'Comments on a GitHub issue or pull request. With a key, a later comment with the same key updates the earlier one.',
-	input: IssueRef.extend({ body: z.string().min(1), key: z.string().min(1).optional() }),
+	input: IssueReference.extend({ body: z.string().min(1), key: z.string().min(1).optional() }),
 	output: PostedComment,
 }
 
@@ -46,7 +46,7 @@ export const commentOnIssue = {
 export const labelIssue = {
 	name: 'githubLabelIssue',
 	description: 'Adds labels to a GitHub issue',
-	input: IssueRef.extend({ labels: z.array(z.string().min(1)).min(1) }),
+	input: IssueReference.extend({ labels: z.array(z.string().min(1)).min(1) }),
 	output: z.object({ labels: z.array(z.string()) }),
 }
 
@@ -54,6 +54,6 @@ export const labelIssue = {
 export const closeIssue = {
 	name: 'githubCloseIssue',
 	description: 'Closes a GitHub issue',
-	input: IssueRef,
+	input: IssueReference,
 	output: z.object({ state: z.enum(['open', 'closed']) }),
 }

@@ -21,8 +21,8 @@ export type Delivery =
 /** How the runtime starts: where, with what environment, and the signal bounding the start. */
 export interface StartRuntimeOptions {
 	readonly signal: AbortSignal
-	readonly cwd: string
-	readonly env: Readonly<Record<string, string>>
+	readonly workingDirectory: string
+	readonly environment: Readonly<Record<string, string>>
 }
 
 /** How long one poll waits for news, so a poll is a short call and not an open connection. */
@@ -66,8 +66,8 @@ export class SandboxChannel {
 		const recordPid = 'pidFile=$1; shift; echo $$ > "$pidFile"; exec "$@"'
 		await this.#sandbox.startInBackground(['sh', '-c', recordPid, 'sh', this.#layout.pidFile, ...command], {
 			signal: options.signal,
-			cwd: options.cwd,
-			env: { ...options.env, [mailboxEnvironmentVariable]: this.#layout.directory },
+			workingDirectory: options.workingDirectory,
+			environment: { ...options.environment, [mailboxEnvironmentVariable]: this.#layout.directory },
 			logFile: this.#layout.logFile,
 		})
 	}

@@ -15,15 +15,15 @@ export type SchemaField = {
 )
 
 const describedProperty = { title: z.string().optional(), description: z.string().optional() }
-const Options = z.array(z.string()).min(1)
+const EnumOptions = z.array(z.string()).min(1)
 
 /** The property schemas a form has a field for: what `input.text/yesNo/choice/choices` make, and numbers. */
 const FlatProperty = z.union([
 	z
-		.object({ type: z.literal('string'), enum: Options, ...describedProperty })
+		.object({ type: z.literal('string'), enum: EnumOptions, ...describedProperty })
 		.transform((property) => ({ ...property, kind: 'choice' as const })),
 	z
-		.object({ type: z.literal('array'), items: z.object({ type: z.literal('string'), enum: Options }), ...describedProperty })
+		.object({ type: z.literal('array'), items: z.object({ type: z.literal('string'), enum: EnumOptions }), ...describedProperty })
 		.transform((property) => ({ ...property, kind: 'choices' as const, enum: property.items.enum })),
 	z
 		.object({ type: z.enum(['string', 'number', 'integer', 'boolean']), enum: z.undefined().optional(), ...describedProperty })
