@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import { modelsOfKind } from './model-apis.mts'
 import { providerCredential } from './provider-credential.mts'
-import { isSendable, unsendableKindMessage } from './undeclared-models.mts'
+import { isSendable, unsendableKindMessage } from './sendable-kind.mts'
 import { webOrigin } from './web-origin.mts'
 
 /**
@@ -37,7 +37,7 @@ export function providerOrigin(provider: ModelProviderDescription): string | und
  */
 export function noOriginMessage(provider: ModelProviderDescription): string {
 	if (!isSendable(provider)) return unsendableKindMessage(provider)
-	return `Provider ${provider.name} has no base URL to tie its key to: give it a \`baseUrl\` in \`modelProviders\`.`
+	return `Provider ${provider.name} has no base URL to tie its key to: give it an http(s) \`baseUrl\` in \`modelProviders\`.`
 }
 
 /** Stores `provider`'s key, with the origin the config sends it to now. Throws, with {@link noOriginMessage}, when it has none. */

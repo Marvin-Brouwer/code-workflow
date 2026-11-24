@@ -78,7 +78,7 @@ describe('the provider settings', () => {
 		// Assert
 		await expect(setting).rejects.toMatchObject({
 			code: 'invalid',
-			message: 'Provider azure has no base URL to tie its key to: give it a `baseUrl` in `modelProviders`.',
+			message: 'Provider azure has no base URL to tie its key to: give it an http(s) `baseUrl` in `modelProviders`.',
 		})
 	})
 
