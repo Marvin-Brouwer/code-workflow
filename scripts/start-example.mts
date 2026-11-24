@@ -20,16 +20,31 @@ const [example, ...serveArguments] = process.argv.slice(2)
 if (example === undefined) throw new Error('Name the example app: node scripts/start-example.mts github-issue')
 const appDirectory = path.join(root, 'examples', example)
 
-/** Runs a command to its end, with its output on this terminal. Rejects when it fails. */
-function run(command: string, commandArguments: readonly string[], workingDirectory: string): Promise<void> {
+/** Runs a child to its end, with its output on this terminal. Rejects when it fails. */
+function waitFor(child: ChildProcess, commandLine: string): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, commandArguments, { cwd: workingDirectory, stdio: 'inherit', shell: process.platform === 'win32' })
 		child.on('error', reject)
 		child.on('exit', (code) => {
 			if (code === 0) resolve()
-			else reject(new Error(`${command} ${commandArguments.join(' ')} failed with ${String(code)}.`))
+			else reject(new Error(`${commandLine} failed with ${String(code)}.`))
 		})
 	})
+}
+
+/** Runs `mesh-flow` with `commandArguments` in `workingDirectory` to its end. */
+function runMeshFlow(commandArguments: readonly string[], workingDirectory: string): Promise<void> {
+	const child = spawn(process.execPath, [cli, '--home', home, ...commandArguments], { cwd: workingDirectory, stdio: 'inherit' })
+	return waitFor(child, `mesh-flow ${commandArguments.join(' ')}`)
+}
+
+/**
+ * Runs pnpm with `commandArguments` in the repository root to its end. pnpm is a `.cmd` on Windows,
+ * which only starts through a shell, and a shell takes one command line: the arguments are our own,
+ * without spaces or quotes.
+ */
+function runPnpm(commandArguments: readonly string[]): Promise<void> {
+	const commandLine = ['pnpm', ...commandArguments].join(' ')
+	return waitFor(spawn(commandLine, { cwd: root, stdio: 'inherit', shell: true }), commandLine)
 }
 
 /** Starts `mesh-flow` with `commandArguments` in `workingDirectory`, its output lines prefixed with `name`. */
@@ -77,9 +92,8 @@ async function connectorsOf(directory: string): Promise<string[]> {
 	return connectors
 }
 
-await run('pnpm', ['--filter', `@example/${example}...`, '--filter', '@mesh-flow/ui...', 'build'], root)
-for (const connector of await connectorsOf(appDirectory))
-	await run(process.execPath, [cli, '--home', home, 'connector', 'add', connector], appDirectory)
+await runPnpm(['--filter', `@example/${example}...`, '--filter', '@mesh-flow/ui...', 'build'])
+for (const connector of await connectorsOf(appDirectory)) await runMeshFlow(['connector', 'add', connector], appDirectory)
 
 // Ctrl+C reaches every process on the terminal: each stops itself, and this waits for them.
 process.on('SIGINT', () => undefined)
