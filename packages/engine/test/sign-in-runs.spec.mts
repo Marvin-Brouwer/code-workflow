@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/app/app-store.mts'
+import { openDeployment } from '../src/app/deployment.mts'
 import type { SignInContext } from '../src/connectors/load-connectors.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns } from '../src/engine/sign-ins.mts'
@@ -20,7 +20,7 @@ const promptly = duration.of('5s')
 /** An engine on the host backend whose connectors are `cloud`, signing in with `signIn`, closed when the test ends. */
 async function openEngine(signIn: (context: SignInContext) => Promise<void>, home?: string) {
 	const directory = home ?? (await temporaryDirectory())
-	const app = await openAppStore(path.join(directory, 'app'), abortSignal)
+	const app = await openDeployment(path.join(directory, 'app'), abortSignal)
 	const engine = await Engine.open(
 		{
 			backend: hostBackend(path.join(directory, 'sandboxes')),

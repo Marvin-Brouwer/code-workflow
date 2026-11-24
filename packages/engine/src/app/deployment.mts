@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { replaceFile } from '@mesh-flow/gateway'
@@ -12,7 +12,7 @@ import { EngineError } from '../engine/engine-error.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { copyTarball } from './copy-tarball.mts'
 
-/** One deployed version of the app: its tarball and what it declares. Versions never change. */
+/** One deployed version of the app: its tarball and what it declares. A version never changes. */
 export interface AppVersion {
 	/** The first characters of the tarball's SHA-256: the same build deploys as the same version. */
 	readonly version: string
@@ -21,12 +21,20 @@ export interface AppVersion {
 	readonly tarball: string
 }
 
-/** The app deployed in the engine's home: one current version, and the versions before it. */
-export interface AppStore {
+/**
+ * The app deployed in the engine's home: its current version, kept on disk so it's there after a
+ * restart. Older versions are removed once no run copies them.
+ */
+export interface Deployment {
 	/** Makes the built app packed in `tarball` the current version. */
 	readonly deploy: (tarball: string, abortSignal: AbortSignal) => Promise<AppVersion>
 	/** The current version, if the app was ever deployed. */
 	readonly current: () => AppVersion | undefined
+	/**
+	 * Calls `use` with the current version, and keeps that version on disk until what `use` returns
+	 * settles, also when a deploy makes another version current meanwhile. For copying it.
+	 */
+	readonly withCurrent: <Result>(use: (current: AppVersion | undefined) => Promise<Result>) => Promise<Result>
 	/** Waits for the writes under way and refuses new ones, so the engine's home can be let go. */
 	readonly close: () => Promise<void>
 }
@@ -44,22 +52,27 @@ const tarballFile = 'app.tgz'
 const currentFile = 'current'
 
 /**
- * The app in `root`: one folder per version, and a `current` file that names the version that
- * runs. Loads what's there, as long as `openSignal` allows; a current version that can't be read is
- * reported to `log` and left out, so the engine still starts and a deploy fixes it. Writes go one
- * after another.
+ * The app in `root`: a folder for the current version, and a `current` file that names it. Loads
+ * what's there, as long as `openSignal` allows; a current version that can't be read is reported to
+ * `log` and left out, so the engine still starts and a deploy fixes it. Writes go one after another.
+ *
+ * A deploy writes the new version's folder whole before `current` names it, then removes the other
+ * folders that no `withCurrent` holds; a folder held is removed once it's let go. A removal that
+ * fails is reported to `log` and tried again after the next deploy, or the next open.
  */
-export async function openAppStore(
+export async function openDeployment(
 	root: string,
 	openSignal: AbortSignal,
 	log: (message: string) => void = () => undefined,
-): Promise<AppStore> {
+): Promise<Deployment> {
 	await mkdir(root, { recursive: true })
 	openSignal.throwIfAborted()
 	let current = await loadCurrent(root).catch((error: unknown) => {
 		log(`Left out the app: ${messageOf(error)} Deploy it again.`)
 		return undefined
 	})
+	/** How many `withCurrent` calls hold each version. */
+	const holders = new Map<string, number>()
 	let writing: Promise<unknown> = Promise.resolve()
 	let closed = false
 	const queued = <Result,>(write: () => Promise<Result>): Promise<Result> => {
@@ -68,6 +81,19 @@ export async function openAppStore(
 		writing = next.catch(() => undefined)
 		return next
 	}
+	/** Removes the version folders that aren't current and that nothing holds. Never throws: what's left is tried again later. */
+	const removeOldVersions = async () => {
+		try {
+			for (const entry of await readdir(root, { withFileTypes: true })) {
+				if (!entry.isDirectory() || entry.name === current?.version || holders.has(entry.name)) continue
+				await rm(path.join(root, entry.name), { recursive: true, force: true })
+			}
+		} catch (error) {
+			log(`Removing an older version in ${root} failed, so it's tried again later: ${messageOf(error)}`)
+		}
+	}
+	// Removed when a crash or a failed removal left them, before anything can hold one.
+	if (current !== undefined) await removeOldVersions()
 	return Object.freeze({
 		deploy: (tarball, abortSignal) =>
 			queued(async () => {
@@ -76,7 +102,7 @@ export async function openAppStore(
 				const folder = path.join(root, version)
 				const manifest = await manifestIn(tarball)
 				abortSignal.throwIfAborted()
-				// A version never changes, and runs may be copying it right now: a redeploy of the same build leaves it be.
+				// Runs may be copying it right now: a redeploy of the same build leaves it be.
 				if (!(await versionIsComplete(folder))) {
 					await mkdir(folder, { recursive: true })
 					await copyTarball(tarball, path.join(folder, tarballFile), abortSignal)
@@ -87,14 +113,31 @@ export async function openAppStore(
 				await replaceFile(path.join(root, currentFile), version, { abortSignal })
 				const deployed: AppVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
 				current = deployed
+				await removeOldVersions()
 				return deployed
 			}),
 		current: () => current,
+		withCurrent: async (use) => {
+			// Taken before anything is awaited, so a deploy that lands meanwhile leaves this version be.
+			const held = current
+			if (held === undefined) return use(undefined)
+			holders.set(held.version, (holders.get(held.version) ?? 0) + 1)
+			try {
+				return await use(held)
+			} finally {
+				const left = (holders.get(held.version) ?? 1) - 1
+				if (left > 0) holders.set(held.version, left)
+				else {
+					holders.delete(held.version)
+					if (held.version !== current?.version && !closed) void queued(removeOldVersions)
+				}
+			}
+		},
 		close: async () => {
 			closed = true
 			await writing
 		},
-	} satisfies AppStore)
+	} satisfies Deployment)
 }
 
 /** Whether a version's folder holds its tarball and its manifest, which is written last. */

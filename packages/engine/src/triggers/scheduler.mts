@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
-import type { AppVersion } from '../app/app-store.mts'
+import type { AppVersion } from '../app/deployment.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'

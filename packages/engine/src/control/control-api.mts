@@ -2,7 +2,7 @@ import { TriggerReference } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
-import { noAppMessage, type AppStore, type AppVersion } from '../app/app-store.mts'
+import { noAppMessage, type Deployment, type AppVersion } from '../app/deployment.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 import { engineEventStream } from './engine-event-stream.mts'
@@ -24,7 +24,7 @@ export const DeployBody = z.object({ tarball: z.string().min(1) })
 
 /** The deployed app, and what to do when a new version is deployed. */
 export interface ControlApp {
-	readonly store: AppStore
+	readonly deployment: Deployment
 	/** Called after a version was deployed, such as to arm its schedules. */
 	readonly afterDeploy: () => void
 }
@@ -106,19 +106,19 @@ export function controlApi(engine: Engine, { app, connectors = [] }: ControlApiO
 	})
 
 	if (app !== undefined) {
-		const { store, afterDeploy } = app
+		const { deployment, afterDeploy } = app
 		api.get('/app', (context) => {
-			const current = store.current()
+			const current = deployment.current()
 			return context.json(current === undefined ? null : shownApp(current))
 		})
 		api.get('/app/missing', async (context) => {
-			const current = store.current()
+			const current = deployment.current()
 			if (current === undefined) throw new EngineError('not-found', noAppMessage)
 			return context.json(await engine.missingSettings(current.manifest.description, context.req.raw.signal))
 		})
 		api.put('/app', async (context) => {
 			const { tarball } = DeployBody.parse(await context.req.json())
-			const deployedVersion = await store.deploy(tarball, context.req.raw.signal)
+			const deployedVersion = await deployment.deploy(tarball, context.req.raw.signal)
 			afterDeploy()
 			const missing = await engine.missingSettings(deployedVersion.manifest.description, context.req.raw.signal)
 			return context.json({ ...shownApp(deployedVersion), missing })

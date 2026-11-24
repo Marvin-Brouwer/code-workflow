@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { duration } from '@mesh-flow/duration'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/app/app-store.mts'
+import { openDeployment } from '../src/app/deployment.mts'
 import { Engine } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { openRunStore, runDirectory, type RunStore } from '../src/runs/run-store.mts'
@@ -32,7 +32,7 @@ async function openEngine({ home, wrap = (backend) => backend, wrapStore = (stor
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend = { ...wrap(host), root: host.root }
 	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
-	const app = await openAppStore(path.join(directory, 'app'), signal)
+	const app = await openDeployment(path.join(directory, 'app'), signal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, app, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))

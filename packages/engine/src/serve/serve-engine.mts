@@ -5,7 +5,7 @@ import { getRequestListener } from '@hono/node-server'
 import { duration } from '@mesh-flow/duration'
 import { openGateway, type CredentialStore, type GatewayHome } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
-import { openAppStore, type AppStore } from '../app/app-store.mts'
+import { openDeployment, type Deployment } from '../app/deployment.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
 import type { ShownConnector } from '../control/shown-connector.mts'
@@ -59,7 +59,7 @@ export interface ServeEngineOptions {
 export interface ServedEngine {
 	readonly engine: Engine
 	/** The deployed app, in the home's `app` folder. */
-	readonly app: AppStore
+	readonly app: Deployment
 	/** The gateway's credentials and providers, in the home's `gateway` folder. */
 	readonly gateway: GatewayHome
 	readonly socketPath: string
@@ -92,7 +92,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 
 	let engine: Engine
-	let app: AppStore
+	let app: Deployment
 	let gatewayHome: GatewayHome
 	let shownConnectors: ShownConnector[]
 	try {
@@ -111,7 +111,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			tools: connectors.flatMap((connector) => connector.tools),
 			registries: Object.fromEntries(connectors.flatMap(({ name, registries }) => (registries === undefined ? [] : [[name, registries]]))),
 		})
-		app = await openAppStore(path.join(options.home, 'app'), options.abortSignal, log)
+		app = await openDeployment(path.join(options.home, 'app'), options.abortSignal, log)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
@@ -137,7 +137,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	armSchedules()
 	const api = getRequestListener(
 		controlApi(engine, {
-			app: { store: app, afterDeploy: armSchedules },
+			app: { deployment: app, afterDeploy: armSchedules },
 			connectors: shownConnectors,
 		}).fetch,
 	)

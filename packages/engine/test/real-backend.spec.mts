@@ -8,7 +8,7 @@ import { keyFile, openCredentialStore, openGateway, openProviderSettings } from 
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/app/app-store.mts'
+import { openDeployment } from '../src/app/deployment.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { finishedStatuses } from '../src/runs/run-record.mts'
@@ -92,7 +92,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			// Arrange
 			const home = await temporaryDirectory()
 			const store = () => openRunStore(path.join(home, 'runs'))
-			const app = await openAppStore(path.join(home, 'app'), signal)
+			const app = await openDeployment(path.join(home, 'app'), signal)
 			await deployTestApp(app, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
 			const first = await Engine.open({ backend: await openBackend(), store: store(), app }, signal)
 			onTestFinished(() => first.close(deadlines()))
@@ -155,7 +155,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 				tools: [],
 				fetch,
 			})
-			const app = await openAppStore(path.join(home, 'app'), signal)
+			const app = await openDeployment(path.join(home, 'app'), signal)
 			const built = path.join(home, 'built')
 			await buildApp({ directory: restoringApp, out: built, abortSignal: buildTimeout.toAbortSignal() })
 			await withPackedApp(built, (tarball) => app.deploy(tarball, signal), signal)

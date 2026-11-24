@@ -76,7 +76,7 @@ mesh-flow dev      # builds and deploys again on every change (not in node_modul
 
 `build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. An engine runs one app: a deploy replaces the current version, whatever app it was built from. Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
-The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` and `resume` run the code it first ran, also after a new deploy.
+A version is named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record when it starts, so `restart` and `resume` run the code it first ran, also after a new deploy. The engine keeps only the current version in its home, and removes an older one once no run is copying it.
 
 ```bash
 mesh-flow app        # 3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
@@ -168,13 +168,13 @@ mesh-flow ui
 ### Embed the engine
 
 ```ts
-import { Engine, openAppStore, openRunStore } from '@mesh-flow/engine'
+import { Engine, openDeployment, openRunStore } from '@mesh-flow/engine'
 import { openGateway, openGatewayHome } from '@mesh-flow/gateway'
 import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const app = await openAppStore('/var/lib/my-app/mesh-flow/app', abortSignal)
+const app = await openDeployment('/var/lib/my-app/mesh-flow/app', abortSignal)
 await app.deploy('/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
 const gatewayHome = await openGatewayHome('/var/lib/my-app/mesh-flow/gateway', abortSignal)
 const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials, providers: gatewayHome.providers })

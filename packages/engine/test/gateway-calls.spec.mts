@@ -14,7 +14,7 @@ import {
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
-import { openAppStore } from '../src/app/app-store.mts'
+import { openDeployment } from '../src/app/deployment.mts'
 import type { ConnectorSettingsCheck } from '../src/engine/connector-settings-check.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns, type SignIns } from '../src/engine/sign-ins.mts'
@@ -79,7 +79,7 @@ async function openEngine({
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend: SandboxBackend =
 		sandboxes === undefined ? host : { ...host, create: async (...parameters) => sandboxes(await host.create(...parameters)) }
-	const app = await openAppStore(path.join(directory, 'app'), abortSignal)
+	const app = await openDeployment(path.join(directory, 'app'), abortSignal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(
 		{

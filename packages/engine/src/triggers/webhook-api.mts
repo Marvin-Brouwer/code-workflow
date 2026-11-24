@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { AppVersion } from '../app/app-store.mts'
+import type { AppVersion } from '../app/deployment.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { EngineError } from '../engine/engine-error.mts'
 import { messageOf } from '../errors.mts'

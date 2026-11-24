@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import type { AppVersion } from '../src/app/app-store.mts'
+import type { AppVersion } from '../src/app/deployment.mts'
 import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
