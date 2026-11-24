@@ -41,5 +41,5 @@ export const ModelProviderDescription = z
 export type ModelProviderDescription = z.infer<typeof ModelProviderDescription>
 
 /** An agent's model ids, in the order they're tried: the first one a provider with a key offers is used. */
-export const ModelChoice = z.array(z.string().min(1)).min(1)
-export type ModelChoice = z.infer<typeof ModelChoice>
+export const ModelConfiguration = z.array(z.string().min(1)).min(1)
+export type ModelConfiguration = z.infer<typeof ModelConfiguration>
