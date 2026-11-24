@@ -51,6 +51,34 @@ describe('the provider settings', () => {
 		expect(listed).toEqual([{ ...moved, hasKey: false, keySetFor: 'https://llm-proxy.example.com' }])
 	})
 
+	test('lists a provider without an origin, and a key stored without one, as having no key', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		await home.credentials.set('provider/anthropic', 'sk-secret', abortSignal)
+		const declared = [anthropic, { name: 'azure', kind: 'azure' }]
+
+		// Act
+		const listed = await listProviders(home, declared, abortSignal)
+
+		// Assert
+		expect(listed).toEqual([
+			{ ...anthropic, hasKey: false },
+			{ name: 'azure', kind: 'azure', hasKey: false },
+		])
+	})
+
+	test('refuses a key for a provider without an origin to tie it to', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		const azure = { name: 'azure', kind: 'azure' }
+
+		// Act
+		const setting = setProviderKey(home, [azure], 'azure', 'sk-secret', abortSignal)
+
+		// Assert
+		await expect(setting).rejects.toMatchObject({ code: 'invalid' })
+	})
+
 	test("refuses a key for a provider the config doesn't declare", async () => {
 		// Arrange
 		const home = await gatewayHome()

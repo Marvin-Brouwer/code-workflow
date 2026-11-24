@@ -8,7 +8,7 @@ function withoutTrailingSlash(url: string): string {
 }
 
 /** The provider's base URL for a model: the config's override, or pi-ai's. */
-function baseUrlOf({ provider, model }: OfferedModel): string {
+export function baseUrlOf({ provider, model }: OfferedModel): string {
 	return withoutTrailingSlash(provider.baseUrl ?? model.baseUrl)
 }
 

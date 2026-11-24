@@ -28,10 +28,10 @@ import type { ResolveRegistryTarget } from './packages/connector-registry.mts'
 import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/fetch-from-connector-registry.mts'
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
-import { providerKeyOf, providerOrigin, type ProviderKey } from './providers/provider-key.mts'
+import { providerKeyOf, providerOrigin, webOrigin, type ProviderKey } from './providers/provider-key.mts'
 import { chosenModel, offeredModel, offeringProvider, type OfferedModel, type ServedModels } from './providers/offering-provider.mts'
 import { providerModels, type ProviderModels } from './providers/provider-models.mts'
-import { sendModelRequest } from './providers/send-model-request.mts'
+import { baseUrlOf, sendModelRequest } from './providers/send-model-request.mts'
 import { notOfferedMessage } from './providers/undeclared-models.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
@@ -199,7 +199,7 @@ function unavailableMessage(
 ): MissingSetting {
 	for (const modelId of modelIds) {
 		for (const provider of providers) {
-			if (keys.get(provider.name)?.status !== 'set' || offeredModel(provider, modelId) === undefined) continue
+			if (!hasKeyIn(keys)(provider.name) || offeredModel(provider, modelId) === undefined) continue
 			const models = listed.get(provider.name)
 			if (models?.source === 'failed')
 				return { message: `${models.reason} It may offer model ${modelId}: try again once it answers.`, fix: { kind: 'other' } }
@@ -218,7 +218,7 @@ function unavailableMessage(
 	const fix: SettingFix = { kind: 'provider-key', provider: name }
 	if (key?.status === 'elsewhere')
 		return {
-			message: `Provider ${name}'s key was set for ${key.origin}, but the config now sends it to ${providerOrigin(keyless.provider) ?? 'another address'}, so it isn't used there. ${setKeyHint(name)}`,
+			message: `Provider ${name}'s key was set for ${key.origin}, but the config now sends it to ${originText(keyless.provider)}, so it isn't used there. ${setKeyHint(name)}`,
 			fix,
 		}
 	return { message: `Provider ${name} offers model ${keyless.model.id} but has no API key. ${setKeyHint(name)}`, fix }
@@ -243,6 +243,11 @@ function servedModelsFrom(
 			return use === 'loop' && provider.kind === openAiCompatibleKind ? [[provider.name, []]] : []
 		}),
 	)
+}
+
+/** Where the config sends `provider`'s requests, for a message: its origin, or a description for a kind the gateway doesn't know. */
+function originText(provider: ModelProviderDescription): string {
+	return providerOrigin(provider) ?? "an address the gateway doesn't know"
 }
 
 /** Whether a provider, by name, has a key for where the config sends it, in `keys`. */
@@ -416,9 +421,9 @@ export function openGateway(options: GatewayOptions): Gateway {
 	): Promise<ReadonlyMap<string, ProviderModels>> => {
 		const listed = await Promise.all(
 			providers.map(async (provider): Promise<[string, ProviderModels][]> => {
-				const known = keys.get(provider.name)
-				if (known?.status !== 'set') return []
-				const { key } = known
+				const providerKey = keys.get(provider.name)
+				if (providerKey?.status !== 'set') return []
+				const { key } = providerKey
 				const models =
 					listings === undefined
 						? await providerModels(provider, { key, fetchFromHost }, abortSignal)
@@ -460,13 +465,16 @@ export function openGateway(options: GatewayOptions): Gateway {
 		abortSignal: AbortSignal,
 	) => {
 		const choice = chosenModel(providers, request.provider, request.model)
-		const known = await providerKeyOf(options.credentials, choice.provider, abortSignal)
+		const providerKey = await providerKeyOf(options.credentials, choice.provider, abortSignal)
 		// Checked again for each call: the key only goes where it was set for.
-		if (known.status !== 'set')
+		if (providerKey.status !== 'set')
 			throw new Error(
-				`Provider ${choice.provider.name} has no API key for ${providerOrigin(choice.provider) ?? 'its address'}. ${setKeyHint(choice.provider.name)}`,
+				`Provider ${choice.provider.name} has no API key for ${originText(choice.provider)}. ${setKeyHint(choice.provider.name)}`,
 			)
-		const { key } = known
+		// The key goes only to the origin it was set for, also when a model is on another than its kind's.
+		if (webOrigin(baseUrlOf(choice)) !== providerOrigin(choice.provider))
+			throw new Error(`Model ${choice.model.id} of provider ${choice.provider.name} isn't at the origin its key was set for.`)
+		const { key } = providerKey
 		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: fetchFromHost, abortSignal })
 		const used = usageOf(response.body, choice.model)
 		await states.update(

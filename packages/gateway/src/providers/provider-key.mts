@@ -16,16 +16,29 @@ export type ProviderKey =
 	| { readonly status: 'missing' }
 	| { readonly status: 'elsewhere'; readonly origin: string }
 
-/**
- * Where the config sends `provider`'s requests: the origin of its base URL, or of its kind's. `undefined`
- * for a kind the gateway doesn't know, which gets no key.
- */
-export function providerOrigin(provider: ModelProviderDescription): string | undefined {
-	const baseUrl = provider.baseUrl ?? (provider.kind === openAiCompatibleKind ? undefined : modelsOfKind(provider.kind)?.[0]?.baseUrl)
-	return baseUrl === undefined ? undefined : new URL(baseUrl).origin
+/** The schemes a provider's key may be sent over: other schemes have no origin to tie a key to. */
+const webSchemes: readonly string[] = ['https:', 'http:']
+
+/** The origin of `url`, or `undefined` when it isn't a web URL, such as pi-ai's empty base URL of a kind that needs one. */
+export function webOrigin(url: string): string | undefined {
+	const parsed = URL.parse(url)
+	return parsed !== null && webSchemes.includes(parsed.protocol) ? parsed.origin : undefined
 }
 
-/** Sets `provider`'s key, for where the config sends it now. Throws for a kind the gateway doesn't know. */
+/**
+ * Where the config sends `provider`'s requests: the origin of its base URL, or of its kind's when
+ * all of the kind's models are on one. `undefined` when there is no single web origin, such as for
+ * a kind the gateway doesn't know or one whose base URL the config has to give: it gets no key.
+ */
+export function providerOrigin(provider: ModelProviderDescription): string | undefined {
+	if (provider.baseUrl !== undefined) return webOrigin(provider.baseUrl)
+	if (provider.kind === openAiCompatibleKind) return undefined
+	const origins = new Set((modelsOfKind(provider.kind) ?? []).map((model) => webOrigin(model.baseUrl)))
+	const [origin, ...others] = origins
+	return others.length === 0 ? origin : undefined
+}
+
+/** Stores `provider`'s key, with the origin the config sends it to now. Throws for a kind the gateway doesn't know. */
 export async function storeProviderKey(
 	credentials: CredentialStore,
 	provider: ModelProviderDescription,
@@ -38,7 +51,10 @@ export async function storeProviderKey(
 	await credentials.set(providerCredential(provider.name), JSON.stringify({ key, origin }), abortSignal)
 }
 
-/** `provider`'s key, if it has one for where the config sends it now. */
+/**
+ * `provider`'s key, if it has one for where the config sends it now. A key stored without an
+ * origin, as before keys were tied to one, counts as missing.
+ */
 export async function providerKeyOf(
 	credentials: CredentialReader,
 	provider: ModelProviderDescription,
