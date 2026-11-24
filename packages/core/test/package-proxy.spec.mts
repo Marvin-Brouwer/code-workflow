@@ -260,7 +260,7 @@ function plainRequest(proxyUrl: string, target: string, method = 'GET'): Promise
  */
 const onWindows = process.platform === 'win32'
 
-describe.skipIf(onWindows)('package proxy', () => {
+describe.skipIf(onWindows)('package proxy', { repeats: 15 }, () => {
 	test('npm installs a package through it, from what the gateway fetched', { timeout: duration.of('1m').to('ms') }, async () => {
 		// Arrange
 		const { packument, tarball, tarballPath } = await fakeRegistry()
