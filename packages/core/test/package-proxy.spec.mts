@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process'
+import { execFile, spawnSync, type ExecException } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
@@ -140,25 +140,58 @@ async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tar
 	return { packument, tarball, tarballPath }
 }
 
+/** What curl prints for the status when it got none. */
+const noStatus = '000'
+
+/**
+ * How long curl may take through the proxy, so a hang fails with curl's own reason (exit 28) instead
+ * of the test's timeout. Longer than the gateway takes to give up on a registry it can't reach.
+ */
+const curlMaxTime = duration.of('30s')
+
+/** What a curl run left: its output, and how it ended when that wasn't exit code 0. */
+interface CurlOutput {
+	readonly stdout: string
+	readonly stderr: string
+	readonly ending: string | undefined
+}
+
+/** How a child process that failed ended: its exit code, or the signal that stopped it. */
+function endingOf(error: ExecException | null): string | undefined {
+	if (error === null) return undefined
+	return typeof error.code === 'number' ? `exited ${String(error.code)}` : `was stopped by ${error.signal ?? 'something else'}`
+}
+
 /**
  * Runs curl with `args` through the proxy, and resolves to the status it got. When curl got none,
  * it resolves to curl's exit code and error instead, so a failing test names why.
  */
 async function curlStatus(environment: PackageEnvironment, home: string, commandArguments: readonly string[]): Promise<string> {
 	// curl exits 0 on any status it got; without one, it exits with why. Async: the proxy runs in this process.
-	const curled = await new Promise<{ stdout: string; stderr: string; failure: string | undefined }>((resolve) => {
+	const curlOutput = await new Promise<CurlOutput>((resolve) => {
 		execFile(
 			'curl',
-			['--silent', '--show-error', '--output', '/dev/null', '--write-out', '%{http_code}', ...commandArguments],
+			[
+				'--silent',
+				'--show-error',
+				'--max-time',
+				String(curlMaxTime.to('s')),
+				'--output',
+				'/dev/null',
+				'--write-out',
+				'%{http_code}',
+				...commandArguments,
+			],
 			{ env: childEnvironment(environment, home) },
 			(error, stdout, stderr) => {
-				resolve({ stdout, stderr, failure: error === null ? undefined : String(error.code) })
+				resolve({ stdout, stderr, ending: endingOf(error) })
 			},
 		)
 	})
-	const status = curled.stdout.trim()
-	if (status !== '' && status !== '000') return status
-	return `no status: curl exited ${curled.failure ?? '0'}: ${curled.stderr.trim()}`
+	const status = curlOutput.stdout.trim()
+	if (status !== '' && status !== noStatus) return status
+	// curl may also exit 0 without a status, such as when the proxy closed the connection cleanly.
+	return `no status: curl ${curlOutput.ending ?? 'exited 0'}: ${curlOutput.stderr.trim()}`
 }
 
 /** A path longer than a package fetch may be. */
