@@ -32,7 +32,7 @@ export {
 	stagedFileName,
 	type MailboxLayout,
 } from '../mailbox-layout.mts'
-export { CompatibleModel, ModelChoice, ModelProviderDescription, openAiCompatibleKind, ProviderName } from '../model-provider.mts'
+export { CompatibleModel, ModelConfiguration, ModelProviderDescription, openAiCompatibleKind, ProviderName } from '../model-provider.mts'
 export {
 	ConnectorRegistry,
 	isConnectorRegistry,

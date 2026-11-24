@@ -1,4 +1,4 @@
-import type { ModelChoice, ModelProviderDescription } from '@mesh-flow/protocol'
+import type { ModelConfiguration, ModelProviderDescription } from '@mesh-flow/protocol'
 import { offeredModel } from './offering-provider.mts'
 import { isSendable, unsendableKindMessage } from './sendable-kind.mts'
 
@@ -8,7 +8,7 @@ import { isSendable, unsendableKindMessage } from './sendable-kind.mts'
  * that a declared provider offers. A compatible server isn't asked here, so it counts as offering
  * every model. `mesh-flow build` fails with these.
  */
-export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelChoice[]): string[] {
+export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelConfiguration[]): string[] {
 	const kindProblems = providers.filter((provider) => !isSendable(provider)).map(unsendableKindMessage)
 	const unoffered = [...new Set(agentModels.flat())]
 		.filter((modelId) => !providers.some((provider) => offeredModel(provider, modelId) !== undefined))
