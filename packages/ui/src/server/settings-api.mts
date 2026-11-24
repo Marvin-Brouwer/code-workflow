@@ -37,7 +37,8 @@ export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOpti
 		return context.body(null, 204)
 	})
 	api.delete('/providers/:name/key', async (context) => {
-		await removeProviderKey(await gatewayHome(context.req.raw.signal), context.req.param('name'), context.req.raw.signal)
+		const abortSignal = context.req.raw.signal
+		await removeProviderKey(await gatewayHome(abortSignal), context.req.param('name'), abortSignal)
 		return context.body(null, 204)
 	})
 	api.get('/credentials', async (context) =>

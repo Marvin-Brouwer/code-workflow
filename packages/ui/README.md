@@ -14,7 +14,7 @@ mesh-flow ui            # serves it on a free port and prints the address
 mesh-flow ui --port 4800
 ```
 
-Open the address it prints in the browser you choose: its token lets one browser in. Settings work without a running engine; runs and triggers need `mesh-flow serve`. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
+Open the address it prints in the browser you choose: its token lets one browser in. Credentials, connectors and removing a provider's key work without a running engine; the providers, setting a key, runs and triggers need `mesh-flow serve`, since the deployed app declares the providers. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
 
 To serve it from code of your own:
 
@@ -61,7 +61,7 @@ This is the local way in. The token only goes to the terminal, never on a comman
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/app`, `GET /api/engine/app/missing` | the deployed app (`null` before the first deploy), and what it still needs before it can run |
-| `GET /api/settings/providers`, `PUT` and `DELETE /api/settings/providers/:name/key` | the providers the deployed app's config declares, whether each has a key, and setting and removing a key, as `mesh-flow provider`; the list is 503 when no engine runs |
+| `GET /api/settings/providers`, `PUT` and `DELETE /api/settings/providers/:name/key` | the providers the deployed app's config declares, whether each has a key, and setting and removing a key, as `mesh-flow provider`; all but `DELETE` are 503 when no engine runs |
 | `/api/settings/credentials`, `/credentials/:name` | credential names, setting and removing them; values never come back |
 | `GET /api/settings/connectors` | the connector packages the engine loads |
 
