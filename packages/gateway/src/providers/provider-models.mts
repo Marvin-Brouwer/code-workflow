@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { messageOf } from '../errors.mts'
 import { untilAborted } from '../until-aborted.mts'
 import { compatibleModel, modelApi, modelsOfKind, type ModelApi } from './model-apis.mts'
+import { withoutTrailingSlash } from './without-trailing-slash.mts'
 
 /** What a provider's model list answers: Anthropic's `GET /v1/models` and OpenAI's `GET /models` both have this shape. */
 const ModelList = z.object({ data: z.array(z.object({ id: z.string().min(1) })) })
@@ -62,7 +63,7 @@ function listingOf(provider: ModelProviderDescription): ModelListing | undefined
 			: modelsOfKind(provider.kind)?.[0]
 	const api = first === undefined ? undefined : modelApi(first.api)
 	if (first === undefined || api === undefined) return undefined
-	return { url: `${(provider.baseUrl ?? first.baseUrl).replace(/\/+$/, '')}${api.list.path}`, api }
+	return { url: `${withoutTrailingSlash(provider.baseUrl ?? first.baseUrl)}${api.list.path}`, api }
 }
 
 /** A provider that didn't list its models, and why. */

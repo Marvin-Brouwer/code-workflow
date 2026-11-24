@@ -271,7 +271,8 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 ## UI
 
 - **The engine's `serve` serving the UI.** Rejected 2026-11-18 ([plan](plans/ui.md)): the
-  settings work on the home's files without a running engine, so the UI is its own command,
+  settings it started with (credentials, connectors) work on the home's files without a running
+  engine, so the UI is its own command,
   `mesh-flow ui`, next to `serve`. It loads `@mesh-flow/ui/server` from where it runs, as
   connectors are loaded, since the UI depends on the engine and the other way round would be a
   cycle.
