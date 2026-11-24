@@ -5,7 +5,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppManifest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { currentFile, openDeployment, type Deployment, type DeploymentVersion } from '../src/app/deployment.mts'
+import { currentFile, openDeployment, tarballFile, versionLength, type Deployment, type DeploymentVersion } from '../src/app/deployment.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { deferred } from './support/deferred.mts'
 import { builtApp, runtimeScript } from './support/test-app.mts'
@@ -29,7 +29,7 @@ const abortSignal = new AbortController().signal
 const hello = { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }
 const other = { ...hello, other: runtimeScript('') }
 
-/** Named like a version, 12 hex characters, as one an earlier deploy left. */
+/** Named like versions, 12 hex characters, as earlier deploys left them. */
 const leftoverVersion = '0123456789ab'
 const otherLeftoverVersion = 'ba9876543210'
 
@@ -183,16 +183,16 @@ describe('openDeployment', () => {
 				const version = createHash('sha256')
 					.update(await readFile(tarball))
 					.digest('hex')
-					.slice(0, leftoverVersion.length)
+					.slice(0, versionLength)
 				// A folder where the tarball goes, so copying it there fails.
-				await mkdir(path.join(root, version, 'app.tgz'), { recursive: true })
+				await mkdir(path.join(root, version, tarballFile), { recursive: true })
 				return deployment.deploy(tarball, abortSignal)
 			},
 			abortSignal,
 		)
 
 		// Assert
-		await expect(deploying).rejects.toThrow()
+		await expect(deploying).rejects.toMatchObject({ syscall: 'rename' })
 		expect(await readdir(root)).toEqual([])
 		expect(deployment.current()).toBeUndefined()
 	})
@@ -259,7 +259,7 @@ describe('openDeployment', () => {
 		expect([after.ino, after.mtimeMs]).toEqual([before.ino, before.mtimeMs])
 	})
 
-	test('keeps the current version and leaves nothing half written when a deploy is aborted', async () => {
+	test('keeps the current version and leaves nothing half written when a deploy is aborted before it writes', async () => {
 		// Arrange
 		const deployment = await openedDeployment(await temporaryDirectory())
 		const first = await withPackedApp(await builtApp(hello), (tarball) => deployment.deploy(tarball, abortSignal), abortSignal)

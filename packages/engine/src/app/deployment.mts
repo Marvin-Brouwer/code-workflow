@@ -45,18 +45,19 @@ export interface Deployment {
 export const noAppMessage = 'There is no app: deploy it first.'
 
 /** How many hex characters of the tarball's hash name a version. */
-const versionLength = 12
+export const versionLength = 12
 
 /** What a version's name looks like: the start of a SHA-256 in hex. */
 const versionPattern = new RegExp(`^[0-9a-f]{${String(versionLength)}}$`)
 
-const tarballFile = 'app.tgz'
+/** The built app's tarball, in a version's folder. */
+export const tarballFile = 'app.tgz'
 
 /** The file in the deployment's root that names the current version. */
 export const currentFile = 'current'
 
-/** How often a removal tries again when a folder is briefly in use, such as by a virus scanner on Windows. */
-const removeRetries = 3
+/** How many times a removal tries again when a folder is briefly in use, such as by a virus scanner on Windows. */
+const removeMaxRetries = 3
 
 /**
  * The app in `root`: a folder for the current version, and a `current` file that names it. Loads
@@ -92,8 +93,9 @@ export async function openDeployment(
 	}
 	/**
 	 * Removes the version folders that aren't current and that nothing holds, one by one, and stops
-	 * once the deployment closes or `abortSignal` aborts. Never throws: a folder it can't remove is
-	 * reported to `log`, and the next removal tries it again.
+	 * once the deployment closes or `abortSignal` aborts. Without `abortSignal`, only closing stops it:
+	 * after a deploy or a release it's cleanup, which the caller's abort mustn't skip. Never throws: a
+	 * folder it can't remove is reported to `log`, and the next removal tries it again.
 	 */
 	const removeOldVersions = async (abortSignal?: AbortSignal) => {
 		const entries = await readdir(root, { withFileTypes: true }).catch((error: unknown) => {
@@ -103,7 +105,7 @@ export async function openDeployment(
 		for (const entry of entries) {
 			if (closed || abortSignal?.aborted === true) return
 			if (!entry.isDirectory() || entry.name === current?.version || holdCounts.has(entry.name)) continue
-			await rm(path.join(root, entry.name), { recursive: true, force: true, maxRetries: removeRetries }).catch((error: unknown) => {
+			await rm(path.join(root, entry.name), { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((error: unknown) => {
 				log(`Removing version ${entry.name} in ${root} failed, so it's tried again later: ${messageOf(error)}`)
 			})
 		}
@@ -130,8 +132,12 @@ export async function openDeployment(
 					abortSignal.throwIfAborted()
 					await replaceFile(path.join(root, currentFile), version, { abortSignal })
 				} catch (error) {
-					// What was written of the version isn't current, so it goes with the other old ones.
-					await removeOldVersions()
+					// Only this deploy wrote that folder, unless a run holds it or it's current already.
+					if (version !== current?.version && !holdCounts.has(version)) {
+						await rm(folder, { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((removing: unknown) => {
+							log(`Removing what a failed deploy wrote of version ${version} failed, so it's tried again later: ${messageOf(removing)}`)
+						})
+					}
 					throw error
 				}
 				const deployed: DeploymentVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
