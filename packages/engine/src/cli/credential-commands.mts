@@ -1,5 +1,5 @@
 import { text } from 'node:stream/consumers'
-import type { GatewayHome } from '@mesh-flow/gateway'
+import { isProviderCredential, providerKeyRefusal, type GatewayHome } from '@mesh-flow/gateway'
 import type { Command } from 'commander'
 import { homeCommandAbortSignal } from './home-command-abort-signal.mts'
 
@@ -18,6 +18,7 @@ export function addCredentialCommands(program: Command, gatewayHome: (abortSigna
 		.action(async (name: string) => {
 			const secret = (await text(process.stdin)).trim()
 			if (secret.length === 0) throw new Error('No secret on stdin. Pipe one in.')
+			if (isProviderCredential(name)) throw new Error(providerKeyRefusal(name))
 			// Started once the secret is in, so typing it doesn't use up the time.
 			const abortSignal = homeCommandAbortSignal()
 			await (await gatewayHome(abortSignal)).credentials.set(name, secret, abortSignal)

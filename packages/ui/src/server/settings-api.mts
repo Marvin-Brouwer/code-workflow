@@ -6,7 +6,7 @@ import {
 	type ConnectorSettings,
 	type ControlClient,
 } from '@mesh-flow/engine'
-import { CredentialName, type GatewayHome } from '@mesh-flow/gateway'
+import { CredentialName, isProviderCredential, providerKeyRefusal, type GatewayHome } from '@mesh-flow/gateway'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { jsonBody, pathParameters } from './checked-request.mts'
@@ -62,6 +62,7 @@ export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOpti
 	api.put('/credentials/:name{.+}', pathParameters(CredentialRoute), jsonBody(SecretBody), async (context) => {
 		const { name } = context.req.valid('param')
 		const { value } = context.req.valid('json')
+		if (isProviderCredential(name)) return context.json({ error: providerKeyRefusal(name) }, 400)
 		await (await gatewayHome(context.req.raw.signal)).credentials.set(name, value, context.req.raw.signal)
 		return context.body(null, 204)
 	})

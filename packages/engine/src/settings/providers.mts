@@ -82,6 +82,7 @@ export async function setProviderKey(
 ): Promise<void> {
 	if (key.length === 0) throw new EngineError('invalid', 'The key is empty.')
 	const provider = declaredProvider(declared, checkedName(name))
+	// Checked here too, so the refusal is an EngineError the CLI and the UI show as invalid.
 	if (providerOrigin(provider) === undefined)
 		throw new EngineError('invalid', `The gateway can't send model calls for provider ${name}'s kind ${provider.kind}.`)
 	await storeProviderKey(home.credentials, provider, key, abortSignal)

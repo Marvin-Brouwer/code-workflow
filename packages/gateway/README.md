@@ -15,15 +15,11 @@ const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
 
 await home.credentials.set('github/token', 'ghp-...', abortSignal)
-await storeProviderKey(
-	home.credentials,
-	{
-		name: 'anthropic',
-		kind: 'anthropic',
-	},
-	'sk-ant-...',
-	abortSignal,
-)
+const anthropic = {
+	name: 'anthropic',
+	kind: 'anthropic',
+}
+await storeProviderKey(home.credentials, anthropic, 'sk-ant-...', abortSignal)
 ```
 
 Every read opens the file again, so a secret set with the CLI counts at once in a running engine.

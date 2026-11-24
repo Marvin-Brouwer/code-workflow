@@ -20,6 +20,8 @@ describe('providerOrigin', () => {
 		['its base URL', proxy, 'https://llm-proxy.example.com'],
 		["its kind's", { name: 'anthropic', kind: 'anthropic' }, 'https://api.anthropic.com'],
 		["nothing for a kind the gateway doesn't know", { name: 'odd', kind: 'unknown-kind' }, undefined],
+		['nothing for a kind whose base URL the config has to give', { name: 'azure', kind: 'azure' }, undefined],
+		["nothing for a base URL that isn't a web one", { name: 'odd', kind: 'openai-compatible', baseUrl: 'foo://server/v1' }, undefined],
 	])('is the origin of %s', (_case, provider, origin) => {
 		// Act
 		const found = providerOrigin(provider)
@@ -67,6 +69,24 @@ describe('providerKeyOf', () => {
 
 		// Assert
 		expect(key).toEqual({ status: 'missing' })
+	})
+})
+
+describe('providerKeyOf, for a provider without an origin', () => {
+	test("doesn't use its key, and says where it was set for", async () => {
+		// Arrange
+		const credentials = await credentialStore()
+		await credentials.set(
+			providerCredential('azure'),
+			JSON.stringify({ key: 'sk-secret', origin: 'https://azure.example.com' }),
+			abortSignal,
+		)
+
+		// Act
+		const key = await providerKeyOf(credentials, { name: 'azure', kind: 'azure' }, abortSignal)
+
+		// Assert
+		expect(key).toEqual({ status: 'elsewhere', origin: 'https://azure.example.com' })
 	})
 })
 
