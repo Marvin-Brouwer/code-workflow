@@ -63,4 +63,5 @@ export {
 	type ToolDefinition,
 } from '../tools/host-tool.mts'
 export { loginCommand, SignInNeededError, signInOf } from '../tools/sign-in-needed.mts'
+export { replaceFile, type ReplaceFileOptions } from '../files/replace-file.mts'
 export { untilAborted } from '../until-aborted.mts'

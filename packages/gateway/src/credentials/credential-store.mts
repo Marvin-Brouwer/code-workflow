@@ -1,10 +1,10 @@
-import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { withFileLock } from '../files/with-file-lock.mts'
 import { ownEntry } from '../own-entry.mts'
 import { seal, unseal } from './sealed-file.mts'
 import type { StoreKey } from './store-key.mts'
+import { replaceFile } from '../files/replace-file.mts'
 
 /** The sealed credentials' file in a gateway's home. */
 export const credentialsFileName = 'credentials.json'
@@ -72,7 +72,7 @@ export function openCredentialStore(file: string, key: StoreKey): CredentialStor
 			const secrets = await read(abortSignal)
 			if (!edit(secrets)) return false
 			abortSignal.throwIfAborted()
-			await writeFileAtomic(file, seal(JSON.stringify(secrets), await key.read(abortSignal)), { mode: 0o600 })
+			await replaceFile(file, seal(JSON.stringify(secrets), await key.read(abortSignal)), { mode: 0o600, abortSignal })
 			return true
 		})
 	return Object.freeze<CredentialStore>({

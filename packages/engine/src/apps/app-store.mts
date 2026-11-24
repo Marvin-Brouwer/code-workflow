@@ -3,10 +3,10 @@ import { createReadStream } from 'node:fs'
 import { mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { replaceFile } from '@mesh-flow/gateway'
 import { AppManifest, appManifestFile } from '@mesh-flow/protocol'
 import { SandboxSpecification } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
-import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
 import { EngineError } from '../engine/engine-error.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
@@ -100,10 +100,10 @@ export async function openAppStore(
 					await mkdir(folder, { recursive: true })
 					await copyTarball(tarball, path.join(folder, tarballFile), abortSignal)
 					// Written last: it marks the version complete.
-					await writeFileAtomic(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'))
+					await replaceFile(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'), { abortSignal })
 				}
 				abortSignal.throwIfAborted()
-				await writeFileAtomic(path.join(root, name, currentFile), version)
+				await replaceFile(path.join(root, name, currentFile), version, { abortSignal })
 				const deployed: AppVersion = { name, version, manifest, tarball: path.join(folder, tarballFile) }
 				current.set(name, deployed)
 				return deployed
