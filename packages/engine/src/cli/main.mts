@@ -9,7 +9,7 @@ import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
-import { WebhookName } from '../app/names.mts'
+import { WebhookName } from '../triggers/webhook-name.mts'
 import { openConnectorSettings } from '../connectors/connector-settings.mts'
 import { loadConnectors, type LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlClient, type ControlClient, type DeployedApp } from '../control/control-client.mts'
@@ -72,7 +72,7 @@ function sandboxPlatform(cpu: AppPlatform['cpu']): AppPlatform {
 	return { os: 'linux', cpu }
 }
 
-/** `-C, --directory`: the app's repository, which every app command works from. */
+/** `-C, --directory`: the app's repository, which `build`, `deploy` and `dev` work from. */
 function directoryOption(): Option {
 	return new Option('-C, --directory <directory>', "the app's repository").default(process.cwd())
 }

@@ -114,6 +114,9 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 		},
 	)
 
+	// Any other path, such as the `/webhooks/<app>/<webhook>` of engines that ran several apps, shows in the log too.
+	api.notFound((context) => refuse(context, 404, notFound, 'webhooks are delivered to /webhooks/<webhook>.'))
+
 	api.onError((error, context) => {
 		if (error instanceof EngineError && error.code === 'conflict') return context.json({ error: 'The engine is shutting down.' }, 503)
 		if (error instanceof EngineError && error.code === 'unavailable') {

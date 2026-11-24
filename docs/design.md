@@ -302,8 +302,9 @@ export default defineMeshFlow({
   parameters as JSON Schema, and the triggers. CI builds the app and deploys it to the engine. The
   sandbox has nothing to set up and only runs `node`, and the engine never runs app code to learn
   what it declares.
-- **An engine runs one app.** One workflow repo, with one `defineMeshFlow` entry, per engine home:
-  no app names in routes, secrets or run records. Another app gets another home.
+- **An engine runs one app.** One workflow repo, with one `defineMeshFlow` entry, per engine:
+  no app names in routes, secrets or run records. A deploy of another app replaces the current
+  version; runs keep the version they started on.
 - **Deployed versions are immutable.** The engine keeps each version it was given, named by the
   hash of its tarball, and one current version. Webhooks and schedules follow the current
   version; a run copies its version, so a restart runs the code it first ran.

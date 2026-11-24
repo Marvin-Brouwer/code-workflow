@@ -1,11 +1,13 @@
 /**
  * Starts one example app with everything around it, for trying mesh-flow by hand from the repo root:
  * `pnpm start:github-issue`. It builds what the app and the UI need, adds the app's connectors to a
- * home of its own in `.mesh-flow/homes/<example>` (an engine runs one app), then runs the engine
- * (`mesh-flow serve`), the app's watch (`mesh-flow dev`) and the UI (`mesh-flow ui`) together.
- * Ctrl+C stops all three.
+ * home of its own in `.mesh-flow/home`, then runs the engine (`mesh-flow serve`), the app's watch
+ * (`mesh-flow dev`) and the UI (`mesh-flow ui`) together. Ctrl+C stops all three.
  *
  * The home stays between starts, so providers and credentials set in the UI are there next time.
+ * An engine runs one app, so starting another example deploys it in place of the last one, whose
+ * runs stay. The examples share the home because one engine per machine runs at a time: engines
+ * on one machine would remove each other's sandboxes, and the home's lock refuses a second one.
  * Arguments after the app's name go to `mesh-flow serve`, such as `--backend gvisor`.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -14,12 +16,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const home = path.join(root, '.mesh-flow', 'home')
 const cli = path.join(root, 'packages', 'engine', 'bin', 'mesh-flow.mts')
 
 const [example, ...serveArguments] = process.argv.slice(2)
 if (example === undefined) throw new Error('Name the example app: node scripts/start-example.mts github-issue')
 const appDirectory = path.join(root, 'examples', example)
-const home = path.join(root, '.mesh-flow', 'homes', example)
 
 /** Runs a child to its end, with its output on this terminal. Rejects when it fails. */
 function waitFor(child: ChildProcess, commandLine: string): Promise<void> {

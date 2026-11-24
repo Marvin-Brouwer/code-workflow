@@ -17,7 +17,7 @@ import {
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
-import type { AppStore } from '../app/app-store.mts'
+import { noAppMessage, type AppStore } from '../app/app-store.mts'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
@@ -296,7 +296,7 @@ export class Engine {
 	async #create(options: StartRunOptions): Promise<RunRecord> {
 		const waitSignal = this.#withLifetime(options.abortSignal)
 		const deployed = this.#app.current()
-		if (deployed === undefined) throw new EngineError('not-found', 'There is no app: deploy it first.')
+		if (deployed === undefined) throw new EngineError('not-found', noAppMessage)
 		const { kind, id: triggerId } = options.trigger
 		const listed = deployed.manifest.description.triggers.find((known) => known.kind === kind && known.id === triggerId)
 		if (listed === undefined) {

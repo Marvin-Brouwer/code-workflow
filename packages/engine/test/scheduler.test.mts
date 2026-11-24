@@ -114,6 +114,22 @@ describe('createScheduler', () => {
 		expect(startRun.mock.calls.map(([options]) => options.trigger.id)).toEqual(['report * * * * * *', 'report */2 * * * * *'])
 	})
 
+	test('disarms every schedule when it is given no version', async () => {
+		// Arrange
+		useClockAt(tenAm)
+		const { engine, startRun } = fakeEngine('succeeded')
+		const { scheduler } = openScheduler(engine)
+		scheduler.update(appVersion('v1'))
+
+		// Act
+		scheduler.update(undefined)
+		await vi.advanceTimersByTimeAsync(3_000)
+
+		// Assert
+		expect(startRun).not.toHaveBeenCalled()
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
 	test('does not make up for ticks it missed when the clock jumps', async () => {
 		// Arrange
 		useClockAt(tenAm)

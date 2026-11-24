@@ -137,7 +137,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	armSchedules()
 	const api = getRequestListener(
 		controlApi(engine, {
-			app: { store: app, deployed: armSchedules },
+			app: { store: app, afterDeploy: armSchedules },
 			connectors: shownConnectors,
 		}).fetch,
 	)

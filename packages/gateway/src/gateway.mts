@@ -39,7 +39,7 @@ export interface GatewayOptions {
 	readonly home: string
 	readonly credentials: CredentialStore
 	readonly providers: ProviderSettings
-	/** The host halves of the tools apps may call. A run gets those of them its app lists. */
+	/** The host halves of the tools the app may call. A run gets those its app version lists. */
 	readonly tools?: readonly HostTool[]
 	/** Sends model requests and package fetches. Default: the global `fetch`. */
 	readonly fetch?: typeof fetch

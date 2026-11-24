@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppManifest } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
@@ -146,6 +146,25 @@ describe('openAppStore', () => {
 		// Assert
 		expect(log).toHaveBeenCalledWith(expect.stringContaining('Left out the app'))
 		expect(reopened.current()).toEqual(fixed)
+	})
+
+	test.each([
+		['names a version whose folder is gone', (root: string, folder: string) => rm(folder, { recursive: true })],
+		['names no version at all', (root: string) => writeFile(path.join(root, 'current'), '')],
+	])('says so when its current file %s, instead of starting as if nothing was deployed', async (_name, breakIt) => {
+		// Arrange
+		const root = await temporaryDirectory()
+		const store = await openAppStore(root, abortSignal)
+		const deployed = await withPackedApp(await builtApp(hello), (tarball) => store.deploy(tarball, abortSignal), abortSignal)
+		await breakIt(root, path.dirname(deployed.tarball))
+		const log = vi.fn<(message: string) => void>()
+
+		// Act
+		const reopened = await openAppStore(root, abortSignal, log)
+
+		// Assert
+		expect(reopened.current()).toBeUndefined()
+		expect(log).toHaveBeenCalledWith(expect.stringContaining('Left out the app'))
 	})
 
 	test('finishes a deploy under way when it closes, and refuses one after', async () => {

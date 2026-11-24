@@ -246,16 +246,18 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(withoutApp.log).toHaveBeenCalledWith(expect.stringContaining('there is no app'))
 	})
 
-	test("answer 404 for names that can't be a webhook's", async () => {
+	test("answer 404 for names that can't be a webhook's, and log a path with an app name in it", async () => {
 		// Arrange
-		const { deliver } = await serve()
+		const { deliver, log } = await serve()
 
 		// Act
 		const badWebhook = await deliver('fix%20issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 		const longWebhook = await deliver('x'.repeat(200), JSON.stringify(payload), { 'x-webhook-secret': secret })
+		const withAppName = await deliver('team/fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 
 		// Assert
-		expect([badWebhook.status, longWebhook.status]).toEqual([404, 404])
+		expect([badWebhook.status, longWebhook.status, withAppName.status]).toEqual([404, 404, 404])
+		expect(log).toHaveBeenCalledWith(expect.stringContaining('Refused a delivery to /webhooks/team/fix-issue'))
 	})
 
 	test('end a run as skipped when the schema in the sandbox turns the delivery down', async () => {

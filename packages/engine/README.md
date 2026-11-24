@@ -70,11 +70,11 @@ An app is a package whose `main` in `package.json` is its entry file, which expo
 
 ```bash
 mesh-flow build    # bundles the entry file into .mesh-flow/app, with mesh-flow.json saying what it declares
-mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as its app's new current version
+mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the app's new current version
 mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
-`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. An engine runs one app: a deploy replaces the current version, whatever app it was built from, and another app gets an engine with a home of its own (`--home`). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. An engine runs one app: a deploy replaces the current version, whatever app it was built from. Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
 The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` and `resume` run the code it first ran, also after a new deploy.
 

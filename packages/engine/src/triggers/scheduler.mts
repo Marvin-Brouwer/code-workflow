@@ -52,41 +52,39 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	const broken = new Set<string>()
 
 	const tick = async (schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
-		const name = schedule.id
 		const going = engine
 			.list()
-			.find((record) => record.trigger.kind === 'schedule' && record.trigger.id === name && goingStatuses.has(record.status))
-		if (going !== undefined || starting.has(name)) {
+			.find((record) => record.trigger.kind === 'schedule' && record.trigger.id === schedule.id && goingStatuses.has(record.status))
+		if (going !== undefined || starting.has(schedule.id)) {
 			const why = going === undefined ? 'its last run is still starting' : `run ${going.id} is still ${going.status}`
-			log(`Skipped schedule ${name} at ${at.toISOString()}: ${why}.`)
+			log(`Skipped schedule ${schedule.id} at ${at.toISOString()}: ${why}.`)
 			return
 		}
-		starting.add(name)
+		starting.add(schedule.id)
 		try {
 			await engine.startRun({
 				trigger: { kind: 'schedule', id: schedule.id },
-				key: `schedule ${name}/${at.toISOString()}`,
+				key: `schedule ${schedule.id}/${at.toISOString()}`,
 				abortSignal: startRunTimeout.toAbortSignal(),
 			})
 		} catch (error) {
 			// Disarmed meanwhile, as on shutdown: the engine turning the run down is expected then.
-			if (!abortSignal.aborted) log(`Starting schedule ${name} at ${at.toISOString()} failed: ${messageOf(error)}`)
+			if (!abortSignal.aborted) log(`Starting schedule ${schedule.id} at ${at.toISOString()} failed: ${messageOf(error)}`)
 		} finally {
-			starting.delete(name)
+			starting.delete(schedule.id)
 		}
 	}
 
 	const arm = (schedule: ScheduleDescription, abortSignal: AbortSignal) => {
-		const name = schedule.id
 		let cron: Cron
 		try {
 			cron = new Cron(schedule.cron, { paused: true })
 		} catch (error) {
-			if (!broken.has(name)) log(`Schedule ${name} doesn't run: ${messageOf(error)}`)
-			broken.add(name)
+			if (!broken.has(schedule.id)) log(`Schedule ${schedule.id} doesn't run: ${messageOf(error)}`)
+			broken.add(schedule.id)
 			return
 		}
-		broken.delete(name)
+		broken.delete(schedule.id)
 		const next = (after: Date) => {
 			const at = cron.nextRun(after)
 			if (at === null) return

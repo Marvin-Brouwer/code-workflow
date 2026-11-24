@@ -14,8 +14,8 @@ pnpm start:github-issue
 pnpm start:big-repo
 ```
 
-Each example has a home of its own, `.mesh-flow/homes/<example>`, kept between starts, since an
-engine runs one app. Arguments after the command go to
+The engine's home is `.mesh-flow/home`, kept between starts. An engine runs one app, so starting
+another example deploys it in place of the last one. Arguments after the command go to
 `mesh-flow serve`, such as `pnpm start:github-issue --backend gvisor`. Ctrl+C stops all three.
 
 ## Packages

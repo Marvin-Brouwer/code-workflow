@@ -31,8 +31,14 @@ export interface AppStore {
 	readonly close: () => Promise<void>
 }
 
+/** What the engine answers when a trigger or a settings check comes before the first deploy. */
+export const noAppMessage = 'There is no app: deploy it first.'
+
 /** How many hex characters of the tarball's hash name a version. */
 const versionLength = 12
+
+/** What a version's name looks like: the start of a SHA-256 in hex. */
+const versionPattern = new RegExp(`^[0-9a-f]{${String(versionLength)}}$`)
 
 const tarballFile = 'app.tgz'
 const currentFile = 'current'
@@ -106,15 +112,23 @@ async function pathExists(file: string): Promise<boolean> {
 	}
 }
 
-/** The version `current` names, or nothing before the first deploy. */
+/**
+ * The version `current` names, or nothing before the first deploy, when there is no `current`. A
+ * `current` that names no complete version, such as one whose folder was removed by hand, throws.
+ */
 async function loadCurrent(root: string): Promise<AppVersion | undefined> {
+	const named = await readFile(path.join(root, currentFile), 'utf8').catch((error: unknown) => {
+		if (hasErrorCode(error, 'ENOENT')) return undefined
+		throw error
+	})
+	if (named === undefined) return undefined
 	try {
-		const version = (await readFile(path.join(root, currentFile), 'utf8')).trim()
+		const version = named.trim()
+		if (!versionPattern.test(version)) throw new Error(`${JSON.stringify(version)} isn't a version.`)
 		const folder = path.join(root, version)
 		const manifest = AppManifest.parse(JSON.parse(await readFile(path.join(folder, appManifestFile), 'utf8')))
 		return { version, manifest, tarball: path.join(folder, tarballFile) }
 	} catch (error) {
-		if (hasErrorCode(error, 'ENOENT')) return undefined
 		throw new Error(`Its current version in ${root} can't be read: ${messageOf(error)}`, { cause: error })
 	}
 }

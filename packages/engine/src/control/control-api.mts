@@ -2,7 +2,7 @@ import { TriggerReference } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
-import type { AppStore, AppVersion } from '../app/app-store.mts'
+import { noAppMessage, type AppStore, type AppVersion } from '../app/app-store.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 import { engineEventStream } from './engine-event-stream.mts'
@@ -26,7 +26,7 @@ export const DeployBody = z.object({ tarball: z.string().min(1) })
 export interface ControlApp {
 	readonly store: AppStore
 	/** Called after a version was deployed, such as to arm its schedules. */
-	readonly deployed: () => void
+	readonly afterDeploy: () => void
 }
 
 /** What the control API says about the deployed app. */
@@ -106,22 +106,22 @@ export function controlApi(engine: Engine, { app, connectors = [] }: ControlApiO
 	})
 
 	if (app !== undefined) {
-		const { store, deployed } = app
+		const { store, afterDeploy } = app
 		api.get('/app', (context) => {
 			const current = store.current()
 			return context.json(current === undefined ? null : shownApp(current))
 		})
 		api.get('/app/missing', async (context) => {
 			const current = store.current()
-			if (current === undefined) throw new EngineError('not-found', 'There is no app: deploy it first.')
+			if (current === undefined) throw new EngineError('not-found', noAppMessage)
 			return context.json(await engine.missingSettings(current.manifest.description, context.req.raw.signal))
 		})
 		api.put('/app', async (context) => {
 			const { tarball } = DeployBody.parse(await context.req.json())
-			const version = await store.deploy(tarball, context.req.raw.signal)
-			deployed()
-			const missing = await engine.missingSettings(version.manifest.description, context.req.raw.signal)
-			return context.json({ ...shownApp(version), missing })
+			const deployedVersion = await store.deploy(tarball, context.req.raw.signal)
+			afterDeploy()
+			const missing = await engine.missingSettings(deployedVersion.manifest.description, context.req.raw.signal)
+			return context.json({ ...shownApp(deployedVersion), missing })
 		})
 	}
 
