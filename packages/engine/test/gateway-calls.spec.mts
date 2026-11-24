@@ -7,6 +7,7 @@ import {
 	openCredentialStore,
 	openGateway,
 	SignInNeededError,
+	storeProviderKey,
 	type HostTool,
 	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
@@ -142,7 +143,7 @@ function deployModelApp(
 /** Sets the key of the provider `work`. */
 async function withKey(gatewayHome: string, key: string) {
 	const credentials = openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key')))
-	await credentials.set('provider/work', key, abortSignal)
+	await storeProviderKey(credentials, workProvider, key, abortSignal)
 }
 
 describe.skipIf(process.platform !== 'linux')('gateway calls', () => {

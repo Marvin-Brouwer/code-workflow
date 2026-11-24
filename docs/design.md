@@ -495,6 +495,9 @@ export const aws = connector({
 
 - Credentials are stored server-side, encrypted per user (envelope encryption); locally in the OS
   keychain or an encrypted file. Same code path.
+- A provider key is set for the origin its provider's base URL has in git at that moment, and
+  is sent nowhere else. When git moves the provider to another origin, the key counts as not set
+  until the user sets it again, so a reviewed change can't quietly send keys to a new server.
 - Startup fails only on infrastructure. Missing user settings never block startup.
 - Starting a run checks that workflow's requirements and shows a wizard with only what's missing.
 - Triggers (section 4) are declared in git and configured in the UI: webhook signing secrets,

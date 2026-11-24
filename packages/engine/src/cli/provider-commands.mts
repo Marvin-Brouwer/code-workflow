@@ -56,7 +56,7 @@ export function addProviderCommands(program: Command, { gatewayHome, declared }:
 			if (key.length === 0) throw new Error('No key on stdin. Pipe one in.')
 			// Started once the key is in, so typing it doesn't use up the time.
 			const abortSignal = homeCommandAbortSignal()
-			await setProviderKey(await gatewayHome(abortSignal), name, key, abortSignal)
+			await setProviderKey(await gatewayHome(abortSignal), await declared(abortSignal), name, key, abortSignal)
 		})
 
 	provider

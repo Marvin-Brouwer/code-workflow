@@ -1,4 +1,4 @@
-import { choice, component, optional } from '@rooted/components'
+import { component, optional } from '@rooted/components'
 import { z } from 'zod'
 import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
 import { Table } from '../_layout/table.mts'
@@ -9,6 +9,13 @@ import { ConfirmButton } from './confirm-button.mts'
 import { ProviderModels } from './provider-models.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
+
+/** Whether `provider` has a key, and when its key was set for another URL, which one: it isn't used until it's set again. */
+function keyText(provider: ListedProvider): string {
+	if (provider.hasKey) return 'set'
+	if (provider.keySetFor === undefined) return 'not set'
+	return `set for ${provider.keySetFor}, set it again`
+}
 
 /**
  * The model providers the app's config declares, in the order models are looked up. They come from
@@ -55,7 +62,7 @@ export const ProvidersPage = component({
 						}),
 					),
 					optional(
-						provider.hasKey,
+						provider.hasKey || provider.keySetFor !== undefined,
 						create(ConfirmButton, {
 							summary: 'Remove key',
 							label: `Remove the key of ${provider.name}`,
@@ -83,7 +90,7 @@ export const ProvidersPage = component({
 						textContent: provider.baseUrl ?? '',
 					}),
 					element('td', {
-						textContent: choice(provider.hasKey, 'set', 'not set'),
+						textContent: keyText(provider),
 					}),
 					element('td', {
 						children: keyActions(provider),

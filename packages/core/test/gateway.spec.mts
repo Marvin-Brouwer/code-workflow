@@ -6,6 +6,7 @@ import {
 	openCredentialStore,
 	openGateway,
 	SignInNeededError,
+	storeProviderKey,
 	tokensPerEndpoint,
 	type Gateway,
 	type HostTool,
@@ -319,7 +320,7 @@ describe('gateway', () => {
 			Promise.resolve(new Response(anthropicStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
 		)
 		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [{ name: 'work', kind: 'anthropic' }] })
-		await credentials.set('provider/work', 'sk-real', abortSignal)
+		await storeProviderKey(credentials, { name: 'work', kind: 'anthropic' }, 'sk-real', abortSignal)
 		const helper = agent({ model: 'claude-opus-5-5' })
 
 		// Act
@@ -342,7 +343,7 @@ describe('gateway', () => {
 			.mockResolvedValueOnce(Response.json({ data: [{ id: 'team-model' }] }))
 		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
 		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 		const helper = agent({ model: 'team-model' })
 
 		// Act
@@ -367,7 +368,7 @@ describe('gateway', () => {
 		)
 		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
 		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 		const helper = agent({ model: 'team-model' })
 		const thinker = agent({ model: 'team-thinker' })
 
@@ -392,7 +393,7 @@ describe('gateway', () => {
 			{ name: 'work', kind: 'anthropic' },
 		]
 		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers })
-		await credentials.set('provider/work', 'sk-real', abortSignal)
+		await storeProviderKey(credentials, { name: 'work', kind: 'anthropic' }, 'sk-real', abortSignal)
 		const helper = agent({ model: ['gpt-4o', 'claude-opus-5-5'] })
 
 		// Act

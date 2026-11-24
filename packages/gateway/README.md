@@ -9,12 +9,21 @@ The host side of every call that needs a credential. A mesh-flow run lives in a 
 Credentials are kept in one file on the host, sealed with AES-256-GCM. The key is in the OS keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux), or, where there is none, such as a headless Linux or WSL, in `store.key` next to the file, readable by its owner only. Never in the sandbox, never in git, never in a `.env` file.
 
 ```ts
-import { openGatewayHome } from '@mesh-flow/gateway'
+import { openGatewayHome, storeProviderKey } from '@mesh-flow/gateway'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
 
-await home.credentials.set('provider/anthropic', 'sk-ant-...', abortSignal)
+await home.credentials.set('github/token', 'ghp-...', abortSignal)
+await storeProviderKey(
+	home.credentials,
+	{
+		name: 'anthropic',
+		kind: 'anthropic',
+	},
+	'sk-ant-...',
+	abortSignal,
+)
 ```
 
 Every read opens the file again, so a secret set with the CLI counts at once in a running engine.
@@ -23,7 +32,7 @@ Every read opens the file again, so a secret set with the CLI counts at once in 
 
 The app's config declares its providers, in git: each is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name, with an optional base URL of its own, for a proxy. A provider of kind `openai-compatible` is a server that speaks the OpenAI chat completions API, such as a LiteLLM proxy: it has a base URL, and the server lists its models.
 
-Each provider with a key says which models it offers that key: `resolve-model` asks it once a run, at the first loop that needs it (Anthropic's `GET /v1/models`, OpenAI's and the others' `GET /models`), and picks only from what it listed. Of a known kind, agents can use the listed models pi-ai's catalog knows; the catalog gives their details. Of a compatible server, every listed model, with its details from pi-ai's catalog when it knows the id, else defaults (128,000 tokens of context, 16,384 per answer, no reasoning); the sandbox gets the model with the base URL, so it can build it without pi-ai knowing it. A provider without a model list (404) goes by pi-ai's catalog of its kind. One that doesn't list now (an error, no answer within 15 seconds, no way to reach it) is asked again at the next loop; meanwhile a known kind goes by the catalog, so a listing outage doesn't stop runs, and a compatible server offers a loop nothing, since it could be sent any model. A trigger's check counts it as offering any model. A run's lists are asked under the run's own signal, which `closeRun` aborts. `providerModels(provider, { key, fetchFromHost }, abortSignal)` is that listing, for the settings to show: a failed list is a value with its reason, and only an abort rejects. `undeclaredModels` at build time asks nobody: it goes by the catalog, and counts a compatible server as offering any model. Only the API key is per user, in the credential store as `provider/<name>`, and a user can leave a provider without one. A run's providers come with `openRun`, from the app version it started on:
+Each provider with a key says which models it offers that key: `resolve-model` asks it once a run, at the first loop that needs it (Anthropic's `GET /v1/models`, OpenAI's and the others' `GET /models`), and picks only from what it listed. Of a known kind, agents can use the listed models pi-ai's catalog knows; the catalog gives their details. Of a compatible server, every listed model, with its details from pi-ai's catalog when it knows the id, else defaults (128,000 tokens of context, 16,384 per answer, no reasoning); the sandbox gets the model with the base URL, so it can build it without pi-ai knowing it. A provider without a model list (404) goes by pi-ai's catalog of its kind. One that doesn't list now (an error, no answer within 15 seconds, no way to reach it) is asked again at the next loop; meanwhile a known kind goes by the catalog, so a listing outage doesn't stop runs, and a compatible server offers a loop nothing, since it could be sent any model. A trigger's check counts it as offering any model. A run's lists are asked under the run's own signal, which `closeRun` aborts. `providerModels(provider, { key, fetchFromHost }, abortSignal)` is that listing, for the settings to show: a failed list is a value with its reason, and only an abort rejects. `undeclaredModels` at build time asks nobody: it goes by the catalog, and counts a compatible server as offering any model. Only the API key is per user, in the credential store as `provider/<name>`, and a user can leave a provider without one. `storeProviderKey` keeps it with the origin of the provider's base URL (or its kind's), and `providerKeyOf` gives it only while the config sends the provider to that origin: when a change in git moves the provider, its key is `elsewhere`, model calls refuse to send it, and the trigger check says to set it again. A run's providers come with `openRun`, from the app version it started on:
 
 ```ts
 const access = {

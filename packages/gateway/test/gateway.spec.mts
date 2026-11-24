@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { tokensPerPackageEndpoint, type GatewayOptions } from '../src/gateway.mts'
 import type { ResolveRegistryTarget } from '../src/packages/connector-registry.mts'
 import { fetchFromPublicRegistry, maxPackageBytes } from '../src/packages/fetch-from-public-registry.mts'
+import { storeProviderKey } from '../src/providers/provider-key.mts'
 import { hostTool, HostToolTransientError } from '../src/tools/host-tool.mts'
 import { SignInNeededError } from '../src/tools/sign-in-needed.mts'
 import { npmRegistry, nugetOrg } from './support/registries.mts'
@@ -366,8 +367,9 @@ const teamModels = { object: 'list', data: [{ id: 'team-model' }, { id: 'claude-
 
 async function withAnthropic(fetchImpl: typeof fetch, baseUrl?: string) {
 	const setup = await testGateway({ fetch: fetchImpl })
-	const providers = [{ name: 'anthropic', kind: 'anthropic', ...(baseUrl === undefined ? {} : { baseUrl }) }]
-	await setup.credentials.set('provider/anthropic', 'sk-real', abortSignal)
+	const anthropic = { name: 'anthropic', kind: 'anthropic', ...(baseUrl === undefined ? {} : { baseUrl }) }
+	const providers = [anthropic]
+	await storeProviderKey(setup.credentials, anthropic, 'sk-real', abortSignal)
 	const grant = await setup.gateway.openRun(runId, { tools: [], providers }, abortSignal)
 	return { ...setup, grant }
 }
@@ -381,8 +383,8 @@ describe('model calls', () => {
 			{ name: 'keyless', kind: 'anthropic' },
 			{ name: 'work', kind: 'anthropic' },
 		]
-		await credentials.set('provider/openai', 'sk-openai', abortSignal)
-		await credentials.set('provider/work', 'sk-work', abortSignal)
+		await storeProviderKey(credentials, { name: 'openai', kind: 'openai' }, 'sk-openai', abortSignal)
+		await storeProviderKey(credentials, { name: 'work', kind: 'anthropic' }, 'sk-work', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
 
 		// Act
@@ -400,7 +402,7 @@ describe('model calls', () => {
 		// Arrange
 		const listed = vi.fn<typeof fetch>(() => Promise.resolve(Response.json(teamModels)))
 		const { gateway, credentials } = await testGateway({ fetch: listed })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers: [litellm] }, abortSignal)
 		const resolve = (models: string[], token: number) =>
 			callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, token), { type: 'resolve-model', models }))
@@ -432,8 +434,8 @@ describe('model calls', () => {
 			'https://api.anthropic.com/v1/models?limit=1000': { data: [{ id: 'claude-opus-5-5' }] },
 		}
 		const { gateway, credentials } = await testGateway({ fetch: (url) => Promise.resolve(Response.json(listings[urlOf(url)])) })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 		const providers = [litellm, { name: 'anthropic', kind: 'anthropic' }]
 		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
 
@@ -456,8 +458,13 @@ describe('model calls', () => {
 		}
 		const listed = vi.fn<typeof fetch>((url) => Promise.resolve(Response.json(listings[urlOf(url)])))
 		const { gateway, credentials } = await testGateway({ fetch: listed })
-		await credentials.set('provider/limited', 'sk-limited', abortSignal)
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(
+			credentials,
+			{ name: 'limited', kind: 'anthropic', baseUrl: 'https://limited.example.com' },
+			'sk-limited',
+			abortSignal,
+		)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 		const providers = [
 			{ name: 'limited', kind: 'anthropic', baseUrl: 'https://limited.example.com' },
 			{ name: 'anthropic', kind: 'anthropic' },
@@ -485,8 +492,8 @@ describe('model calls', () => {
 		const { gateway, credentials } = await testGateway({
 			fetch: (url) => Promise.resolve(listings[urlOf(url)] ?? new Response('', { status: 500 })),
 		})
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 		const providers = [litellm, { name: 'anthropic', kind: 'anthropic' }]
 		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
 
@@ -504,7 +511,7 @@ describe('model calls', () => {
 	test("tells a loop why a compatible server it needs didn't list its models, not to set its key again", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ fetch: () => Promise.resolve(new Response('down', { status: 503 })) })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers: [litellm] }, abortSignal)
 
 		// Act
@@ -523,7 +530,7 @@ describe('model calls', () => {
 	test("says a provider's key doesn't list a model it would offer, with the key as the fix", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ fetch: listsOnlySonnet })
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 
 		// Act
 		const unavailable = await gateway.unavailableModels([{ name: 'anthropic', kind: 'anthropic' }], [['claude-opus-5-5']], abortSignal)
@@ -541,7 +548,7 @@ describe('model calls', () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(never)
 		const { gateway, credentials } = await testGateway({ fetch: sent })
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers: [{ name: 'anthropic', kind: 'anthropic' }] }, abortSignal)
 		const resolving = callGateway(
 			gateway,
@@ -563,7 +570,7 @@ describe('model calls', () => {
 	test("goes by pi-ai's catalog when a provider can't list its models now", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ fetch: () => Promise.reject(new Error('connect ECONNREFUSED')) })
-		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-anthropic', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers: [{ name: 'anthropic', kind: 'anthropic' }] }, abortSignal)
 
 		// Act
@@ -584,7 +591,7 @@ describe('model calls', () => {
 			{ name: 'anthropic', kind: 'anthropic' },
 			{ name: 'openai', kind: 'openai' },
 		]
-		await credentials.set('provider/openai', 'sk-openai', abortSignal)
+		await storeProviderKey(credentials, { name: 'openai', kind: 'openai' }, 'sk-openai', abortSignal)
 		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
 
 		// Act
@@ -742,10 +749,49 @@ describe('model calls', () => {
 		expect(errorOf(answer)).toContain('mesh-flow provider key anthropic')
 	})
 
+	test('sends a key nowhere but where it was set for, once the config moves the provider', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>()
+		const { gateway, credentials } = await testGateway({ fetch: sent })
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-real', abortSignal)
+		const moved = { name: 'anthropic', kind: 'anthropic', baseUrl: 'https://llm-proxy.example.com' }
+		const grant = await gateway.openRun(runId, { tools: [], providers: [moved] }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'model', request: anthropicRequest }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toContain('has no API key for https://llm-proxy.example.com')
+		expect(sent).not.toHaveBeenCalled()
+	})
+
+	test('says a key was set for another address than the config sends the provider to now, and how to set it again', async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway()
+		await storeProviderKey(credentials, { name: 'anthropic', kind: 'anthropic' }, 'sk-real', abortSignal)
+		const moved = { name: 'anthropic', kind: 'anthropic', baseUrl: 'https://llm-proxy.example.com' }
+
+		// Act
+		const unavailable = await gateway.unavailableModels([moved], [['claude-opus-5-5']], abortSignal)
+
+		// Assert
+		expect(unavailable).toEqual([
+			{
+				message:
+					"Provider anthropic's key was set for https://api.anthropic.com, but the config now sends it to https://llm-proxy.example.com, so it isn't used there. Set it with `mesh-flow provider key anthropic`.",
+				fix: expect.anything() as unknown,
+			},
+		])
+	})
+
 	test("doesn't refuse a run when a compatible server can't list its models now: the loop that needs one says why", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ fetch: () => Promise.resolve(new Response('down', { status: 503 })) })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 
 		// Act
 		const unavailable = await gateway.unavailableModels([litellm], [['team-model']], abortSignal)
@@ -758,7 +804,7 @@ describe('model calls', () => {
 		// Arrange
 		const listed = vi.fn<typeof fetch>(never)
 		const { gateway, credentials } = await testGateway({ fetch: listed })
-		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await storeProviderKey(credentials, litellm, 'sk-litellm', abortSignal)
 		const stop = new AbortController()
 
 		// Act
@@ -779,7 +825,7 @@ describe('model calls', () => {
 			{ name: 'work', kind: 'anthropic' },
 			{ name: 'spare', kind: 'openai' },
 		]
-		await credentials.set('provider/work', 'sk-real', abortSignal)
+		await storeProviderKey(credentials, { name: 'work', kind: 'anthropic' }, 'sk-real', abortSignal)
 
 		// Act
 		const unavailable = await gateway.unavailableModels(

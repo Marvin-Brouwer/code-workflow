@@ -1,4 +1,4 @@
-import { providerCredential, providerModels, type GatewayHome } from '@mesh-flow/gateway'
+import { providerCredential, providerKeyOf, providerModels, providerOrigin, storeProviderKey, type GatewayHome } from '@mesh-flow/gateway'
 import { ProviderName, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { EngineError } from '../engine/engine-error.mts'
 
@@ -7,7 +7,10 @@ export interface ListedProvider {
 	readonly name: string
 	readonly kind: string
 	readonly baseUrl?: string | undefined
+	/** Whether it has a key for where the config sends it now. */
 	readonly hasKey: boolean
+	/** Where its key was set for, when that isn't where the config sends it now: the key isn't used until it's set again. */
+	readonly keySetFor?: string | undefined
 }
 
 /** The providers the app's config declares, in the order models are looked up, with whether each has a key. */
@@ -16,13 +19,19 @@ export async function listProviders(
 	declared: readonly ModelProviderDescription[],
 	abortSignal: AbortSignal,
 ): Promise<ListedProvider[]> {
-	const keys = new Set(await home.credentials.names(abortSignal))
-	return declared.map(({ name, kind, baseUrl }) => ({
-		name,
-		kind,
-		...(baseUrl === undefined ? {} : { baseUrl }),
-		hasKey: keys.has(providerCredential(name)),
-	}))
+	return Promise.all(
+		declared.map(async (provider): Promise<ListedProvider> => {
+			const { name, kind, baseUrl } = provider
+			const key = await providerKeyOf(home.credentials, provider, abortSignal)
+			return {
+				name,
+				kind,
+				...(baseUrl === undefined ? {} : { baseUrl }),
+				hasKey: key.status === 'set',
+				...(key.status === 'elsewhere' ? { keySetFor: key.origin } : {}),
+			}
+		}),
+	)
 }
 
 /** A model a provider offers, as the CLI and the UI list it: whether agents can use it. */
@@ -48,11 +57,11 @@ export async function listProviderModels(
 	abortSignal: AbortSignal,
 	fetchFromHost: typeof fetch = fetch,
 ): Promise<ProviderModelList> {
-	const provider = declared.find((known) => known.name === name)
-	if (provider === undefined) throw new EngineError('not-found', `The app's config declares no provider ${name}.`)
-	const key = await home.credentials.get(providerCredential(name), abortSignal)
-	if (key === undefined) throw new EngineError('invalid', `Provider ${name} has no key, so it can't be asked for its models.`)
-	const models = await providerModels(provider, { key, fetchFromHost }, abortSignal)
+	const provider = declaredProvider(declared, name)
+	const key = await providerKeyOf(home.credentials, provider, abortSignal)
+	if (key.status !== 'set')
+		throw new EngineError('invalid', `Provider ${name} has no key for where the config sends it, so it can't be asked for its models.`)
+	const models = await providerModels(provider, { key: key.key, fetchFromHost }, abortSignal)
 	if (models.source === 'failed') return models
 	return {
 		source: models.source,
@@ -60,10 +69,29 @@ export async function listProviderModels(
 	}
 }
 
-/** Sets the API key of the provider `name`, as the app's config names it. */
-export async function setProviderKey(home: GatewayHome, name: string, key: string, abortSignal: AbortSignal): Promise<void> {
+/**
+ * Sets the API key of the provider `name` of the app's config, for where the config sends it now:
+ * the key goes nowhere else, so a config that changes the provider's base URL needs it set again.
+ */
+export async function setProviderKey(
+	home: GatewayHome,
+	declared: readonly ModelProviderDescription[],
+	name: string,
+	key: string,
+	abortSignal: AbortSignal,
+): Promise<void> {
 	if (key.length === 0) throw new EngineError('invalid', 'The key is empty.')
-	await home.credentials.set(providerCredential(checkedName(name)), key, abortSignal)
+	const provider = declaredProvider(declared, checkedName(name))
+	if (providerOrigin(provider) === undefined)
+		throw new EngineError('invalid', `The gateway can't send model calls for provider ${name}'s kind ${provider.kind}.`)
+	await storeProviderKey(home.credentials, provider, key, abortSignal)
+}
+
+/** The provider `name` of the app's config, or a `not-found` refusal. */
+function declaredProvider(declared: readonly ModelProviderDescription[], name: string): ModelProviderDescription {
+	const provider = declared.find((known) => known.name === name)
+	if (provider === undefined) throw new EngineError('not-found', `The app's config declares no provider ${name}.`)
+	return provider
 }
 
 /** Removes the API key of the provider `name`. The provider stays in the config, without a key. */

@@ -46,8 +46,10 @@ export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOpti
 		return context.json(await listProviderModels(await gatewayHome(abortSignal), declared, context.req.param('name'), abortSignal))
 	})
 	api.put('/providers/:name/key', jsonBody(KeyBody), async (context) => {
+		const abortSignal = context.req.raw.signal
 		const { key } = context.req.valid('json')
-		await setProviderKey(await gatewayHome(context.req.raw.signal), context.req.param('name'), key, context.req.raw.signal)
+		const declared = await declaredProviders(abortSignal)
+		await setProviderKey(await gatewayHome(abortSignal), declared, context.req.param('name'), key, abortSignal)
 		return context.body(null, 204)
 	})
 	api.delete('/providers/:name/key', async (context) => {
