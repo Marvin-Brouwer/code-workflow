@@ -215,6 +215,23 @@ describe('settings', () => {
 		},
 	)
 
+	test.skipIf(process.platform === 'win32')(
+		"doesn't ask a provider for its models without its key, or one the app's config doesn't declare",
+		async () => {
+			// Arrange
+			const { url, cookie, home } = await servedUi()
+			await standInEngine(home)
+
+			// Act
+			const keyless = await send(url, '/api/settings/providers/anthropic/models', { headers: { cookie } })
+			const undeclared = await send(url, '/api/settings/providers/nobody/models', { headers: { cookie } })
+
+			// Assert
+			expect(keyless.status).toBe(400)
+			expect(undeclared.status).toBe(404)
+		},
+	)
+
 	test("removes a provider's key, and answers 404 when it has none", async () => {
 		// Arrange
 		const { url, cookie, home } = await servedUi()

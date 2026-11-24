@@ -28,7 +28,7 @@ import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-f
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential } from './providers/provider-credential.mts'
 import { chosenModel, notOfferedMessage, offeringProvider, type ModelChoice, type ServedModels } from './providers/resolve-model.mts'
-import { servedModels } from './providers/served-models.mts'
+import { providerModels, type ProviderModels } from './providers/provider-models.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
@@ -253,7 +253,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'open') return { result: await openLoop(runId, call.tools, abortSignal) }
 		if (call.type === 'close') return { result: await closeLoop(runId, call.endpoint, abortSignal) }
 		if (call.type === 'resolve-model') {
-			const served = await servedModelsOf(state.providers, abortSignal)
+			const served = await servedModelsOf(state.providers, runId, abortSignal)
 			const choice = offeringProvider(state.providers, call.models, await keyCheck(abortSignal), served)
 			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models, served))
 			return { result: resolvedModel(choice) }
@@ -305,13 +305,52 @@ export function openGateway(options: GatewayOptions): Gateway {
 			abortSignal,
 		)
 
-	/** The models the app's compatible servers with a key offer now, each asked with its key. */
-	const servedModelsOf = (providers: readonly ModelProviderDescription[], abortSignal: AbortSignal) =>
-		servedModels(
-			providers,
-			{ keyOf: (provider) => options.credentials.get(providerCredential(provider), abortSignal), fetchFromHost },
-			abortSignal,
+	/** Each run's model lists, by provider name: asked at the run's first loop that needs them, then kept for the run. */
+	const runListings = new Map<string, Map<string, Promise<ProviderModels>>>()
+
+	/**
+	 * The models `provider` offers its key, as it lists them; once a run for `runId`. `undefined` when
+	 * it has no key or can't be reached. A provider that didn't list them is asked again next time.
+	 */
+	const listedModels = async (
+		provider: ModelProviderDescription,
+		runId: string | undefined,
+		abortSignal: AbortSignal,
+	): Promise<ProviderModels | undefined> => {
+		const key = await options.credentials.get(providerCredential(provider.name), abortSignal)
+		if (key === undefined) return undefined
+		const listings = runId === undefined ? undefined : (runListings.get(runId) ?? new Map<string, Promise<ProviderModels>>())
+		let listing = listings?.get(provider.name)
+		if (listing === undefined) {
+			listing = providerModels(provider, key, fetchFromHost, abortSignal)
+			if (runId !== undefined && listings !== undefined) {
+				listings.set(provider.name, listing)
+				runListings.set(runId, listings)
+				const forget = () => listings.delete(provider.name)
+				listing.then((models) => models.source === 'failed' && forget(), forget)
+			}
+		}
+		try {
+			return await untilAborted(listing, abortSignal)
+		} catch {
+			abortSignal.throwIfAborted()
+			return undefined
+		}
+	}
+
+	/** The models each provider of `providers` with a key lists now, asked at once; kept for the run of `runId`. */
+	const servedModelsOf = async (
+		providers: readonly ModelProviderDescription[],
+		runId: string | undefined,
+		abortSignal: AbortSignal,
+	): Promise<ServedModels> => {
+		const listed = await Promise.all(
+			providers.map(async (provider) => [provider.name, await listedModels(provider, runId, abortSignal)] as const),
 		)
+		return new Map(
+			listed.flatMap(([name, models]) => (models === undefined || models.source === 'failed' ? [] : [[name, models.usable] as const])),
+		)
+	}
 
 	/** Whether a provider, by name, has a key now. */
 	const keyCheck = async (abortSignal: AbortSignal): Promise<(provider: string) => boolean> => {
@@ -325,11 +364,8 @@ export function openGateway(options: GatewayOptions): Gateway {
 		abortSignal: AbortSignal,
 	) => {
 		const hasKey = await keyCheck(abortSignal)
-		// A server that can't list its models now counts as offering them: the loop that needs one says why it can't.
-		const served = await servedModelsOf(providers, abortSignal).catch((): ServedModels => {
-			abortSignal.throwIfAborted()
-			return new Map()
-		})
+		// A provider that can't list its models now counts as offering its kind's, or any for a compatible server.
+		const served = await servedModelsOf(providers, undefined, abortSignal)
 		const missing = agentModels.flatMap((modelIds): MissingSetting[] => {
 			if (offeringProvider(providers, modelIds, hasKey, served) !== undefined) return []
 			const keyless = offeringProvider(providers, modelIds, () => true, served)
@@ -504,7 +540,10 @@ export function openGateway(options: GatewayOptions): Gateway {
 			),
 		usage: async (runId, abortSignal) => (await states.load(runId, abortSignal))?.usage ?? {},
 		unavailableModels,
-		closeRun: (runId, abortSignal) => states.update(runId, (state) => ({ state: undefined, value: state?.usage ?? {} }), abortSignal),
+		closeRun: (runId, abortSignal) => {
+			runListings.delete(runId)
+			return states.update(runId, (state) => ({ state: undefined, value: state?.usage ?? {} }), abortSignal)
+		},
 	})
 }
 

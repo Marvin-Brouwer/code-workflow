@@ -6,6 +6,7 @@ import { read, send } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { ListedProvider, NoContent } from '../_shared/settings.mts'
 import { ConfirmButton } from './confirm-button.mts'
+import { ProviderModels } from './provider-models.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
@@ -49,6 +50,9 @@ export const ProvidersPage = component({
 					}),
 					...(provider.hasKey
 						? [
+								create(ProviderModels, {
+									provider: provider.name,
+								}),
 								create(ConfirmButton, {
 									summary: 'Remove key',
 									label: `Remove the key of ${provider.name}`,

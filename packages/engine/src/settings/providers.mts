@@ -1,4 +1,4 @@
-import { providerCredential, type GatewayHome } from '@mesh-flow/gateway'
+import { providerCredential, providerModels, type GatewayHome } from '@mesh-flow/gateway'
 import { ProviderName, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { EngineError } from '../engine/engine-error.mts'
 
@@ -23,6 +23,41 @@ export async function listProviders(
 		...(baseUrl === undefined ? {} : { baseUrl }),
 		hasKey: keys.has(providerCredential(name)),
 	}))
+}
+
+/** A model a provider offers, as the CLI and the UI list it: whether agents can use it. */
+export interface ListedModel {
+	readonly id: string
+	readonly usable: boolean
+}
+
+/**
+ * The models a provider offers its key, as the CLI and the UI show them. `provider`: as the
+ * provider listed them. `catalog`: it has no model list, so they're pi-ai's catalog of its kind.
+ * `failed`: it didn't list them, with why.
+ */
+export type ProviderModelList =
+	| { readonly source: 'provider' | 'catalog'; readonly models: readonly ListedModel[] }
+	| { readonly source: 'failed'; readonly reason: string }
+
+/** Asks the provider `name` of the app's config, with its key, which models it offers. */
+export async function listProviderModels(
+	home: GatewayHome,
+	declared: readonly ModelProviderDescription[],
+	name: string,
+	abortSignal: AbortSignal,
+	fetchFromHost: typeof fetch = fetch,
+): Promise<ProviderModelList> {
+	const provider = declared.find((known) => known.name === name)
+	if (provider === undefined) throw new EngineError('not-found', `The app's config declares no provider ${name}.`)
+	const key = await home.credentials.get(providerCredential(name), abortSignal)
+	if (key === undefined) throw new EngineError('invalid', `Provider ${name} has no key, so it can't be asked for its models.`)
+	const models = await providerModels(provider, key, fetchFromHost, abortSignal)
+	if (models.source === 'failed') return models
+	return {
+		source: models.source,
+		models: [...models.usable.map(({ id }) => ({ id, usable: true })), ...models.unusable.map((id) => ({ id, usable: false }))],
+	}
 }
 
 /** Sets the API key of the provider `name`, as the app's config names it. */

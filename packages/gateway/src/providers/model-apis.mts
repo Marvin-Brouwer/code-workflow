@@ -3,14 +3,18 @@ import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ModelProviderDescription } from '@mesh-flow/protocol'
 
 /** How the gateway sends requests of one model API: the paths a model call may take, and how the key goes along. */
-interface ModelApi {
+export interface ModelApi {
 	/** Paths below the base URL that make a model request. Anything else is refused: the key is for model calls only. */
 	readonly paths: readonly string[]
 	/** The headers that carry the key. */
 	readonly credential: (key: string) => Record<string, string>
+	/** The path below the base URL that lists the models the key may use, with the headers that go along. */
+	readonly list: { readonly path: string; readonly headers: Readonly<Record<string, string>> }
 }
 
 const bearer = (key: string) => ({ authorization: `Bearer ${key}` })
+
+const openAiList = { path: '/models', headers: {} }
 
 /**
  * The model APIs the gateway can send with an API key. Each provider SDK in the sandbox makes its
@@ -18,9 +22,13 @@ const bearer = (key: string) => ({ authorization: `Bearer ${key}` })
  * (thinking, caching, beta headers) stay intact.
  */
 const modelApis: Readonly<Partial<Record<Api, ModelApi>>> = {
-	'anthropic-messages': { paths: ['/v1/messages'], credential: (key) => ({ 'x-api-key': key }) },
-	'openai-completions': { paths: ['/chat/completions'], credential: bearer },
-	'openai-responses': { paths: ['/responses'], credential: bearer },
+	'anthropic-messages': {
+		paths: ['/v1/messages'],
+		credential: (key) => ({ 'x-api-key': key }),
+		list: { path: '/v1/models?limit=1000', headers: { 'anthropic-version': '2023-06-01' } },
+	},
+	'openai-completions': { paths: ['/chat/completions'], credential: bearer, list: openAiList },
+	'openai-responses': { paths: ['/responses'], credential: bearer, list: openAiList },
 }
 
 /** How to send requests of `api`, or `undefined` when the gateway can't. */

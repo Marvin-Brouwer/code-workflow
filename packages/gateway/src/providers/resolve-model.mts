@@ -9,10 +9,11 @@ export interface ModelChoice {
 }
 
 /**
- * The model ids compatible servers say they offer, by provider name. A compatible server missing
- * here wasn't asked, such as one without a key, or at build time, so it may offer any model.
+ * The models providers said they offer their keys, by provider name. A provider missing here wasn't
+ * asked, or couldn't say: such as one without a key, or at build time. Then its kind's models in
+ * pi-ai's catalog stand in, and a compatible server may offer any model.
  */
-export type ServedModels = ReadonlyMap<string, readonly string[]>
+export type ServedModels = ReadonlyMap<string, readonly Model<Api>[]>
 
 const notAsked: ServedModels = new Map()
 
@@ -39,13 +40,14 @@ export function offeringProvider(
 }
 
 /**
- * The model `modelId` as `provider` offers it, or `undefined` when it doesn't: its kind in pi-ai's
- * catalog, or, for a compatible server, what the server listed in `served`.
+ * The model `modelId` as `provider` offers it, or `undefined` when it doesn't: as the provider
+ * listed it in `served`, else from its kind in pi-ai's catalog.
  */
 export function offeredModel(provider: ModelProviderDescription, modelId: string, served: ServedModels = notAsked): Model<Api> | undefined {
-	if (provider.kind !== openAiCompatibleKind) return modelsOfKind(provider.kind)?.find((offered) => offered.id === modelId)
 	const listed = served.get(provider.name)
-	return listed === undefined || listed.includes(modelId) ? compatibleModel(provider, modelId) : undefined
+	if (listed !== undefined) return listed.find((offered) => offered.id === modelId)
+	if (provider.kind === openAiCompatibleKind) return compatibleModel(provider, modelId)
+	return modelsOfKind(provider.kind)?.find((offered) => offered.id === modelId)
 }
 
 /** The provider called `name`, offering `modelId`: what a model call names. Throws when it's not so. */

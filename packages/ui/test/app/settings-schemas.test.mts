@@ -1,4 +1,4 @@
-import { ShownConnector, SignInState, type ConnectorSetting, type ListedProvider } from '@mesh-flow/engine'
+import { ShownConnector, SignInState, type ConnectorSetting, type ListedProvider, type ProviderModelList } from '@mesh-flow/engine'
 import { CredentialName, MissingSetting } from '@mesh-flow/gateway'
 import { describe, expect, expectTypeOf, test } from 'vitest'
 import { z } from 'zod'
@@ -20,6 +20,17 @@ describe("the page's copies of the engine's answers", () => {
 
 		// Assert
 		expect(copied).toEqual(shapeOf(original))
+	})
+
+	test('ProviderModelList takes what the original holds', () => {
+		// Arrange
+		const listed: ProviderModelList[] = [
+			{ source: 'provider', models: [{ id: 'claude-opus-5-5', usable: true }] },
+			{ source: 'failed', reason: 'It answered 401.' },
+		]
+
+		// Assert
+		expect(listed.map((answer) => page.ProviderModelList.safeParse(answer).success)).toEqual([true, true])
 	})
 
 	test('ListedProvider and ConnectorPackage take what the originals hold', () => {

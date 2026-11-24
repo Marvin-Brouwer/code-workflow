@@ -36,6 +36,7 @@ export { openPackageCache, type PackageCache } from '../packages/package-cache.m
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'
+export { providerModels, type ListedModels, type ProviderModels, type UnlistedModels } from '../providers/provider-models.mts'
 export { providerCredential } from '../providers/provider-credential.mts'
 export { offeringProvider, undeclaredModels, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
