@@ -359,10 +359,10 @@ function urlOf(input: string | URL | Request): string {
 /** An Anthropic key that lists only Sonnet, as one without access to Opus does. */
 const listsOnlySonnet = () => Promise.resolve(Response.json({ data: [{ id: 'claude-sonnet-5-5' }] }))
 
-/** A LiteLLM proxy in the app's config. */
 /** Anthropic's own API, as a config declares it. */
 const anthropicProvider = { name: 'anthropic', kind: 'anthropic' }
 
+/** A LiteLLM proxy in the app's config. */
 const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
 
 /** What the proxy lists: a model pi-ai doesn't know, and one it does. */
