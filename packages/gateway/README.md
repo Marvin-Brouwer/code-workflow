@@ -27,8 +27,15 @@ The app's config declares its providers, in git: each is one of pi-ai's provider
 const access = {
 	tools: [],
 	providers: [
-		{ name: 'anthropic', kind: 'anthropic' },
-		{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+		{
+			name: 'anthropic',
+			kind: 'anthropic',
+		},
+		{
+			name: 'proxy',
+			kind: 'openrouter',
+			baseUrl: 'https://llm-proxy.example.com/api/v1',
+		},
 	],
 }
 const grant = await gateway.openRun('run-1', access, abortSignal)

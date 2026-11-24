@@ -13,8 +13,7 @@ export interface GatewayHome {
 
 /**
  * Opens a gateway's directory: `credentials.json`, sealed with a key from the OS keychain or, where
- * there is none, `store.key` next to it; and `runs/`, the state of the runs it
- * serves. The engine and the CLI open the same one.
+ * there is none, `store.key` next to it; and `runs/`, the state of the runs it serves. The engine and the CLI open the same one.
  */
 export async function openGatewayHome(
 	directory: string,

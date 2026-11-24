@@ -109,6 +109,11 @@ async function withGateway({
 	return { gateway, credentials, calls, client }
 }
 
+/** The address a fetch goes to. */
+function addressOf(input: string | URL | Request): string {
+	return input instanceof Request ? input.url : input.toString()
+}
+
 /** One streamed OpenAI Chat Completions chunk with `choice`, and `extra` fields beside the choices. */
 function chatCompletionsChunk(choice: Record<string, unknown>, extra: Record<string, unknown> = {}): string {
 	const chunk = {
@@ -349,6 +354,32 @@ describe('gateway', () => {
 		expect(url).toEqual(new URL('https://litellm.example.com/v1/chat/completions'))
 		expect(init?.headers).toMatchObject({ authorization: 'Bearer sk-litellm' })
 		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'team-model': { requests: 1, inputTokens: 10, outputTokens: 4 } })
+	})
+
+	test('runs two agents on different models of one compatible server in a run', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>((input) =>
+			Promise.resolve(
+				addressOf(input).endsWith('/models')
+					? Response.json({ data: [{ id: 'team-model' }, { id: 'team-thinker' }] })
+					: new Response(chatCompletionsStream('Paris'), { headers: { 'content-type': 'text/event-stream' } }),
+			),
+		)
+		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
+		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const helper = agent({ model: 'team-model' })
+		const thinker = agent({ model: 'team-thinker' })
+
+		// Act
+		const run = await runBody(
+			async () => [await helper.loop`What is the capital of France?`, await thinker.loop`And of the Netherlands?`],
+			{ gateway: client },
+		)
+
+		// Assert
+		expect(await run.result).toEqual(['Paris', 'Paris'])
+		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'team-model': { requests: 1 }, 'team-thinker': { requests: 1 } })
 	})
 
 	test('runs an agent on its next model when no provider with a key offers its first', async () => {

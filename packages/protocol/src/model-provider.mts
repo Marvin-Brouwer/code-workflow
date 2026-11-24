@@ -36,7 +36,7 @@ export const ModelProviderDescription = z
 		baseUrl: z.url().optional(),
 	})
 	.refine((provider) => provider.kind !== openAiCompatibleKind || provider.baseUrl !== undefined, {
-		message: `A provider of kind ${openAiCompatibleKind} has a base URL.`,
+		message: `A provider of kind ${openAiCompatibleKind} needs a base URL.`,
 	})
 export type ModelProviderDescription = z.infer<typeof ModelProviderDescription>
 

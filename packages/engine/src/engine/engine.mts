@@ -272,8 +272,8 @@ export class Engine {
 
 	/**
 	 * The settings the app needs that this engine doesn't have, each a line that says what to do and
-	 * what sets it: an agent none of whose models a provider with a key serves, a host tool no loaded connector brings, a
-	 * credential a connector reads. Empty when the app can run. A trigger refuses a run with them; a
+	 * what sets it: an agent whose models no provider with a key serves, a host tool no loaded
+	 * connector brings, a credential a connector reads. Empty when the app can run. A trigger refuses a run with them; a
 	 * deploy reports them; the UI's wizard asks for them.
 	 */
 	async missingSettings(description: WorkflowsDescription, abortSignal: AbortSignal): Promise<MissingSetting[]> {

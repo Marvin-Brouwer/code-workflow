@@ -1,7 +1,7 @@
 /**
  * The entry file, which `main` in package.json names: the sandbox the app's runs get, the model
- * providers its agents run on, and everything that can start a run. A workflow says what it does and what it starts with; this
- * file says how it gets started and where it runs.
+ * providers its agents run on, and everything that can start a run. A workflow says what it does
+ * and what it starts with; this file says how it gets started and where it runs.
  *
  * The sandbox needs git next to node, which `node:26-bookworm` has. It reaches the npm registry,
  * so the checkout's npm dependencies install and the agent can run the tests, and nothing else:
