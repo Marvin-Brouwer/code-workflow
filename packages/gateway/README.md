@@ -29,8 +29,15 @@ Each provider with a key says which models it offers that key: `resolve-model` a
 const access = {
 	tools: [],
 	providers: [
-		{ name: 'anthropic', kind: 'anthropic' },
-		{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+		{
+			name: 'anthropic',
+			kind: 'anthropic',
+		},
+		{
+			name: 'proxy',
+			kind: 'openrouter',
+			baseUrl: 'https://llm-proxy.example.com/api/v1',
+		},
 	],
 }
 const grant = await gateway.openRun('run-1', access, abortSignal)

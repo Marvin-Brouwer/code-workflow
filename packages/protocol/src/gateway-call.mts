@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { CompatibleModel, ModelChoice } from './model-provider.mts'
 import { ConnectorName } from './connector-name.mts'
+import { CompatibleModel, ModelChoice } from './model-provider.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
 

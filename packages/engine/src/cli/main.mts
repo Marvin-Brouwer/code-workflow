@@ -144,7 +144,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				directory,
 				out,
 				platform: sandboxPlatform(options.cpu),
-				check: modelsOfConfig,
+				check: modelProblems,
 				abortSignal: buildTimeout.toAbortSignal(),
 			})
 			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
@@ -185,7 +185,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const buildAndDeploy = async () => {
 				try {
 					const abortSignal = AbortSignal.any([stopping.signal, buildTimeout.toAbortSignal()])
-					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), check: modelsOfConfig, abortSignal })
+					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), check: modelProblems, abortSignal })
 					const deployed = await withPackedApp(out, (tarball) => client().deploy(tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.version}.`)
 					reportMissing(deployed.missing)
@@ -225,7 +225,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.command('triggers')
 		.description("Lists the workflows and triggers of the app's current version.")
 		.action(async () => {
-			const deployed = await deployedApp(client())
+			const deployed = await deployedApp(client(), requestSignal())
 			console.log(formatDescription(deployed.manifest.description))
 		})
 
@@ -233,7 +233,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.command('app')
 		.description("Shows the app's current version and when it was built.")
 		.action(async () => {
-			const { version, manifest } = await deployedApp(client())
+			const { version, manifest } = await deployedApp(client(), requestSignal())
 			console.log(`${version}  built ${manifest.builtAt}`)
 		})
 
@@ -398,13 +398,13 @@ async function readJsonOrFile(value: string): Promise<unknown> {
 	return parseJson(value.startsWith('@') ? await readFile(value.slice(1), 'utf8') : value)
 }
 
-/** The current version of the deployed app. */
-/** A build's check: every agent's models are offered by a provider the app's config declares. */
-function modelsOfConfig(description: WorkflowsDescription): string[] {
+/** A build's check: what the app's config gets wrong about its models, each a line. Empty when every agent's models are offered. */
+function modelProblems(description: WorkflowsDescription): string[] {
 	return undeclaredModels(description.providers, description.models)
 }
 
-async function deployedApp(client: ControlClient, abortSignal = requestSignal()): Promise<DeployedApp> {
+/** The current version of the deployed app. */
+async function deployedApp(client: ControlClient, abortSignal: AbortSignal): Promise<DeployedApp> {
 	const found = await client.app(abortSignal)
 	if (found === undefined) throw new Error('There is no app. Deploy it with `mesh-flow deploy`, or run `mesh-flow dev`.')
 	return found

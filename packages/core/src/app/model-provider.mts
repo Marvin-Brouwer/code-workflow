@@ -65,7 +65,9 @@ export const xAi = factoryOf('xai')
 
 /**
  * GitHub Copilot. Named `github-copilot` by default. It needs a GitHub sign-in exchanged for a
- * Copilot token, which the gateway doesn't do yet: until it does, a key set for it doesn't work.
+ * Copilot token, which the gateway doesn't do yet
+ * ([#65](https://github.com/Marvin-Brouwer/code-workflow/issues/65)): until it does, it can be
+ * listed but serves no model calls.
  */
 export const githubCopilot = factoryOf('github-copilot')
 
