@@ -50,7 +50,7 @@ const grant = await gateway.openRun('run-1', access, abortSignal)
 
 An agent names a model id, or several in the order they're tried. The gateway resolves them **model first**: the agent's first model that a provider with a key offers, on the first such provider in the config's order.
 
-- `gateway.unavailableModels(providers, agentModels, abortSignal)` says why each agent can't run now: the provider that offers its model has no key, or no provider in the config offers it. A trigger uses it to refuse a run before it starts.
+- `gateway.unavailableModels(providers, agentModels, abortSignal)` says why each agent can't run now: the provider that offers its model has no key, or its key was set for another origin, or no provider in the config offers it. A trigger uses it to refuse a run before it starts.
 - `gateway.unavailableModels` also says when a provider with a key would offer a model but doesn't list it for that key: the key may have no access to it.
 - `undeclaredModels(providers, agentModels)` says which agent models no declared provider kind offers at all, and which kinds the gateway can't send for. `mesh-flow build` fails with those: it's a change to the config, not a setting.
 

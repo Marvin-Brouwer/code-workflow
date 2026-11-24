@@ -3,8 +3,13 @@ import { modelsOfKind } from './model-apis.mts'
 import { offeredModel } from './offering-provider.mts'
 
 /** Whether the gateway can send model calls for the kind of `provider`. */
-function isSendable(provider: ModelProviderDescription): boolean {
+export function isSendable(provider: ModelProviderDescription): boolean {
 	return provider.kind === openAiCompatibleKind || (modelsOfKind(provider.kind)?.length ?? 0) > 0
+}
+
+/** Says the gateway can't send model calls for `provider`'s kind. */
+export function unsendableKindMessage(provider: ModelProviderDescription): string {
+	return `The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}). See \`mesh-flow provider kinds\`.`
 }
 
 /**
@@ -14,12 +19,7 @@ function isSendable(provider: ModelProviderDescription): boolean {
  * every model. `mesh-flow build` fails with these.
  */
 export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelChoice[]): string[] {
-	const kindProblems = providers
-		.filter((provider) => !isSendable(provider))
-		.map(
-			(provider) =>
-				`The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}). See \`mesh-flow provider kinds\`.`,
-		)
+	const kindProblems = providers.filter((provider) => !isSendable(provider)).map(unsendableKindMessage)
 	const unoffered = [...new Set(agentModels.flat())]
 		.filter((modelId) => !providers.some((provider) => offeredModel(provider, modelId) !== undefined))
 		.map((modelId) => notOfferedMessage(providers, modelId))

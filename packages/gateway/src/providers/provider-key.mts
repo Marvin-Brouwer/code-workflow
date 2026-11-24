@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import { modelsOfKind } from './model-apis.mts'
 import { providerCredential } from './provider-credential.mts'
+import { isSendable, unsendableKindMessage } from './undeclared-models.mts'
 import { webOrigin } from './web-origin.mts'
 
 /**
@@ -30,7 +31,16 @@ export function providerOrigin(provider: ModelProviderDescription): string | und
 	return others.length === 0 ? origin : undefined
 }
 
-/** Stores `provider`'s key, with the origin the config sends it to now. Throws for a kind the gateway doesn't know. */
+/**
+ * Why `provider` can't get a key: its kind isn't one the gateway sends for, or it has no single
+ * origin to tie the key to until the config gives it a base URL, as `azure` needs.
+ */
+export function noOriginMessage(provider: ModelProviderDescription): string {
+	if (!isSendable(provider)) return unsendableKindMessage(provider)
+	return `Provider ${provider.name} has no base URL to tie its key to: give it a \`baseUrl\` in \`modelProviders\`.`
+}
+
+/** Stores `provider`'s key, with the origin the config sends it to now. Throws, with {@link noOriginMessage}, when it has none. */
 export async function storeProviderKey(
 	credentials: CredentialStore,
 	provider: ModelProviderDescription,
@@ -38,8 +48,7 @@ export async function storeProviderKey(
 	abortSignal: AbortSignal,
 ): Promise<void> {
 	const origin = providerOrigin(provider)
-	if (origin === undefined)
-		throw new Error(`The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}).`)
+	if (origin === undefined) throw new Error(noOriginMessage(provider))
 	await credentials.set(providerCredential(provider.name), JSON.stringify({ key, origin }), abortSignal)
 }
 

@@ -222,6 +222,11 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **Model roles/aliases (`model: 'planning'` mapped in config, or a `modelRole('planning', [...])`
   value).** Rejected (again in #58): agents name model ids directly. A fallback is a plain array
   (`model: ['claude-opus-5-5', 'gpt-5.5']`), which needs no second name for the same list.
+- **A provider key that isn't tied to where it goes, or is tied to the whole base URL.**
+  Rejected (#67): untied, a reviewed change to a base URL in git would send every user's existing
+  key to the new server. Tied to the full base URL, moving a proxy's path on the same server would
+  need every key set again for nothing. A key is tied to the base URL's origin: a path change keeps
+  it, a new host, port or scheme needs it set again.
 - **Switching an agent to its next model mid-loop when a call fails.** The model is part of a
   loop's fingerprint, so a switch would start the loop over or break its resume. The fallback
   model is picked when a loop starts, from the providers that have a key.

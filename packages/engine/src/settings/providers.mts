@@ -1,4 +1,12 @@
-import { providerCredential, providerKeyOf, providerModels, providerOrigin, storeProviderKey, type GatewayHome } from '@mesh-flow/gateway'
+import {
+	providerCredential,
+	providerKeyOf,
+	providerModels,
+	noOriginMessage,
+	providerOrigin,
+	storeProviderKey,
+	type GatewayHome,
+} from '@mesh-flow/gateway'
 import { ProviderName, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { EngineError } from '../engine/engine-error.mts'
 
@@ -83,8 +91,7 @@ export async function setProviderKey(
 	if (key.length === 0) throw new EngineError('invalid', 'The key is empty.')
 	const provider = declaredProvider(declared, checkedName(name))
 	// Checked here too, so the refusal is an EngineError the CLI and the UI show as invalid.
-	if (providerOrigin(provider) === undefined)
-		throw new EngineError('invalid', `The gateway can't send model calls for provider ${name}'s kind ${provider.kind}.`)
+	if (providerOrigin(provider) === undefined) throw new EngineError('invalid', noOriginMessage(provider))
 	await storeProviderKey(home.credentials, provider, key, abortSignal)
 }
 
