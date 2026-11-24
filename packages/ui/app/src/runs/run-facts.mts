@@ -31,7 +31,7 @@ export const RunFacts = component<RunFactsOptions>({
 				children: [
 					fact('Status', record.status),
 					fact('Workflow', record.workflow),
-					fact('App version', record.app.version),
+					fact('Workflow version', record.app.version),
 					fact('Started by', `${record.trigger.kind} ${record.trigger.id}`),
 					fact('Started', shownTime(record.createdAt)),
 					fact('Last change', shownTime(record.updatedAt)),
