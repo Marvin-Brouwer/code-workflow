@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ModelChoice } from './model-provider.mts'
+import { CompatibleModel, ModelChoice } from './model-provider.mts'
 import { ConnectorName } from './connector-name.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
@@ -54,6 +54,8 @@ export const ResolvedModel = z.object({
 	/** The pi-ai provider it is, such as `anthropic`, whose SDK makes the request in the sandbox. */
 	kind: z.string().min(1),
 	model: z.string().min(1),
+	/** For a compatible server, which pi-ai doesn't know: its base URL and the model as the config describes it. */
+	compatible: z.object({ baseUrl: z.url(), model: CompatibleModel }).optional(),
 })
 export type ResolvedModel = z.infer<typeof ResolvedModel>
 

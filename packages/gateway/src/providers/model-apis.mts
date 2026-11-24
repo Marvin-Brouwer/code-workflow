@@ -1,5 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
 
 /** How the gateway sends requests of one model API: the paths a model call may take, and how the key goes along. */
 interface ModelApi {
@@ -36,6 +37,25 @@ let catalog: ReadonlyMap<string, readonly Model<Api>[]> | undefined
 export function modelsOfKind(kind: string): readonly Model<Api>[] | undefined {
 	catalog ??= new Map(builtinProviders().map((provider) => [provider.id, provider.getModels().filter((model) => modelApis[model.api])]))
 	return catalog.get(kind)
+}
+
+/**
+ * The models `provider` offers that the gateway can send: its kind's from pi-ai's catalog, or, for a
+ * compatible server, the ones the config describes, on OpenAI's Chat Completions API with no price.
+ * `undefined` for a kind pi-ai doesn't know.
+ */
+export function modelsOfProvider(provider: ModelProviderDescription): readonly Model<Api>[] | undefined {
+	if (provider.kind !== openAiCompatibleKind) return modelsOfKind(provider.kind)
+	const baseUrl = provider.baseUrl ?? ''
+	return (provider.models ?? []).map((model) => ({
+		...model,
+		name: model.id,
+		api: 'openai-completions',
+		provider: provider.name,
+		baseUrl,
+		input: ['text'],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	}))
 }
 
 /** The kinds of provider the gateway can send for, with how many models each offers. */

@@ -26,7 +26,7 @@ import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/f
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
 import { providerCredential } from './providers/provider-credential.mts'
-import { chosenModel, notOfferedMessage, offeringProvider } from './providers/resolve-model.mts'
+import { chosenModel, notOfferedMessage, offeringProvider, type ModelChoice } from './providers/resolve-model.mts'
 import { sendModelRequest } from './providers/send-model-request.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
@@ -183,6 +183,15 @@ function unavailableMessage(providers: readonly ModelProviderDescription[], mode
 	return `Provider ${keyless.provider.name} offers model ${keyless.model.id} but has no API key. ${setKeyHint(keyless.provider.name)}`
 }
 
+/** A model choice as the sandbox gets it: for a compatible server, with the model as the config describes it. */
+function resolvedModel({ provider, model }: ModelChoice): ResolvedModel {
+	const compatible = provider.models?.find((described) => described.id === model.id)
+	const resolved: ResolvedModel = { provider: provider.name, kind: provider.kind, model: model.id }
+	return compatible === undefined || provider.baseUrl === undefined
+		? resolved
+		: { ...resolved, compatible: { baseUrl: provider.baseUrl, model: compatible } }
+}
+
 /** What a call that failed answers: why, and whether another try, or a sign-in first, may help. */
 function failedOutcome(error: unknown): CallAnswer['outcome'] {
 	const signInTo = signInOf(error)
@@ -245,8 +254,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'resolve-model') {
 			const choice = offeringProvider(state.providers, call.models, await keyCheck(abortSignal))
 			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models))
-			const { provider, model } = choice
-			return { result: { provider: provider.name, kind: provider.kind, model: model.id } satisfies ResolvedModel }
+			return { result: resolvedModel(choice) }
 		}
 		if (call.type === 'package') {
 			const asked = registryKey(call.request.registry)

@@ -382,6 +382,30 @@ describe('model calls', () => {
 		expect(ResolvedModel.parse(resultOf(answer))).toEqual({ provider: 'work', kind: 'anthropic', model: 'claude-opus-5-5' })
 	})
 
+	test('resolves a model of a compatible server with the model as the config describes it, for the sandbox', async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway()
+		const model = { id: 'team-model', contextWindow: 32_000, maxTokens: 4_000, reasoning: true }
+		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1', models: [model] }
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [], providers: [litellm] }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['team-model'] }),
+		)
+
+		// Assert
+		expect(ResolvedModel.parse(resultOf(answer))).toEqual({
+			provider: 'team-litellm',
+			kind: 'openai-compatible',
+			model: 'team-model',
+			compatible: { baseUrl: 'https://litellm.example.com/v1', model },
+		})
+	})
+
 	test("falls back to an agent's next model when no provider with a key offers the first", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway()

@@ -1,5 +1,6 @@
 import type { Api, AssistantMessageEventStream, Model, ProviderRequestOptions } from '@earendil-works/pi-ai'
-import { createModels, type Provider } from '@earendil-works/pi-ai/models'
+import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
+import { createModels, createProvider, type Provider } from '@earendil-works/pi-ai/models'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ModelRef } from '@earendil-works/pi-durable'
 import { ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
@@ -46,8 +47,7 @@ export function gatewayModels(gateway: GatewayClient): ModelSource {
 
 /** One of the app's providers, as the sandbox sees it: pi-ai's provider of its kind, with a `fetch` that goes through the gateway. */
 function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provider {
-	const inner = builtinProviders().find((provider) => provider.id === choice.kind)
-	if (inner === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${choice.kind}.`)
+	const inner = innerProvider(choice)
 	const asInner = <TApi extends Api>(model: Model<TApi>): Model<TApi> => ({ ...model, provider: inner.id })
 	const options = <Options extends ProviderRequestOptions<never>>(model: Model<Api>, given: Options | undefined): Options =>
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the options are the caller's, with the key and fetch replaced
@@ -65,6 +65,36 @@ function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provide
 		streamSimple: (model, context, given): AssistantMessageEventStream =>
 			inner.streamSimple(asInner(model), context, options(model, given)),
 	}
+}
+
+/**
+ * pi-ai's provider of the choice's kind, or, for a compatible server, which pi-ai doesn't know, one
+ * on OpenAI's Chat Completions API with the model as the config describes it.
+ */
+function innerProvider(choice: ResolvedModel): Provider {
+	if (choice.compatible !== undefined) {
+		const { baseUrl, model } = choice.compatible
+		return createProvider({
+			id: choice.kind,
+			baseUrl,
+			auth: { apiKey: { name: keySource, resolve: () => Promise.resolve({ auth: { apiKey: noKey }, source: keySource }) } },
+			models: [
+				{
+					...model,
+					name: model.id,
+					api: 'openai-completions',
+					provider: choice.kind,
+					baseUrl,
+					input: ['text'],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				},
+			],
+			api: openAICompletionsApi(),
+		})
+	}
+	const builtin = builtinProviders().find((provider) => provider.id === choice.kind)
+	if (builtin === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${choice.kind}.`)
+	return builtin
 }
 
 /**

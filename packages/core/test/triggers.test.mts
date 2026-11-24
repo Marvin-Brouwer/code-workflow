@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { defineMeshFlow } from '../src/app/define-mesh-flow.mts'
 import { describeApp } from '../src/app/describe-app.mts'
 import { image } from '../src/app/image.mts'
-import { anthropicClaude, modelProvider, openRouter } from '../src/app/model-provider.mts'
+import { anthropicClaude, modelProvider, openAiCompatible, openRouter } from '../src/app/model-provider.mts'
 import { defineWorkflows } from '../src/triggers/define-workflows.mts'
 import { schedule } from '../src/triggers/schedule.mts'
 import { userTrigger } from '../src/triggers/user-trigger.mts'
@@ -172,6 +172,26 @@ describe('defineMeshFlow', () => {
 			{ name: 'team-openrouter', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
 			{ name: 'groq', kind: 'groq' },
 		])
+	})
+
+	test("describes a compatible server's models, with defaults for what the config leaves out", () => {
+		// Act
+		const provider = openAiCompatible({
+			name: 'team-litellm',
+			baseUrl: 'https://litellm.example.com/v1',
+			models: [{ id: 'team-model' }, { id: 'team-thinker', contextWindow: 200_000, maxTokens: 32_000, reasoning: true }],
+		})
+
+		// Assert
+		expect(provider).toEqual({
+			name: 'team-litellm',
+			kind: 'openai-compatible',
+			baseUrl: 'https://litellm.example.com/v1',
+			models: [
+				{ id: 'team-model', contextWindow: 128_000, maxTokens: 16_384, reasoning: false },
+				{ id: 'team-thinker', contextWindow: 200_000, maxTokens: 32_000, reasoning: true },
+			],
+		})
 	})
 
 	test('describes its sandbox, its model providers in order, and the workflows it is given with their parameters as JSON Schema', () => {

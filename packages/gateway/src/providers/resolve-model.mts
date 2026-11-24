@@ -1,6 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import type { ModelProviderDescription } from '@mesh-flow/protocol'
-import { modelsOfKind } from './model-apis.mts'
+import { modelsOfProvider } from './model-apis.mts'
 
 /** A model id resolved to the provider that serves it, with pi-ai's description of the model. */
 export interface ModelChoice {
@@ -31,7 +31,7 @@ export function offeringProvider(
 
 /** The model `modelId` as `provider` offers it, or `undefined` when its kind doesn't. */
 export function offeredModel(provider: ModelProviderDescription, modelId: string): Model<Api> | undefined {
-	return modelsOfKind(provider.kind)?.find((offered) => offered.id === modelId)
+	return modelsOfProvider(provider)?.find((offered) => offered.id === modelId)
 }
 
 /** The provider called `name`, offering `modelId`: what a model call names. Throws when it's not so. */
@@ -50,7 +50,7 @@ export function chosenModel(providers: readonly ModelProviderDescription[], name
  */
 export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly (readonly string[])[]): string[] {
 	const unknownKinds = providers
-		.filter((provider) => (modelsOfKind(provider.kind)?.length ?? 0) === 0)
+		.filter((provider) => (modelsOfProvider(provider)?.length ?? 0) === 0)
 		.map(
 			(provider) =>
 				`The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}). See \`mesh-flow provider kinds\`.`,

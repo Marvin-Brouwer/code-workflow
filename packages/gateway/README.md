@@ -21,7 +21,7 @@ Every read opens the file again, so a secret set with the CLI counts at once in 
 
 ## Model providers
 
-The app's config declares its providers, in git: each is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name, with an optional base URL of its own, for a proxy or a compatible server. Only the API key is per user, in the credential store as `provider/<name>`, and a user can leave a provider without one. A run's providers come with `openRun`, from the app version it started on:
+The app's config declares its providers, in git: each is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name, with an optional base URL of its own, for a proxy. A provider of kind `openai-compatible` is a server that speaks the OpenAI chat completions API, such as a LiteLLM proxy: it has a base URL and lists the models it serves (`id`, `contextWindow`, `maxTokens`, `reasoning`), and `resolve-model` hands the sandbox that model description with the base URL, so it can build the model without pi-ai knowing it. Only the API key is per user, in the credential store as `provider/<name>`, and a user can leave a provider without one. A run's providers come with `openRun`, from the app version it started on:
 
 ```ts
 const access = {

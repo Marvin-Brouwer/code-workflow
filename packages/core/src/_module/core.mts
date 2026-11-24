@@ -14,14 +14,18 @@ export { image, type ImageOptions } from '../app/image.mts'
 export {
 	anthropicClaude,
 	deepSeek,
+	githubCopilot,
 	groq,
 	modelProvider,
 	openAi,
+	openAiCompatible,
 	openRouter,
 	xAi,
+	type CompatibleModelOptions,
 	type ModelProvider,
 	type ModelProviderFactory,
 	type ModelProviderOptions,
+	type OpenAiCompatibleOptions,
 } from '../app/model-provider.mts'
 export { check, runCheck, type Check, type Finding } from '../check/check.mts'
 export type { Exit, Gate } from '../exits/exit.mts'
