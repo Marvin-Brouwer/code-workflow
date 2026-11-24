@@ -145,9 +145,10 @@ const noStatus = '000'
 
 /**
  * How long curl may take through the proxy, so a hang fails with curl's own reason (exit 28) instead
- * of the test's timeout. Longer than the gateway takes to give up on a registry it can't reach.
+ * of the test's timeout: under vitest's test timeout (30 s), and longer than the gateway takes to
+ * give up on a registry it can't reach (about 15 s).
  */
-const curlMaxTime = duration.of('30s')
+const curlMaxTime = duration.of('20s')
 
 /** What a curl run left: its output, and how it ended when that wasn't exit code 0. */
 interface CurlOutput {
@@ -156,18 +157,20 @@ interface CurlOutput {
 	readonly ending: string | undefined
 }
 
-/** How a child process that failed ended: its exit code, or the signal that stopped it. */
+/** How a child process that failed ended: its exit code, why it didn't start, or the signal that stopped it. */
 function endingOf(error: ExecException | null): string | undefined {
 	if (error === null) return undefined
-	return typeof error.code === 'number' ? `exited ${String(error.code)}` : `was stopped by ${error.signal ?? 'something else'}`
+	if (typeof error.code === 'number') return `exited ${String(error.code)}`
+	if (typeof error.code === 'string') return `didn't start: ${error.message}`
+	return `was stopped by ${error.signal ?? 'an unknown signal'}`
 }
 
 /**
- * Runs curl with `args` through the proxy, and resolves to the status it got. When curl got none,
- * it resolves to curl's exit code and error instead, so a failing test names why.
+ * Runs curl with `commandArguments` through the proxy, and resolves to the status it got. When curl
+ * got none, it resolves to how curl ended and its error instead, so a failing test names why.
  */
 async function curlStatus(environment: PackageEnvironment, home: string, commandArguments: readonly string[]): Promise<string> {
-	// curl exits 0 on any status it got; without one, it exits with why. Async: the proxy runs in this process.
+	// curl exits 0 on any status it got, and usually exits with why when it got none. Async: the proxy runs in this process.
 	const curlOutput = await new Promise<CurlOutput>((resolve) => {
 		execFile(
 			'curl',
