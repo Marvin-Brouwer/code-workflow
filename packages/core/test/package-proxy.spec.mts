@@ -145,7 +145,7 @@ const noStatus = '000'
 
 /**
  * How long curl may take through the proxy, so a hang fails with curl's own reason (exit 28) instead
- * of the test's timeout: under vitest's test timeout (30 s), and longer than the gateway takes to
+ * of the test's timeout: under vitest's `testTimeout` (vitest.config.mts, 30 s now), and longer than the gateway takes to
  * give up on a registry it can't reach (about 15 s).
  */
 const curlMaxTime = duration.of('20s')
