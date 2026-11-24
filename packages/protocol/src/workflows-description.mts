@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ToolName } from './gateway-call.mts'
-import { ModelChoice, ModelProviderDescription } from './model-provider.mts'
+import { ModelConfiguration, ModelProviderDescription } from './model-provider.mts'
 import { PackageRegistry } from './package-registry.mts'
 
 /** A JSON Schema, as a plain object. */
@@ -79,6 +79,6 @@ export const WorkflowsDescription = z.object({
 	/** The model providers the app's config declares, in the order a model is looked up. */
 	providers: z.array(ModelProviderDescription),
 	/** The model ids of each of the app's agents, which a trigger checks against the providers before it starts a run. */
-	models: z.array(ModelChoice),
+	models: z.array(ModelConfiguration),
 })
 export type WorkflowsDescription = z.infer<typeof WorkflowsDescription>

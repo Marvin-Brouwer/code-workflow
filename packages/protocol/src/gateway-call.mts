@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ConnectorName } from './connector-name.mts'
-import { CompatibleModel, ModelChoice } from './model-provider.mts'
+import { CompatibleModel, ModelConfiguration } from './model-provider.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
 
@@ -73,7 +73,7 @@ export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('tool'), tool: ToolName, input: z.unknown() }),
 	z.object({ type: z.literal('open'), tools: z.array(ToolName) }),
 	z.object({ type: z.literal('close'), endpoint: EndpointId }),
-	z.object({ type: z.literal('resolve-model'), models: ModelChoice }),
+	z.object({ type: z.literal('resolve-model'), models: ModelConfiguration }),
 	z.object({ type: z.literal('model'), request: ModelRequest }),
 	z.object({ type: z.literal('package'), request: PackageRequest }),
 ])
