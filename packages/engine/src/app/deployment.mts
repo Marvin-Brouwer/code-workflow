@@ -91,6 +91,12 @@ export async function openDeployment(
 		writing = next.catch(() => undefined)
 		return next
 	}
+	/** Removes the folder of `version`. Never throws: a failure is reported to `log`, and the next removal tries it again. */
+	const removeVersion = async (version: string) => {
+		await rm(path.join(root, version), { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((removalError: unknown) => {
+			log(`Removing version ${version} in ${root} failed, so it's tried again later: ${messageOf(removalError)}`)
+		})
+	}
 	/**
 	 * Removes the version folders that aren't current and that nothing holds, one by one, and stops
 	 * once the deployment closes or `abortSignal` aborts. Without `abortSignal`, only closing stops it:
@@ -105,9 +111,7 @@ export async function openDeployment(
 		for (const entry of entries) {
 			if (closed || abortSignal?.aborted === true) return
 			if (!entry.isDirectory() || entry.name === current?.version || holdCounts.has(entry.name)) continue
-			await rm(path.join(root, entry.name), { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((error: unknown) => {
-				log(`Removing version ${entry.name} in ${root} failed, so it's tried again later: ${messageOf(error)}`)
-			})
+			await removeVersion(entry.name)
 		}
 	}
 	// Removed when a crash or a failed removal left them, before anything can hold one.
@@ -121,25 +125,21 @@ export async function openDeployment(
 				const folder = path.join(root, version)
 				const manifest = await manifestIn(tarball)
 				abortSignal.throwIfAborted()
-				try {
-					// Runs may be copying it right now: a redeploy of the same build leaves it be.
-					if (!(await versionIsComplete(folder))) {
+				// Runs may be copying it right now: a redeploy of the same build leaves it be.
+				if (!(await versionIsComplete(folder))) {
+					try {
 						await mkdir(folder, { recursive: true })
 						await copyTarball(tarball, path.join(folder, tarballFile), abortSignal)
 						// Written last: it marks the version complete.
 						await replaceFile(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'), { abortSignal })
+					} catch (error) {
+						// A folder that isn't complete is neither current nor held, so what's in it came from this deploy.
+						await removeVersion(version)
+						throw error
 					}
-					abortSignal.throwIfAborted()
-					await replaceFile(path.join(root, currentFile), version, { abortSignal })
-				} catch (error) {
-					// Only this deploy wrote that folder, unless a run holds it or it's current already.
-					if (version !== current?.version && !holdCounts.has(version)) {
-						await rm(folder, { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((removing: unknown) => {
-							log(`Removing what a failed deploy wrote of version ${version} failed, so it's tried again later: ${messageOf(removing)}`)
-						})
-					}
-					throw error
 				}
+				abortSignal.throwIfAborted()
+				await replaceFile(path.join(root, currentFile), version, { abortSignal })
 				const deployed: DeploymentVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
 				current = deployed
 				await removeOldVersions()
