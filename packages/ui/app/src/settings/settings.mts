@@ -11,7 +11,8 @@ export const SettingsPage = component({
 				textContent: 'Settings',
 			}),
 			element('p', {
-				textContent: "These work on the engine home's files, without a running engine. A running one sees a change at once.",
+				textContent:
+					"Credentials, connectors and removing a provider's key work on the engine home's files, without a running engine, and a running one sees a change at once. The providers and setting their keys need mesh-flow serve, since the deployed app declares the providers.",
 			}),
 			element('ul', {
 				children: settingsPages.map(({ route, label, description }) =>

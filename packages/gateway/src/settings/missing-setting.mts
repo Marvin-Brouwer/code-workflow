@@ -3,7 +3,8 @@ import { z } from 'zod'
 /**
  * What sets a missing setting, so a settings page knows which form to show:
  *
- * - `provider-key`: `provider` offers a model but has no API key;
+ * - `provider-key`: set `provider`'s API key: it offers a model but has no key, or its key doesn't
+ *   get the model;
  * - `credential`: set the credential `name`, which looks like `example` when there is one;
  * - `connector-for-tools`: no loaded connector brings these host tools;
  * - `connector`: the connector `connector` isn't loaded;

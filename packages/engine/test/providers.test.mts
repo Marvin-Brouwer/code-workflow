@@ -76,7 +76,10 @@ describe('the provider settings', () => {
 		const setting = setProviderKey(home, [azure], 'azure', 'sk-secret', abortSignal)
 
 		// Assert
-		await expect(setting).rejects.toMatchObject({ code: 'invalid' })
+		await expect(setting).rejects.toMatchObject({
+			code: 'invalid',
+			message: 'Provider azure has no base URL to tie its key to: give it a `baseUrl` in `modelProviders`.',
+		})
 	})
 
 	test("refuses a key for a provider the config doesn't declare", async () => {

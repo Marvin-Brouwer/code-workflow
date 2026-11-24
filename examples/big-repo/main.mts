@@ -30,7 +30,8 @@ export default defineMeshFlow({
 		registries: [nugetOrg, awsCodeArtifacts],
 	}),
 	// The agents run on the team's LiteLLM proxy first, which lists its own models, then on GitHub
-	// Copilot. Each user sets the keys they have: `mesh-flow provider key team-litellm`.
+	// Copilot, once the gateway can exchange a GitHub sign-in for its token (#65). Each user sets
+	// the keys they have: `mesh-flow provider key team-litellm`.
 	modelProviders: [
 		openAiCompatible({
 			name: 'team-litellm',
