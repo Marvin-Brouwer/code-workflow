@@ -18,7 +18,7 @@ describe('providerModels', () => {
 			{
 				key: 'sk-anthropic',
 				fetchFromHost: neverAnswers,
-				timeout: duration({ milliseconds: 20 }),
+				timeout: duration.of('20ms'),
 			},
 			abortSignal,
 		)

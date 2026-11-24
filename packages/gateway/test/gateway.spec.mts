@@ -501,6 +501,25 @@ describe('model calls', () => {
 		expect(ResolvedModel.parse(resultOf(answer))).toEqual({ provider: 'anthropic', kind: 'anthropic', model: 'claude-opus-5-5' })
 	})
 
+	test("tells a loop why a compatible server it needs didn't list its models, not to set its key again", async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway({ fetch: () => Promise.resolve(new Response('down', { status: 503 })) })
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [], providers: [litellm] }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['team-model'] }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toBe(
+			"Provider team-litellm didn't list its models: it answered 503. It may offer model team-model: try again once it answers.",
+		)
+	})
+
 	test("says a provider's key doesn't list a model it would offer, with the key as the fix", async () => {
 		// Arrange
 		const { gateway, credentials } = await testGateway({ fetch: listsOnlySonnet })

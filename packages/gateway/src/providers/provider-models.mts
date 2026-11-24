@@ -1,6 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
-import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { duration, type Duration } from '@mesh-flow/duration'
+import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { messageOf } from '../errors.mts'
 import { untilAborted } from '../until-aborted.mts'
@@ -33,12 +33,13 @@ export interface UnlistedModels {
 export type ProviderModels = ListedModels | UnlistedModels
 
 /** How long a provider has to list its models before it counts as one that can't say now. */
-export const modelListTimeout = duration({ seconds: 15 })
+export const modelListTimeout = duration.of('15s')
 
 /** What {@link providerModels} asks with. */
 export interface ProviderModelsOptions {
 	/** The provider's key, which the list is for. */
 	readonly key: string
+	/** Sends the list request: the gateway's own `fetch`. */
 	readonly fetchFromHost: typeof fetch
 	/** How long the provider has to list its models. Default: {@link modelListTimeout}. */
 	readonly timeout?: Duration | undefined
@@ -109,19 +110,14 @@ export async function providerModels(
 	{ key, fetchFromHost, timeout = modelListTimeout }: ProviderModelsOptions,
 	abortSignal: AbortSignal,
 ): Promise<ProviderModels> {
-	const noAnswer = new AbortController()
-	const timer = setTimeout(() => {
-		noAnswer.abort()
-	}, timeout.to('ms'))
-	const listingSignal = AbortSignal.any([abortSignal, noAnswer.signal])
+	const noAnswer = timeout.toAbortSignal()
+	const listingSignal = AbortSignal.any([abortSignal, noAnswer])
 	try {
 		// A provider that ignores the signal, or never finishes its answer, can't hold up a stop.
 		return await untilAborted(askedModels(provider, key, fetchFromHost, listingSignal), listingSignal)
 	} catch (error) {
 		abortSignal.throwIfAborted()
-		if (noAnswer.signal.aborted) return unlisted(provider, `no answer within ${timeout.toString()}`)
+		if (noAnswer.aborted) return unlisted(provider, `no answer within ${timeout.toString()}`)
 		return unlisted(provider, messageOf(error))
-	} finally {
-		clearTimeout(timer)
 	}
 }
