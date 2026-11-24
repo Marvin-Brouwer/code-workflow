@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { uploadApp } from '../src/apps/upload-app.mts'
+import { uploadApp } from '../src/app/upload-app.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { hostBackend } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'

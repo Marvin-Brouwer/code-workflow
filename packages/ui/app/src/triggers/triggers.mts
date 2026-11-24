@@ -45,7 +45,7 @@ export const TriggersPage = component({
 				return element('code', {
 					textContent: trigger.cron,
 				})
-			const name = `webhook/${app.name}/${trigger.id}`
+			const name = `webhook/${trigger.id}`
 			if (secrets.has(name))
 				return element('span', {
 					textContent: 'Secret set',

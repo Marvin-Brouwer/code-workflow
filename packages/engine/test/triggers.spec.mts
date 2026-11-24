@@ -12,7 +12,7 @@ import { openWebhookSecrets } from '../src/triggers/webhook-secrets.mts'
 import { deferred } from './support/deferred.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { deployThroughApi, testAppName } from './support/test-app.mts'
+import { deployThroughApi } from './support/test-app.mts'
 import { triggerEntry } from './support/trigger-entry.mts'
 
 const signal = new AbortController().signal
@@ -85,10 +85,12 @@ interface ServeOptions {
 	readonly triggers?: WorkflowsDescription['triggers']
 	/** Changes what the backend does. */
 	readonly wrap?: (backend: SandboxBackend) => SandboxBackend
+	/** Whether the test app is deployed. Default: it is. */
+	readonly deployed?: boolean
 }
 
 /** An engine that serves webhooks, with the test app deployed and its webhook secrets set, closed when the test ends. */
-async function serve({ body, triggers = declared.triggers, wrap = (backend) => backend }: ServeOptions = {}) {
+async function serve({ body, triggers = declared.triggers, wrap = (backend) => backend, deployed = true }: ServeOptions = {}) {
 	const home = await temporaryDirectory()
 	const host = hostBackend(path.join(home, 'sandboxes'))
 	const created = vi.fn()
@@ -113,12 +115,12 @@ async function serve({ body, triggers = declared.triggers, wrap = (backend) => b
 		served.close({ pause: pauseDeadline.toAbortSignal(), backend: backendDeadline.toAbortSignal() })
 	onTestFinished(() => close())
 	const secrets = openWebhookSecrets(served.gateway.credentials)
-	await secrets.set(testAppName, 'fix-issue', secret, signal)
-	await secrets.set(testAppName, 'signed', secret, signal)
+	await secrets.set('fix-issue', secret, signal)
+	await secrets.set('signed', secret, signal)
 	const client = controlClient(served.socketPath)
-	await deployThroughApi(client, { main: triggerEntry(body) }, { workflows: declared.workflows, triggers })
-	const deliver = (webhook: string, delivery: string, headers: Record<string, string>, app = testAppName) =>
-		fetch(`${served.webhookUrl ?? ''}/webhooks/${app}/${webhook}`, {
+	if (deployed) await deployThroughApi(client, { main: triggerEntry(body) }, { workflows: declared.workflows, triggers })
+	const deliver = (webhook: string, delivery: string, headers: Record<string, string>) =>
+		fetch(`${served.webhookUrl ?? ''}/webhooks/${webhook}`, {
 			method: 'POST',
 			body: delivery,
 			headers: { 'content-type': 'application/json', ...headers },
@@ -154,9 +156,8 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect(await runOf(again)).toBe(run)
 		const record = await untilStatus(client, run, 'succeeded')
 		expect(record).toMatchObject({
-			app: { name: testAppName },
 			trigger: { kind: 'webhook', id: 'fix-issue' },
-			key: `webhook ${testAppName}/fix-issue/delivery-1`,
+			key: 'webhook fix-issue/delivery-1',
 		})
 		expect(await client.events(run, signal)).toEqual([
 			expect.objectContaining({ trigger: { kind: 'webhook', id: 'fix-issue' }, input: payload }),
@@ -229,32 +230,32 @@ describe.skipIf(process.platform !== 'linux')('webhook triggers', () => {
 		expect([first.status, same.status, other.status]).toEqual([202, 200, 202])
 	})
 
-	test('answer 404 for a webhook the app does not have, and for an app that is not deployed', async () => {
+	test('answer 404 for a webhook the app does not have, and before an app is deployed', async () => {
 		// Arrange
-		const { secrets, deliver, log } = await serve()
-		await secrets.set(testAppName, 'deploy', secret, signal)
-		await secrets.set('elsewhere', 'fix-issue', secret, signal)
+		const withApp = await serve()
+		const withoutApp = await serve({ deployed: false })
+		await withApp.secrets.set('deploy', secret, signal)
 
 		// Act
-		const unknownWebhook = await deliver('deploy', JSON.stringify(payload), { 'x-webhook-secret': secret })
-		const unknownApp = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret }, 'elsewhere')
+		const unknownWebhook = await withApp.deliver('deploy', JSON.stringify(payload), { 'x-webhook-secret': secret })
+		const undeployed = await withoutApp.deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 
 		// Assert
-		expect([unknownWebhook.status, unknownApp.status]).toEqual([404, 404])
-		expect(log).toHaveBeenCalledWith(expect.stringContaining('has no webhook deploy'))
-		expect(log).toHaveBeenCalledWith(expect.stringContaining('there is no app elsewhere'))
+		expect([unknownWebhook.status, undeployed.status]).toEqual([404, 404])
+		expect(withApp.log).toHaveBeenCalledWith(expect.stringContaining('has no webhook deploy'))
+		expect(withoutApp.log).toHaveBeenCalledWith(expect.stringContaining('there is no app'))
 	})
 
-	test("answer 404 for names that can't be an app's or a webhook's", async () => {
+	test("answer 404 for names that can't be a webhook's", async () => {
 		// Arrange
 		const { deliver } = await serve()
 
 		// Act
-		const badApp = await deliver('fix-issue', JSON.stringify(payload), { 'x-webhook-secret': secret }, 'my%20app')
+		const badWebhook = await deliver('fix%20issue', JSON.stringify(payload), { 'x-webhook-secret': secret })
 		const longWebhook = await deliver('x'.repeat(200), JSON.stringify(payload), { 'x-webhook-secret': secret })
 
 		// Assert
-		expect([badApp.status, longWebhook.status]).toEqual([404, 404])
+		expect([badWebhook.status, longWebhook.status]).toEqual([404, 404])
 	})
 
 	test('end a run as skipped when the schema in the sandbox turns the delivery down', async () => {
@@ -306,7 +307,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		const { client, log } = await serve({ body: waitsForever, triggers: [everySecond] })
 		await vi.waitFor(
 			() => {
-				expect(log).toHaveBeenCalledWith(expect.stringContaining(`Skipped schedule ${testAppName}/fix-issue * * * * * *`))
+				expect(log).toHaveBeenCalledWith(expect.stringContaining('Skipped schedule fix-issue * * * * * *'))
 			},
 			{ timeout: duration.of('10s').to('ms'), interval: 100 },
 		)
@@ -314,7 +315,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		// Assert
 		const runs = await client.list(signal)
 		expect(runs).toHaveLength(1)
-		expect(runs[0]).toMatchObject({ app: { name: testAppName }, trigger: { kind: 'schedule', id: 'fix-issue * * * * * *' } })
+		expect(runs[0]).toMatchObject({ trigger: { kind: 'schedule', id: 'fix-issue * * * * * *' } })
 	})
 
 	test('start a schedule again once its previous run has ended', async () => {
@@ -331,7 +332,7 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		)
 	})
 
-	test('start nothing more once the app is removed', async () => {
+	test('start nothing more once a version without the schedule is deployed', async () => {
 		// Arrange
 		const { client } = await serve({ triggers: [everySecond] })
 		await vi.waitFor(
@@ -342,12 +343,12 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 		)
 
 		// Act
-		await client.removeApp(testAppName, signal)
-		const afterRemoving = (await client.list(signal)).length
+		await deployThroughApi(client, { main: triggerEntry() }, { workflows: declared.workflows, triggers: [] })
+		const afterDeploying = (await client.list(signal)).length
 		await sleep(moreThanTwoTicks, signal)
 
 		// Assert
-		expect((await client.list(signal)).length).toBe(afterRemoving)
+		expect((await client.list(signal)).length).toBe(afterDeploying)
 	})
 
 	test('fire a schedule by hand, with the parameters it is given', async () => {
@@ -356,7 +357,6 @@ describe.skipIf(process.platform !== 'linux')('schedule triggers', () => {
 
 		// Act
 		const run = await client.startRun({
-			app: testAppName,
 			trigger: { kind: 'schedule', id: 'fix-issue 0 0 1 1 *' },
 			input: { issue: 9 },
 			abortSignal: signal,

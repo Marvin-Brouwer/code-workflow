@@ -5,7 +5,7 @@ import { getRequestListener } from '@hono/node-server'
 import { duration } from '@mesh-flow/duration'
 import { openGateway, type CredentialStore, type GatewayHome } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
-import { openAppStore, type AppStore } from '../apps/app-store.mts'
+import { openAppStore, type AppStore } from '../app/app-store.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
 import type { ShownConnector } from '../control/shown-connector.mts'
@@ -45,7 +45,7 @@ export interface ServeEngineOptions {
 	 */
 	readonly webhooks?: { readonly port: number; readonly host?: string }
 	/**
-	 * Loads the connectors whose host tools apps may call through the gateway, and whose sign-ins
+	 * Loads the connectors whose host tools the app may call through the gateway, and whose sign-ins
 	 * runs may wait for, with the gateway's credentials. Default: none.
 	 */
 	readonly connectors?: (credentials: CredentialStore, abortSignal: AbortSignal) => Promise<readonly LoadedConnector[]>
@@ -58,8 +58,8 @@ export interface ServeEngineOptions {
 /** An engine that serves its control API. */
 export interface ServedEngine {
 	readonly engine: Engine
-	/** The deployed apps, in the home's `apps` folder. */
-	readonly apps: AppStore
+	/** The deployed app, in the home's `app` folder. */
+	readonly app: AppStore
 	/** The gateway's credentials and providers, in the home's `gateway` folder. */
 	readonly gateway: GatewayHome
 	readonly socketPath: string
@@ -92,7 +92,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 
 	let engine: Engine
-	let apps: AppStore
+	let app: AppStore
 	let gatewayHome: GatewayHome
 	let shownConnectors: ShownConnector[]
 	try {
@@ -111,12 +111,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			tools: connectors.flatMap((connector) => connector.tools),
 			registries: Object.fromEntries(connectors.flatMap(({ name, registries }) => (registries === undefined ? [] : [[name, registries]]))),
 		})
-		apps = await openAppStore(path.join(options.home, 'apps'), options.abortSignal, log)
+		app = await openAppStore(path.join(options.home, 'app'), options.abortSignal, log)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
 				store: openRunStore(path.join(options.home, 'runs')),
-				apps,
+				app,
 				gateway,
 				signIns: openSignIns({ connectors, log }),
 				connectorSettings: connectorSettingsOf(connectors),
@@ -132,12 +132,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 	const scheduler = createScheduler({ engine, log })
 	const armSchedules = () => {
-		scheduler.update(apps.list())
+		scheduler.update(app.current())
 	}
 	armSchedules()
 	const api = getRequestListener(
 		controlApi(engine, {
-			apps: { store: apps, changed: armSchedules },
+			app: { store: app, deployed: armSchedules },
 			connectors: shownConnectors,
 		}).fetch,
 	)
@@ -148,7 +148,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let webhooks: { server: Server; url: string } | undefined
 	if (options.webhooks) {
 		const secrets = openWebhookSecrets(gatewayHome.credentials)
-		const ingress = getRequestListener(webhookApi({ engine, current: apps.current, secrets, log }).fetch)
+		const ingress = getRequestListener(webhookApi({ engine, current: app.current, secrets, log }).fetch)
 		const webhookServer = createServer((request, response) => {
 			void ingress(request, response)
 		})
@@ -157,7 +157,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		} catch (error) {
 			scheduler.close()
 			await closeServer(server)
-			await apps.close()
+			await app.close()
 			await engine.close({ pause: closeStep.toAbortSignal(), backend: closeStep.toAbortSignal() })
 			await unlock()
 			throw error
@@ -170,7 +170,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			await Promise.all([closeServer(server), webhooks ? closeServer(webhooks.server) : undefined])
 			scheduler.close()
 			// A deploy that was under way when the servers closed finishes before the home is let go.
-			await settleWithin(apps.close(), deadlines.backend)
+			await settleWithin(app.close(), deadlines.backend)
 			await engine.close(deadlines)
 		} finally {
 			// Reported, not thrown: an error closing the engine is the one to see.
@@ -181,7 +181,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 	return {
 		engine,
-		apps,
+		app,
 		gateway: gatewayHome,
 		socketPath,
 		...(webhooks ? { webhookUrl: webhooks.url } : {}),

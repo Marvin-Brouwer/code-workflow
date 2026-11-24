@@ -35,7 +35,7 @@ function signInLines(connector: string, signIns: readonly SignInState[]): string
 export function formatRun(record: RunRecord, signIns: readonly SignInState[] = []): string {
 	const lines = [
 		`${record.id}: ${record.workflow}, ${record.status}`,
-		field('app', `${record.app.name} ${record.app.version}`),
+		field('app', record.app.version),
 		field('trigger', `${record.trigger.kind} ${record.trigger.id}`),
 		field('started', record.createdAt),
 		field('updated', record.updatedAt),

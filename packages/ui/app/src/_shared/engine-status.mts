@@ -4,7 +4,7 @@ import { read, type Answer } from './api.mts'
 import { poll } from './poll.mts'
 
 /**
- * Whether the engine answers on its control socket: runs and apps need it, settings don't. Or
+ * Whether the engine answers on its control socket: runs and the app need it, settings don't. Or
  * that this page has no access any more: `mesh-flow ui` was started again, with a new token.
  */
 export type EngineStatus = 'unknown' | 'running' | 'stopped' | 'no-access'

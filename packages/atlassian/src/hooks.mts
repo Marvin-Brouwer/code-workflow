@@ -127,11 +127,11 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * Starts `workflow` with `{ key }` whenever `label` is put on an issue: a ready-made `webhook`
  * trigger for the most common way to hand a story to a run.
  *
- * Point a Jira webhook for updated issues at `/webhooks/<app>/<workflow>-labeled-<label>` on the
+ * Point a Jira webhook for updated issues at `/webhooks/<workflow>-labeled-<label>` on the
  * engine: deliveries are checked as Jira signs them, and keyed by Jira's delivery id, so a
  * redelivery reuses its run. Other updates end as skipped runs, since a changelog can't be filtered
  * by structure alone, so narrow the webhook in Jira with JQL, such as `labels = ai-develop`. Set
- * its secret with `mesh-flow webhook secret <app> <workflow>-labeled-<label> --generate` and paste
+ * its secret with `mesh-flow webhook secret <workflow>-labeled-<label> --generate` and paste
  * it into Jira.
  *
  * @param workflow - A workflow whose parameters are `JiraIssueParameters`, or `{ key }` with

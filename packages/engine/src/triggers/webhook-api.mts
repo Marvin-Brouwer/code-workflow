@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { AppVersion } from '../apps/app-store.mts'
+import type { AppVersion } from '../app/app-store.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { EngineError } from '../engine/engine-error.mts'
 import { messageOf } from '../errors.mts'
@@ -12,8 +12,8 @@ import type { WebhookSecrets } from './webhook-secrets.mts'
 /** What the webhook ingress needs. */
 export interface WebhookApiOptions {
 	readonly engine: Pick<Engine, 'runWithKey' | 'startRun'>
-	/** The current version of a deployed app, which says what webhooks it has. */
-	readonly current: (app: string) => AppVersion | undefined
+	/** The current version of the deployed app, which says what webhooks it has. */
+	readonly current: () => AppVersion | undefined
 	readonly secrets: WebhookSecrets
 	/** Where the details of a refused delivery go; the sender only gets a short answer. */
 	readonly log: (message: string) => void
@@ -25,20 +25,20 @@ const maxBodyBytes = 25 * 1024 * 1024
 /** The longest delivery name taken from a header. */
 const maxDeliveryNameLength = 200
 
-/** The route an app's webhook is delivered to. */
-export function webhookPath(app: string, webhook: string): string {
-	return `/webhooks/${encodeURIComponent(app)}/${encodeURIComponent(webhook)}`
+/** The route a webhook is delivered to. */
+export function webhookPath(webhook: string): string {
+	return `/webhooks/${encodeURIComponent(webhook)}`
 }
 
 /**
- * The webhook ingress: `POST /webhooks/:app/:webhook` starts a run for a delivery to a webhook
- * trigger of a deployed app's current version. Everything is checked on the host before a sandbox
+ * The webhook ingress: `POST /webhooks/:webhook` starts a run for a delivery to a webhook trigger
+ * of the deployed app's current version. Everything is checked on the host before a sandbox
  * is made, in this order:
  *
  * | Check | Answer when it fails |
  * |---|---|
- * | a secret is set for the app's webhook | 404 |
- * | the app is deployed, and its current version has the webhook | 404 |
+ * | a secret is set for the webhook | 404 |
+ * | an app is deployed, and its current version has the webhook | 404 |
  * | the delivery is signed with the secret | 401 |
  * | the body is JSON, up to 25 MB | 400, 413 |
  *
@@ -67,20 +67,17 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 	const skippedFor = new Set<string>()
 
 	api.post(
-		'/webhooks/:app/:webhook',
+		'/webhooks/:webhook',
 		bodyLimit({ maxSize: maxBodyBytes, onError: (context) => context.json({ error: 'The delivery is too large.' }, 413) }),
 		async (context) => {
-			const appName = context.req.param('app')
 			const id = context.req.param('webhook')
 			// Undeployed and unset look the same from outside, so names can't be probed.
-			const secret = await secrets.get(appName, id, context.req.raw.signal)
-			if (secret === undefined)
-				return refuse(context, 404, notFound, `no secret is set; set one with \`mesh-flow webhook secret ${appName} ${id}\`.`)
-			const deployed = current(appName)
-			if (deployed === undefined) return refuse(context, 404, notFound, `there is no app ${appName}; deploy it with \`mesh-flow deploy\`.`)
+			const secret = await secrets.get(id, context.req.raw.signal)
+			if (secret === undefined) return refuse(context, 404, notFound, `no secret is set; set one with \`mesh-flow webhook secret ${id}\`.`)
+			const deployed = current()
+			if (deployed === undefined) return refuse(context, 404, notFound, 'there is no app; deploy it with `mesh-flow deploy`.')
 			const trigger = deployed.manifest.description.triggers.find((candidate) => candidate.kind === 'webhook' && candidate.id === id)
-			if (trigger?.kind !== 'webhook')
-				return refuse(context, 404, notFound, `version ${deployed.version} of ${appName} has no webhook ${id}.`)
+			if (trigger?.kind !== 'webhook') return refuse(context, 404, notFound, `version ${deployed.version} of the app has no webhook ${id}.`)
 			const body = new Uint8Array(await context.req.arrayBuffer())
 			if (!signatureFits(trigger.signature, secret, context.req.raw.headers, body)) {
 				const { scheme, header } = trigger.signature
@@ -103,12 +100,11 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 				return context.json({ skipped: `The delivery is not for webhook ${id}.`, problems }, 200)
 			}
 
-			const key = `webhook ${appName}/${id}/${deliveryName(trigger.deliveryHeader, context.req.raw.headers, body)}`
+			const key = `webhook ${id}/${deliveryName(trigger.deliveryHeader, context.req.raw.headers, body)}`
 			const known = engine.runWithKey(key)
 			if (known !== undefined) return context.json({ run: known.id, status: known.status }, 200)
 			// Not the request's signal: a sender that hangs up after this point doesn't undo the delivery.
 			const record = await engine.startRun({
-				app: appName,
 				input: payload,
 				trigger: { kind: 'webhook', id },
 				key,
@@ -124,7 +120,7 @@ export function webhookApi(options: WebhookApiOptions): Hono {
 			log(`A delivery to ${context.req.path} wasn't started: ${error.message}`)
 			return context.json({ error: "The engine can't run this app's models now." }, 503)
 		}
-		// Removed, or deployed again without the webhook, since the checks above.
+		// Deployed again without the webhook since the checks above.
 		if (error instanceof EngineError && error.code === 'not-found') return context.json({ error: notFound }, 404)
 		log(`A delivery to ${context.req.path} failed: ${messageOf(error)}`)
 		return context.json({ error: 'The delivery could not be handled.' }, 500)

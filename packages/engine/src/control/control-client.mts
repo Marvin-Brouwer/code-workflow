@@ -8,8 +8,8 @@ import { hasErrorCode } from '../errors.mts'
 import { RunRecord } from '../runs/run-record.mts'
 import { ShownConnector } from './shown-connector.mts'
 
-/** A deployed app as the control API shows it: its current version and what that declares. */
-export const DeployedApp = z.object({ name: z.string(), version: z.string(), manifest: AppManifest })
+/** The deployed app as the control API shows it: its current version and what that declares. */
+export const DeployedApp = z.object({ version: z.string(), manifest: AppManifest })
 export type DeployedApp = z.infer<typeof DeployedApp>
 
 /** What a deploy answers: the app, and the settings the engine still needs before it can run. */
@@ -34,9 +34,8 @@ export interface ControlClient {
 	get(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/** The run's events, in the order the runtime sent them. */
 	events(run: string, abortSignal: AbortSignal): Promise<RuntimeEvent[]>
-	/** Starts a run through one of an app's triggers, with its parameters or a webhook's payload. Without them, a schedule runs with its own. */
+	/** Starts a run through one of the app's triggers, with its parameters or a webhook's payload. Without them, a schedule runs with its own. */
 	startRun(options: {
-		readonly app: string
 		readonly trigger: TriggerReference
 		readonly input?: unknown
 		/** Names the start, so sending it again returns the run it started instead of a second one. */
@@ -64,13 +63,12 @@ export interface ControlClient {
 	signIns(abortSignal: AbortSignal): Promise<SignInState[]>
 	/** Waits until the user signed in to `connector`, joining the sign-in runs wait for. */
 	waitForSignIn(connector: string, abortSignal: AbortSignal): Promise<void>
-	/** Every deployed app's current version. */
-	apps(abortSignal: AbortSignal): Promise<DeployedApp[]>
-	/** The settings the current version of app `name` still needs before it can run. Empty when it can. */
-	missingSettings(name: string, abortSignal: AbortSignal): Promise<MissingSetting[]>
-	/** Deploys the built app packed in `tarball`, on this machine, as the new current version of `name`. */
-	deploy(name: string, tarball: string, abortSignal: AbortSignal): Promise<DeployOutcome>
-	removeApp(name: string, abortSignal: AbortSignal): Promise<void>
+	/** The deployed app's current version, or nothing before the first deploy. */
+	app(abortSignal: AbortSignal): Promise<DeployedApp | undefined>
+	/** The settings the app's current version still needs before it can run. Empty when it can. */
+	missingSettings(abortSignal: AbortSignal): Promise<MissingSetting[]>
+	/** Deploys the built app packed in `tarball`, on this machine, as the new current version. */
+	deploy(tarball: string, abortSignal: AbortSignal): Promise<DeployOutcome>
 }
 
 /** The route of one run. */
@@ -86,8 +84,7 @@ export function controlClient(socketPath: string): ControlClient {
 		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
 		get: (run, abortSignal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, abortSignal),
 		events: (run, abortSignal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, abortSignal),
-		startRun: ({ app, trigger, input, key, abortSignal }) =>
-			call(socketPath, RunRecord, 'POST', '/runs', { app, trigger, input, key }, abortSignal),
+		startRun: ({ trigger, input, key, abortSignal }) => call(socketPath, RunRecord, 'POST', '/runs', { trigger, input, key }, abortSignal),
 		answer: (run, requestId, value, abortSignal) =>
 			call(socketPath, RunRecord, 'POST', `${runPath(run)}/answers/${encodeURIComponent(requestId)}`, { value }, abortSignal),
 		stop: act('stop'),
@@ -101,14 +98,9 @@ export function controlClient(socketPath: string): ControlClient {
 		waitForSignIn: async (connector, abortSignal) => {
 			await call(socketPath, z.object({ signedIn: z.string() }), 'POST', `/sign-ins/${encodeURIComponent(connector)}`, {}, abortSignal)
 		},
-		apps: (abortSignal) => call(socketPath, z.array(DeployedApp), 'GET', '/apps', undefined, abortSignal),
-		missingSettings: (name, abortSignal) =>
-			call(socketPath, z.array(MissingSetting), 'GET', `/apps/${encodeURIComponent(name)}/missing`, undefined, abortSignal),
-		deploy: (name, tarball, abortSignal) =>
-			call(socketPath, DeployOutcome, 'PUT', `/apps/${encodeURIComponent(name)}`, { tarball }, abortSignal),
-		removeApp: async (name, abortSignal) => {
-			await call(socketPath, z.unknown(), 'DELETE', `/apps/${encodeURIComponent(name)}`, undefined, abortSignal)
-		},
+		app: async (abortSignal) => (await call(socketPath, DeployedApp.nullable(), 'GET', '/app', undefined, abortSignal)) ?? undefined,
+		missingSettings: (abortSignal) => call(socketPath, z.array(MissingSetting), 'GET', '/app/missing', undefined, abortSignal),
+		deploy: (tarball, abortSignal) => call(socketPath, DeployOutcome, 'PUT', '/app', { tarball }, abortSignal),
 	} satisfies ControlClient)
 }
 

@@ -2,7 +2,6 @@ import { RunUsage } from '@mesh-flow/gateway'
 import { PackageRegistry, RuntimeRequest, TriggerReference } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox, SandboxSpecification } from '@mesh-flow/sandbox'
 import { z } from 'zod'
-import { AppName } from '../apps/names.mts'
 import { RunId } from './run-id.mts'
 
 /**
@@ -28,7 +27,6 @@ export const finishedStatuses: ReadonlySet<RunStatus> = new Set(['succeeded', 'f
  * code in the same sandbox even after another version was deployed.
  */
 export const RunApp = z.object({
-	name: AppName,
 	version: z.string().min(1),
 	/** The built entry file the sandbox starts with `node`. */
 	entry: z.string().min(1),

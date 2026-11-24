@@ -15,7 +15,7 @@ export const deliveryHeader = 'idempotency-key'
 /**
  * The options every GitLab webhook trigger gets: how GitLab signs a delivery, and the header that
  * names it. Spread them into a `webhook` trigger on one of the events here. Set the webhook's secret
- * with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitLab as the
+ * with `mesh-flow webhook secret <webhook> --generate` and paste it into GitLab as the
  * webhook's secret token.
  *
  * @example

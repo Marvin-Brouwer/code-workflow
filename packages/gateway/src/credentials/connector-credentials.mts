@@ -3,7 +3,7 @@ import type { CredentialStore } from './credential-store.mts'
 /**
  * The names the gateway and the engine keep their own credentials under, which no connector may
  * take as its name: model providers' keys (`provider/<name>`) and webhook secrets
- * (`webhook/<app>/<webhook>`).
+ * (`webhook/<webhook>`).
  */
 const reservedCredentialNamespaces: readonly string[] = ['provider', 'webhook']
 

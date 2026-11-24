@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import type { AppVersion } from '../src/apps/app-store.mts'
+import type { AppVersion } from '../src/app/app-store.mts'
 import type { StartRunOptions } from '../src/engine/engine.mts'
 import type { RunRecord, RunStatus } from '../src/runs/run-record.mts'
 import { createScheduler } from '../src/triggers/scheduler.mts'
@@ -11,10 +11,9 @@ const sandboxDescription = { ...sandbox, registries: [] }
 const everySecond = { kind: 'schedule' as const, id: 'report * * * * * *', workflow: 'report', cron: '* * * * * *' }
 const everyOtherSecond = { kind: 'schedule' as const, id: 'report */2 * * * * *', workflow: 'report', cron: '*/2 * * * * *' }
 
-/** Version `version` of the app `team`, listing `triggers`. */
-function teamApp(version: string, triggers: TriggerDescription[] = [everySecond]): AppVersion {
+/** Version `version` of the app, listing `triggers`. */
+function appVersion(version: string, triggers: TriggerDescription[] = [everySecond]): AppVersion {
 	return {
-		name: 'team',
 		version,
 		manifest: {
 			entry: 'main.mjs',
@@ -28,7 +27,7 @@ function teamApp(version: string, triggers: TriggerDescription[] = [everySecond]
 			},
 			builtAt: '2026-11-09T09:00:00.000Z',
 		},
-		tarball: `/apps/team/${version}/app.tgz`,
+		tarball: `/app/${version}/app.tgz`,
 	}
 }
 
@@ -42,7 +41,6 @@ function fakeEngine(status: RunStatus = 'running') {
 			workflow: 'report',
 			trigger: options.trigger,
 			app: {
-				name: options.app,
 				version: 'v1',
 				entry: 'main.mjs',
 				sandbox,
@@ -87,8 +85,8 @@ describe('createScheduler', () => {
 		useClockAt(tenAm)
 		const going = fakeEngine('paused')
 		const restartable = fakeEngine('restartable')
-		openScheduler(going.engine).scheduler.update([teamApp('v1')])
-		openScheduler(restartable.engine).scheduler.update([teamApp('v1')])
+		openScheduler(going.engine).scheduler.update(appVersion('v1'))
+		openScheduler(restartable.engine).scheduler.update(appVersion('v1'))
 
 		// Act
 		await vi.advanceTimersByTimeAsync(3_000)
@@ -98,18 +96,18 @@ describe('createScheduler', () => {
 		expect(restartable.startRun).toHaveBeenCalledTimes(3)
 	})
 
-	test('follows the schedules of the version deployed now, and none once the app is gone', async () => {
+	test('follows the schedules of the version deployed now, and none once a version lists none', async () => {
 		// Arrange
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
-		scheduler.update([teamApp('v1')])
+		scheduler.update(appVersion('v1'))
 		await vi.advanceTimersByTimeAsync(1_000)
 
 		// Act
-		scheduler.update([teamApp('v2', [everyOtherSecond])])
+		scheduler.update(appVersion('v2', [everyOtherSecond]))
 		await vi.advanceTimersByTimeAsync(2_000)
-		scheduler.update([])
+		scheduler.update(appVersion('v3', []))
 		await vi.advanceTimersByTimeAsync(3_000)
 
 		// Assert
@@ -120,7 +118,7 @@ describe('createScheduler', () => {
 		// Arrange
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
-		openScheduler(engine).scheduler.update([teamApp('v1')])
+		openScheduler(engine).scheduler.update(appVersion('v1'))
 
 		// Act
 		vi.setSystemTime(new Date('2026-11-09T11:00:00.000Z'))
@@ -135,7 +133,7 @@ describe('createScheduler', () => {
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
 		const { scheduler } = openScheduler(engine)
-		scheduler.update([teamApp('v1')])
+		scheduler.update(appVersion('v1'))
 
 		// Act
 		scheduler.close()
@@ -146,7 +144,7 @@ describe('createScheduler', () => {
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
-	test('arms nothing when it is given apps after it closed', async () => {
+	test('arms nothing when it is given a version after it closed', async () => {
 		// Arrange
 		useClockAt(tenAm)
 		const { engine, startRun } = fakeEngine('succeeded')
@@ -154,7 +152,7 @@ describe('createScheduler', () => {
 		scheduler.close()
 
 		// Act
-		scheduler.update([teamApp('v1')])
+		scheduler.update(appVersion('v1'))
 		await vi.advanceTimersByTimeAsync(3_000)
 
 		// Assert

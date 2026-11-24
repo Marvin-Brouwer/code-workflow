@@ -70,7 +70,7 @@ export const CredentialsPage = component({
 			}),
 			element('p', {
 				textContent:
-					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<app>/<webhook>. Sealed on this machine; a value never comes back.',
+					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<webhook>. Sealed on this machine; a value never comes back.',
 			}),
 			list,
 			status,

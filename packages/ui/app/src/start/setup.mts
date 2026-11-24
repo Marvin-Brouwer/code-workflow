@@ -26,7 +26,6 @@ export const SetupPage = component({
 		}
 		content.replaceChildren(
 			create(MissingSettings, {
-				app,
 				complete() {
 					content.replaceChildren(
 						element('p', {

@@ -51,20 +51,13 @@ export const StartPage = component<StartPageOptions>({
 		// One key for this page, so a start sent again, such as after the engine restarted, starts one run.
 		const key = `ui-${crypto.randomUUID()}`
 		const start = async (input: unknown, abortSignal: AbortSignal) => {
-			const started = await send(
-				'POST',
-				'/engine/runs',
-				{ app: app.name, trigger: { kind: 'user', id: triggerId }, input, key },
-				RunRecord,
-				abortSignal,
-			)
+			const started = await send('POST', '/engine/runs', { trigger: { kind: 'user', id: triggerId }, input, key }, RunRecord, abortSignal)
 			if (started.ok) navigate(href.for(RunRoute, { id: started.value.id }))
 			return started
 		}
 
 		content.replaceChildren(
 			create(MissingSettings, {
-				app,
 				complete() {
 					content.replaceChildren(
 						element('h2', {

@@ -17,8 +17,8 @@ import {
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
-import type { AppStore } from '../apps/app-store.mts'
-import { hasErrorCode, messageOf } from '../errors.mts'
+import type { AppStore } from '../app/app-store.mts'
+import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
@@ -47,8 +47,8 @@ export interface EngineOptions {
 	readonly backend: SandboxBackend
 	/** Where the run records are kept. */
 	readonly store: RunStore
-	/** The deployed apps runs start from. */
-	readonly apps: AppStore
+	/** The deployed app runs start from. */
+	readonly app: AppStore
 	/** Where things go inside a sandbox. */
 	readonly layout?: SandboxLayout
 	/** Where the engine reports what it did on its own, such as reconciling. Default: nowhere. */
@@ -72,11 +72,9 @@ export interface EngineOptions {
 	readonly connectorSettings?: ConnectorSettingsCheck
 }
 
-/** Which trigger of which app starts a run, and with what. */
+/** Which trigger of the app starts a run, and with what. */
 export interface StartRunOptions {
-	/** The deployed app; the run starts on its current version. */
-	readonly app: string
-	/** One of the triggers the app's current version lists. Its workflow is the one that runs. */
+	/** One of the triggers the app's current version lists; the run starts on that version. Its workflow is the one that runs. */
 	readonly trigger: TriggerReference
 	/**
 	 * For a user trigger or a schedule, the run's parameters, which the runtime checks against the
@@ -129,9 +127,9 @@ export const startRunTimeout = duration.of('1m')
  * @example
  * ```ts
  * const store = openRunStore(path.join(home, 'runs'))
- * const apps = await openAppStore(path.join(home, 'apps'), abortSignal)
- * const engine = await Engine.open({ backend, store, apps }, abortSignal)
- * const run = await engine.startRun({ app: 'team', trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
+ * const app = await openAppStore(path.join(home, 'app'), abortSignal)
+ * const engine = await Engine.open({ backend, store, app }, abortSignal)
+ * const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: duration.of('30s').toAbortSignal(), backend: duration.of('1m').toAbortSignal() })
  * ```
@@ -140,7 +138,7 @@ export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
 	readonly #writes: RunWriteFeed
-	readonly #apps: AppStore
+	readonly #app: AppStore
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
@@ -161,7 +159,7 @@ export class Engine {
 		const watched = watchedRunStore(options.store)
 		this.#store = watched.store
 		this.#writes = watched.writes
-		this.#apps = options.apps
+		this.#app = options.app
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
@@ -252,7 +250,7 @@ export class Engine {
 	}
 
 	/**
-	 * Starts a run through one of an app's triggers, on the app's current version. Returns once the
+	 * Starts a run through one of the app's triggers, on its current version. Returns once the
 	 * record is saved; the sandbox is made and the app unpacked in the background, so follow the
 	 * run's status. With a `key`, a run that has it already is returned instead, also while it's
 	 * being started.
@@ -272,7 +270,7 @@ export class Engine {
 	}
 
 	/**
-	 * The settings an app needs that this engine doesn't have, each a line that says what to do and
+	 * The settings the app needs that this engine doesn't have, each a line that says what to do and
 	 * what sets it: a model no provider with a key serves, a host tool no loaded connector brings, a
 	 * credential a connector reads. Empty when the app can run. A trigger refuses a run with them; a
 	 * deploy reports them; the UI's wizard asks for them.
@@ -297,29 +295,25 @@ export class Engine {
 
 	async #create(options: StartRunOptions): Promise<RunRecord> {
 		const waitSignal = this.#withLifetime(options.abortSignal)
-		const deployed = this.#apps.current(options.app)
-		if (deployed === undefined) throw new EngineError('not-found', `There is no app ${options.app}: deploy it first.`)
+		const deployed = this.#app.current()
+		if (deployed === undefined) throw new EngineError('not-found', 'There is no app: deploy it first.')
 		const { kind, id: triggerId } = options.trigger
 		const listed = deployed.manifest.description.triggers.find((known) => known.kind === kind && known.id === triggerId)
 		if (listed === undefined) {
-			throw new EngineError('not-found', `Version ${deployed.version} of ${options.app} has no ${kind} trigger ${triggerId}.`)
+			throw new EngineError('not-found', `Version ${deployed.version} of the app has no ${kind} trigger ${triggerId}.`)
 		}
 		const sandbox = SandboxSpecification.safeParse(deployed.manifest.description.sandbox)
 		if (!sandbox.success) {
-			throw new EngineError(
-				'invalid',
-				`Version ${deployed.version} of ${options.app} asks for a sandbox this engine can't make: deploy it again.`,
-			)
+			throw new EngineError('invalid', `Version ${deployed.version} of the app asks for a sandbox this engine can't make: deploy it again.`)
 		}
 		const missing = await this.missingSettings(deployed.manifest.description, waitSignal)
 		if (missing.length > 0) {
 			throw new EngineError(
 				'unavailable',
-				`${options.app} can't run now, so no run was started:\n${missing.map(({ message }) => message).join('\n')}`,
+				`The app can't run now, so no run was started:\n${missing.map(({ message }) => message).join('\n')}`,
 			)
 		}
 		const app: RunApp = {
-			name: deployed.name,
 			version: deployed.version,
 			entry: deployed.manifest.entry,
 			sandbox: sandbox.data,
@@ -327,11 +321,9 @@ export class Engine {
 			registries: [...deployed.manifest.description.sandbox.registries],
 		}
 		const id = newRunId()
-		// A copy of its own, so the run keeps its code when the app is deployed again or removed.
+		// A copy of its own, so the run keeps its code when the app is deployed again.
 		await this.#store.saveApp(id, deployed.tarball, waitSignal).catch(async (error: unknown) => {
 			await this.#store.removeRun(id).catch(() => undefined)
-			// Removed between finding it and copying it.
-			if (hasErrorCode(error, 'ENOENT')) throw new EngineError('not-found', `The app ${options.app} was removed.`)
 			throw error
 		})
 		waitSignal.throwIfAborted()

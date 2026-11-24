@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
-import type { AppVersion } from '../apps/app-store.mts'
+import type { AppVersion } from '../app/app-store.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
@@ -18,8 +18,8 @@ export interface SchedulerOptions {
 
 /** Starts schedule runs on the wall clock, for the schedules it was last given. */
 export interface Scheduler {
-	/** Follows these apps' schedules from now on: new ones are armed, changed or gone ones disarmed. */
-	update(apps: readonly AppVersion[]): void
+	/** Follows this app version's schedules from now on: new ones are armed, changed or gone ones disarmed. */
+	update(app: AppVersion | undefined): void
 	/** Stops every timer, and arms none from then on. Runs that were started go on. */
 	close(): void
 }
@@ -36,13 +36,8 @@ interface Armed {
  */
 const goingStatuses: ReadonlySet<RunStatus> = new Set(['starting', 'running', 'paused'])
 
-/** Names a schedule of an app, in run keys and logs. */
-function scheduleName(app: string, schedule: string): string {
-	return `${app}/${schedule}`
-}
-
 /**
- * Starts the schedule triggers of the apps it's given, each on its cron expression and the
+ * Starts the schedule triggers of the app version it's given, each on its cron expression and the
  * engine's clock. A tick is skipped while the previous run of the same schedule is still going.
  * Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
  */
@@ -56,17 +51,11 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	/** Schedules whose cron expression was reported as broken, so it's reported once. */
 	const broken = new Set<string>()
 
-	const tick = async (app: string, schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
-		const name = scheduleName(app, schedule.id)
+	const tick = async (schedule: ScheduleDescription, at: Date, abortSignal: AbortSignal) => {
+		const name = schedule.id
 		const going = engine
 			.list()
-			.find(
-				(record) =>
-					record.trigger.kind === 'schedule' &&
-					record.trigger.id === schedule.id &&
-					record.app.name === app &&
-					goingStatuses.has(record.status),
-			)
+			.find((record) => record.trigger.kind === 'schedule' && record.trigger.id === name && goingStatuses.has(record.status))
 		if (going !== undefined || starting.has(name)) {
 			const why = going === undefined ? 'its last run is still starting' : `run ${going.id} is still ${going.status}`
 			log(`Skipped schedule ${name} at ${at.toISOString()}: ${why}.`)
@@ -75,7 +64,6 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 		starting.add(name)
 		try {
 			await engine.startRun({
-				app,
 				trigger: { kind: 'schedule', id: schedule.id },
 				key: `schedule ${name}/${at.toISOString()}`,
 				abortSignal: startRunTimeout.toAbortSignal(),
@@ -88,8 +76,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 		}
 	}
 
-	const arm = (app: string, schedule: ScheduleDescription, abortSignal: AbortSignal) => {
-		const name = scheduleName(app, schedule.id)
+	const arm = (schedule: ScheduleDescription, abortSignal: AbortSignal) => {
+		const name = schedule.id
 		let cron: Cron
 		try {
 			cron = new Cron(schedule.cron, { paused: true })
@@ -105,7 +93,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 			const fire = () => {
 				// From now, not from the tick: a timer that fired late, after a sleep, doesn't make up for what it missed.
 				next(new Date(Math.max(at.getTime(), now().getTime())))
-				void tick(app, schedule, at, abortSignal)
+				void tick(schedule, at, abortSignal)
 			}
 			wakeAt(at, fire, abortSignal, now)
 		}
@@ -113,25 +101,23 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 	}
 
 	return Object.freeze({
-		update(apps) {
+		update(app) {
 			if (closed) return
-			const wanted = new Map<string, { app: AppVersion; schedule: ScheduleDescription }>()
-			for (const app of apps) {
-				for (const trigger of app.manifest.description.triggers) {
-					if (trigger.kind === 'schedule') wanted.set(scheduleName(app.name, trigger.id), { app, schedule: trigger })
-				}
-			}
+			const schedules = (app?.manifest.description.triggers ?? []).filter(
+				(trigger): trigger is ScheduleDescription => trigger.kind === 'schedule',
+			)
 			for (const [name, current] of armed) {
 				// A new version may have changed the schedule's workflow or parameters: armed again.
-				if (wanted.get(name)?.app.version === current.version) continue
+				if (app?.version === current.version && schedules.some((schedule) => schedule.id === name)) continue
 				current.controller.abort()
 				armed.delete(name)
 			}
-			for (const [name, { app, schedule }] of wanted) {
-				if (armed.has(name)) continue
+			if (app === undefined) return
+			for (const schedule of schedules) {
+				if (armed.has(schedule.id)) continue
 				const controller = new AbortController()
-				armed.set(name, { version: app.version, controller })
-				arm(app.name, schedule, controller.signal)
+				armed.set(schedule.id, { version: app.version, controller })
+				arm(schedule, controller.signal)
 			}
 		},
 		close() {

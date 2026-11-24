@@ -10,7 +10,7 @@ import { replaceFile } from '../files/replace-file.mts'
 export const credentialsFileName = 'credentials.json'
 
 /**
- * Names a credential, such as `provider/anthropic` or `webhook/team/fix-issue`: letters, digits and
+ * Names a credential, such as `provider/anthropic` or `webhook/fix-issue`: letters, digits and
  * `_ . / -`, up to 128. No part between slashes is `.` or `..`, which a URL path would fold away.
  */
 export const CredentialName = z

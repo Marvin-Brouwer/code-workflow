@@ -4,13 +4,11 @@ import { FixForm } from '../_forms/fix-form.mts'
 import { read } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { refresher } from '../_shared/refresher.mts'
-import type { DeployedApp } from '../_shared/runs.mts'
 import { MissingSetting } from '../_shared/settings.mts'
 import { missingPath } from '../_shared/the-app.mts'
 
-/** Whose settings, and what to do once nothing is missing. */
+/** What to do once nothing is missing. */
 export interface MissingSettingsOptions {
-	readonly app: DeployedApp
 	/** Called once nothing is missing, at once when nothing was. Show what comes next. */
 	readonly complete: () => void
 }
@@ -22,10 +20,10 @@ export interface MissingSettingsOptions {
 export const MissingSettings = component<MissingSettingsOptions>({
 	name: 'missing-settings',
 	onMount({ append, element, create, options, signal }) {
-		const { app, complete } = options
+		const { complete } = options
 		const content = append(element('div'))
 		const show = async (abortSignal: AbortSignal): Promise<void> => {
-			const missing = await read(missingPath(app), z.array(MissingSetting), abortSignal)
+			const missing = await read(missingPath, z.array(MissingSetting), abortSignal)
 			if (abortSignal.aborted) return
 			if (!missing.ok) {
 				content.replaceChildren(errorText(element, missing.error))

@@ -11,7 +11,6 @@ function record(id: string, createdAt: string): RunRecord {
 		workflow: 'develop',
 		trigger: { kind: 'user', id: 'develop' },
 		app: {
-			name: 'team',
 			version: '0123456789ab',
 			entry: 'main.mjs',
 			sandbox: { image: 'node:26-slim', cpus: 1, memoryMb: 512 },

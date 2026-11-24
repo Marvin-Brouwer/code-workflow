@@ -1,6 +1,6 @@
 import type { RunGrant, RunStart } from '@mesh-flow/protocol'
 import type { Sandbox } from '@mesh-flow/sandbox'
-import { uploadApp } from '../apps/upload-app.mts'
+import { uploadApp } from '../app/upload-app.mts'
 import type { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import type { SandboxLayout } from './sandbox-layout.mts'
 

@@ -65,7 +65,6 @@ function runRecord(status: RunRecord['status']): RunRecord {
 		workflow: 'report',
 		trigger: { kind: 'user', id: 'report' },
 		app: {
-			name: 'reports',
 			version: 'v1',
 			entry: 'main.mjs',
 			sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
