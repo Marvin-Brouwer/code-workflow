@@ -47,35 +47,27 @@ export async function installForPlatform(
 		`--cpu=${platform.cpu}`,
 		`--libc=${sandboxLibc}`,
 	]
-	await run(
-		'npm',
-		commandArguments,
-		out,
-		{ npm_config_platform: platform.os, npm_config_arch: platform.cpu, npm_config_libc: sandboxLibc },
-		abortSignal,
-	)
+	await run('npm', commandArguments, out, abortSignal)
 }
 
-function run(
-	command: string,
-	commandArguments: readonly string[],
-	workingDirectory: string,
-	environment: Record<string, string>,
-	abortSignal: AbortSignal,
-): Promise<void> {
+/**
+ * Runs `command` in `workingDirectory` with the environment as it is. The arguments are our own,
+ * without spaces or quotes, so one command line holds them on every platform.
+ */
+function run(command: string, commandArguments: readonly string[], workingDirectory: string, abortSignal: AbortSignal): Promise<void> {
+	const commandLine = [command, ...commandArguments].join(' ')
 	return new Promise((resolve, reject) => {
-		// npm is a `.cmd` on Windows, which only starts through a shell.
-		const child = spawn(command, commandArguments, {
+		// npm is a `.cmd` on Windows, which only starts through a shell; a shell takes one command line.
+		const child = spawn(commandLine, {
 			cwd: workingDirectory,
-			env: { ...process.env, ...environment },
-			shell: process.platform === 'win32',
+			shell: true,
 			stdio: 'inherit',
 			signal: abortSignal,
 		})
 		child.on('error', reject)
 		child.on('close', (code) => {
 			if (code === 0) resolve()
-			else reject(new Error(`${command} ${commandArguments.join(' ')} failed with exit code ${String(code)}.`))
+			else reject(new Error(`${commandLine} failed with exit code ${String(code)}.`))
 		})
 	})
 }

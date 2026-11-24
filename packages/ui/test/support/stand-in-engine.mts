@@ -5,8 +5,14 @@ import { Hono } from 'hono'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
 
-/** The app the stand-in has deployed: one workflow, started by a button, that needs a GitHub token. */
+/**
+ * The app the stand-in has deployed: one workflow that needs a GitHub token, started by two buttons,
+ * a webhook without its secret, and a schedule.
+ */
 export const standInApp = 'dice'
+
+/** The cron of the stand-in app's schedule. */
+export const standInSchedule = '0 3 * * *'
 
 const builtAt = '2026-11-23T08:00:00.000Z'
 
@@ -29,7 +35,18 @@ const app = {
 					},
 				},
 			],
-			triggers: [{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' }],
+			triggers: [
+				{ kind: 'user', id: 'fix-issue', workflow: 'fix-issue' },
+				{ kind: 'user', id: 'retry-issue', workflow: 'fix-issue' },
+				{
+					kind: 'webhook',
+					id: 'issue-opened',
+					workflow: 'fix-issue',
+					payload: { type: 'object' },
+					signature: { scheme: 'hmac-sha256', header: 'x-hub-signature-256', prefix: 'sha256=' },
+				},
+				{ kind: 'schedule', id: 'nightly', workflow: 'fix-issue', cron: standInSchedule },
+			],
 			tools: [],
 			models: [],
 		},

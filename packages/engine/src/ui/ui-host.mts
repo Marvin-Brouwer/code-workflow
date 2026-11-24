@@ -14,8 +14,6 @@ export interface ServeUiOptions {
 	readonly keychain: boolean
 	/** The port on 127.0.0.1. `0` takes a free one. */
 	readonly port: number
-	/** Whether to open the page in the browser once it's served. */
-	readonly open: boolean
 	/** Aborting it closes the server, even with requests still open. */
 	readonly abortSignal: AbortSignal
 }

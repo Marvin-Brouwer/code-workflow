@@ -6,7 +6,7 @@ const anyFreePort = 0
 
 /**
  * `mesh-flow ui`: serves the UI on 127.0.0.1 from `@mesh-flow/ui`, installed where `mesh-flow`
- * runs, and opens it. Ctrl+C stops it.
+ * runs, and prints its address, so you open it in the browser you choose. Ctrl+C stops it.
  */
 export function addUiCommand(
 	program: Command,
@@ -15,10 +15,9 @@ export function addUiCommand(
 ): void {
 	program
 		.command('ui')
-		.description('Serves the UI on 127.0.0.1 and opens it. Needs @mesh-flow/ui installed here. Ctrl+C stops it.')
+		.description('Serves the UI on 127.0.0.1 and prints its address. Needs @mesh-flow/ui installed here. Ctrl+C stops it.')
 		.option('--port <port>', 'the port (default: a free one)', parsePort, anyFreePort)
-		.option('--no-open', 'only prints the address')
-		.action(async (options: { port: number; open: boolean }) => {
+		.action(async (options: { port: number }) => {
 			const serveUi = await importServeUi(process.cwd())
 			const stopping = new AbortController()
 			process.once('SIGINT', () => {
