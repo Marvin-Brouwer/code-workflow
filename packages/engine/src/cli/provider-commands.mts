@@ -1,73 +1,59 @@
 import { text } from 'node:stream/consumers'
 import { knownKinds, type GatewayHome } from '@mesh-flow/gateway'
+import type { ModelProviderDescription } from '@mesh-flow/protocol'
 import type { Command } from 'commander'
-import { listProviders, putProvider, removeProvider, setProviderKey } from '../settings/providers.mts'
+import { listProviders, removeProviderKey, setProviderKey } from '../settings/providers.mts'
 import { homeCommandAbortSignal } from './home-command-abort-signal.mts'
 
+/** What the provider commands work on. */
+export interface ProviderCommandsOptions {
+	readonly gatewayHome: (abortSignal: AbortSignal) => Promise<GatewayHome>
+	/** The providers the current app's config declares, from the running engine. */
+	readonly declared: (abortSignal: AbortSignal) => Promise<readonly ModelProviderDescription[]>
+}
+
 /**
- * `mesh-flow provider ...`: the user's model providers, in order, and their API keys. They work on
- * the engine's home directly, so they work without a running engine, and a running one sees the
+ * `mesh-flow provider ...`: the API keys of the model providers the app's config declares. The
+ * providers themselves, their order and base URLs, are in the config, in git. Setting a key works on
+ * the engine's home directly, so it works without a running engine, and a running one sees the
  * change at once.
  */
-export function addProviderCommands(program: Command, gatewayHome: (abortSignal: AbortSignal) => Promise<GatewayHome>): void {
+export function addProviderCommands(program: Command, { gatewayHome, declared }: ProviderCommandsOptions): void {
 	const provider = program
 		.command('provider')
-		.description('Model providers, in order: an agent gets the first one that offers its model. Keys stay on this machine.')
-
-	provider
-		.command('add')
-		.description('Adds a provider at the end of the list, or changes one, and sets its API key from stdin when one is piped in.')
-		.argument('<name>', 'your name for it, such as anthropic or work-openrouter')
-		.requiredOption('--kind <kind>', 'which provider it is: see `mesh-flow provider kinds`')
-		.option('--base-url <url>', "another base URL than the kind's, for a proxy or a compatible server")
-		.action(async (name: string, options: { kind: string; baseUrl?: string }) => {
-			// Read first: the time a command may take starts once its input is in.
-			const key = process.stdin.isTTY ? '' : (await text(process.stdin)).trim()
-			const abortSignal = homeCommandAbortSignal()
-			const home = await gatewayHome(abortSignal)
-			await putProvider(home, { name, ...options, key }, abortSignal)
-			if (!(await listProviders(home, abortSignal)).some((known) => known.name === name && known.hasKey))
-				console.error(`Set its API key with: mesh-flow provider key ${name} < key.txt`)
-		})
-
-	provider
-		.command('key')
-		.description("Sets a provider's API key, read from stdin.")
-		.argument('<name>')
-		.action(async (name: string) => {
-			const key = (await text(process.stdin)).trim()
-			if (key.length === 0) throw new Error('No key on stdin. Pipe one in.')
-			const abortSignal = homeCommandAbortSignal()
-			await setProviderKey(await gatewayHome(abortSignal), name, key, abortSignal)
-		})
+		.description("The keys of the app's model providers. The providers are in the app's config; keys stay on this machine.")
 
 	provider
 		.command('list')
-		.description('Lists the providers in the order models are looked up, and whether each has a key.')
+		.description("Lists the providers of the app's current version, in the order models are looked up, and whether each has a key.")
 		.action(async () => {
 			const abortSignal = homeCommandAbortSignal()
-			for (const known of await listProviders(await gatewayHome(abortSignal), abortSignal)) {
+			const providers = await declared(abortSignal)
+			for (const known of await listProviders(await gatewayHome(abortSignal), providers, abortSignal)) {
 				const key = known.hasKey ? 'key set' : 'no key'
 				console.log(`${known.name}  ${known.kind}  ${key}${known.baseUrl === undefined ? '' : `  ${known.baseUrl}`}`)
 			}
 		})
 
 	provider
-		.command('order')
-		.description('Puts the providers in this order. Name every provider once.')
-		.argument('<names...>')
-		.action(async (names: string[]) => {
+		.command('key')
+		.description("Sets a provider's API key, read from stdin.")
+		.argument('<name>', "the provider's name in the app's config")
+		.action(async (name: string) => {
+			const key = (await text(process.stdin)).trim()
+			if (key.length === 0) throw new Error('No key on stdin. Pipe one in.')
+			// Started once the key is in, so typing it doesn't use up the time.
 			const abortSignal = homeCommandAbortSignal()
-			await (await gatewayHome(abortSignal)).providers.order(names, abortSignal)
+			await setProviderKey(await gatewayHome(abortSignal), name, key, abortSignal)
 		})
 
 	provider
-		.command('remove')
-		.description('Removes a provider and its key.')
+		.command('remove-key')
+		.description("Removes a provider's API key. The provider stays in the config, and models go to the next one.")
 		.argument('<name>')
 		.action(async (name: string) => {
 			const abortSignal = homeCommandAbortSignal()
-			await removeProvider(await gatewayHome(abortSignal), name, abortSignal)
+			await removeProviderKey(await gatewayHome(abortSignal), name, abortSignal)
 		})
 
 	provider

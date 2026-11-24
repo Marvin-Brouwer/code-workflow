@@ -42,10 +42,12 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 
 		// Act
 		await page.goto(url)
-		await page.getByText('The app still needs 1 setting before a run can start.').waitFor()
+		await page.getByText('The app still needs 2 settings before a run can start.').waitFor()
 		await page.getByRole('link', { name: 'New run' }).click()
 		await page.getByRole('link', { name: 'fix-issue: starts fix-issue' }).click()
-		await page.getByText('Set github/token').waitFor()
+		await page.getByLabel('API key of anthropic').fill('sk-test')
+		await page.getByRole('button', { name: 'Set key' }).click()
+		await page.getByLabel('API key of anthropic').waitFor({ state: 'detached' })
 		await page.getByLabel('Value').fill('ghp_test')
 		await page.getByRole('button', { name: 'Set' }).click()
 		await page.getByLabel('issue').fill('63')
@@ -75,6 +77,9 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		// Act
 		await page.goto(url)
 		await page.getByRole('link', { name: 'Set them up' }).click()
+		await page.getByLabel('API key of anthropic').fill('sk-test')
+		await page.getByRole('button', { name: 'Set key' }).click()
+		await page.getByLabel('API key of anthropic').waitFor({ state: 'detached' })
 		await page.getByLabel('Value').fill('ghp_test')
 		await page.getByRole('button', { name: 'Set' }).click()
 		await page.getByText('Nothing is missing: every run can start.').waitFor()
@@ -90,5 +95,36 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(barCount).toBe(0)
 		expect(startLinks).toBe(2)
 		expect(webhookDetail).toContain('No secret: set webhook/issue-opened under credentials')
+	})
+
+	test("lists the config's providers without a way to add, move or remove one, and sets and removes a key", async () => {
+		// Arrange
+		const { page, url } = await openUi()
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/settings/providers/', url).href)
+		const proxyRow = await page.getByRole('row', { name: /proxy/ }).textContent()
+		const formFields = await page.getByLabel(/Name|Kind|Base URL/).count()
+		const moveButtons = await page.getByRole('button', { name: /Up|Down/ }).count()
+		await page
+			.getByRole('row', { name: /anthropic/ })
+			.locator('summary', { hasText: 'Set key' })
+			.click()
+		await page.getByLabel('API key of anthropic').fill('sk-test')
+		await page.getByRole('button', { name: 'Set key' }).click()
+		const removeKey = page.locator('summary', { hasText: 'Remove key' })
+		await removeKey.waitFor()
+		const keySet = await page.getByRole('row', { name: /anthropic/ }).textContent()
+		await removeKey.click()
+		await page.getByRole('button', { name: 'Remove the key of anthropic' }).click()
+		await removeKey.waitFor({ state: 'detached' })
+
+		// Assert
+		expect(proxyRow).toContain('https://llm-proxy.example.com/api/v1')
+		expect(proxyRow).toContain('not set')
+		expect(formFields).toBe(0)
+		expect(moveButtons).toBe(0)
+		expect(keySet).not.toContain('not set')
 	})
 })

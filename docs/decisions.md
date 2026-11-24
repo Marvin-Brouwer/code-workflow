@@ -211,10 +211,20 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **Credentials in the sandbox (env vars, `.env`, written credential files).** Agents have a shell
   and read untrusted input (stories, review comments): prompt injection can exfiltrate them, and
   they'd end up in snapshots stored for days.
-- **`.env`-based provider config.** Replaced by UI-managed providers and an encrypted credential
-  store; startup no longer fails on missing user settings.
-- **Model roles/aliases (`model: 'planning'` mapped in config).** Rejected: agents name model ids
-  directly; the gateway resolves them model-first.
+- **`.env`-based provider config.** Replaced by providers declared in the app's config and keys in
+  an encrypted credential store; startup no longer fails on missing user settings.
+- **Providers, their order and base URLs managed per user in the UI** (`providers.json`,
+  `mesh-flow provider add/order/remove`). SUPERSEDED (#58): it came from reading "not in a `.env`
+  file but based on UI" as "not in `.env` or a config file". The intent was providers declared in
+  config, only the keys in the UI. A base URL decides where prompts and code go, so it belongs in
+  reviewed config, and the repo should say what a workflow runs on. Providers are now
+  `modelProviders` in `defineMeshFlow`; users only set keys.
+- **Model roles/aliases (`model: 'planning'` mapped in config, or a `modelRole('planning', [...])`
+  value).** Rejected (again in #58): agents name model ids directly. A fallback is a plain array
+  (`model: ['claude-opus-5-5', 'gpt-5.5']`), which needs no second name for the same list.
+- **Switching an agent to its next model mid-loop when a call fails.** The model is part of a
+  loop's fingerprint, so a switch would start the loop over or break its resume. The fallback
+  model is picked when a loop starts, from the providers that have a key.
 - **Translating all model traffic to one wire format.** Loses provider-specific features; the
   gateway proxies each provider's native API instead.
 - **AWS through a re-signing proxy with placeholder credentials.** Possible (SigV4 re-signing via
@@ -261,10 +271,10 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 ## UI
 
 - **The engine's `serve` serving the UI.** Rejected 2026-11-18 ([plan](plans/ui.md)): the
-  settings work on the home's files without a running engine, so the UI is its own command,
-  `mesh-flow ui`, next to `serve`. It loads `@mesh-flow/ui/server` from where it runs, as
-  connectors are loaded, since the UI depends on the engine and the other way round would be a
-  cycle.
+  settings it started with (credentials, connectors) work on the home's files without a running
+  engine, so the UI is its own command, `mesh-flow ui`, next to `serve`. It loads
+  `@mesh-flow/ui/server` from where it runs, as connectors are loaded, since the UI depends on the
+  engine and the other way round would be a cycle.
 - **A separate project for the UI** (as design section 3 first had it). Rejected 2026-11-18: it
   shares the engine's types and settings functions, so it lives in this repository as
   `@mesh-flow/ui`.

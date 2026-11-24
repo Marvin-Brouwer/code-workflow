@@ -29,8 +29,8 @@ describe('access', () => {
 
 	test.each([
 		{ request: 'another token', route: '/?token=not-it', cookie: undefined, headers: {}, status: 401 },
-		{ request: 'no cookie', route: '/api/settings/providers', cookie: undefined, headers: {}, status: 401 },
-		{ request: 'another cookie', route: '/api/settings/providers', cookie: 'not-it', headers: {}, status: 401 },
+		{ request: 'no cookie', route: '/api/settings/credentials', cookie: undefined, headers: {}, status: 401 },
+		{ request: 'another cookie', route: '/api/settings/credentials', cookie: 'not-it', headers: {}, status: 401 },
 		{
 			request: "the engine's event stream without the cookie",
 			route: '/api/engine/events',
@@ -63,7 +63,7 @@ describe('access', () => {
 		const { url, cookie } = await servedUi()
 
 		// Act
-		const refused = await send(url, '/api/settings/providers', { headers: { host: `rebound.example:${url.port}`, cookie } })
+		const refused = await send(url, '/api/settings/credentials', { headers: { host: `rebound.example:${url.port}`, cookie } })
 
 		// Assert
 		expect(refused.status).toBe(403)
@@ -78,7 +78,7 @@ describe('access', () => {
 		const { url, cookie } = await servedUi()
 
 		// Act
-		const refused = await send(url, '/api/settings/providers', { headers: { cookie, ...headers } })
+		const refused = await send(url, '/api/settings/credentials', { headers: { cookie, ...headers } })
 
 		// Assert
 		expect(refused.status).toBe(403)
@@ -89,7 +89,7 @@ describe('access', () => {
 		const { url, cookie } = await servedUi()
 
 		// Act
-		const fromPage = await send(url, '/api/settings/providers', {
+		const fromPage = await send(url, '/api/settings/credentials', {
 			headers: { cookie, 'sec-fetch-site': 'same-origin', origin: `http://${url.host}` },
 		})
 		const opened = await send(url, '/', { headers: { cookie, 'sec-fetch-site': 'none' } })
@@ -105,7 +105,7 @@ describe('access', () => {
 		const second = await servedUi()
 
 		// Act
-		const refused = await send(second.url, '/api/settings/providers', { headers: { cookie: first.cookie } })
+		const refused = await send(second.url, '/api/settings/credentials', { headers: { cookie: first.cookie } })
 
 		// Assert
 		expect(first.cookieName).not.toBe(second.cookieName)
@@ -191,50 +191,54 @@ describe('settings', () => {
 		expect(await gatewayHome.credentials.get('github/token', abortSignal)).toBe('ghp-secret')
 	})
 
-	test('adds a provider with its key, and lists it with the key set', async () => {
+	test.skipIf(process.platform === 'win32')(
+		"sets a provider's key, and lists the app's providers in the config's order with whether each has a key",
+		async () => {
+			// Arrange
+			const { url, cookie, home } = await servedUi()
+			await standInEngine(home)
+
+			// Act
+			const set = await send(url, '/api/settings/providers/anthropic/key', {
+				method: 'PUT',
+				headers: { cookie, ...json },
+				body: JSON.stringify({ key: 'sk-secret' }),
+			})
+			const listed = await send(url, '/api/settings/providers', { headers: { cookie } })
+
+			// Assert
+			expect(set.status).toBe(204)
+			expect(JSON.parse(listed.body)).toEqual([
+				{ name: 'anthropic', kind: 'anthropic', hasKey: true },
+				{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1', hasKey: false },
+			])
+		},
+	)
+
+	test("removes a provider's key, and answers 404 when it has none", async () => {
 		// Arrange
-		const { url, cookie } = await servedUi()
+		const { url, cookie, home } = await servedUi()
+		const gatewayHome = await openEngineGatewayHome(home, abortSignal, { keychain: false })
+		await gatewayHome.credentials.set('provider/anthropic', 'sk-secret', abortSignal)
 
 		// Act
-		const added = await send(url, '/api/settings/providers/work', {
-			method: 'PUT',
-			headers: { cookie, ...json },
-			body: JSON.stringify({ kind: 'anthropic', key: 'sk-secret' }),
-		})
-		const listed = await send(url, '/api/settings/providers', { headers: { cookie } })
+		// Node's client sends a DELETE's body without a length unless it's given one.
+		const removal = { method: 'DELETE', headers: { cookie, ...json, 'content-length': '2' }, body: '{}' }
+		const removed = await send(url, '/api/settings/providers/anthropic/key', removal)
+		const again = await send(url, '/api/settings/providers/anthropic/key', removal)
 
 		// Assert
-		expect(added.status).toBe(204)
-		expect(JSON.parse(listed.body)).toEqual([{ name: 'work', kind: 'anthropic', hasKey: true }])
+		expect(removed.status).toBe(204)
+		expect(again.status).toBe(404)
+		expect(await gatewayHome.credentials.names(abortSignal)).toEqual([])
 	})
 
-	test('refuses a provider kind there is none of', async () => {
-		// Arrange
-		const { url, cookie } = await servedUi()
-
-		// Act
-		const refused = await send(url, '/api/settings/providers/work', {
-			method: 'PUT',
-			headers: { cookie, ...json },
-			body: JSON.stringify({ kind: 'no-such-kind' }),
-		})
-
-		// Assert
-		expect(refused.status).toBe(400)
-		expect(JSON.parse(refused.body)).toEqual({ error: expect.stringContaining('There is no provider kind no-such-kind') as unknown })
-	})
 	test.each([
 		{ request: "a body that doesn't fit", route: '/api/settings/providers/work/key', method: 'PUT', body: '{}' },
 		{ request: "a body that isn't JSON", route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": ' },
 		{ request: "a name that isn't a credential's", route: '/api/settings/credentials/no-slash', method: 'DELETE', body: '{}' },
 		{ request: 'a secret of only spaces', route: '/api/settings/credentials/github/token', method: 'PUT', body: '{"value": "   "}' },
 		{ request: 'a key of only spaces', route: '/api/settings/providers/work/key', method: 'PUT', body: '{"key": " \\n"}' },
-		{
-			request: 'a new provider with a key of only spaces',
-			route: '/api/settings/providers/work',
-			method: 'PUT',
-			body: '{"kind": "anthropic", "key": "  "}',
-		},
 	])('answers $request with 400', async ({ route, method, body }) => {
 		// Arrange
 		const { url, cookie } = await servedUi()

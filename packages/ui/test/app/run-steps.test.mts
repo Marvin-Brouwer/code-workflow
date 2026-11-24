@@ -45,6 +45,20 @@ describe('stepsOf', () => {
 		])
 	})
 
+	test('titles the bar of an agent with fallback models by all of them, in order', () => {
+		// Arrange
+		const withFallback = [
+			event('1-1', 'workflow', undefined, { workflow: 'fix-issue' }),
+			event('1-2', 'loop', '1-1', { model: ['claude-opus-5-5', 'gpt-5.5'], prompt: 'Plan it' }),
+		]
+
+		// Act
+		const [agent] = stepsOf(withFallback, false)
+
+		// Assert
+		expect(agent?.title).toBe('Agent on claude-opus-5-5 or gpt-5.5')
+	})
+
 	test("reads an agent's bar as its text with its calls as chips", () => {
 		// Act
 		const agent = stepsOf(events, false)[1]

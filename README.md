@@ -7,7 +7,7 @@ with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 ## Try it
 
 One command per example app builds everything, then runs the engine, the app (redeployed on
-every change) and the UI together. Open the UI link it prints to add providers and credentials.
+every change) and the UI together. Open the UI link it prints to set provider keys and credentials.
 
 ```sh
 pnpm start:github-issue

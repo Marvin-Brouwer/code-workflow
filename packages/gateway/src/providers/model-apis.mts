@@ -1,5 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import type { ModelProviderDescription } from '@mesh-flow/protocol'
 
 /** How the gateway sends requests of one model API: the paths a model call may take, and how the key goes along. */
 interface ModelApi {
@@ -34,8 +35,37 @@ let catalog: ReadonlyMap<string, readonly Model<Api>[]> | undefined
  * those of `anthropic`. `undefined` for a kind pi-ai doesn't know.
  */
 export function modelsOfKind(kind: string): readonly Model<Api>[] | undefined {
+	return catalogOfKinds().get(kind)
+}
+
+/** pi-ai's models the gateway can send, by provider kind. */
+function catalogOfKinds(): ReadonlyMap<string, readonly Model<Api>[]> {
 	catalog ??= new Map(builtinProviders().map((provider) => [provider.id, provider.getModels().filter((model) => modelApis[model.api])]))
-	return catalog.get(kind)
+	return catalog
+}
+
+/** What a model of a compatible server gets when pi-ai's catalog doesn't know its id. */
+const compatibleDefaults = { contextWindow: 128_000, maxTokens: 16_384, reasoning: false }
+
+/**
+ * Model `modelId` of the compatible server `provider`, on OpenAI's Chat Completions API with no
+ * price. The server only lists ids, so its context window, answer size and whether it reasons come
+ * from pi-ai's catalog when a kind there knows the id, else from defaults.
+ */
+export function compatibleModel(provider: ModelProviderDescription, modelId: string): Model<Api> {
+	const known = [...catalogOfKinds().values()].flat().find((model) => model.id === modelId) ?? compatibleDefaults
+	return {
+		id: modelId,
+		name: modelId,
+		api: 'openai-completions',
+		provider: provider.name,
+		baseUrl: provider.baseUrl ?? '',
+		contextWindow: known.contextWindow,
+		maxTokens: known.maxTokens,
+		reasoning: known.reasoning,
+		input: ['text'],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	}
 }
 
 /** The kinds of provider the gateway can send for, with how many models each offers. */

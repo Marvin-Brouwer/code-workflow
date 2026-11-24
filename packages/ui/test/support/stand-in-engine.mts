@@ -11,8 +11,8 @@ export const standInSchedule = '0 3 * * *'
 const builtAt = '2026-11-23T08:00:00.000Z'
 
 /**
- * The app the stand-in has deployed: one workflow that needs a GitHub token, started by two buttons,
- * a webhook without its secret, and a schedule.
+ * The app the stand-in has deployed: one workflow that needs a GitHub token and a key for its
+ * agent's provider, started by two buttons, a webhook without its secret, and a schedule.
  */
 const app = {
 	version: 'v1',
@@ -45,7 +45,11 @@ const app = {
 				{ kind: 'schedule', id: 'nightly', workflow: 'fix-issue', cron: standInSchedule },
 			],
 			tools: [],
-			models: [],
+			providers: [
+				{ name: 'anthropic', kind: 'anthropic' },
+				{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+			],
+			models: [['claude-sonnet-5-5']],
 		},
 	},
 }
@@ -81,6 +85,7 @@ export async function standInEngine(home: string) {
 				sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
 				tools: [],
 				registries: [],
+				providers: [],
 			},
 			status: run.status,
 			cursor: 0,
@@ -104,11 +109,18 @@ export async function standInEngine(home: string) {
 	api.get('/app/missing', async (context) => {
 		const gatewayHome = await openEngineGatewayHome(home, context.req.raw.signal, { keychain: false })
 		const names = await gatewayHome.credentials.names(context.req.raw.signal)
-		return context.json(
-			names.includes('github/token')
-				? []
-				: [{ message: 'Set github/token: `mesh-flow credential set github/token`', fix: { kind: 'credential', name: 'github/token' } }],
-		)
+		const providerKey = {
+			message: 'Provider anthropic offers model claude-sonnet-5-5 but has no API key. Set it with `mesh-flow provider key anthropic`.',
+			fix: { kind: 'provider-key', provider: 'anthropic' },
+		}
+		const githubToken = {
+			message: 'Set github/token: `mesh-flow credential set github/token`',
+			fix: { kind: 'credential', name: 'github/token' },
+		}
+		return context.json([
+			...(names.includes('provider/anthropic') ? [] : [providerKey]),
+			...(names.includes('github/token') ? [] : [githubToken]),
+		])
 	})
 	api.post('/runs', async (context) => {
 		const { input } = z.object({ input: z.object({ issue: z.number() }) }).parse(await context.req.json())

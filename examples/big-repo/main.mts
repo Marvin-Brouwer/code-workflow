@@ -1,14 +1,14 @@
 /**
- * The entry file, which `main` in package.json names: the sandbox the app's runs get, and
- * everything that can start a run. A workflow says what it does and what it starts with; this
- * file says how it gets started and where it runs.
+ * The entry file, which `main` in package.json names: the sandbox the app's runs get, the model
+ * providers its agents run on, and everything that can start a run. A workflow says what it does
+ * and what it starts with; this file says how it gets started and where it runs.
  *
  * The sandbox is meant to be the image the Dockerfile next to this file builds; see `sandboxImage`.
  * It reaches nuget.org and the team's CodeArtifact repository, so restores work, and nothing else:
  * Jira, Confluence, GitLab and AWS are only spoken to from the host, through the gateway.
  */
 import { jira } from '@mesh-flow/atlassian/hooks'
-import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { defineMeshFlow, githubCopilot, image, openAiCompatible, userTrigger } from '@mesh-flow/core'
 import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { awsCodeArtifacts } from './artifactories/aws-codeartifact.mts'
 import { develop } from './workflows/develop.mts'
@@ -29,6 +29,16 @@ export default defineMeshFlow({
 		memoryMb: 4096,
 		registries: [nugetOrg, awsCodeArtifacts],
 	}),
+	// The agents run on the team's LiteLLM proxy first, which lists its own models, then on GitHub
+	// Copilot, once the gateway can exchange a GitHub sign-in for its token (#65). Each user sets
+	// the keys they have: `mesh-flow provider key team-litellm`.
+	modelProviders: [
+		openAiCompatible({
+			name: 'team-litellm',
+			baseUrl: 'https://litellm.example.com/v1',
+		}),
+		githubCopilot,
+	],
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

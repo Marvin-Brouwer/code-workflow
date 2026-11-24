@@ -6,11 +6,12 @@ import { runLoop } from '../loop/run-loop.mts'
 import type { PromptValues } from '../render/prompt-values.mts'
 import { callSite, callSiteText } from '../run/call-site.mts'
 import { tool, type Tool } from '../tool/tool.mts'
+import { modelIdsOf, type AgentModel } from './agent-model.mts'
 import type { Prompt } from './prompt.mts'
 
 export interface AgentOptions {
-	/** A model id, such as `claude-opus-5-5`. The run's providers resolve it, model first. */
-	readonly model: string
+	/** The model the agent runs on, or several to fall back on. The app's providers resolve it, model first. */
+	readonly model: AgentModel
 	/** How much the model thinks before it answers. The model's default without it. */
 	readonly reasoning?: 'low' | 'medium' | 'high'
 	/** The system prompt. Tools interpolated in it are there in every loop of this agent. */
@@ -25,8 +26,8 @@ export interface AsToolOptions {
 }
 
 export interface Agent {
-	/** The model id the agent runs on. */
-	readonly model: string
+	/** The model the agent runs on, or several in the order they're tried. */
+	readonly model: AgentModel
 	/**
 	 * Runs the agent until it calls one of the exits interpolated in the template, and resolves to
 	 * the exit's result (see `ResultOf`). Without exits, it resolves to the agent's final text.
@@ -54,11 +55,15 @@ export interface Agent {
 	as(name: string, options?: AsToolOptions): Tool<{ task: string }, string>
 }
 
-const defined = new Set<string>()
+/** The model ids of every agent made in this process, by their JSON text, so each list is there once. */
+const defined = new Map<string, readonly string[]>()
 
-/** The model ids of every agent made in this process: what the app's runs need a provider for. */
-export function definedModels(): string[] {
-	return [...defined].toSorted()
+/**
+ * The model ids of every agent made in this process, each agent's in the order they're tried: what
+ * the app's runs need a provider for.
+ */
+export function definedModels(): string[][] {
+	return [...defined.entries()].toSorted(([first], [second]) => first.localeCompare(second)).map(([, models]) => [...models])
 }
 
 /**
@@ -71,10 +76,17 @@ export function definedModels(): string[] {
  * 	reasoning: 'medium',
  * 	system: prompt`You are a senior developer. When the plan doesn't fit, ${requestUserInput}.`,
  * })
+ *
+ * // Runs on the first of these that a provider with a key offers.
+ * export const planner = agent({
+ * 	model: ['claude-opus-5-5', 'gpt-5.5'],
+ * 	reasoning: 'high',
+ * })
  * ```
  */
 export function agent(options: AgentOptions): Agent {
-	defined.add(options.model)
+	const modelIds = modelIdsOf(options.model)
+	defined.set(JSON.stringify(modelIds), modelIds)
 	const loopAgent = { model: options.model, reasoning: options.reasoning, system: options.system }
 	return Object.freeze<Agent>({
 		model: options.model,

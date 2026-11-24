@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { buildApp } from '@mesh-flow/build'
 import { duration } from '@mesh-flow/duration'
-import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
+import { keyFile, openCredentialStore, openGateway } from '@mesh-flow/gateway'
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -152,7 +152,6 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			const gateway = openGateway({
 				home: gatewayHome,
 				credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
-				providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 				tools: [],
 				fetch,
 			})

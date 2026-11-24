@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs'
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
 import path from 'node:path'
-import { appManifestFile, appSourceMapMarker, type AppManifest, type AppPlatform } from '@mesh-flow/protocol'
+import { appManifestFile, appSourceMapMarker, type AppManifest, type AppPlatform, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { build } from 'rolldown'
 import { describeBuiltApp } from './describe-built-app.mts'
 import { assertInstallable, installForPlatform } from './install-for-platform.mts'
@@ -18,6 +18,12 @@ export interface BuildAppOptions {
 	readonly out: string
 	/** The sandbox's platform, which native dependencies are installed for. Default: linux-x64. */
 	readonly platform?: AppPlatform
+	/**
+	 * What's wrong with what the app declares, each a line, such as a model no provider in its config
+	 * offers. Any fail the build before `mesh-flow.json` is written, so the build can't be deployed.
+	 * Default: nothing is checked.
+	 */
+	readonly check?: (description: WorkflowsDescription) => readonly string[]
 	readonly abortSignal: AbortSignal
 }
 
@@ -73,6 +79,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppManifest> {
 	await markAppSourceMap(path.join(out, `${builtEntry}.map`), abortSignal)
 	// Described before the sandbox's binaries are installed next to it: this machine may not run them.
 	const description = await describeBuiltApp({ bundle: path.join(out, builtEntry), directory, abortSignal })
+	const problems = options.check?.(description) ?? []
+	if (problems.length > 0) throw new Error(`The app's config doesn't add up:\n${problems.join('\n')}`)
 	await installForPlatform(out, natives, platform, abortSignal)
 	const manifest: AppManifest = { entry: builtEntry, platform, description, builtAt: new Date().toISOString() }
 	await writeFile(path.join(out, appManifestFile), JSON.stringify(manifest, null, '\t'))

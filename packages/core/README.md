@@ -13,7 +13,11 @@ Calls to `loop`, tools and `input` run inside a workflow body (see [Workflows](#
 ```ts
 import { agent, prompt, requestUserInput } from '@mesh-flow/core'
 
-export const planner = agent({ model: 'claude-opus-5-5', reasoning: 'high' })
+// Runs on the first of these models that a provider with a key offers.
+export const planner = agent({
+	model: ['claude-opus-5-5', 'gpt-5.5'],
+	reasoning: 'high',
+})
 
 export const developer = agent({
 	model: 'claude-sonnet-5-5',
@@ -142,7 +146,7 @@ The input is checked by the stub and again on the host, and the result against `
 
 ### Models
 
-Under the engine an agent's model comes through the gateway: its id is resolved on the host, model first, to the first of the user's providers that offers it. pi-ai runs the provider's own request in the sandbox with a key that means nothing, and its `fetch` hands the request to the gateway, which sends it with the real key and counts the usage. Outside the engine, `runWorkflow` takes `models` directly.
+An agent names a model id, or several in the order they're tried. Under the engine its model comes through the gateway: the ids are resolved on the host, model first, to the agent's first model that a provider of the app's config with a key offers, on the first such provider in the config's order (see [Apps](#apps)). The model is picked when a loop starts, and a loop doesn't move to another model when a call fails. pi-ai runs the provider's own request in the sandbox with a key that means nothing, and its `fetch` hands the request to the gateway, which sends it with the real key and counts the usage. Outside the engine, `runWorkflow` takes `models` directly.
 
 ### Checks
 
@@ -253,14 +257,14 @@ export const weeklyReport = workflow('weekly-report', async ({ abortSignal }) =>
 
 ### Apps
 
-An app is a package whose `main` in `package.json` is its entry file. The entry file exports `defineMeshFlow`: the sandbox the app's runs get, and everything that can start a run, so there is one place to see what is live and where it runs:
+An app is a package whose `main` in `package.json` is its entry file. The entry file exports `defineMeshFlow`: the sandbox the app's runs get, the model providers its agents run on, and everything that can start a run, so there is one place to see what is live and where it runs:
 
 ```json
 { "name": "example", "type": "module", "main": "main.mts" }
 ```
 
 ```ts
-import { defineMeshFlow, image, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { anthropicClaude, defineMeshFlow, image, openRouter, schedule, userTrigger, webhook } from '@mesh-flow/core'
 import { npmRegistry } from '@mesh-flow/toolchain-node'
 import { z } from 'zod'
 import { develop, weeklyReport } from './workflows/develop.mts'
@@ -283,6 +287,14 @@ export default defineMeshFlow({
 		memoryMb: 4096,
 		registries: [npmRegistry],
 	}),
+	// In order: a model goes to the first provider here that offers it and has a key.
+	modelProviders: [
+		anthropicClaude,
+		openRouter({
+			name: 'team-openrouter',
+			baseUrl: 'https://llm-proxy.example.com/api/v1',
+		}),
+	],
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),
@@ -295,6 +307,8 @@ export default defineMeshFlow({
 ```
 
 `image({ name, cpus?, memoryMb?, registries? })` is the sandbox: an image with `node` in it, 2 CPUs and 2048 MB unless you say otherwise, and the package registries it restores from (see [Packages](#packages)). `mesh-flow build` bundles the entry file with its dependencies and writes down what it declares, so the sandbox has nothing to install and only runs `node` (see [`@mesh-flow/build`](../build/README.md)).
+
+A provider comes from its factory: `anthropicClaude`, `openAi`, `openRouter`, `groq`, `deepSeek`, `xAi` or `githubCopilot`, listed as it is or called with `{ name?, baseUrl? }`: a name of its own, which its key is set under, and a base URL for a proxy. Each is named after its kind by default. `githubCopilot` can be listed but serves no model calls yet: it needs a GitHub sign-in exchanged for a Copilot token, which the gateway doesn't do yet (#65). A server that speaks the OpenAI chat completions API, such as a LiteLLM proxy, comes from `openAiCompatible({ name, baseUrl })`. The server says which models it offers (`GET <baseUrl>/models`, with the user's key) when a loop picks its model, so the config doesn't list them and the build check counts it as offering any model. `modelProvider(kind, { name?, baseUrl? })` makes one of any other pi-ai provider kind. The providers, their order and their base URLs are team policy, reviewed in git: a base URL decides where prompts and code go. Each user only sets a provider's key (`mesh-flow provider key <name>`, or in the UI), and can leave one without a key. `mesh-flow build` fails when an agent's model isn't offered by any provider listed here.
 
 `defineWorkflows(...triggers)` bundles triggers, for a package or a module that brings several at once. A bundle goes in `workflows` like a trigger does:
 
@@ -363,7 +377,7 @@ A workflow never says how it is started; the app's `workflows` does.
 
 TypeScript checks every trigger against its workflow: a webhook schema that doesn't give the parameters, or a schedule without them, doesn't compile. Secrets, and turning a trigger on or off, are settings of the engine, never code.
 
-Under the engine, the built entry file starts itself: `node main.mjs` reads what the engine asked for from the mailbox and runs one workflow through one of its triggers, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. A schedule fired by hand (`mesh-flow trigger schedule`) runs with the parameters it was given instead of its own. `mesh-flow build` starts it the same way to have it describe what it declares: its sandbox, its workflows with their parameters as JSON Schema, and its triggers. `describeApp(app)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
+Under the engine, the built entry file starts itself: `node main.mjs` reads what the engine asked for from the mailbox and runs one workflow through one of its triggers, stopped on `SIGTERM` or `SIGINT`, exiting with 0 or 1. A schedule fired by hand (`mesh-flow trigger schedule`) runs with the parameters it was given instead of its own. `mesh-flow build` starts it the same way to have it describe what it declares: its sandbox, its model providers and its agents' models, its workflows with their parameters as JSON Schema, and its triggers. `describeApp(app)` gives the same description in code, for a test of your entry file; it describes the workflows your modules registered, or the ones you pass as its second argument.
 
 ### Running a workflow yourself
 

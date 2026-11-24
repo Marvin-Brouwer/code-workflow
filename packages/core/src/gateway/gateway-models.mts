@@ -1,8 +1,9 @@
 import type { Api, AssistantMessageEventStream, Model, ProviderRequestOptions } from '@earendil-works/pi-ai'
-import { createModels, type Provider } from '@earendil-works/pi-ai/models'
+import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy'
+import { createModels, createProvider, type Provider } from '@earendil-works/pi-ai/models'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ModelRef } from '@earendil-works/pi-durable'
-import { ModelResponse, ResolvedModel } from '@mesh-flow/protocol'
+import { ModelResponse, ResolvedModel, type CompatibleModel } from '@mesh-flow/protocol'
 import type { ModelSource } from '../loop/model-source.mts'
 import type { GatewayClient } from './gateway-client.mts'
 
@@ -16,37 +17,46 @@ const noKey = 'mesh-flow-gateway-adds-the-key'
 const keySource = 'mesh-flow gateway'
 
 /**
- * The run's models, through the gateway. A model id is resolved on the host, model first, to one of
- * the user's providers. The provider's SDK runs here, as pi-ai always runs it, and makes the
- * provider's own request, but its `fetch` hands the request to the gateway, which sends it with the
- * key. Nothing in the sandbox holds a key.
+ * The run's models, through the gateway. An agent's model ids are resolved on the host, model first,
+ * to one of the providers the app's config declares that has a key. The provider's SDK runs here,
+ * as pi-ai always runs it, and makes the provider's own request, but its `fetch` hands the request
+ * to the gateway, which sends it with the key. Nothing in the sandbox holds a key.
  */
 export function gatewayModels(gateway: GatewayClient): ModelSource {
 	const models = createModels()
 	const resolved = new Map<string, Promise<ModelRef>>()
-	const resolve = async (modelId: string, abortSignal: AbortSignal): Promise<ModelRef> => {
-		const choice = ResolvedModel.parse(await gateway.call(gateway.run, { type: 'resolve-model', model: modelId }, abortSignal))
-		if (models.getProvider(choice.provider) === undefined) models.setProvider(gatewayProvider(choice, gateway))
+	// A compatible server's models, by provider: pi-ai doesn't know them, so its provider is made again with each one resolved on it.
+	const compatibleModels = new Map<string, CompatibleModel[]>()
+	const resolve = async (modelIds: readonly string[], abortSignal: AbortSignal): Promise<ModelRef> => {
+		const choice = ResolvedModel.parse(await gateway.call(gateway.run, { type: 'resolve-model', models: [...modelIds] }, abortSignal))
+		if (choice.compatible === undefined) {
+			if (models.getProvider(choice.provider) === undefined)
+				models.setProvider(gatewayProvider(choice, builtinProviderOf(choice.kind), gateway))
+			return { provider: choice.provider, modelId: choice.model }
+		}
+		const known = compatibleModels.get(choice.provider) ?? []
+		const offered = known.some((model) => model.id === choice.model) ? known : [...known, choice.compatible.model]
+		compatibleModels.set(choice.provider, offered)
+		models.setProvider(gatewayProvider(choice, compatibleProvider(choice.kind, choice.compatible.baseUrl, offered), gateway))
 		return { provider: choice.provider, modelId: choice.model }
 	}
 	return {
 		models,
-		resolve(modelId, abortSignal) {
-			const known = resolved.get(modelId)
+		resolve(modelIds, abortSignal) {
+			const key = JSON.stringify(modelIds)
+			const known = resolved.get(key)
 			if (known !== undefined) return known
-			const resolving = resolve(modelId, abortSignal)
-			resolved.set(modelId, resolving)
-			// A failed resolve is tried again by the next loop: the user may have added a provider since.
-			resolving.catch(() => resolved.delete(modelId))
+			const resolving = resolve(modelIds, abortSignal)
+			resolved.set(key, resolving)
+			// A failed resolve is tried again by the next loop: the user may have set a key since.
+			resolving.catch(() => resolved.delete(key))
 			return resolving
 		},
 	}
 }
 
-/** One of the user's providers, as the sandbox sees it: pi-ai's provider of its kind, with a `fetch` that goes through the gateway. */
-function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provider {
-	const inner = builtinProviders().find((provider) => provider.id === choice.kind)
-	if (inner === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${choice.kind}.`)
+/** One of the app's providers, as the sandbox sees it: pi-ai's provider of its kind, with a `fetch` that goes through the gateway. */
+function gatewayProvider(choice: ResolvedModel, inner: Provider, gateway: GatewayClient): Provider {
 	const asInner = <TApi extends Api>(model: Model<TApi>): Model<TApi> => ({ ...model, provider: inner.id })
 	const options = <Options extends ProviderRequestOptions<never>>(model: Model<Api>, given: Options | undefined): Options =>
 		// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the options are the caller's, with the key and fetch replaced
@@ -64,6 +74,35 @@ function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provide
 		streamSimple: (model, context, given): AssistantMessageEventStream =>
 			inner.streamSimple(asInner(model), context, options(model, given)),
 	}
+}
+
+/** What a compatible server's models cost here: nothing is known, so they're counted without a price. */
+const unpriced = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+
+/** A compatible server, which pi-ai doesn't know: OpenAI's Chat Completions API at its base URL, with the models resolved on it so far. */
+function compatibleProvider(kind: string, baseUrl: string, offered: readonly CompatibleModel[]): Provider {
+	return createProvider({
+		id: kind,
+		baseUrl,
+		auth: { apiKey: { name: keySource, resolve: () => Promise.resolve({ auth: { apiKey: noKey }, source: keySource }) } },
+		models: offered.map((model) => ({
+			...model,
+			name: model.id,
+			api: 'openai-completions',
+			provider: kind,
+			baseUrl,
+			input: ['text'],
+			cost: unpriced,
+		})),
+		api: openAICompletionsApi(),
+	})
+}
+
+/** pi-ai's provider of `kind`. */
+function builtinProviderOf(kind: string): Provider {
+	const builtin = builtinProviders().find((provider) => provider.id === kind)
+	if (builtin === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${kind}.`)
+	return builtin
 }
 
 /**

@@ -24,9 +24,9 @@ Vite into static files, plus a `mesh-flow ui` command in the engine that serves 
 
 ### 1. `mesh-flow ui` (host)
 
-A command next to `serve`, not part of it, for the same reason the provider commands aren't: the
-settings work on the home's files without a running engine, and a running one sees the change at
-once.
+A command next to `serve`, not part of it: credentials and connector settings work on the home's
+files without a running engine, and a running one sees the change at once. (Since providers moved
+into the app's config, the providers page needs the running engine.)
 
 - Listens on `127.0.0.1`, on a free port (`--port` to pick one), serves the built UI and an API
   under `/api`, and prints the URL, so you open it in the browser you choose.

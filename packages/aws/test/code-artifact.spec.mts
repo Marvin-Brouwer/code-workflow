@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { connectorCredentials, keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway } from '@mesh-flow/gateway'
+import { connectorCredentials, keyFile, openCredentialStore, openGateway, type Gateway } from '@mesh-flow/gateway'
 import type { ConnectorRegistry, RunGrant } from '@mesh-flow/protocol'
 import { describe, expect, test } from 'vitest'
 import { codeArtifact } from '../src/code-artifact.mts'
@@ -45,7 +45,6 @@ async function setUp({
 	const gateway = openGateway({
 		home: path.join(home, 'gateway'),
 		credentials: store,
-		providers: openProviderSettings(path.join(home, 'providers.json')),
 		registries: { aws: resolve },
 		fetch: repository.fetch,
 	})

@@ -6,11 +6,11 @@ import {
 	keyFile,
 	openCredentialStore,
 	openGateway,
-	openProviderSettings,
 	SignInNeededError,
 	type HostTool,
 	type ResolveRegistryTarget,
 } from '@mesh-flow/gateway'
+import type { ModelProviderDescription } from '@mesh-flow/protocol'
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
@@ -71,7 +71,6 @@ async function openEngine({
 	const gateway = openGateway({
 		home: gatewayHome,
 		credentials: openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key'))),
-		providers: openProviderSettings(path.join(gatewayHome, 'providers.json')),
 		tools,
 		...(fetch === undefined ? {} : { fetch }),
 		...(registries === undefined ? {} : { registries }),
@@ -125,15 +124,23 @@ ${body}
 /** The model of the app {@link deployModelApp} deploys. */
 const appModel = 'claude-opus-5-5'
 
-/** Deploys an app whose agents use {@link appModel} and whose one workflow succeeds at once. */
-function deployModelApp(deployment: Awaited<ReturnType<typeof openEngine>>['deployment']) {
-	return deployTestApp(deployment, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { models: [appModel] })
+/** The one provider of the app {@link deployModelApp} deploys, which serves {@link appModel}. */
+const workProvider: ModelProviderDescription = { name: 'work', kind: 'anthropic' }
+
+/**
+ * Deploys an app whose agents use {@link appModel}, with `providers` in its config, and whose one
+ * workflow runs `calls`: by default, it succeeds at once.
+ */
+function deployModelApp(
+	deployment: Awaited<ReturnType<typeof openEngine>>['deployment'],
+	providers = [workProvider],
+	calls = runtimeScript(`mailbox.send({ type: 'succeeded' })`),
+) {
+	return deployTestApp(deployment, { calls }, { models: [[appModel]], providers })
 }
 
-/** Adds a provider `work` that serves {@link appModel}, with `key` when one is given. */
-async function withProvider(gatewayHome: string, key?: string) {
-	await openProviderSettings(path.join(gatewayHome, 'providers.json')).put({ name: 'work', kind: 'anthropic' }, abortSignal)
-	if (key === undefined) return
+/** Sets the key of the provider `work`. */
+async function withKey(gatewayHome: string, key: string) {
 	const credentials = openCredentialStore(path.join(gatewayHome, 'credentials.json'), keyFile(path.join(gatewayHome, 'store.key')))
 	await credentials.set('provider/work', key, abortSignal)
 }
@@ -469,17 +476,17 @@ mailbox.send({ type: 'succeeded' })
 		expect(JSON.stringify(done)).toContain('engine stopped')
 	})
 
-	test("refuses a run before its sandbox when no provider serves the app's models", async () => {
+	test("refuses a run before its sandbox when no provider in the app's config offers its models", async () => {
 		// Arrange
 		const { engine, deployment } = await openEngine()
-		await deployModelApp(deployment)
+		await deployModelApp(deployment, [])
 
 		// Act
 		const refused = engine.startRun({ ...userRun('calls'), abortSignal })
 
 		// Assert
 		await expect(refused).rejects.toMatchObject({ code: 'unavailable' })
-		await expect(refused).rejects.toThrow('No model providers are set up')
+		await expect(refused).rejects.toThrow("Model claude-opus-5-5 isn't offered by any provider in the config")
 		expect(engine.list()).toEqual([])
 	})
 
@@ -489,7 +496,7 @@ mailbox.send({ type: 'succeeded' })
 		const deployed = await deployTestApp(
 			deployment,
 			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
-			{ tools: ['echo', 'githubComment'], models: [appModel] },
+			{ tools: ['echo', 'githubComment'], models: [[appModel]], providers: [workProvider] },
 		)
 
 		// Act
@@ -497,8 +504,8 @@ mailbox.send({ type: 'succeeded' })
 
 		// Assert
 		expect(missing).toHaveLength(2)
-		expect(missing[0]).toMatchObject({ fix: { kind: 'provider', model: 'claude-opus-5-5' } })
-		expect(missing[0]?.message).toContain('No model providers are set up')
+		expect(missing[0]).toMatchObject({ fix: { kind: 'provider-key', provider: 'work' } })
+		expect(missing[0]?.message).toContain('mesh-flow provider key work')
 		expect(missing[1]).toMatchObject({ fix: { kind: 'connector-for-tools', tools: ['githubComment'] } })
 		expect(missing[1]?.message).toContain('host tools githubComment')
 	})
@@ -548,9 +555,8 @@ mailbox.send({ type: 'succeeded' })
 
 	test("refuses a run when the provider of the app's model has no key", async () => {
 		// Arrange
-		const { engine, deployment, gatewayHome } = await openEngine()
+		const { engine, deployment } = await openEngine()
 		await deployModelApp(deployment)
-		await withProvider(gatewayHome)
 
 		// Act
 		const refused = engine.startRun({ ...userRun('calls'), abortSignal })
@@ -563,12 +569,36 @@ mailbox.send({ type: 'succeeded' })
 		// Arrange
 		const { engine, deployment, gatewayHome } = await openEngine()
 		await deployModelApp(deployment)
-		await withProvider(gatewayHome, 'sk-test')
+		await withKey(gatewayHome, 'sk-test')
 
 		// Act
 		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
 
 		// Assert
 		await untilStatus(engine, run.id, 'succeeded')
+	})
+
+	test("resolves a run's models with the providers of the app version it started on", async () => {
+		// Arrange
+		const { engine, deployment, gatewayHome } = await openEngine()
+		await deployModelApp(
+			deployment,
+			[{ name: 'proxy', kind: 'anthropic', baseUrl: 'https://llm-proxy.example.com' }, workProvider],
+			callingScript(`
+const resolved = await call('call-1', { type: 'resolve-model', models: ['${appModel}'] }, grant.tokens[0])
+event('done', 'called', { resolved: resolved.outcome })
+mailbox.send({ type: 'succeeded' })
+`),
+		)
+		await withKey(gatewayHome, 'sk-test')
+
+		// Act
+		const run = await engine.startRun({ ...userRun('calls'), abortSignal })
+		await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		expect(await engine.events(run.id)).toEqual([
+			expect.objectContaining({ resolved: { ok: true, result: { provider: 'work', kind: 'anthropic', model: appModel } } }),
+		])
 	})
 })

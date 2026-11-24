@@ -32,8 +32,8 @@ export interface AgentHarness {
 	keptResult(key: string, abortSignal: AbortSignal): Promise<StoredResult | undefined>
 	/** Keeps the result a loop's store key finished with, so a rerun returns it without running the loop again. */
 	keepResult(key: string, result: StoredResult, abortSignal: AbortSignal): Promise<void>
-	/** Which provider serves a model id, model first. */
-	model(modelId: string, abortSignal: AbortSignal): Promise<ModelRef>
+	/** Which of an agent's model ids runs, and on which provider: the first one a provider offers, model first. */
+	model(modelIds: readonly string[], abortSignal: AbortSignal): Promise<ModelRef>
 	/** Adds a loop's tools and hooks. Conversations select it in their `agent`. */
 	install(extension: Extension): void
 	/** Removes a loop's tools and hooks once its conversation is done with them. */
@@ -112,7 +112,7 @@ export async function openAgentHarness(options: AgentHarnessOptions, runSignal: 
 				loops.results[key] = JSON.stringify(result)
 			}, context(abortSignal))
 		},
-		model: (modelId, abortSignal) => options.models.resolve(modelId, abortSignal),
+		model: (modelIds, abortSignal) => options.models.resolve(modelIds, abortSignal),
 		install: (extension) => {
 			registry.install(extension)
 		},

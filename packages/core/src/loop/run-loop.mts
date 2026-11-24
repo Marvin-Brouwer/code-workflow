@@ -17,6 +17,7 @@ import {
 } from '@earendil-works/pi-durable'
 import { CodingTools } from '@earendil-works/pi-durable/tools'
 import { z } from 'zod'
+import { modelIdsOf, type AgentModel } from '../agent/agent-model.mts'
 import { promptParts, type Prompt } from '../agent/prompt.mts'
 import type { ExitSpecification } from '../exits/exit.mts'
 import type { Endpoint } from '../gateway/gateway-client.mts'
@@ -35,7 +36,7 @@ import { runGateOf } from './run-gate.mts'
 
 /** What a loop needs of its agent. */
 export interface LoopAgent {
-	readonly model: string
+	readonly model: AgentModel
 	readonly reasoning: 'low' | 'medium' | 'high' | undefined
 	readonly system: Prompt | undefined
 }
@@ -106,7 +107,7 @@ interface DriveLoopInput {
 
 async function driveLoop({ agent, template, system, key, storeKey, scope: eventScope, harness }: DriveLoopInput): Promise<unknown> {
 	const { run } = eventScope
-	const model = await harness.model(agent.model, run.abortSignal)
+	const model = await harness.model(modelIdsOf(agent.model), run.abortSignal)
 	const stopNow = new AbortController()
 	// A loop run from a tool call of another stops with it, such as a review in a check whose loop ran
 	// out of time. The other loop's signal stops with the run too.

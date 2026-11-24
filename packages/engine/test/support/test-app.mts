@@ -9,6 +9,7 @@ import {
 	mailboxLayout,
 	type PackageRegistry,
 	type TriggerDescription,
+	type ModelProviderDescription,
 	type WorkflowDescription,
 } from '@mesh-flow/protocol'
 import type { Deployment, DeploymentVersion } from '../../src/app/deployment.mts'
@@ -60,7 +61,9 @@ export interface TestAppOptions {
 	/** The host tools the app calls through the gateway. Default: none. */
 	readonly tools?: readonly string[]
 	/** The models the app's agents use. Default: none. */
-	readonly models?: readonly string[]
+	readonly models?: readonly (readonly string[])[]
+	/** The model providers the app's config declares. Default: none. */
+	readonly providers?: readonly ModelProviderDescription[]
 	/** The package registries the app restores from. Default: none. */
 	readonly registries?: readonly PackageRegistry[]
 }
@@ -93,7 +96,8 @@ export async function builtApp(workflows: Record<string, string>, options: TestA
 			workflows: options.workflows ? [...options.workflows] : names.map((name) => ({ name, parameters: { type: 'object' } })),
 			triggers: options.triggers ? [...options.triggers] : names.map((name) => ({ kind: 'user', id: name, workflow: name })),
 			tools: [...(options.tools ?? [])],
-			models: [...(options.models ?? [])],
+			providers: [...(options.providers ?? [])],
+			models: (options.models ?? []).map((modelIds) => [...modelIds]),
 		},
 		builtAt: new Date().toISOString(),
 	}

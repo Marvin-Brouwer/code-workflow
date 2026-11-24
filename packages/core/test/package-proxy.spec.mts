@@ -6,7 +6,7 @@ import { connect } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { duration } from '@mesh-flow/duration'
-import { keyFile, openCredentialStore, openGateway, openProviderSettings } from '@mesh-flow/gateway'
+import { keyFile, openCredentialStore, openGateway } from '@mesh-flow/gateway'
 import type { ConnectorRegistry, PackageRegistry, PackageRequest } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { gatewayClient, GatewayCallError } from '../src/gateway/gateway-client.mts'
@@ -73,7 +73,6 @@ async function throughGateway(registries: readonly PackageRegistry[], fetchFromH
 	const gateway = openGateway({
 		home,
 		credentials: openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key'))),
-		providers: openProviderSettings(path.join(home, 'providers.json')),
 		fetch: fetchFromHost,
 	})
 	const lifetime = new AbortController()

@@ -7,16 +7,9 @@
  */
 import { z } from 'zod'
 
-/** A provider kind the gateway knows, and how many models it has. */
-export const ProviderKind = z.object({ kind: z.string(), models: z.number() })
-export type ProviderKind = z.infer<typeof ProviderKind>
-
-/** A provider as the settings list it: never its key, only whether it has one. */
+/** A provider of the app's config, as the settings list it: never its key, only whether it has one. */
 export const ListedProvider = z.object({ name: z.string(), kind: z.string(), baseUrl: z.string().optional(), hasKey: z.boolean() })
 export type ListedProvider = z.infer<typeof ListedProvider>
-
-/** The names `ProviderName` in `@mesh-flow/gateway` takes, as an input's `pattern`. */
-export const providerNamePattern = '[a-z0-9][\\w\\-]{0,63}'
 
 /** A connector package the engine loads: `ConnectorSetting` in `@mesh-flow/engine`. */
 export const ConnectorPackage = z.object({ package: z.string() })
@@ -36,7 +29,6 @@ export type SignInState = z.infer<typeof SignInState>
 
 /** What sets a missing setting: see `SettingFix` in `@mesh-flow/gateway`. */
 export const SettingFix = z.discriminatedUnion('kind', [
-	z.object({ kind: z.literal('provider'), model: z.string() }),
 	z.object({ kind: z.literal('provider-key'), provider: z.string() }),
 	z.object({ kind: z.literal('credential'), name: z.string(), example: z.string().optional() }),
 	z.object({ kind: z.literal('connector-for-tools'), tools: z.array(z.string()) }),

@@ -402,10 +402,19 @@ directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
 
 ### Model providers
 
-- Agents name a **model id**. The gateway resolves it model-first: the first provider in the
-  user's ordered list that offers it.
+- The app's config declares its **providers**, in order: `modelProviders` in `defineMeshFlow`,
+  each a pi-ai provider kind with an optional base URL (a proxy or a compatible server). This is
+  non-secret team policy, reviewed in git: a base URL decides where prompts and code go, and the
+  repo says what a workflow runs on. Only the keys are per user ([Settings](#9-settings)); a user
+  can leave a provider without one, and nobody adds a provider or a base URL outside git.
+- Agents name a **model id**, or several as a fallback in order (`['claude-opus-5-5', 'gpt-5.5']`).
+  The gateway resolves them model-first: the agent's first model that a provider with a key offers,
+  on the first such provider in the config's order. The model is picked when a loop starts; there's
+  no failover during a loop.
 - Agents are module-level, so the build's description ([Triggers](#triggers)) tells the engine a
-  workflow's models before a run starts, and it checks them against the user's providers up front.
+  workflow's models before a run starts. `mesh-flow build` fails when an agent's model isn't
+  offered by any declared provider kind; each trigger checks the keys up front. A run keeps the
+  providers of the app version it started on.
 - In the sandbox, pi-ai sends each provider's native request over the channel and the gateway
   forwards it with the credential, which keeps provider-specific features (thinking, caching, headers) intact.
 - Usage and cost per run are measured at the gateway.
@@ -478,8 +487,8 @@ export const aws = connector({
 
 | Where | What |
 |---|---|
-| **Git** (workflow repo) | workflows, agents (model ids), the entry file with triggers, static non-secret team config (start URLs, regions, accounts, thresholds) |
-| **UI** (per user) | providers and their order, credentials, logins, overrides of static config |
+| **Git** (workflow repo) | workflows, agents (model ids), the entry file with triggers and the model providers in order, static non-secret team config (start URLs, regions, accounts, thresholds) |
+| **UI** (per user) | provider keys, credentials, logins, overrides of static config |
 | **Host config** | infrastructure only: gateway URL, credential store, KMS key |
 
 - Credentials are stored server-side, encrypted per user (envelope encryption); locally in the OS

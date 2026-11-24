@@ -70,6 +70,7 @@ function runRecord(status: RunRecord['status']): RunRecord {
 			sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
 			tools: [],
 			registries: [],
+			providers: [],
 		},
 		status,
 		cursor: 0,

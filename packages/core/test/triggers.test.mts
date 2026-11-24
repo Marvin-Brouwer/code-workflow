@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { defineMeshFlow } from '../src/app/define-mesh-flow.mts'
 import { describeApp } from '../src/app/describe-app.mts'
 import { image } from '../src/app/image.mts'
+import { anthropicClaude, modelProvider, openAiCompatible, openRouter } from '../src/app/model-provider.mts'
 import { defineWorkflows } from '../src/triggers/define-workflows.mts'
 import { schedule } from '../src/triggers/schedule.mts'
 import { userTrigger } from '../src/triggers/user-trigger.mts'
@@ -131,10 +132,68 @@ describe('defineMeshFlow', () => {
 		expect(defining).toThrow('The user trigger fix-issue is listed twice.')
 	})
 
-	test('describes its sandbox, and the workflows it is given with their parameters as JSON Schema', () => {
+	test('refuses two model providers with one name, since a key is set by name', () => {
+		// Arrange
+		const modelProviders = [anthropicClaude, openRouter({ name: 'anthropic' })]
+
+		// Act
+		const defining = () => defineMeshFlow({ sandbox: image({ name: 'node:26-slim' }), modelProviders, workflows: [] })
+
+		// Assert
+		expect(defining).toThrow('The model provider anthropic is listed twice.')
+	})
+
+	test.each([
+		['a name the gateway cannot keep a key under', { name: 'Work Proxy' }],
+		['a base URL that is not one', { baseUrl: 'not a url' }],
+	])('refuses a model provider with %s', (_case, options) => {
+		// Act
+		const defining = () => modelProvider('anthropic', options)
+
+		// Assert
+		expect(defining).toThrow()
+	})
+
+	test('makes a provider factory listed as it is with its defaults, and one called with its options', () => {
+		// Act
+		const app = defineMeshFlow({
+			sandbox: image({ name: 'node:26-slim' }),
+			modelProviders: [
+				anthropicClaude,
+				openRouter({ name: 'team-openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' }),
+				modelProvider('groq'),
+			],
+			workflows: [],
+		})
+
+		// Assert
+		expect(app.modelProviders).toEqual([
+			{ name: 'anthropic', kind: 'anthropic' },
+			{ name: 'team-openrouter', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+			{ name: 'groq', kind: 'groq' },
+		])
+	})
+
+	test('describes a compatible server by its name and base URL', () => {
+		// Act
+		const provider = openAiCompatible({
+			name: 'team-litellm',
+			baseUrl: 'https://litellm.example.com/v1',
+		})
+
+		// Assert
+		expect(provider).toEqual({
+			name: 'team-litellm',
+			kind: 'openai-compatible',
+			baseUrl: 'https://litellm.example.com/v1',
+		})
+	})
+
+	test('describes its sandbox, its model providers in order, and the workflows it is given with their parameters as JSON Schema', () => {
 		// Arrange
 		const app = defineMeshFlow({
 			sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
+			modelProviders: [openRouter({ name: 'proxy', baseUrl: 'https://llm-proxy.example.com/api/v1' }), anthropicClaude],
 			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
 		})
 
@@ -144,6 +203,10 @@ describe('defineMeshFlow', () => {
 		// Assert
 		expect(description).toEqual({
 			sandbox: { image: 'node:26-slim', cpus: 2, memoryMb: 2048, registries: [npmRegistry] },
+			providers: [
+				{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+				{ name: 'anthropic', kind: 'anthropic' },
+			],
 			workflows: [
 				{ name: 'fix-issue', parameters: { type: 'object', properties: { issue: { type: 'number' } }, required: ['issue'] } },
 				{ name: 'report', parameters: { type: 'object', properties: {} } },

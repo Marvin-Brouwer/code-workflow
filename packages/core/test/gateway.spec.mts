@@ -5,12 +5,12 @@ import {
 	keyFile,
 	openCredentialStore,
 	openGateway,
-	openProviderSettings,
 	SignInNeededError,
 	tokensPerEndpoint,
 	type Gateway,
 	type HostTool,
 } from '@mesh-flow/gateway'
+import type { ModelProviderDescription } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
 import { agent } from '../src/agent/agent.mts'
@@ -67,9 +67,12 @@ async function withGateway({
 	signIn,
 	signInCancelled,
 	resumes,
+	providers = [],
 	...options
 }: {
 	readonly fetch?: typeof fetch
+	/** The model providers the run's app declares. Default: none. */
+	readonly providers?: readonly ModelProviderDescription[]
 	readonly signIn?: (connector: string) => Promise<void>
 	/** How many sign-ins the engine answers as a resume first. */
 	readonly resumes?: number
@@ -82,8 +85,7 @@ async function withGateway({
 	})
 	const home = await temporaryDirectory()
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
-	const providers = openProviderSettings(path.join(home, 'providers.json'))
-	const opened = openGateway({ home, credentials, providers, tools: hostTools, ...options })
+	const opened = openGateway({ home, credentials, tools: hostTools, ...options })
 	const calls: { readonly endpoint: string; readonly type: string }[] = []
 	const gateway: Gateway = {
 		...opened,
@@ -92,7 +94,7 @@ async function withGateway({
 			return opened.accept(id, message, acceptAbortSignal)
 		},
 	}
-	const grant = await gateway.openRun(runId, { tools: definedHostTools() }, abortSignal)
+	const grant = await gateway.openRun(runId, { tools: definedHostTools(), providers }, abortSignal)
 	const client = (lifetime: AbortSignal) =>
 		gatewayClient(
 			gatewayChannel(gateway, runId, lifetime, {
@@ -104,7 +106,34 @@ async function withGateway({
 			'test',
 			lifetime,
 		)
-	return { gateway, credentials, providers, calls, client }
+	return { gateway, credentials, calls, client }
+}
+
+/** The address a fetch goes to. */
+function addressOf(input: string | URL | Request): string {
+	return input instanceof Request ? input.url : input.toString()
+}
+
+/** One streamed OpenAI Chat Completions chunk with `choice`, and `extra` fields beside the choices. */
+function chatCompletionsChunk(choice: Record<string, unknown>, extra: Record<string, unknown> = {}): string {
+	const chunk = {
+		id: 'chat-1',
+		object: 'chat.completion.chunk',
+		created: 0,
+		model: 'team-model',
+		choices: [{ index: 0, ...choice }],
+		...extra,
+	}
+	return `data: ${JSON.stringify(chunk)}\n\n`
+}
+
+/** An OpenAI Chat Completions streamed answer that says `text`. */
+function chatCompletionsStream(text: string): string {
+	return [
+		chatCompletionsChunk({ delta: { role: 'assistant', content: text }, finish_reason: null }),
+		chatCompletionsChunk({ delta: {}, finish_reason: 'stop' }, { usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } }),
+		'data: [DONE]\n\n',
+	].join('')
 }
 
 /** An Anthropic streamed answer that says `text`. */
@@ -289,8 +318,7 @@ describe('gateway', () => {
 		const sent = vi.fn<typeof fetch>(() =>
 			Promise.resolve(new Response(anthropicStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
 		)
-		const { client, credentials, providers, gateway } = await withGateway({ fetch: sent })
-		await providers.put({ name: 'work', kind: 'anthropic' }, abortSignal)
+		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [{ name: 'work', kind: 'anthropic' }] })
 		await credentials.set('provider/work', 'sk-real', abortSignal)
 		const helper = agent({ model: 'claude-opus-5-5' })
 
@@ -302,6 +330,77 @@ describe('gateway', () => {
 		const [, init] = sent.mock.calls[0] ?? []
 		expect(init?.headers).toMatchObject({ 'x-api-key': 'sk-real' })
 		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'claude-opus-5-5': { requests: 1, inputTokens: 10, outputTokens: 4 } })
+	})
+
+	test('runs a model a compatible server lists, at its base URL with its key', async () => {
+		// Arrange
+		// The server lists its models first, when the loop picks one, then answers the model call.
+		const sent = vi
+			.fn<typeof fetch>(() =>
+				Promise.resolve(new Response(chatCompletionsStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
+			)
+			.mockResolvedValueOnce(Response.json({ data: [{ id: 'team-model' }] }))
+		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
+		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const helper = agent({ model: 'team-model' })
+
+		// Act
+		const run = await runBody(() => helper.loop`What is the capital of France?`, { gateway: client })
+
+		// Assert
+		expect(await run.result).toBe('Paris')
+		const [url, init] = sent.mock.calls[1] ?? []
+		expect(url).toEqual(new URL('https://litellm.example.com/v1/chat/completions'))
+		expect(init?.headers).toMatchObject({ authorization: 'Bearer sk-litellm' })
+		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'team-model': { requests: 1, inputTokens: 10, outputTokens: 4 } })
+	})
+
+	test('runs two agents on different models of one compatible server in a run', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>((input) =>
+			Promise.resolve(
+				addressOf(input).endsWith('/models')
+					? Response.json({ data: [{ id: 'team-model' }, { id: 'team-thinker' }] })
+					: new Response(chatCompletionsStream('Paris'), { headers: { 'content-type': 'text/event-stream' } }),
+			),
+		)
+		const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
+		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers: [litellm] })
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const helper = agent({ model: 'team-model' })
+		const thinker = agent({ model: 'team-thinker' })
+
+		// Act
+		const run = await runBody(
+			async () => [await helper.loop`What is the capital of France?`, await thinker.loop`And of the Netherlands?`],
+			{ gateway: client },
+		)
+
+		// Assert
+		expect(await run.result).toEqual(['Paris', 'Paris'])
+		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'team-model': { requests: 1 }, 'team-thinker': { requests: 1 } })
+	})
+
+	test('runs an agent on its next model when no provider with a key offers its first', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() =>
+			Promise.resolve(new Response(anthropicStream('Paris'), { headers: { 'content-type': 'text/event-stream' } })),
+		)
+		const providers = [
+			{ name: 'openai', kind: 'openai' },
+			{ name: 'work', kind: 'anthropic' },
+		]
+		const { client, credentials, gateway } = await withGateway({ fetch: sent, providers })
+		await credentials.set('provider/work', 'sk-real', abortSignal)
+		const helper = agent({ model: ['gpt-4o', 'claude-opus-5-5'] })
+
+		// Act
+		const run = await runBody(() => helper.loop`What is the capital of France?`, { gateway: client })
+
+		// Assert
+		expect(await run.result).toBe('Paris')
+		expect(await gateway.usage(runId, abortSignal)).toMatchObject({ 'claude-opus-5-5': { requests: 1 } })
 	})
 
 	test('settles promptly when the run stops while a host tool never settles, and stops the tool', async () => {

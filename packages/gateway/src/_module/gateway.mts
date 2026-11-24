@@ -36,14 +36,8 @@ export { openPackageCache, type PackageCache } from '../packages/package-cache.m
 export { knownKinds } from '../providers/model-apis.mts'
 export { oneAtATime, type OneAtATime } from '../one-at-a-time.mts'
 export { projectUrl } from '../project-url.mts'
-export {
-	openProviderSettings,
-	providerCredential,
-	ProviderName,
-	ProviderSetting,
-	type ProviderSettings,
-} from '../providers/provider-settings.mts'
-export { resolveModel, type ModelChoice } from '../providers/resolve-model.mts'
+export { providerCredential } from '../providers/provider-credential.mts'
+export { offeringProvider, undeclaredModels, type ModelChoice } from '../providers/resolve-model.mts'
 export { mergeUsage, ModelUsage, RunUsage } from '../providers/usage.mts'
 export { missingCredentials, type WantedCredential } from '../settings/missing-credentials.mts'
 export { MissingSetting, SettingFix } from '../settings/missing-setting.mts'

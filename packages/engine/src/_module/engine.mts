@@ -30,13 +30,6 @@ export { RunApp, RunRecord, RunStatus } from '../runs/run-record.mts'
 export { openRunStore, runDirectory, type LoadedRuns, type RunStore } from '../runs/run-store.mts'
 export { gatewayDirectory, openEngineGatewayHome, type EngineGatewayOptions } from '../serve/engine-gateway.mts'
 export { serveEngine, type ServedEngine, type ServeEngineOptions } from '../serve/serve-engine.mts'
-export {
-	listProviders,
-	putProvider,
-	removeProvider,
-	setProviderKey,
-	type ListedProvider,
-	type ProviderInput,
-} from '../settings/providers.mts'
+export { listProviders, removeProviderKey, setProviderKey, type ListedProvider } from '../settings/providers.mts'
 export { handleShutdown, type HandleShutdownOptions, type ShutdownProcess } from '../shutdown/handle-shutdown.mts'
 export { uiEntry, type ServedUi, type ServeUi, type ServeUiOptions } from '../ui/ui-host.mts'
