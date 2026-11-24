@@ -140,16 +140,25 @@ async function fakeRegistry(): Promise<{ packument: string; tarball: Buffer; tar
 	return { packument, tarball, tarballPath }
 }
 
-/** What curl prints for the status when it got none. */
-const noStatus = '000'
-
-/** Runs curl with `args` through the proxy, and resolves to the status it got, `000` when it got none. */
+/**
+ * Runs curl with `args` through the proxy, and resolves to the status it got. When curl got none,
+ * it resolves to curl's exit code and error instead, so a failing test names why.
+ */
 async function curlStatus(environment: PackageEnvironment, home: string, commandArguments: readonly string[]): Promise<string> {
-	// curl prints the status and fails on a refused tunnel alike; either way, stdout has the status.
-	const result: unknown = await run('curl', ['--silent', '--output', '/dev/null', '--write-out', '%{http_code}', ...commandArguments], {
-		env: childEnvironment(environment, home),
-	}).catch((error: unknown) => error)
-	return typeof result === 'object' && result !== null && 'stdout' in result && typeof result.stdout === 'string' ? result.stdout : noStatus
+	// curl exits 0 on any status it got; without one, it exits with why. Async: the proxy runs in this process.
+	const curled = await new Promise<{ stdout: string; stderr: string; failure: string | undefined }>((resolve) => {
+		execFile(
+			'curl',
+			['--silent', '--show-error', '--output', '/dev/null', '--write-out', '%{http_code}', ...commandArguments],
+			{ env: childEnvironment(environment, home) },
+			(error, stdout, stderr) => {
+				resolve({ stdout, stderr, failure: error === null ? undefined : String(error.code) })
+			},
+		)
+	})
+	const status = curled.stdout.trim()
+	if (status !== '' && status !== '000') return status
+	return `no status: curl exited ${curled.failure ?? '0'}: ${curled.stderr.trim()}`
 }
 
 /** A path longer than a package fetch may be. */
