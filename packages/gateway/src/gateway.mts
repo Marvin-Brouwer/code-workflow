@@ -10,7 +10,7 @@ import {
 	type CallMessage,
 	type EndpointGrant,
 	type GatewayCall,
-	type ModelChoice,
+	type ModelConfiguration,
 	type ModelProviderDescription,
 	type ModelResponse,
 	type PackageRegistry,
@@ -141,7 +141,7 @@ export interface Gateway {
 	 */
 	readonly unavailableModels: (
 		providers: readonly ModelProviderDescription[],
-		agentModels: readonly ModelChoice[],
+		agentModels: readonly ModelConfiguration[],
 		abortSignal: AbortSignal,
 	) => Promise<MissingSetting[]>
 	/** Which of `tools` this gateway has no host tool for. A trigger checks the app's tools with it before it makes a sandbox. */
@@ -424,7 +424,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 
 	const unavailableModels = async (
 		providers: readonly ModelProviderDescription[],
-		agentModels: readonly ModelChoice[],
+		agentModels: readonly ModelConfiguration[],
 		abortSignal: AbortSignal,
 	) => {
 		const hasKey = await providerHasKey(abortSignal)

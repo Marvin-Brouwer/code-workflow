@@ -1,4 +1,4 @@
-import { openAiCompatibleKind, type ModelChoice, type ModelProviderDescription } from '@mesh-flow/protocol'
+import { openAiCompatibleKind, type ModelConfiguration, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { modelsOfKind } from './model-apis.mts'
 import { offeredModel } from './offering-provider.mts'
 
@@ -13,7 +13,7 @@ function isSendable(provider: ModelProviderDescription): boolean {
  * that a declared provider offers. A compatible server isn't asked here, so it counts as offering
  * every model. `mesh-flow build` fails with these.
  */
-export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelChoice[]): string[] {
+export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelConfiguration[]): string[] {
 	const kindProblems = providers
 		.filter((provider) => !isSendable(provider))
 		.map(
