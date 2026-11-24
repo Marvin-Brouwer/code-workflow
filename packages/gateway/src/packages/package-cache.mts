@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { registryKey, type PackageRequest } from '@mesh-flow/protocol'
-import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
 import type { RegistryAnswer } from './fetch-from-public-registry.mts'
+import { replaceFile } from '../files/replace-file.mts'
 
 /**
  * The packages every run on the gateway has fetched, on the host: a published version doesn't
@@ -77,8 +77,8 @@ export function openPackageCache(directory: string): PackageCache {
 			const files = filesOf(request)
 			try {
 				await mkdir(path.dirname(files.body), { recursive: true, mode: 0o700 })
-				await writeFileAtomic(files.body, fetched.body, { mode: 0o600 })
-				await writeFileAtomic(files.headers, JSON.stringify(fetched.headers), { mode: 0o600 })
+				await replaceFile(files.body, fetched.body, { mode: 0o600, abortSignal })
+				await replaceFile(files.headers, JSON.stringify(fetched.headers), { mode: 0o600, abortSignal })
 			} catch {
 				abortSignal.throwIfAborted()
 			}

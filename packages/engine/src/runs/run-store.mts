@@ -1,12 +1,15 @@
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readdir, readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { replaceFile } from '@mesh-flow/gateway'
 import { RunStart, RuntimeEvent } from '@mesh-flow/protocol'
-import writeFileAtomic from 'write-file-atomic'
 import { copyTarball } from '../apps/copy-tarball.mts'
 import { hasErrorCode, messageOf } from '../errors.mts'
 import { RunId } from './run-id.mts'
 import { RunRecord } from './run-record.mts'
+
+/** A run's own files are written to the end whoever stops: a half-kept run can't resume. */
+const untilWritten = new AbortController().signal
 
 /** What {@link RunStore.loadAll} found, and the files it had to skip. */
 export interface LoadedRuns {
@@ -79,7 +82,7 @@ export function openRunStore(root: string): RunStore {
 		saveStart: (id, start) =>
 			queues.write(id, async () => {
 				await mkdir(runDirectory(root, id), { recursive: true })
-				await writeFileAtomic(file(id, startFile), JSON.stringify(start))
+				await replaceFile(file(id, startFile), JSON.stringify(start), { abortSignal: untilWritten })
 			}),
 
 		loadStart: async (record) => {
@@ -94,7 +97,7 @@ export function openRunStore(root: string): RunStore {
 			const text = `${JSON.stringify(record, null, '\t')}\n`
 			return queues.write(record.id, async () => {
 				await mkdir(runDirectory(root, record.id), { recursive: true })
-				await writeFileAtomic(file(record.id, recordFile), text)
+				await replaceFile(file(record.id, recordFile), text, { abortSignal: untilWritten })
 			})
 		},
 

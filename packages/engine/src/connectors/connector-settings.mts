@@ -1,6 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import writeFileAtomic from 'write-file-atomic'
+import { replaceFile } from '@mesh-flow/gateway'
 import { z } from 'zod'
 import { hasErrorCode } from '../errors.mts'
 
@@ -44,7 +44,7 @@ export function openConnectorSettings(file: string): ConnectorSettings {
 	const write = async (connectors: ConnectorSetting[], abortSignal: AbortSignal) => {
 		await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
 		abortSignal.throwIfAborted()
-		await writeFileAtomic(file, `${JSON.stringify({ connectors }, null, '\t')}\n`, { mode: 0o600 })
+		await replaceFile(file, `${JSON.stringify({ connectors }, null, '\t')}\n`, { mode: 0o600, abortSignal })
 	}
 	return Object.freeze<ConnectorSettings>({
 		list,

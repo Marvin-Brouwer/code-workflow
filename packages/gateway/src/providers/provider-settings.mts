@@ -1,7 +1,7 @@
-import writeFileAtomic from 'write-file-atomic'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { withFileLock } from '../files/with-file-lock.mts'
+import { replaceFile } from '../files/replace-file.mts'
 
 /** Names a provider the user added, such as `anthropic` or `work-openrouter`. */
 export const ProviderName = z.string().regex(/^[a-z0-9][\w-]{0,63}$/, 'Use 1 to 64 lowercase letters, digits, _ or -.')
@@ -58,7 +58,7 @@ export function openProviderSettings(file: string): ProviderSettings {
 			const next = edit(await list(abortSignal))
 			if (next === undefined) return false
 			abortSignal.throwIfAborted()
-			await writeFileAtomic(file, `${JSON.stringify({ providers: next }, null, '\t')}\n`, { mode: 0o600 })
+			await replaceFile(file, `${JSON.stringify({ providers: next }, null, '\t')}\n`, { mode: 0o600, abortSignal })
 			return true
 		})
 	return Object.freeze<ProviderSettings>({

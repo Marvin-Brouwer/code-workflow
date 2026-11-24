@@ -1,10 +1,10 @@
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
-import writeFileAtomic from 'write-file-atomic'
 import { PackageRegistry } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { RunUsage } from '../providers/usage.mts'
+import { replaceFile } from '../files/replace-file.mts'
 
 /** One endpoint of a run: the tools it takes and the hashes of the tokens that work on it now. */
 const EndpointState = z.object({
@@ -82,7 +82,7 @@ export function openRunStates(directory: string): RunStates {
 				if (state === undefined) await rm(fileOf(runId), { force: true })
 				else {
 					await mkdir(directory, { recursive: true, mode: 0o700 })
-					await writeFileAtomic(fileOf(runId), `${JSON.stringify(state)}\n`, { mode: 0o600 })
+					await replaceFile(fileOf(runId), `${JSON.stringify(state)}\n`, { mode: 0o600, abortSignal })
 				}
 				return value
 			})
