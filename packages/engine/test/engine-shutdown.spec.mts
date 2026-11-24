@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { duration } from '@mesh-flow/duration'
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/apps/app-store.mts'
+import { openAppStore } from '../src/app/app-store.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { pollScript } from '../src/mailbox/poll-script.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
@@ -80,9 +80,9 @@ const ampleDeadlines = () => ({ pause: duration.of('10s').toAbortSignal(), backe
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
-	const apps = await openAppStore(path.join(home, 'apps'), signal)
-	await deployTestApp(apps, { hello: runtimeScript('') })
-	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), apps }, signal)
+	const app = await openAppStore(path.join(home, 'app'), signal)
+	await deployTestApp(app, { hello: runtimeScript('') })
+	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), app }, signal)
 	onTestFinished(() => engine.close(shortDeadlines()))
 	const { id } = await engine.startRun({ ...userRun('hello'), abortSignal: signal })
 	return { engine, id }

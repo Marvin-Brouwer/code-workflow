@@ -51,7 +51,7 @@ describe("the provider form's name pattern", () => {
 })
 
 describe("the page's credential names", () => {
-	test.each(['github/token', 'webhook/team/fix-issue', 'a.b/c', 'a/./b', 'x/../provider-order', '..', 'no space', ''])(
+	test.each(['github/token', 'webhook/fix-issue', 'a.b/c', 'a/./b', 'x/../provider-order', '..', 'no space', ''])(
 		'take %j exactly when the gateway does',
 		(name) => {
 			// Act

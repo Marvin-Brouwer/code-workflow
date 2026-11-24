@@ -5,7 +5,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { serveUiFrom } from '../src/_module/server.mts'
 import { temporaryDirectory } from './support/served-ui.mts'
-import { standInApp, standInEngine, standInSchedule } from './support/stand-in-engine.mts'
+import { standInEngine, standInSchedule } from './support/stand-in-engine.mts'
 
 /** The page as `pnpm build` makes it: this test runs against the real one. */
 const builtPage = fileURLToPath(new URL('../dist/app', import.meta.url))
@@ -89,6 +89,6 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		// Assert
 		expect(barCount).toBe(0)
 		expect(startLinks).toBe(2)
-		expect(webhookDetail).toContain(`No secret: set webhook/${standInApp}/issue-opened under credentials`)
+		expect(webhookDetail).toContain('No secret: set webhook/issue-opened under credentials')
 	})
 })

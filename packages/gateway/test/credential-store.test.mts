@@ -30,16 +30,16 @@ describe('openCredentialStore', () => {
 	test('lists names, never secrets, and removes one', async () => {
 		// Arrange
 		const { credentials } = await openTestStore()
-		await credentials.set('webhook/team/b', 'one', abortSignal)
+		await credentials.set('webhook/b', 'one', abortSignal)
 		await credentials.set('provider/a', 'two', abortSignal)
 
 		// Act
-		const removed = await credentials.remove('webhook/team/b', abortSignal)
+		const removed = await credentials.remove('webhook/b', abortSignal)
 
 		// Assert
 		expect(removed).toBe(true)
 		expect(await credentials.names(abortSignal)).toEqual(['provider/a'])
-		expect(await credentials.remove('webhook/team/b', abortSignal)).toBe(false)
+		expect(await credentials.remove('webhook/b', abortSignal)).toBe(false)
 	})
 
 	test('updates a secret from its current one, and leaves it when the update says so', async () => {

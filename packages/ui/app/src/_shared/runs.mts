@@ -1,5 +1,5 @@
 /**
- * The runs and apps as the engine routes answer them, as far as the page reads them. Loose, so a
+ * The runs and the app as the engine routes answer them, as far as the page reads them. Loose, so a
  * field the engine adds later doesn't break the page; the page can't import the engine's own
  * schemas, which come with Node packages.
  *
@@ -34,7 +34,7 @@ export const RunRecord = z.looseObject({
 	id: z.string(),
 	workflow: z.string(),
 	trigger: z.object({ kind: z.string(), id: z.string() }),
-	app: z.looseObject({ name: z.string(), version: z.string() }),
+	app: z.looseObject({ version: z.string() }),
 	status: RunStatus,
 	pending: z.array(RunRequest),
 	error: z.string().optional(),
@@ -63,9 +63,8 @@ export const TriggerDescription = z.discriminatedUnion('kind', [
 ])
 export type TriggerDescription = z.infer<typeof TriggerDescription>
 
-/** A deployed app: its current version and what it declares. */
+/** The deployed app: its current version and what it declares. */
 export const DeployedApp = z.object({
-	name: z.string(),
 	version: z.string(),
 	manifest: z.looseObject({
 		builtAt: z.string(),

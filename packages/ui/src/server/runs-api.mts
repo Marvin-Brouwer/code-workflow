@@ -4,15 +4,15 @@ import { Hono } from 'hono'
 import { jsonBody } from './checked-request.mts'
 
 /**
- * The runs, apps and sign-ins, from the running engine over its control socket: the same calls the
+ * The runs, the app and sign-ins, from the running engine over its control socket: the same calls the
  * CLI makes. Only these routes, not the whole control API, so the browser can't deploy.
  */
 export function runsApi(client: ControlClient): Hono {
 	const api = new Hono()
 	api.get('/runs', async (context) => context.json(await client.list(context.req.raw.signal)))
 	api.post('/runs', jsonBody(StartRunBody), async (context) => {
-		const { app, trigger, input, key } = context.req.valid('json')
-		return context.json(await client.startRun({ app, trigger, input, key, abortSignal: context.req.raw.signal }), 201)
+		const { trigger, input, key } = context.req.valid('json')
+		return context.json(await client.startRun({ trigger, input, key, abortSignal: context.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', async (context) => context.json(await client.get(context.req.param('run'), context.req.raw.signal)))
 	api.get('/runs/:run/events', async (context) => {
@@ -36,10 +36,8 @@ export function runsApi(client: ControlClient): Hono {
 		await client.waitForSignIn(connector, context.req.raw.signal)
 		return context.json({ signedIn: connector })
 	})
-	api.get('/apps', async (context) => context.json(await client.apps(context.req.raw.signal)))
-	api.get('/apps/:name/missing', async (context) =>
-		context.json(await client.missingSettings(context.req.param('name'), context.req.raw.signal)),
-	)
+	api.get('/app', async (context) => context.json((await client.app(context.req.raw.signal)) ?? null))
+	api.get('/app/missing', async (context) => context.json(await client.missingSettings(context.req.raw.signal)))
 	return api
 }
 

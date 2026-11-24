@@ -8,14 +8,14 @@ import { keyFile, openCredentialStore, openGateway, openProviderSettings } from 
 import type { SandboxBackend } from '@mesh-flow/sandbox'
 import * as tar from 'tar'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/apps/app-store.mts'
+import { openAppStore } from '../src/app/app-store.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { finishedStatuses } from '../src/runs/run-record.mts'
 import { openRunStore } from '../src/runs/run-store.mts'
 import { restoredPackage } from './fixtures/restoring-app/restored-package.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { copiedMailbox, deployTestApp, runtimeScript, testAppName, userRun } from './support/test-app.mts'
+import { copiedMailbox, deployTestApp, runtimeScript, userRun } from './support/test-app.mts'
 
 /**
  * Runs end to end in a real sandbox: one across a shutdown and a restart of the engine, and one
@@ -92,9 +92,9 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			// Arrange
 			const home = await temporaryDirectory()
 			const store = () => openRunStore(path.join(home, 'runs'))
-			const apps = await openAppStore(path.join(home, 'apps'), signal)
-			await deployTestApp(apps, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
-			const first = await Engine.open({ backend: await openBackend(), store: store(), apps }, signal)
+			const app = await openAppStore(path.join(home, 'app'), signal)
+			await deployTestApp(app, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
+			const first = await Engine.open({ backend: await openBackend(), store: store(), app }, signal)
 			onTestFinished(() => first.close(deadlines()))
 			const { id } = await first.startRun({ ...userRun('ask'), abortSignal: signal })
 			await vi.waitFor(
@@ -114,7 +114,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 
 			// Act
 			const backend = await openBackend()
-			const second = await Engine.open({ backend, store: store(), apps }, signal)
+			const second = await Engine.open({ backend, store: store(), app }, signal)
 			onTestFinished(() => second.close(deadlines()))
 			await second.resume(id, signal)
 			await second.answer(id, 'second', 2, signal)
@@ -155,14 +155,11 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 				tools: [],
 				fetch,
 			})
-			const apps = await openAppStore(path.join(home, 'apps'), signal)
+			const app = await openAppStore(path.join(home, 'app'), signal)
 			const built = path.join(home, 'built')
 			await buildApp({ directory: restoringApp, out: built, abortSignal: buildTimeout.toAbortSignal() })
-			await withPackedApp(built, (tarball) => apps.deploy(testAppName, tarball, signal), signal)
-			const engine = await Engine.open(
-				{ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), apps, gateway },
-				signal,
-			)
+			await withPackedApp(built, (tarball) => app.deploy(tarball, signal), signal)
+			const engine = await Engine.open({ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), app, gateway }, signal)
 			onTestFinished(() => engine.close(deadlines()))
 
 			// Act

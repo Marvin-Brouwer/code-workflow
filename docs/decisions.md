@@ -166,6 +166,12 @@ Came out of building `@mesh-flow/engine` in November 2026; its
 - **An engine per workflow repository or per `run`.** Reconciliation removes every mesh-flow
   sandbox the engine has no record of, so two engines on one machine would remove each other's.
   One engine per machine and user, with its socket as the lock.
+- **Several apps per engine** (superseded by #57, November 2026). The engine kept apps by name,
+  each with its own versions, so the name went into every route (`/apps/:name`,
+  `/webhooks/:app/:webhook`), webhook secret, run record and run key, and the UI grew an Apps page.
+  mesh-flow is meant to run one workflow repo with one `defineMeshFlow` entry, and its config
+  (such as the providers in #58) belongs to that app. An engine now keeps one current version, with
+  the versions before it immutable.
 - **Attaching to a sandbox that still runs after a crash.** The sandbox interface can't attach to
   a running sandbox or pause one it didn't start, and the runtime may have moved on unobserved.
   It's removed, and the run is restartable.

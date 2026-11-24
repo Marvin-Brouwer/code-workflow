@@ -81,6 +81,6 @@ export const RunsStart = component({
 /** How many settings `app` still needs; none without an app, or while the engine can't say. */
 async function missingCount(app: DeployedApp | undefined, abortSignal: AbortSignal): Promise<number> {
 	if (app === undefined) return 0
-	const missing = await read(missingPath(app), z.array(MissingSetting), abortSignal)
+	const missing = await read(missingPath, z.array(MissingSetting), abortSignal)
 	return missing.ok ? missing.value.length : 0
 }

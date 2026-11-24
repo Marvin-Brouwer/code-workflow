@@ -14,7 +14,7 @@ import {
 import type { Sandbox, SandboxBackend } from '@mesh-flow/sandbox'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { z } from 'zod'
-import { openAppStore } from '../src/apps/app-store.mts'
+import { openAppStore } from '../src/app/app-store.mts'
 import type { ConnectorSettingsCheck } from '../src/engine/connector-settings-check.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns, type SignIns } from '../src/engine/sign-ins.mts'
@@ -79,13 +79,13 @@ async function openEngine({
 	const host = hostBackend(path.join(directory, 'sandboxes'))
 	const backend: SandboxBackend =
 		sandboxes === undefined ? host : { ...host, create: async (...parameters) => sandboxes(await host.create(...parameters)) }
-	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
+	const app = await openAppStore(path.join(directory, 'app'), abortSignal)
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(
 		{
 			backend,
 			store: openRunStore(path.join(directory, 'runs')),
-			apps,
+			app,
 			gateway,
 			layout: hostSandboxLayout,
 			log,
@@ -95,7 +95,7 @@ async function openEngine({
 		abortSignal,
 	)
 	onTestFinished(() => engine.close(deadlines()))
-	return { engine, apps, log, home: directory, gatewayHome }
+	return { engine, app, log, home: directory, gatewayHome }
 }
 
 async function untilStatus(engine: Engine, id: string, status: RunStatus): Promise<RunRecord> {
@@ -125,8 +125,8 @@ ${body}
 const appModel = 'claude-opus-5-5'
 
 /** Deploys an app whose agents use {@link appModel} and whose one workflow succeeds at once. */
-function deployModelApp(apps: Awaited<ReturnType<typeof openEngine>>['apps']) {
-	return deployTestApp(apps, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { models: [appModel] })
+function deployModelApp(app: Awaited<ReturnType<typeof openEngine>>['app']) {
+	return deployTestApp(app, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { models: [appModel] })
 }
 
 /** Adds a provider `work` that serves {@link appModel}, with `key` when one is given. */
@@ -140,9 +140,9 @@ async function withProvider(gatewayHome: string, key?: string) {
 describe.skipIf(process.platform !== 'linux')('gateway calls', () => {
 	test('runs host tools for the runtime, each call on the token the last answer handed out', async () => {
 		// Arrange
-		const { engine, apps, gatewayHome } = await openEngine()
+		const { engine, app, gatewayHome } = await openEngine()
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 const first = await call('call-1', { type: 'tool', tool: 'echo', input: { text: 'one' } }, grant.tokens[0])
@@ -166,9 +166,9 @@ mailbox.send({ type: 'succeeded' })
 	test('fetches packages from the registries the app restores from, staging each body for the sandbox, and no other', async () => {
 		// Arrange
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{"name":"left-pad"}')))
-		const { engine, apps } = await openEngine({ fetch: sent })
+		const { engine, app } = await openEngine({ fetch: sent })
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 const npm = await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(npmRegistry)}, path: '/left-pad' } }, grant.packages.tokens[0], grant.packages.endpoint)
@@ -214,9 +214,9 @@ mailbox.send({ type: 'succeeded' })
 			destroy: (destroyAbortSignal) => sandbox.destroy(destroyAbortSignal),
 		})
 		const sent = vi.fn<typeof fetch>(() => Promise.resolve(new Response('tarball')))
-		const { engine, apps } = await openEngine({ fetch: sent, sandboxes: hangsOnStaging })
+		const { engine, app } = await openEngine({ fetch: sent, sandboxes: hangsOnStaging })
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(npmRegistry)}, path: '/left-pad/-/left-pad-1.3.0.tgz' } }, grant.packages.tokens[0], grant.packages.endpoint)
@@ -250,9 +250,9 @@ await call('call-1', { type: 'package', request: { registry: ${JSON.stringify(np
 			return Promise.resolve()
 		})
 		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
-		const { engine, apps } = await openEngine({ tools: [session], signIns })
+		const { engine, app } = await openEngine({ tools: [session], signIns })
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 const first = await call('call-1', { type: 'tool', tool: 'cloudSession', input: {} }, grant.tokens[0])
@@ -290,9 +290,9 @@ mailbox.send({ type: 'succeeded' })
 			return Promise.resolve()
 		})
 		const signIns = openSignIns({ connectors: [{ name: 'cloud', signIn: login }] })
-		const { engine, apps } = await openEngine({ fetch: sent, signIns, registries: { cloud: resolveTarget } })
+		const { engine, app } = await openEngine({ fetch: sent, signIns, registries: { cloud: resolveTarget } })
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 const request = { registry: ${JSON.stringify(registry)}, path: '/npm/packages/left-pad' }
@@ -324,9 +324,9 @@ mailbox.send({ type: 'succeeded' })
 
 	test("refuses a tool the app doesn't list", async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
+		const { engine, app } = await openEngine()
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 const answer = await call('call-1', { type: 'tool', tool: 'never', input: {} }, grant.tokens[0])
@@ -350,9 +350,9 @@ mailbox.send({ type: 'succeeded' })
 
 	test('stops a call the runtime cancels, and still answers it with the next token', async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
+		const { engine, app } = await openEngine()
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 mailbox.send({ type: 'call', id: 'call-1', endpoint: grant.endpoint, token: grant.tokens[0], call: { type: 'tool', tool: 'never', input: {} } })
@@ -382,9 +382,9 @@ mailbox.send({ type: 'succeeded' })
 
 	test('stops a call whose cancel comes in the same read as the call', async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
+		const { engine, app } = await openEngine()
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 mailbox.send({ type: 'call', id: 'call-1', endpoint: grant.endpoint, token: grant.tokens[0], call: { type: 'tool', tool: 'never', input: {} } })
@@ -409,9 +409,9 @@ mailbox.send({ type: 'succeeded' })
 
 	test('fails the run when a spent token comes again', async () => {
 		// Arrange
-		const { engine, apps, log } = await openEngine()
+		const { engine, app, log } = await openEngine()
 		await deployTestApp(
-			apps,
+			app,
 			{
 				calls: callingScript(`
 await call('call-1', { type: 'tool', tool: 'echo', input: { text: 'one' } }, grant.tokens[0])
@@ -435,7 +435,7 @@ await new Promise(() => {})
 		// Arrange
 		const first = await openEngine()
 		await deployTestApp(
-			first.apps,
+			first.app,
 			{
 				calls: callingScript(`
 const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
@@ -470,8 +470,8 @@ mailbox.send({ type: 'succeeded' })
 
 	test("refuses a run before its sandbox when no provider serves the app's models", async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
-		await deployModelApp(apps)
+		const { engine, app } = await openEngine()
+		await deployModelApp(app)
 
 		// Act
 		const refused = engine.startRun({ ...userRun('calls'), abortSignal })
@@ -484,9 +484,9 @@ mailbox.send({ type: 'succeeded' })
 
 	test('lists the settings an app still needs: unserved models and host tools no connector brings', async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
+		const { engine, app } = await openEngine()
 		const deployed = await deployTestApp(
-			apps,
+			app,
 			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
 			{ tools: ['echo', 'githubComment'], models: [appModel] },
 		)
@@ -513,9 +513,9 @@ mailbox.send({ type: 'succeeded' })
 				},
 			]),
 		)
-		const { engine, apps } = await openEngine({ connectorSettings })
+		const { engine, app } = await openEngine({ connectorSettings })
 		const deployed = await deployTestApp(
-			apps,
+			app,
 			{ calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) },
 			{ tools: ['echo'], registries: [npmRegistry, registry] },
 		)
@@ -533,8 +533,8 @@ mailbox.send({ type: 'succeeded' })
 
 	test('refuses a run before its sandbox when no loaded connector brings a host tool the app lists', async () => {
 		// Arrange
-		const { engine, apps } = await openEngine()
-		await deployTestApp(apps, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { tools: ['echo', 'githubComment'] })
+		const { engine, app } = await openEngine()
+		await deployTestApp(app, { calls: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }, { tools: ['echo', 'githubComment'] })
 
 		// Act
 		const refused = engine.startRun({ ...userRun('calls'), abortSignal })
@@ -547,8 +547,8 @@ mailbox.send({ type: 'succeeded' })
 
 	test("refuses a run when the provider of the app's model has no key", async () => {
 		// Arrange
-		const { engine, apps, gatewayHome } = await openEngine()
-		await deployModelApp(apps)
+		const { engine, app, gatewayHome } = await openEngine()
+		await deployModelApp(app)
 		await withProvider(gatewayHome)
 
 		// Act
@@ -560,8 +560,8 @@ mailbox.send({ type: 'succeeded' })
 
 	test("starts a run once a provider with a key serves the app's models", async () => {
 		// Arrange
-		const { engine, apps, gatewayHome } = await openEngine()
-		await deployModelApp(apps)
+		const { engine, app, gatewayHome } = await openEngine()
+		await deployModelApp(app)
 		await withProvider(gatewayHome, 'sk-test')
 
 		// Act

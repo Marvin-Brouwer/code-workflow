@@ -1,6 +1,5 @@
 import path from 'node:path'
 import { openGatewayHome, type GatewayHome } from '@mesh-flow/gateway'
-import { moveLegacyWebhookSecrets } from '../triggers/webhook-secrets.mts'
 
 /** Where the gateway lives in an engine's home. */
 export function gatewayDirectory(home: string): string {
@@ -13,16 +12,11 @@ export interface EngineGatewayOptions {
 	readonly keychain?: boolean
 }
 
-/**
- * Opens the gateway's directory in an engine's home, as the engine and the CLI both do, and moves
- * webhook secrets from where engines kept them before into its credential store.
- */
+/** Opens the gateway's directory in an engine's home, as the engine and the CLI both do. */
 export async function openEngineGatewayHome(
 	home: string,
 	abortSignal: AbortSignal,
 	options: EngineGatewayOptions = {},
 ): Promise<GatewayHome> {
-	const gatewayHome = await openGatewayHome(gatewayDirectory(home), abortSignal, options)
-	await moveLegacyWebhookSecrets(home, gatewayHome.credentials, abortSignal)
-	return gatewayHome
+	return openGatewayHome(gatewayDirectory(home), abortSignal, options)
 }

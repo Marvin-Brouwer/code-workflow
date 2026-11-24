@@ -12,7 +12,7 @@ export const deliveryHeader = 'x-github-delivery'
 /**
  * The options every GitHub webhook trigger gets: how GitHub signs a delivery, and the header that
  * names it. Spread them into a `webhook` trigger on one of the events here. Set the webhook's
- * secret with `mesh-flow webhook secret <app> <webhook> --generate` and paste it into GitHub.
+ * secret with `mesh-flow webhook secret <webhook> --generate` and paste it into GitHub.
  *
  * @example
  * ```ts
@@ -166,8 +166,8 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue`
  * parameter.
  *
- * Point a GitHub webhook for `Issues` events at `/webhooks/<app>/<workflow>-labeled-<label>` on the
- * engine. Set its secret with `mesh-flow webhook secret <app> <workflow>-labeled-<label> --generate`
+ * Point a GitHub webhook for `Issues` events at `/webhooks/<workflow>-labeled-<label>` on the
+ * engine. Set its secret with `mesh-flow webhook secret <workflow>-labeled-<label> --generate`
  * and paste it into GitHub. The engine skips other labels before it makes a sandbox.
  *
  * @param workflow - A workflow whose parameters are `IssueParameters`, or `{ issue }` with

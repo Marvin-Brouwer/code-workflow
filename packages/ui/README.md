@@ -60,7 +60,7 @@ This is the local way in. The token only goes to the terminal, never on a comman
 | `GET /api/engine/runs/:run/events` as `text/event-stream` | one run's stream: its record and its events, first all of them and then each change, and its sign-ins |
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
-| `GET /api/engine/apps`, `GET /api/engine/apps/:name/missing` | deployed apps, and what one still needs before it can run |
+| `GET /api/engine/app`, `GET /api/engine/app/missing` | the deployed app (`null` before the first deploy), and what it still needs before it can run |
 | `/api/settings/providers`, `/providers/:name`, `/providers/:name/key`, `/provider-order`, `/provider-kinds` | model providers and their keys, as `mesh-flow provider` |
 | `/api/settings/credentials`, `/credentials/:name` | credential names, setting and removing them; values never come back |
 | `GET /api/settings/connectors` | the connector packages the engine loads |

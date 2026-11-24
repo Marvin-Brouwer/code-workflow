@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { duration } from '@mesh-flow/duration'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
-import { openAppStore } from '../src/apps/app-store.mts'
+import { openAppStore } from '../src/app/app-store.mts'
 import type { SignInContext } from '../src/connectors/load-connectors.mts'
 import { Engine } from '../src/engine/engine.mts'
 import { openSignIns } from '../src/engine/sign-ins.mts'
@@ -20,19 +20,19 @@ const promptly = duration.of('5s')
 /** An engine on the host backend whose connectors are `cloud`, signing in with `signIn`, closed when the test ends. */
 async function openEngine(signIn: (context: SignInContext) => Promise<void>, home?: string) {
 	const directory = home ?? (await temporaryDirectory())
-	const apps = await openAppStore(path.join(directory, 'apps'), abortSignal)
+	const app = await openAppStore(path.join(directory, 'app'), abortSignal)
 	const engine = await Engine.open(
 		{
 			backend: hostBackend(path.join(directory, 'sandboxes')),
 			store: openRunStore(path.join(directory, 'runs')),
-			apps,
+			app,
 			layout: hostSandboxLayout,
 			signIns: openSignIns({ connectors: [{ name: 'cloud', signIn }, { name: 'tracker' }], idle: shortIdle }),
 		},
 		abortSignal,
 	)
 	onTestFinished(() => engine.close(deadlines()))
-	return { engine, apps, home: directory }
+	return { engine, app, home: directory }
 }
 
 /** How long a sign-in nobody waits for goes on in these tests. */
@@ -81,8 +81,8 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 	test('waits for the sign-in, shows where to sign in, and goes on once the user approved', async () => {
 		// Arrange
 		const { signIn, approve } = approvableSignIn({ honoursAbort: false })
-		const { engine, apps } = await openEngine(signIn)
-		await deployTestApp(apps, { cloud: signingInScript('cloud') })
+		const { engine, app } = await openEngine(signIn)
+		await deployTestApp(app, { cloud: signingInScript('cloud') })
 		const { id } = await engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilPending(engine, id, 'login-1')
 		await untilCalled(signIn)
@@ -101,8 +101,8 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 	test('lets `mesh-flow login` join the sign-in the run waits for', async () => {
 		// Arrange
 		const { signIn, approve } = approvableSignIn({ honoursAbort: false })
-		const { engine, apps } = await openEngine(signIn)
-		await deployTestApp(apps, { cloud: signingInScript('cloud') })
+		const { engine, app } = await openEngine(signIn)
+		await deployTestApp(app, { cloud: signingInScript('cloud') })
 		const { id } = await engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilPending(engine, id, 'login-1')
 		await untilCalled(signIn)
@@ -121,7 +121,7 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 		// Arrange
 		const first = approvableSignIn({ honoursAbort: false })
 		const opened = await openEngine(first.signIn)
-		await deployTestApp(opened.apps, { cloud: signingInScript('cloud') })
+		await deployTestApp(opened.app, { cloud: signingInScript('cloud') })
 		const { id } = await opened.engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilPending(opened.engine, id, 'login-1')
 		await untilCalled(first.signIn)
@@ -142,8 +142,8 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 	test('shuts down promptly while a run waits for a sign-in that never settles', async () => {
 		// Arrange
 		const { signIn, contexts } = approvableSignIn({ honoursAbort: false })
-		const { engine, apps } = await openEngine(signIn)
-		await deployTestApp(apps, { cloud: signingInScript('cloud') })
+		const { engine, app } = await openEngine(signIn)
+		await deployTestApp(app, { cloud: signingInScript('cloud') })
 		const { id } = await engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilPending(engine, id, 'login-1')
 		await untilCalled(signIn)
@@ -161,14 +161,14 @@ describe.skipIf(process.platform !== 'linux')('runs that wait for a sign-in', ()
 	test('stops the sign-in a run cancels a while after, while the run goes on', async () => {
 		// Arrange
 		const { signIn, contexts } = approvableSignIn({ honoursAbort: false })
-		const { engine, apps } = await openEngine(signIn)
+		const { engine, app } = await openEngine(signIn)
 		const cancelling = runtimeScript(`
 mailbox.send({ type: 'request', request: { kind: 'login', id: 'login-1', connector: 'cloud' } })
 await new Promise((resolve) => setTimeout(resolve, ${String(cancelAfter.to('ms'))}))
 mailbox.send({ type: 'cancel', id: 'login-1' })
 await mailbox.answer('never', signal)
 `)
-		await deployTestApp(apps, { cloud: cancelling })
+		await deployTestApp(app, { cloud: cancelling })
 		const { id } = await engine.startRun({ ...userRun('cloud'), abortSignal })
 		await untilCalled(signIn)
 
@@ -185,8 +185,8 @@ await mailbox.answer('never', signal)
 	test('fails a run that asks for a sign-in no connector of the engine does', async () => {
 		// Arrange
 		const { signIn } = approvableSignIn({ honoursAbort: false })
-		const { engine, apps } = await openEngine(signIn)
-		await deployTestApp(apps, { tracker: signingInScript('tracker') })
+		const { engine, app } = await openEngine(signIn)
+		await deployTestApp(app, { tracker: signingInScript('tracker') })
 
 		// Act
 		const { id } = await engine.startRun({ ...userRun('tracker'), abortSignal })

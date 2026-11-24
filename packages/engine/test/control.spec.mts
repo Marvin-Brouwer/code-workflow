@@ -8,7 +8,7 @@ import { controlClient, type ControlClient } from '../src/control/control-client
 import { serveEngine } from '../src/serve/serve-engine.mts'
 import { hostBackend, hostSandboxLayout } from './support/host-backend.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
-import { builtApp, deployThroughApi, runtimeScript, testAppName, userRun } from './support/test-app.mts'
+import { builtApp, deployThroughApi, runtimeScript, userRun } from './support/test-app.mts'
 
 const signal = new AbortController().signal
 
@@ -55,7 +55,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		expect(await client.events(started.id, signal)).toEqual([expect.objectContaining({ type: 'input-answered', value: 'ABC-1' })])
 	})
 
-	test('deploys an app, as the same version when the tarball is the same, lists it and removes it', async () => {
+	test('deploys an app, as the same version when the tarball is the same, and shows it', async () => {
 		// Arrange
 		const { client } = await serve()
 		const folder = await builtApp({ ask })
@@ -63,21 +63,30 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		// Act
 		const [deployed, again] = await withPackedApp(
 			folder,
-			async (tarball) => [await client.deploy(testAppName, tarball, signal), await client.deploy(testAppName, tarball, signal)],
+			async (tarball) => [await client.deploy(tarball, signal), await client.deploy(tarball, signal)],
 			signal,
 		)
-		const listed = await client.apps(signal)
-		const stillMissing = await client.missingSettings(testAppName, signal)
-		await client.removeApp(testAppName, signal)
+		const shownApp = await client.app(signal)
+		const stillMissing = await client.missingSettings(signal)
 
 		// Assert
 		expect(again.version).toBe(deployed.version)
 		const { missing, ...shown } = deployed
-		expect(listed).toEqual([shown])
+		expect(shownApp).toEqual(shown)
 		expect(missing).toEqual([])
 		expect(stillMissing).toEqual([])
 		expect(deployed.manifest.description.triggers).toEqual([{ kind: 'user', id: 'ask', workflow: 'ask' }])
-		expect(await client.apps(signal)).toEqual([])
+	})
+
+	test('shows no app before the first deploy', async () => {
+		// Arrange
+		const { client } = await serve()
+
+		// Act
+		const shown = await client.app(signal)
+
+		// Assert
+		expect(shown).toBeUndefined()
 	})
 
 	test('streams which run changed, and closes with the stream still open', async () => {
@@ -144,10 +153,8 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 	test.each([
 		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
 		['an app that is not deployed', (client: ControlClient) => client.startRun({ ...userRun('develop'), abortSignal: signal }), 404],
-		['the settings of an app that is not deployed', (client: ControlClient) => client.missingSettings(testAppName, signal), 404],
-		['removing an app that was never deployed', (client: ControlClient) => client.removeApp(testAppName, signal), 404],
-		['removing an app name that is not one', (client: ControlClient) => client.removeApp('Not An App', signal), 400],
-		['deploying a tarball that is not there', (client: ControlClient) => client.deploy(testAppName, '/nowhere/app.tgz', signal), 400],
+		['the settings of an app that is not deployed', (client: ControlClient) => client.missingSettings(signal), 404],
+		['deploying a tarball that is not there', (client: ControlClient) => client.deploy('/nowhere/app.tgz', signal), 400],
 		['resuming a run that is not paused', (client: ControlClient) => client.resume('run-000000000000', signal), 404],
 		['an answer without a value', (client: ControlClient) => client.answer('run-000000000000', 'story', undefined, signal), 400],
 	])('refuses %s with the right status', async (_name, call, status) => {
@@ -163,7 +170,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 })
 
 describe.skipIf(process.platform !== 'linux')('the mesh-flow command with an engine', () => {
-	test('deploys a built app, lists it and starts a run through one of its triggers', async () => {
+	test('deploys a built app, shows it and starts a run through one of its triggers', async () => {
 		// Arrange
 		const { client, home } = await serve()
 		const folder = await builtApp({ ask })
@@ -177,14 +184,16 @@ describe.skipIf(process.platform !== 'linux')('the mesh-flow command with an eng
 		const command = (...commandArguments: string[]) => main(['node', 'mesh-flow', '--home', home, ...commandArguments])
 
 		// Act
-		await command('deploy', folder, '--app', testAppName)
-		await command('trigger', 'user', 'ask', '--app', testAppName, '-p', '{"story":"ABC-1"}')
-		await command('trigger', 'user', 'unlisted', '--app', testAppName, '-p', '{}')
+		await command('deploy', folder)
+		await command('app')
+		await command('trigger', 'user', 'ask', '-p', '{"story":"ABC-1"}')
+		await command('trigger', 'user', 'unlisted', '-p', '{}')
 
 		// Assert
 		expect(process.exitCode).toBe(1)
 		expect(errors).toHaveBeenCalledWith(expect.stringContaining('has no user trigger unlisted'))
-		expect(await client.apps(signal)).toEqual([expect.objectContaining({ name: testAppName })])
+		const deployed = await client.app(signal)
+		expect(printed).toHaveBeenCalledWith(expect.stringContaining(`${deployed?.version ?? 'no version'}  built `))
 		expect(await client.list(signal)).toEqual([expect.objectContaining({ workflow: 'ask', trigger: { kind: 'user', id: 'ask' } })])
 	})
 })

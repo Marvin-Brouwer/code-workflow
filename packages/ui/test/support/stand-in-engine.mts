@@ -5,19 +5,16 @@ import { Hono } from 'hono'
 import { onTestFinished } from 'vitest'
 import { z } from 'zod'
 
-/**
- * The app the stand-in has deployed: one workflow that needs a GitHub token, started by two buttons,
- * a webhook without its secret, and a schedule.
- */
-export const standInApp = 'dice'
-
 /** The cron of the stand-in app's schedule. */
 export const standInSchedule = '0 3 * * *'
 
 const builtAt = '2026-11-23T08:00:00.000Z'
 
+/**
+ * The app the stand-in has deployed: one workflow that needs a GitHub token, started by two buttons,
+ * a webhook without its secret, and a schedule.
+ */
 const app = {
-	name: standInApp,
 	version: 'v1',
 	manifest: {
 		entry: 'main.mjs',
@@ -79,7 +76,6 @@ export async function standInEngine(home: string) {
 			workflow: 'fix-issue',
 			trigger: { kind: 'user', id: 'fix-issue' },
 			app: {
-				name: standInApp,
 				version: 'v1',
 				entry: 'main.mjs',
 				sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
@@ -104,8 +100,8 @@ export async function standInEngine(home: string) {
 	}
 
 	const api = new Hono()
-	api.get('/apps', (context) => context.json([app]))
-	api.get('/apps/:name/missing', async (context) => {
+	api.get('/app', (context) => context.json(app))
+	api.get('/app/missing', async (context) => {
 		const gatewayHome = await openEngineGatewayHome(home, context.req.raw.signal, { keychain: false })
 		const names = await gatewayHome.credentials.names(context.req.raw.signal)
 		return context.json(

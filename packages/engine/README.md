@@ -74,14 +74,13 @@ mesh-flow deploy   # hands .mesh-flow/app to the engine on this machine as the a
 mesh-flow dev      # builds and deploys again on every change (not in node_modules), so the triggers are live while you work
 ```
 
-`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. The app's name is the `name` in `package.json`, with its scope folded in (`@example/big-repo` is `example-big-repo`; `--app` to give another). Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
+`build` is [`@mesh-flow/build`](../build/README.md): in CI, build the app there and deploy what it wrote. An engine runs one app: a deploy replaces the current version, whatever app it was built from. Deploying goes over the engine's local socket; deploying to an engine on another machine needs authentication, which is still to come.
 
-The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` runs the code it first ran, also after a new deploy or `mesh-flow app remove`.
+The engine keeps every version it was given, named by the first 12 characters of the tarball's SHA-256, so the same build deploys as the same version. Deploying makes a version the current one; webhooks and schedules follow it at once. A run copies its version's tarball next to its record, so `restart` and `resume` run the code it first ran, also after a new deploy.
 
 ```bash
-mesh-flow app list                        # example-github-issue  3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
-mesh-flow triggers                        # the current version's sandbox, workflows, their parameters and triggers
-mesh-flow app remove example-github-issue  # its webhooks and schedules stop; its runs stay
+mesh-flow app        # 3f2a9c0d1e7b  built 2026-11-09T10:00:00.000Z
+mesh-flow triggers   # the current version's sandbox, workflows, their parameters and triggers
 ```
 
 The sandbox image needs `node` and what the engine uses in it: `sh`, `cat`, `kill`, `mkdir`, `chmod`, `rm`, `mv`, `tail`, `wc`, `sleep`, `base64` and `tar`, plus `setsid` on E2B and microsandbox. Debian-based images such as `node:26-slim` have all of them.
@@ -116,19 +115,19 @@ An app's entry file lists what can start its workflows: buttons, webhooks and sc
 
 #### Webhooks
 
-`serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<app>/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the gateway's credential store holds, never the app:
+`serve --webhook-port 8787` takes deliveries over plain HTTP on `127.0.0.1` (`--webhook-host` to change that), at `POST /webhooks/<webhook>`. Put a tunnel or a reverse proxy with TLS in front of it to reach it from outside. Each webhook needs a secret, which only the gateway's credential store holds, never the app:
 
 ```bash
-mesh-flow webhook secret example-github-issue fix-issue --generate   # prints a new secret to paste into the sender
-printf '%s' "$SECRET" | mesh-flow webhook secret example-github-issue fix-issue
+mesh-flow webhook secret fix-issue --generate   # prints a new secret to paste into the sender
+printf '%s' "$SECRET" | mesh-flow webhook secret fix-issue
 ```
 
 Everything is checked on the host, before a sandbox is made:
 
 | Check, in this order | Answer when it fails |
 |---|---|
-| a secret is set for the app's webhook | 404 |
-| the app is deployed, and its current version has the webhook | 404 |
+| a secret is set for the webhook | 404 |
+| an app is deployed, and its current version has the webhook | 404 |
 | the delivery is signed with the secret (a secret header, or an HMAC-SHA256 of the body) | 401 |
 | the body is JSON, up to 25 MB | 400, 413 |
 
@@ -138,7 +137,7 @@ A delivery that passes gets `202` and a new run on the current version. Its deli
 
 #### Schedules
 
-The engine follows the schedules of every deployed app's current version, and starts each run on its own clock. A deploy or a removal re-arms them at once. A tick is skipped while the previous run of the same schedule is still going, also when it is paused or waits for a human. A run that is `restartable` doesn't hold its schedule up: it needs a person, and the next tick starts a new run. Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
+The engine follows the schedules of the app's current version, and starts each run on its own clock. A deploy re-arms them at once. A tick is skipped while the previous run of the same schedule is still going, also when it is paused or waits for a human. A run that is `restartable` doesn't hold its schedule up: it needs a person, and the next tick starts a new run. Ticks missed while the engine wasn't running, or while the machine slept, aren't made up for.
 
 ### Model providers and credentials
 
@@ -175,13 +174,13 @@ import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const apps = await openAppStore('/var/lib/my-app/mesh-flow/apps', abortSignal)
-await apps.deploy('example', '/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
+const app = await openAppStore('/var/lib/my-app/mesh-flow/app', abortSignal)
+await app.deploy('/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
 const gatewayHome = await openGatewayHome('/var/lib/my-app/mesh-flow/gateway', abortSignal)
 const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials, providers: gatewayHome.providers })
-const engine = await Engine.open({ backend: microsandboxBackend(), store, apps, gateway, log: console.error }, abortSignal)
+const engine = await Engine.open({ backend: microsandboxBackend(), store, app, gateway, log: console.error }, abortSignal)
 
-const run = await engine.startRun({ app: 'example', trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })
+const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })
 // ... later, when the run waits for input:
 await engine.answer(run.id, 'story', { key: 'ABC-123' }, abortSignal)
 
@@ -243,7 +242,7 @@ The home's lock comes first: a second engine on the same home refuses to start, 
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, { apps, connectors })` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /events` (server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds; `GET /runs/:run/events` streams one run the same way when asked for `text/event-stream`), `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /apps`, `GET /apps/:name/missing`, and `PUT` and `DELETE` on `/apps/:name`. `controlClient(socketPath)` returns the functions that call it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, { app, connectors })` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /events` (server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds; `GET /runs/:run/events` streams one run the same way when asked for `text/event-stream`), `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /app` (`null` before the first deploy), `GET /app/missing` and `PUT /app`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 
@@ -251,7 +250,7 @@ The CLI talks to the engine over HTTP on a Unix socket in the home directory, or
 pnpm --filter @mesh-flow/engine test
 ```
 
-Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover deploying apps, a run from start to end, input and wake requests, gateway calls (token rotation, a reused token, a cancel, a host tool that never settles across a shutdown and resume), webhook deliveries (signatures, payload checks, redeliveries, skips), schedules and their overlap rule, a schedule fired by hand, crashes, stop, restart on the version a run first ran, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, unpack, poll and pause never settle. The scheduler runs on fake timers in a unit test.
+Unit tests (`*.test.mts`) run anywhere. The functional tests (`*.spec.mts`) run real runs on a stand-in backend that runs each "sandbox" as processes on the host, and pauses them with `SIGSTOP`. They cover deploying the app, a run from start to end, input and wake requests, gateway calls (token rotation, a reused token, a cancel, a host tool that never settles across a shutdown and resume), webhook deliveries (signatures, payload checks, redeliveries, skips), schedules and their overlap rule, a schedule fired by hand, crashes, stop, restart on the version a run first ran, a pause and resume across an engine restart, an engine process killed with `SIGKILL` and cleaned up on the next start, and `SIGINT` in a real process. They need Linux. `close` is also tested against a backend whose create, unpack, poll and pause never settle. The scheduler runs on fake timers in a unit test.
 
 One run end to end on a real backend, across a shutdown and a restart of the engine, runs only when asked:
 

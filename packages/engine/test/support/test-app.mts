@@ -11,7 +11,7 @@ import {
 	type TriggerDescription,
 	type WorkflowDescription,
 } from '@mesh-flow/protocol'
-import type { AppStore, AppVersion } from '../../src/apps/app-store.mts'
+import type { AppStore, AppVersion } from '../../src/app/app-store.mts'
 import { withPackedApp } from '../../src/cli/with-packed-app.mts'
 import type { ControlClient, DeployedApp } from '../../src/control/control-client.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
@@ -33,9 +33,6 @@ const deployTimeout = duration.of('10s')
 function deploySignal(): AbortSignal {
 	return deployTimeout.toAbortSignal()
 }
-
-/** The app tests deploy, unless they name another. */
-export const testAppName = 'team'
 
 /**
  * A runtime for tests: the body runs with `mailbox`, `signal` and `event(id, type, fields)` in
@@ -112,19 +109,15 @@ export async function builtApp(workflows: Record<string, string>, options: TestA
 	return directory
 }
 
-/** Builds a test app with {@link builtApp} and deploys it to `apps` as `name`. */
-export async function deployTestApp(
-	apps: AppStore,
-	workflows: Record<string, string>,
-	options: TestAppOptions & { readonly name?: string } = {},
-): Promise<AppVersion> {
+/** Builds a test app with {@link builtApp} and deploys it to `app`. */
+export async function deployTestApp(app: AppStore, workflows: Record<string, string>, options: TestAppOptions = {}): Promise<AppVersion> {
 	const folder = await builtApp(workflows, options)
-	return withPackedApp(folder, (tarball) => apps.deploy(options.name ?? testAppName, tarball, deploySignal()), deploySignal())
+	return withPackedApp(folder, (tarball) => app.deploy(tarball, deploySignal()), deploySignal())
 }
 
 /** Starts `workflow` of the test app through its user trigger. */
 export function userRun(workflow: string, input?: unknown) {
-	return { app: testAppName, trigger: { kind: 'user' as const, id: workflow }, ...(input === undefined ? {} : { input }) }
+	return { trigger: { kind: 'user' as const, id: workflow }, ...(input === undefined ? {} : { input }) }
 }
 
 /** Builds a test app with {@link builtApp} and deploys it through the control API, as `mesh-flow deploy` does. */
@@ -134,5 +127,5 @@ export async function deployThroughApi(
 	options: TestAppOptions = {},
 ): Promise<DeployedApp> {
 	const folder = await builtApp(workflows, options)
-	return withPackedApp(folder, (tarball) => client.deploy(testAppName, tarball, deploySignal()), deploySignal())
+	return withPackedApp(folder, (tarball) => client.deploy(tarball, deploySignal()), deploySignal())
 }
