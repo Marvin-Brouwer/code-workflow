@@ -28,10 +28,11 @@ import type { ResolveRegistryTarget } from './packages/connector-registry.mts'
 import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/fetch-from-connector-registry.mts'
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
-import { providerKeyOf, providerOrigin, webOrigin, type ProviderKey } from './providers/provider-key.mts'
+import { providerKeyOf, providerOrigin, type ProviderKey } from './providers/provider-key.mts'
 import { chosenModel, offeredModel, offeringProvider, type OfferedModel, type ServedModels } from './providers/offering-provider.mts'
 import { providerModels, type ProviderModels } from './providers/provider-models.mts'
 import { baseUrlOf, sendModelRequest } from './providers/send-model-request.mts'
+import { webOrigin } from './providers/web-origin.mts'
 import { notOfferedMessage } from './providers/undeclared-models.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
 import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
@@ -471,7 +472,7 @@ export function openGateway(options: GatewayOptions): Gateway {
 			throw new Error(
 				`Provider ${choice.provider.name} has no API key for ${originText(choice.provider)}. ${setKeyHint(choice.provider.name)}`,
 			)
-		// The key goes only to the origin it was set for, also when a model is on another than its kind's.
+		// The key goes only to the origin it was set for, also when a model's base URL isn't its kind's.
 		if (webOrigin(baseUrlOf(choice)) !== providerOrigin(choice.provider))
 			throw new Error(`Model ${choice.model.id} of provider ${choice.provider.name} isn't at the origin its key was set for.`)
 		const { key } = providerKey

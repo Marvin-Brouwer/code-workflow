@@ -70,10 +70,8 @@ describe('providerKeyOf', () => {
 		// Assert
 		expect(key).toEqual({ status: 'missing' })
 	})
-})
 
-describe('providerKeyOf, for a provider without an origin', () => {
-	test("doesn't use its key, and says where it was set for", async () => {
+	test("doesn't use the key of a provider without an origin, and says where it was set for", async () => {
 		// Arrange
 		const credentials = await credentialStore()
 		await credentials.set(

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { CredentialReader, CredentialStore } from '../credentials/credential-store.mts'
 import { modelsOfKind } from './model-apis.mts'
 import { providerCredential } from './provider-credential.mts'
+import { webOrigin } from './web-origin.mts'
 
 /**
  * A provider's key as the credential store keeps it: with the origin it was set for. The key only
@@ -15,15 +16,6 @@ export type ProviderKey =
 	| { readonly status: 'set'; readonly key: string }
 	| { readonly status: 'missing' }
 	| { readonly status: 'elsewhere'; readonly origin: string }
-
-/** The schemes a provider's key may be sent over: other schemes have no origin to tie a key to. */
-const webSchemes: readonly string[] = ['https:', 'http:']
-
-/** The origin of `url`, or `undefined` when it isn't a web URL, such as pi-ai's empty base URL of a kind that needs one. */
-export function webOrigin(url: string): string | undefined {
-	const parsed = URL.parse(url)
-	return parsed !== null && webSchemes.includes(parsed.protocol) ? parsed.origin : undefined
-}
 
 /**
  * Where the config sends `provider`'s requests: the origin of its base URL, or of its kind's when
