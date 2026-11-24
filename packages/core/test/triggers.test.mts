@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { defineMeshFlow } from '../src/app/define-mesh-flow.mts'
 import { describeApp } from '../src/app/describe-app.mts'
 import { image } from '../src/app/image.mts'
-import { modelProvider } from '../src/app/model-provider.mts'
+import { anthropicClaude, modelProvider, openRouter } from '../src/app/model-provider.mts'
 import { defineWorkflows } from '../src/triggers/define-workflows.mts'
 import { schedule } from '../src/triggers/schedule.mts'
 import { userTrigger } from '../src/triggers/user-trigger.mts'
@@ -134,7 +134,7 @@ describe('defineMeshFlow', () => {
 
 	test('refuses two model providers with one name, since a key is set by name', () => {
 		// Arrange
-		const modelProviders = [modelProvider('anthropic'), modelProvider('openrouter', { name: 'anthropic' })]
+		const modelProviders = [anthropicClaude, openRouter({ name: 'anthropic' })]
 
 		// Act
 		const defining = () => defineMeshFlow({ sandbox: image({ name: 'node:26-slim' }), modelProviders, workflows: [] })
@@ -154,14 +154,31 @@ describe('defineMeshFlow', () => {
 		expect(defining).toThrow()
 	})
 
+	test('makes a provider factory listed as it is with its defaults, and one called with its options', () => {
+		// Act
+		const app = defineMeshFlow({
+			sandbox: image({ name: 'node:26-slim' }),
+			modelProviders: [
+				anthropicClaude,
+				openRouter({ name: 'team-openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' }),
+				modelProvider('groq'),
+			],
+			workflows: [],
+		})
+
+		// Assert
+		expect(app.modelProviders).toEqual([
+			{ name: 'anthropic', kind: 'anthropic' },
+			{ name: 'team-openrouter', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+			{ name: 'groq', kind: 'groq' },
+		])
+	})
+
 	test('describes its sandbox, its model providers in order, and the workflows it is given with their parameters as JSON Schema', () => {
 		// Arrange
 		const app = defineMeshFlow({
 			sandbox: image({ name: 'node:26-slim', registries: [npmRegistry] }),
-			modelProviders: [
-				modelProvider('openrouter', { name: 'proxy', baseUrl: 'https://llm-proxy.example.com/api/v1' }),
-				modelProvider('anthropic'),
-			],
+			modelProviders: [openRouter({ name: 'proxy', baseUrl: 'https://llm-proxy.example.com/api/v1' }), anthropicClaude],
 			workflows: [userTrigger(fixIssue), schedule(report, '0 7 * * 1')],
 		})
 

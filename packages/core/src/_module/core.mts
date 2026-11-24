@@ -11,7 +11,18 @@ export { requestUserInput } from '../agent/request-user-input.mts'
 export { defineMeshFlow, type MeshFlowApp, type MeshFlowOptions } from '../app/define-mesh-flow.mts'
 export { describeApp } from '../app/describe-app.mts'
 export { image, type ImageOptions } from '../app/image.mts'
-export { modelProvider, type ModelProvider, type ModelProviderOptions } from '../app/model-provider.mts'
+export {
+	anthropicClaude,
+	deepSeek,
+	groq,
+	modelProvider,
+	openAi,
+	openRouter,
+	xAi,
+	type ModelProvider,
+	type ModelProviderFactory,
+	type ModelProviderOptions,
+} from '../app/model-provider.mts'
 export { check, runCheck, type Check, type Finding } from '../check/check.mts'
 export type { Exit, Gate } from '../exits/exit.mts'
 export type { ResultOf } from '../exits/result-of.mts'

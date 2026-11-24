@@ -7,7 +7,7 @@
  * so the checkout's npm dependencies install and the agent can run the tests, and nothing else:
  * GitHub is only spoken to from the host, through the gateway.
  */
-import { defineMeshFlow, image, modelProvider, userTrigger } from '@mesh-flow/core'
+import { anthropicClaude, defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
 import { github } from '@mesh-flow/github/hooks'
 import { npmRegistry } from '@mesh-flow/toolchain-node'
 import { fixIssue } from './workflows/fix-issue.mts'
@@ -18,7 +18,7 @@ export default defineMeshFlow({
 		registries: [npmRegistry],
 	}),
 	// The agents run on Anthropic. Each user sets its key: `mesh-flow provider key anthropic`.
-	modelProviders: [modelProvider('anthropic')],
+	modelProviders: [anthropicClaude],
 	workflows: [
 		// A button in the UI, with the issue as its form.
 		userTrigger(fixIssue),

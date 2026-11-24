@@ -6,18 +6,18 @@ import { assertUniqueTriggers } from '../triggers/assert-unique-triggers.mts'
 import type { WorkflowBundle } from '../triggers/define-workflows.mts'
 import type { Trigger } from '../triggers/trigger.mts'
 import { startFromEngine } from '../workflow/start-from-engine.mts'
-import type { ModelProvider } from './model-provider.mts'
+import { madeProviders, type ModelProvider, type ModelProviderFactory } from './model-provider.mts'
 
 /** What `defineMeshFlow` takes. */
 export interface MeshFlowOptions {
 	/** The sandbox every run gets, such as `image({ name: 'node:26-slim' })`. */
 	readonly sandbox: SandboxDescription
 	/**
-	 * The model providers the app's agents may run on, from `modelProvider`, in the order a model is
-	 * looked up: the first one that offers it and has a key serves it. Default: none, for an app
-	 * without agents.
+	 * The model providers the app's agents may run on, in the order a model is looked up: the first
+	 * one that offers it and has a key serves it. A factory such as `anthropicClaude` can be listed
+	 * as it is, or called with a name or base URL of its own. Default: none, for an app without agents.
 	 */
-	readonly modelProviders?: readonly ModelProvider[]
+	readonly modelProviders?: readonly (ModelProvider | ModelProviderFactory)[]
 	/** Everything that can start a run: triggers, and bundles of them from `defineWorkflows`. */
 	readonly workflows: readonly (Trigger | WorkflowBundle)[]
 }
@@ -43,7 +43,11 @@ export interface MeshFlowApp {
  * 		registries: [npmRegistry],
  * 	}),
  * 	modelProviders: [
- * 		modelProvider('anthropic'),
+ * 		anthropicClaude,
+ * 		openRouter({
+ * 			name: 'team-openrouter',
+ * 			baseUrl: 'https://llm-proxy.example.com/api/v1',
+ * 		}),
  * 	],
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
@@ -65,11 +69,11 @@ export interface MeshFlowApp {
 export function defineMeshFlow(options: MeshFlowOptions): MeshFlowApp {
 	const triggers = options.workflows.flatMap((listed) => ('kind' in listed ? [listed] : listed.triggers))
 	assertUniqueTriggers(triggers)
-	const modelProviders = options.modelProviders ?? []
+	const modelProviders = madeProviders(options.modelProviders ?? [])
 	assertUniqueProviders(modelProviders)
 	const app: MeshFlowApp = Object.freeze({
 		sandbox: options.sandbox,
-		modelProviders: Object.freeze([...modelProviders]),
+		modelProviders: Object.freeze(modelProviders),
 		triggers: Object.freeze(triggers),
 	})
 	if (isEntryOfEngineRun(callSite(1)?.file)) {
@@ -86,7 +90,9 @@ function assertUniqueProviders(providers: readonly ModelProvider[]): void {
 	const seen = new Set<string>()
 	for (const { name } of providers) {
 		if (seen.has(name))
-			throw new Error(`The model provider ${name} is listed twice. Give the second one a name of its own: modelProvider(kind, { name }).`)
+			throw new Error(
+				`The model provider ${name} is listed twice. Give the second one a name of its own, such as openRouter({ name: 'team-openrouter' }).`,
+			)
 		seen.add(name)
 	}
 }

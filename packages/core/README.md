@@ -264,7 +264,7 @@ An app is a package whose `main` in `package.json` is its entry file. The entry 
 ```
 
 ```ts
-import { defineMeshFlow, image, modelProvider, schedule, userTrigger, webhook } from '@mesh-flow/core'
+import { anthropicClaude, defineMeshFlow, image, openRouter, schedule, userTrigger, webhook } from '@mesh-flow/core'
 import { npmRegistry } from '@mesh-flow/toolchain-node'
 import { z } from 'zod'
 import { develop, weeklyReport } from './workflows/develop.mts'
@@ -289,9 +289,9 @@ export default defineMeshFlow({
 	}),
 	// In order: a model goes to the first provider here that offers it and has a key.
 	modelProviders: [
-		modelProvider('anthropic'),
-		modelProvider('openrouter', {
-			name: 'work-openrouter',
+		anthropicClaude,
+		openRouter({
+			name: 'team-openrouter',
 			baseUrl: 'https://llm-proxy.example.com/api/v1',
 		}),
 	],
@@ -308,7 +308,7 @@ export default defineMeshFlow({
 
 `image({ name, cpus?, memoryMb?, registries? })` is the sandbox: an image with `node` in it, 2 CPUs and 2048 MB unless you say otherwise, and the package registries it restores from (see [Packages](#packages)). `mesh-flow build` bundles the entry file with its dependencies and writes down what it declares, so the sandbox has nothing to install and only runs `node` (see [`@mesh-flow/build`](../build/README.md)).
 
-`modelProvider(kind, { name?, baseUrl? })` is one model provider: a pi-ai provider kind (`anthropic`, `openai`, `openrouter`, ...), named after its kind unless you give it a name, with a base URL of its own for a proxy or a compatible server. The providers, their order and their base URLs are team policy, reviewed in git: a base URL decides where prompts and code go. Each user only sets a provider's key (`mesh-flow provider key <name>`, or in the UI), and can leave one without a key. `mesh-flow build` fails when an agent's model isn't offered by any provider kind listed here.
+A provider comes from its factory: `anthropicClaude`, `openAi`, `openRouter`, `groq`, `deepSeek` or `xAi`, listed as it is or called with `{ name?, baseUrl? }`: a name of its own, which its key is set under, and a base URL for a proxy or a compatible server. Each is named after its kind by default. `modelProvider(kind, { name?, baseUrl? })` makes one of any other pi-ai provider kind. The providers, their order and their base URLs are team policy, reviewed in git: a base URL decides where prompts and code go. Each user only sets a provider's key (`mesh-flow provider key <name>`, or in the UI), and can leave one without a key. `mesh-flow build` fails when an agent's model isn't offered by any provider kind listed here.
 
 `defineWorkflows(...triggers)` bundles triggers, for a package or a module that brings several at once. A bundle goes in `workflows` like a trigger does:
 
