@@ -1,5 +1,5 @@
-import type { Api, Model } from '@earendil-works/pi-ai'
 import path from 'node:path'
+import type { Api, Model } from '@earendil-works/pi-ai'
 import {
 	isConnectorRegistry,
 	openAiCompatibleKind,
