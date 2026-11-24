@@ -1,5 +1,5 @@
 import { RunUsage } from '@mesh-flow/gateway'
-import { PackageRegistry, RuntimeRequest, TriggerReference } from '@mesh-flow/protocol'
+import { ModelProviderDescription, PackageRegistry, RuntimeRequest, TriggerReference } from '@mesh-flow/protocol'
 import { BackendName, PausedSandbox, SandboxSpecification } from '@mesh-flow/sandbox'
 import { z } from 'zod'
 import { RunId } from './run-id.mts'
@@ -35,6 +35,8 @@ export const RunApp = z.object({
 	tools: z.array(z.string()).default([]),
 	/** The package registries the app restores from, through the gateway: public ones and connectors'. */
 	registries: z.array(PackageRegistry).default([]),
+	/** The model providers the app's config declares, in the order a model is looked up. */
+	providers: z.array(ModelProviderDescription),
 })
 export type RunApp = z.infer<typeof RunApp>
 

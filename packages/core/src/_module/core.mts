@@ -5,11 +5,13 @@
  * @module
  */
 export { agent, type Agent, type AgentOptions, type AsToolOptions } from '../agent/agent.mts'
+export type { AgentModel } from '../agent/agent-model.mts'
 export { prompt, type Prompt } from '../agent/prompt.mts'
 export { requestUserInput } from '../agent/request-user-input.mts'
 export { defineMeshFlow, type MeshFlowApp, type MeshFlowOptions } from '../app/define-mesh-flow.mts'
 export { describeApp } from '../app/describe-app.mts'
 export { image, type ImageOptions } from '../app/image.mts'
+export { modelProvider, type ModelProvider, type ModelProviderOptions } from '../app/model-provider.mts'
 export { check, runCheck, type Check, type Finding } from '../check/check.mts'
 export type { Exit, Gate } from '../exits/exit.mts'
 export type { ResultOf } from '../exits/result-of.mts'

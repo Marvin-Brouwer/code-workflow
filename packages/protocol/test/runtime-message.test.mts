@@ -31,11 +31,20 @@ describe('RuntimeMessage', () => {
 					},
 					{ kind: 'schedule', id: 'fix-issue 0 7 * * 1', workflow: 'fix-issue', cron: '0 7 * * 1', parameters: { issue: 1 } },
 				],
+				providers: [{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' }],
+				models: [['claude-opus-5-5', 'gpt-5.5']],
 			},
 		})
 
 		// Assert
-		expect(message).toMatchObject({ type: 'described', description: { triggers: [{}, { kind: 'webhook' }, { cron: '0 7 * * 1' }] } })
+		expect(message).toMatchObject({
+			type: 'described',
+			description: {
+				triggers: [{}, { kind: 'webhook' }, { cron: '0 7 * * 1' }],
+				providers: [{ name: 'proxy', baseUrl: 'https://llm-proxy.example.com/api/v1' }],
+				models: [['claude-opus-5-5', 'gpt-5.5']],
+			},
+		})
 	})
 
 	test.each([

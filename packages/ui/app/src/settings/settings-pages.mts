@@ -5,7 +5,7 @@ export const settingsPages = [
 	{
 		route: ProvidersRoute,
 		label: 'Providers',
-		description: 'the model providers, in the order models are looked up, and their keys.',
+		description: "the keys of the model providers the app's config declares.",
 	},
 	{
 		route: CredentialsRoute,

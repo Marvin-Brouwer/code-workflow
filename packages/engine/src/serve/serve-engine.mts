@@ -60,7 +60,7 @@ export interface ServedEngine {
 	readonly engine: Engine
 	/** The deployed app, in the home's `app` folder. */
 	readonly deployment: Deployment
-	/** The gateway's credentials and providers, in the home's `gateway` folder. */
+	/** The gateway's credentials, in the home's `gateway` folder. */
 	readonly gateway: GatewayHome
 	readonly socketPath: string
 	/** Where webhook deliveries go, such as `http://127.0.0.1:8787`, when webhooks are served. */
@@ -107,7 +107,6 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		const gateway = openGateway({
 			home: gatewayHome.directory,
 			credentials: gatewayHome.credentials,
-			providers: gatewayHome.providers,
 			tools: connectors.flatMap((connector) => connector.tools),
 			registries: Object.fromEntries(connectors.flatMap(({ name, registries }) => (registries === undefined ? [] : [[name, registries]]))),
 		})

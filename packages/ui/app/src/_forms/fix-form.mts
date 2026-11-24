@@ -1,7 +1,6 @@
 import { component } from '@rooted/components'
 import type { MissingSetting } from '../_shared/settings.mts'
 import { CredentialForm } from './credential-form.mts'
-import { ProviderForm } from './provider-form.mts'
 import { ProviderKeyForm } from './provider-key-form.mts'
 
 /** The setting the form is for, and what it does after. */
@@ -13,9 +12,9 @@ export interface FixFormOptions {
 }
 
 /**
- * What a missing setting says, and the form that sets it: a provider, a provider's key or a
- * credential. A connector is installed where the engine runs, so for that the message, which names
- * the command, is all there is.
+ * What a missing setting says, and the form that sets it: a provider's key or a credential. A
+ * connector is installed where the engine runs, and a model no provider in the app's config offers
+ * is a change to the config in git, so for those the message is all there is.
  */
 export const FixForm = component<FixFormOptions>({
 	name: 'fix-form',
@@ -23,11 +22,6 @@ export const FixForm = component<FixFormOptions>({
 		const { setting, done } = options
 		const { fix } = setting
 		const form = () => {
-			if (fix.kind === 'provider')
-				return create(ProviderForm, {
-					model: fix.model,
-					done,
-				})
 			if (fix.kind === 'provider-key')
 				return create(ProviderKeyForm, {
 					provider: fix.provider,

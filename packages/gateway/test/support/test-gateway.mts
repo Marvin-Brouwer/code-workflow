@@ -3,7 +3,6 @@ import type { CallMessage, GatewayCall } from '@mesh-flow/protocol'
 import { openCredentialStore } from '../../src/credentials/credential-store.mts'
 import { keyFile } from '../../src/credentials/store-key.mts'
 import { openGateway, type Gateway, type GatewayOptions } from '../../src/gateway.mts'
-import { openProviderSettings } from '../../src/providers/provider-settings.mts'
 import { temporaryDirectory } from './temporary-directory.mts'
 
 export const abortSignal = new AbortController().signal
@@ -14,9 +13,8 @@ export async function testGateway(
 ) {
 	const home = options.home ?? (await temporaryDirectory())
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
-	const providers = openProviderSettings(path.join(home, 'providers.json'))
-	const gateway = openGateway({ home, credentials, providers, ...options })
-	return { home, gateway, credentials, providers }
+	const gateway = openGateway({ home, credentials, ...options })
+	return { home, gateway, credentials }
 }
 
 let calls = 0

@@ -7,7 +7,7 @@ function withoutTrailingSlash(url: string): string {
 	return url.replace(/\/+$/, '')
 }
 
-/** The provider's base URL for a model: the user's override, or pi-ai's. */
+/** The provider's base URL for a model: the config's override, or pi-ai's. */
 function baseUrlOf({ provider, model }: ModelChoice): string {
 	return withoutTrailingSlash(provider.baseUrl ?? model.baseUrl)
 }

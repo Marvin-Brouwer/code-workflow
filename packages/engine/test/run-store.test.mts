@@ -16,6 +16,7 @@ function record(id: string, createdAt: string): RunRecord {
 			sandbox: { image: 'node:26-slim', cpus: 1, memoryMb: 512 },
 			tools: [],
 			registries: [],
+			providers: [],
 		},
 		status: 'running',
 		cursor: 3,

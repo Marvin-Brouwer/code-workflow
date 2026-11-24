@@ -1,6 +1,6 @@
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { PackageRegistry } from '@mesh-flow/protocol'
+import { ModelProviderDescription, PackageRegistry } from '@mesh-flow/protocol'
 import { z } from 'zod'
 import { readTextIfExists } from '../files/read-text-if-exists.mts'
 import { RunUsage } from '../providers/usage.mts'
@@ -43,6 +43,8 @@ export const RunState = z.object({
 	tools: z.array(z.string()),
 	/** The package registries the run's app restores from: public ones and connectors'. */
 	registries: z.array(PackageRegistry).default([]),
+	/** The model providers the run's app declares, in the order a model is looked up. */
+	providers: z.array(ModelProviderDescription),
 	endpoints: z.record(z.string(), EndpointState),
 	inFlight: z.record(z.string(), InFlightCall),
 	usage: RunUsage,

@@ -24,6 +24,7 @@ const description: WorkflowsDescription = {
 	workflows: [{ name: 'greet', parameters: { type: 'object' } }],
 	triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }],
 	tools: [],
+	providers: [],
 	models: [],
 }
 
@@ -100,6 +101,22 @@ describe('buildApp', () => {
 
 		// Assert
 		await expect(building).rejects.toThrow(/exited without describing itself[\s\S]*no defineMeshFlow here/)
+	})
+
+	test('fails without a manifest when the check finds something wrong with what the app declares', async () => {
+		// Arrange
+		const directory = await appRepository({
+			files: { 'main.mts': describingEntry(description), 'greeting.mts': `export const greeting: string = 'Hello'\n` },
+			packages: { greeting: greetingPackage },
+		})
+		const out = path.join(await temporaryDirectory(), 'app')
+
+		// Act
+		const building = buildApp({ directory, out, check: () => ['Model m-1 is offered by no provider.'], abortSignal })
+
+		// Assert
+		await expect(building).rejects.toThrow("The app's config doesn't add up:\nModel m-1 is offered by no provider.")
+		expect(existsSync(path.join(out, appManifestFile))).toBe(false)
 	})
 
 	test('refuses an import it cannot find, rather than leaving it to the sandbox', async () => {

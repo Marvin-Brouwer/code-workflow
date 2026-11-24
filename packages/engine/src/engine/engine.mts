@@ -272,13 +272,13 @@ export class Engine {
 
 	/**
 	 * The settings the app needs that this engine doesn't have, each a line that says what to do and
-	 * what sets it: a model no provider with a key serves, a host tool no loaded connector brings, a
+	 * what sets it: an agent none of whose models a provider with a key serves, a host tool no loaded connector brings, a
 	 * credential a connector reads. Empty when the app can run. A trigger refuses a run with them; a
 	 * deploy reports them; the UI's wizard asks for them.
 	 */
 	async missingSettings(description: WorkflowsDescription, abortSignal: AbortSignal): Promise<MissingSetting[]> {
 		if (this.#gateway === undefined) return []
-		const models = await this.#gateway.unavailableModels(description.models, abortSignal)
+		const models = await this.#gateway.unavailableModels(description.providers, description.models, abortSignal)
 		const tools = this.#gateway.missingTools(description.tools)
 		const { registries } = description.sandbox
 		const settings = (await this.#connectorSettings?.({ tools: description.tools, registries }, abortSignal)) ?? []
@@ -331,6 +331,7 @@ export class Engine {
 			sandbox: sandbox.data,
 			tools: deployed.manifest.description.tools,
 			registries: [...deployed.manifest.description.sandbox.registries],
+			providers: deployed.manifest.description.providers,
 		}
 		return { app, listed }
 	}
@@ -549,7 +550,7 @@ export class Engine {
 			if (error instanceof EngineError) await this.#discard(id, reference)
 			throw error
 		})
-		const grant = await this.#gateway?.openRun(id, { tools: app.tools, registries: app.registries }, abortSignal)
+		const grant = await this.#gateway?.openRun(id, { tools: app.tools, registries: app.registries, providers: app.providers }, abortSignal)
 		const setup = {
 			tarball: this.#store.appOf(id),
 			entry: app.entry,

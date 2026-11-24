@@ -1,6 +1,6 @@
 /**
- * The entry file, which `main` in package.json names: the sandbox the app's runs get, and
- * everything that can start a run. A workflow says what it does and what it starts with; this
+ * The entry file, which `main` in package.json names: the sandbox the app's runs get, the model
+ * providers its agents run on, and everything that can start a run. A workflow says what it does and what it starts with; this
  * file says how it gets started and where it runs.
  *
  * The sandbox is meant to be the image the Dockerfile next to this file builds; see `sandboxImage`.
@@ -8,7 +8,7 @@
  * Jira, Confluence, GitLab and AWS are only spoken to from the host, through the gateway.
  */
 import { jira } from '@mesh-flow/atlassian/hooks'
-import { defineMeshFlow, image, userTrigger } from '@mesh-flow/core'
+import { defineMeshFlow, image, modelProvider, userTrigger } from '@mesh-flow/core'
 import { nugetOrg } from '@mesh-flow/toolchain-dotnet'
 import { awsCodeArtifacts } from './artifactories/aws-codeartifact.mts'
 import { develop } from './workflows/develop.mts'
@@ -29,6 +29,8 @@ export default defineMeshFlow({
 		memoryMb: 4096,
 		registries: [nugetOrg, awsCodeArtifacts],
 	}),
+	// The agents run on Anthropic. Each user sets its key: `mesh-flow provider key anthropic`.
+	modelProviders: [modelProvider('anthropic')],
 	workflows: [
 		// A button in the UI, with the story's key as its form.
 		userTrigger(develop),

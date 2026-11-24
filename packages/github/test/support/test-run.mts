@@ -8,7 +8,7 @@ import {
 	type RunChannel,
 	type RunOutcome,
 } from '@mesh-flow/core'
-import { keyFile, openCredentialStore, openGateway, openProviderSettings, type Gateway, type HostTool } from '@mesh-flow/gateway'
+import { keyFile, openCredentialStore, openGateway, type Gateway, type HostTool } from '@mesh-flow/gateway'
 import type { Answer, CallMessage, RuntimeMessage } from '@mesh-flow/protocol'
 import { onTestFinished } from 'vitest'
 import { tokenCredential } from '../../src/host/api.mts'
@@ -22,7 +22,7 @@ export async function testGateway(tools: readonly HostTool[]): Promise<Gateway> 
 	const home = await temporaryDirectory()
 	const credentials = openCredentialStore(path.join(home, 'credentials.json'), keyFile(path.join(home, 'store.key')))
 	await credentials.set(tokenCredential, testToken, new AbortController().signal)
-	return openGateway({ home, credentials, providers: openProviderSettings(path.join(home, 'providers.json')), tools })
+	return openGateway({ home, credentials, tools })
 }
 
 /**

@@ -1,16 +1,18 @@
 import { choice, component } from '@rooted/components'
 import { z } from 'zod'
-import { ProviderForm } from '../_forms/provider-form.mts'
 import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
 import { Table } from '../_layout/table.mts'
-import { read, send, type Answer } from '../_shared/api.mts'
+import { read, send } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { ListedProvider, NoContent } from '../_shared/settings.mts'
 import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
-/** The model providers in the order models are looked up: add one, set a key, move one, remove one. */
+/**
+ * The model providers the app's config declares, in the order models are looked up. They come from
+ * git, so only their keys are set here.
+ */
 export const ProvidersPage = component({
 	name: 'providers-page',
 	styles,
@@ -22,20 +24,45 @@ export const ProvidersPage = component({
 			role: 'alert',
 		})
 
-		const applyChange = async (sent: Promise<Answer<unknown>>) => {
-			const answer = await sent
+		const removeKey = async (name: string) => {
+			const answer = await send('DELETE', `/settings/providers/${encodeURIComponent(name)}/key`, {}, NoContent, signal)
 			status.textContent = answer.ok ? '' : answer.error
 			await show()
 		}
 
-		const row = (provider: ListedProvider, index: number, providers: readonly ListedProvider[]) => {
-			const move = (offset: number) => {
-				const names = providers.map(({ name }) => name)
-				names.splice(index, 1)
-				names.splice(index + offset, 0, provider.name)
-				void applyChange(send('PUT', '/settings/provider-order', { names }, NoContent, signal))
-			}
-			return element('tr', {
+		const keyActions = (provider: ListedProvider) =>
+			element('div', {
+				classes: styles.actions,
+				children: [
+					element('details', {
+						children: [
+							element('summary', {
+								textContent: 'Set key',
+							}),
+							create(ProviderKeyForm, {
+								provider: provider.name,
+								done() {
+									void show()
+								},
+							}),
+						],
+					}),
+					...(provider.hasKey
+						? [
+								create(ConfirmButton, {
+									summary: 'Remove key',
+									label: `Remove the key of ${provider.name}`,
+									confirmed() {
+										void removeKey(provider.name)
+									},
+								}),
+							]
+						: []),
+				],
+			})
+
+		const row = (provider: ListedProvider, index: number) =>
+			element('tr', {
 				children: [
 					element('td', {
 						textContent: String(index + 1),
@@ -53,61 +80,16 @@ export const ProvidersPage = component({
 						textContent: choice(provider.hasKey, 'set', 'not set'),
 					}),
 					element('td', {
-						children: element('div', {
-							classes: styles.actions,
-							children: [
-								element('button', {
-									type: 'button',
-									textContent: 'Up',
-									disabled: index === 0,
-									on: {
-										click() {
-											move(-1)
-										},
-									},
-								}),
-								element('button', {
-									type: 'button',
-									textContent: 'Down',
-									disabled: index === providers.length - 1,
-									on: {
-										click() {
-											move(1)
-										},
-									},
-								}),
-								element('details', {
-									children: [
-										element('summary', {
-											textContent: 'Set key',
-										}),
-										create(ProviderKeyForm, {
-											provider: provider.name,
-											done() {
-												void show()
-											},
-										}),
-									],
-								}),
-								create(ConfirmButton, {
-									summary: 'Remove',
-									label: `Remove ${provider.name} and its key`,
-									confirmed() {
-										void applyChange(send('DELETE', `/settings/providers/${encodeURIComponent(provider.name)}`, {}, NoContent, signal))
-									},
-								}),
-							],
-						}),
+						children: keyActions(provider),
 					}),
 				],
 			})
-		}
 
-		const view = (providers: Answer<ListedProvider[]>) => {
+		const view = (providers: Awaited<ReturnType<typeof readProviders>>) => {
 			if (!providers.ok) return errorText(element, providers.error)
 			if (providers.value.length === 0)
 				return element('p', {
-					textContent: 'No providers yet. Agents need one that offers their model.',
+					textContent: "The app's config declares no providers. Add them to modelProviders in defineMeshFlow.",
 				})
 			return create(Table, {
 				headings: ['', 'Name', 'Kind', 'Base URL', 'Key', ''],
@@ -115,8 +97,10 @@ export const ProvidersPage = component({
 			})
 		}
 
+		const readProviders = () => read('/settings/providers', z.array(ListedProvider), signal)
+
 		async function show(): Promise<void> {
-			list.replaceChildren(view(await read('/settings/providers', z.array(ListedProvider), signal)))
+			list.replaceChildren(view(await readProviders()))
 		}
 
 		append(
@@ -125,23 +109,11 @@ export const ProvidersPage = component({
 				textContent: 'Providers',
 			}),
 			element('p', {
-				textContent: 'A model goes to the first provider that offers it.',
+				textContent:
+					"The app's config declares these, in git. A model goes to the first one that offers it and has a key. Keys are sealed on this machine and never come back.",
 			}),
 			list,
 			status,
-			element('section', {
-				classes: styles.section,
-				children: [
-					element('h2', {
-						textContent: 'Add a provider',
-					}),
-					create(ProviderForm, {
-						done() {
-							void show()
-						},
-					}),
-				],
-			}),
 		)
 		await show()
 	},

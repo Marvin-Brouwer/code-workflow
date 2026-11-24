@@ -6,24 +6,33 @@ import { assertUniqueTriggers } from '../triggers/assert-unique-triggers.mts'
 import type { WorkflowBundle } from '../triggers/define-workflows.mts'
 import type { Trigger } from '../triggers/trigger.mts'
 import { startFromEngine } from '../workflow/start-from-engine.mts'
+import type { ModelProvider } from './model-provider.mts'
 
 /** What `defineMeshFlow` takes. */
 export interface MeshFlowOptions {
 	/** The sandbox every run gets, such as `image({ name: 'node:26-slim' })`. */
 	readonly sandbox: SandboxDescription
+	/**
+	 * The model providers the app's agents may run on, from `modelProvider`, in the order a model is
+	 * looked up: the first one that offers it and has a key serves it. Default: none, for an app
+	 * without agents.
+	 */
+	readonly modelProviders?: readonly ModelProvider[]
 	/** Everything that can start a run: triggers, and bundles of them from `defineWorkflows`. */
 	readonly workflows: readonly (Trigger | WorkflowBundle)[]
 }
 
-/** A mesh-flow app: its sandbox, and everything that can start a run. */
+/** A mesh-flow app: its sandbox, its model providers, and everything that can start a run. */
 export interface MeshFlowApp {
 	readonly sandbox: SandboxDescription
+	readonly modelProviders: readonly ModelProvider[]
 	readonly triggers: readonly Trigger[]
 }
 
 /**
  * The app's entry file's default export, the file `main` in `package.json` points at: the
- * sandbox its runs get, and everything that can start a run, in one place.
+ * sandbox its runs get, the model providers its agents run on, and everything that can start a
+ * run, in one place.
  *
  * ```ts
  * import { npmRegistry } from '@mesh-flow/toolchain-node'
@@ -33,6 +42,9 @@ export interface MeshFlowApp {
  * 		name: 'node:26-slim',
  * 		registries: [npmRegistry],
  * 	}),
+ * 	modelProviders: [
+ * 		modelProvider('anthropic'),
+ * 	],
  * 	workflows: [
  * 		// A button in the UI, with the issue as its form.
  * 		userTrigger(fixIssue),
@@ -53,7 +65,13 @@ export interface MeshFlowApp {
 export function defineMeshFlow(options: MeshFlowOptions): MeshFlowApp {
 	const triggers = options.workflows.flatMap((listed) => ('kind' in listed ? [listed] : listed.triggers))
 	assertUniqueTriggers(triggers)
-	const app: MeshFlowApp = Object.freeze({ sandbox: options.sandbox, triggers: Object.freeze(triggers) })
+	const modelProviders = options.modelProviders ?? []
+	assertUniqueProviders(modelProviders)
+	const app: MeshFlowApp = Object.freeze({
+		sandbox: options.sandbox,
+		modelProviders: Object.freeze([...modelProviders]),
+		triggers: Object.freeze(triggers),
+	})
 	if (isEntryOfEngineRun(callSite(1)?.file)) {
 		// After the whole module has loaded, so everything the file defines is there.
 		setImmediate(() => {
@@ -61,6 +79,16 @@ export function defineMeshFlow(options: MeshFlowOptions): MeshFlowApp {
 		})
 	}
 	return app
+}
+
+/** Throws when two providers have the same name: a key is set per name. */
+function assertUniqueProviders(providers: readonly ModelProvider[]): void {
+	const seen = new Set<string>()
+	for (const { name } of providers) {
+		if (seen.has(name))
+			throw new Error(`The model provider ${name} is listed twice. Give the second one a name of its own: modelProvider(kind, { name }).`)
+		seen.add(name)
+	}
 }
 
 /** Whether `file` is the file the engine started this process with. */

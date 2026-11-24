@@ -159,7 +159,7 @@ export function stepsOf(events: readonly RunEvent[], over: boolean): Step[] {
 				return [step(event, { kind: 'tool', title: call.title, status: call.status, call, steps: stepsUnder(event) })]
 			}
 			if (event.type === 'loop')
-				return [step(event, { kind: 'agent', title: `Agent on ${textOf(event.model) ?? 'a model'}`, stream: streamOf(event) })]
+				return [step(event, { kind: 'agent', title: `Agent on ${modelText(event.model) ?? 'a model'}`, stream: streamOf(event) })]
 			if (event.type === 'input') return [step(event, { kind: 'input', title: textOf(event.question) ?? 'A question' })]
 			if (event.type === 'wait') return [step(event, { kind: 'wait', title: `Waits ${textOf(event.time) ?? ''}`.trim() })]
 			if (event.type === 'node') return [step(event, { kind: 'group', title: textOf(event.node) ?? 'node', steps: stepsUnder(event) })]
@@ -179,4 +179,10 @@ function callStatus(call: { selfContained: boolean; failed: boolean; error: stri
 /** A field that is text, or `undefined`. */
 function textOf(value: unknown): string | undefined {
 	return typeof value === 'string' ? value : undefined
+}
+
+/** An agent's model as its loop names it: one model id, or several in the order they're tried. */
+function modelText(value: unknown): string | undefined {
+	if (Array.isArray(value)) return value.every((modelId) => typeof modelId === 'string') ? value.join(' or ') : undefined
+	return textOf(value)
 }

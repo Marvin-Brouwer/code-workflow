@@ -167,7 +167,7 @@ describe('RuntimeMailbox', () => {
 		const layout = mailboxLayout(directory)
 		await mkdir(layout.inbox)
 		const mailbox = new RuntimeMailbox(directory)
-		mailbox.send({ type: 'call', id: 'call-1', endpoint: 'run', token: 'a'.repeat(32), call: { type: 'resolve-model', model: 'm' } })
+		mailbox.send({ type: 'call', id: 'call-1', endpoint: 'run', token: 'a'.repeat(32), call: { type: 'resolve-model', models: ['m'] } })
 		await writeFile(answerFile(layout, 'call-1'), JSON.stringify({ value: { outcome: { ok: true, result: 1 } } }))
 
 		// Act
@@ -186,8 +186,8 @@ describe('RuntimeMailbox', () => {
 			id: 'call-1',
 			endpoint: 'run',
 			token: 'a'.repeat(32),
-			call: { type: 'resolve-model', model: 'm' },
-		} as const
+			call: { type: 'resolve-model', models: ['m'] },
+		} satisfies RuntimeMessage
 		mailbox.send(call)
 
 		// Act

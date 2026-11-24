@@ -16,34 +16,35 @@ const noKey = 'mesh-flow-gateway-adds-the-key'
 const keySource = 'mesh-flow gateway'
 
 /**
- * The run's models, through the gateway. A model id is resolved on the host, model first, to one of
- * the user's providers. The provider's SDK runs here, as pi-ai always runs it, and makes the
+ * The run's models, through the gateway. An agent's model ids are resolved on the host, model first,
+ * to one of the providers the app's config declares that has a key. The provider's SDK runs here, as pi-ai always runs it, and makes the
  * provider's own request, but its `fetch` hands the request to the gateway, which sends it with the
  * key. Nothing in the sandbox holds a key.
  */
 export function gatewayModels(gateway: GatewayClient): ModelSource {
 	const models = createModels()
 	const resolved = new Map<string, Promise<ModelRef>>()
-	const resolve = async (modelId: string, abortSignal: AbortSignal): Promise<ModelRef> => {
-		const choice = ResolvedModel.parse(await gateway.call(gateway.run, { type: 'resolve-model', model: modelId }, abortSignal))
+	const resolve = async (modelIds: readonly string[], abortSignal: AbortSignal): Promise<ModelRef> => {
+		const choice = ResolvedModel.parse(await gateway.call(gateway.run, { type: 'resolve-model', models: [...modelIds] }, abortSignal))
 		if (models.getProvider(choice.provider) === undefined) models.setProvider(gatewayProvider(choice, gateway))
 		return { provider: choice.provider, modelId: choice.model }
 	}
 	return {
 		models,
-		resolve(modelId, abortSignal) {
-			const known = resolved.get(modelId)
+		resolve(modelIds, abortSignal) {
+			const key = JSON.stringify(modelIds)
+			const known = resolved.get(key)
 			if (known !== undefined) return known
-			const resolving = resolve(modelId, abortSignal)
-			resolved.set(modelId, resolving)
-			// A failed resolve is tried again by the next loop: the user may have added a provider since.
-			resolving.catch(() => resolved.delete(modelId))
+			const resolving = resolve(modelIds, abortSignal)
+			resolved.set(key, resolving)
+			// A failed resolve is tried again by the next loop: the user may have set a key since.
+			resolving.catch(() => resolved.delete(key))
 			return resolving
 		},
 	}
 }
 
-/** One of the user's providers, as the sandbox sees it: pi-ai's provider of its kind, with a `fetch` that goes through the gateway. */
+/** One of the app's providers, as the sandbox sees it: pi-ai's provider of its kind, with a `fetch` that goes through the gateway. */
 function gatewayProvider(choice: ResolvedModel, gateway: GatewayClient): Provider {
 	const inner = builtinProviders().find((provider) => provider.id === choice.kind)
 	if (inner === undefined) throw new Error(`pi-ai in the sandbox doesn't know provider kind ${choice.kind}.`)

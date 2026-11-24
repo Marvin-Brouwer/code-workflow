@@ -1,5 +1,5 @@
 import { ShownConnector, SignInState, type ConnectorSetting, type ListedProvider } from '@mesh-flow/engine'
-import { CredentialName, knownKinds, MissingSetting, ProviderName } from '@mesh-flow/gateway'
+import { CredentialName, MissingSetting } from '@mesh-flow/gateway'
 import { describe, expect, expectTypeOf, test } from 'vitest'
 import { z } from 'zod'
 import * as page from '../../app/src/_shared/settings.mts'
@@ -22,32 +22,11 @@ describe("the page's copies of the engine's answers", () => {
 		expect(copied).toEqual(shapeOf(original))
 	})
 
-	test('ProviderKind reads every kind the gateway knows', () => {
-		// Act
-		const parsed = z.array(page.ProviderKind).safeParse(knownKinds())
-
-		// Assert
-		expect(parsed.success).toBe(true)
-	})
-
 	test('ListedProvider and ConnectorPackage take what the originals hold', () => {
 		// Assert
 		expectTypeOf<ListedProvider>().toExtend<page.ListedProvider>()
 		expectTypeOf<ConnectorSetting>().toExtend<page.ConnectorPackage>()
 	})
-})
-
-describe("the provider form's name pattern", () => {
-	test.each(['anthropic', 'work-2', 'a_b', '0', 'Anthropic', '-lead', 'with space', '', 'a'.repeat(64), 'a'.repeat(65)])(
-		'takes %j exactly when the gateway does',
-		(name) => {
-			// Act
-			const matches = new RegExp(`^(?:${page.providerNamePattern})$`, 'v').test(name)
-
-			// Assert
-			expect(matches).toBe(ProviderName.safeParse(name).success)
-		},
-	)
 })
 
 describe("the page's credential names", () => {

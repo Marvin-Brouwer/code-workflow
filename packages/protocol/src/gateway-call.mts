@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ModelChoice } from './model-provider.mts'
 import { ConnectorName } from './connector-name.mts'
 import { PackageRequest } from './package-registry.mts'
 import { RequestId } from './request-id.mts'
@@ -26,7 +27,7 @@ export type ToolName = z.infer<typeof ToolName>
  * URL, the headers and the body. The gateway adds the credential and sends it to the provider.
  */
 export const ModelRequest = z.object({
-	/** The provider, as the user named it, that `resolve-model` picked. */
+	/** The provider, as the app's config names it, that `resolve-model` picked. */
 	provider: z.string().min(1),
 	/** The model the request is for, as the agent names it. */
 	model: z.string().min(1),
@@ -46,9 +47,9 @@ export const ModelResponse = z.object({
 })
 export type ModelResponse = z.infer<typeof ModelResponse>
 
-/** Which provider serves a model, model first, and the API its SDK speaks. */
+/** Which model runs, on which provider, and the API its SDK speaks. */
 export const ResolvedModel = z.object({
-	/** The provider as the user named it. */
+	/** The provider as the app's config names it. */
 	provider: z.string().min(1),
 	/** The pi-ai provider it is, such as `anthropic`, whose SDK makes the request in the sandbox. */
 	kind: z.string().min(1),
@@ -62,7 +63,7 @@ export type ResolvedModel = z.infer<typeof ResolvedModel>
  * - `tool`: run a host tool with this input;
  * - `open`: open an endpoint for one loop that takes only these tools. Only on the run's endpoint;
  * - `close`: close a loop's endpoint once the loop has settled. Only on the run's endpoint;
- * - `resolve-model`: which provider serves a model, model first;
+ * - `resolve-model`: which of an agent's models runs, and on which provider: the first model a provider with a key offers, model first;
  * - `model`: send a model request with the provider's credential;
  * - `package`: fetch a package or its metadata from a registry the app restores from. Only on the run's package endpoint, a `RunGrant`'s `packages`.
  */
@@ -70,7 +71,7 @@ export const GatewayCall = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('tool'), tool: ToolName, input: z.unknown() }),
 	z.object({ type: z.literal('open'), tools: z.array(ToolName) }),
 	z.object({ type: z.literal('close'), endpoint: EndpointId }),
-	z.object({ type: z.literal('resolve-model'), model: z.string().min(1) }),
+	z.object({ type: z.literal('resolve-model'), models: ModelChoice }),
 	z.object({ type: z.literal('model'), request: ModelRequest }),
 	z.object({ type: z.literal('package'), request: PackageRequest }),
 ])

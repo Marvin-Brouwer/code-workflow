@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ToolName } from './gateway-call.mts'
+import { ModelChoice, ModelProviderDescription } from './model-provider.mts'
 import { PackageRegistry } from './package-registry.mts'
 
 /** A JSON Schema, as a plain object. */
@@ -66,7 +67,8 @@ export type SandboxDescription = z.infer<typeof SandboxDescription>
 
 /**
  * What an entry file declares: its sandbox, every workflow its modules define, what can start them,
- * and the host tools its modules call through the gateway. A run's gateway takes only those.
+ * the host tools its modules call through the gateway, which are all a run's gateway takes, and its
+ * model providers with the models its agents need.
  */
 export const WorkflowsDescription = z.object({
 	sandbox: SandboxDescription,
@@ -74,7 +76,9 @@ export const WorkflowsDescription = z.object({
 	triggers: z.array(TriggerDescription),
 	/** Apps built before the gateway list none. */
 	tools: z.array(ToolName).default([]),
-	/** The model ids of the app's agents, which a trigger checks against the providers before it starts a run. */
-	models: z.array(z.string().min(1)).default([]),
+	/** The model providers the app's config declares, in the order a model is looked up. */
+	providers: z.array(ModelProviderDescription),
+	/** The model ids of each of the app's agents, which a trigger checks against the providers before it starts a run. */
+	models: z.array(ModelChoice),
 })
 export type WorkflowsDescription = z.infer<typeof WorkflowsDescription>

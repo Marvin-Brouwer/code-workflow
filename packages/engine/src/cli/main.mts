@@ -4,8 +4,8 @@ import path from 'node:path'
 import { text } from 'node:stream/consumers'
 import { buildApp } from '@mesh-flow/build'
 import { duration } from '@mesh-flow/duration'
-import type { CredentialStore, MissingSetting } from '@mesh-flow/gateway'
-import { AppPlatform, TriggerKind } from '@mesh-flow/protocol'
+import { undeclaredModels, type CredentialStore, type MissingSetting } from '@mesh-flow/gateway'
+import { AppPlatform, TriggerKind, type WorkflowsDescription } from '@mesh-flow/protocol'
 import { BackendName } from '@mesh-flow/sandbox'
 import { Command, InvalidArgumentError, Option } from 'commander'
 import envPaths from 'env-paths'
@@ -144,6 +144,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 				directory,
 				out,
 				platform: sandboxPlatform(options.cpu),
+				check: modelsOfConfig,
 				abortSignal: buildTimeout.toAbortSignal(),
 			})
 			log(`Built ${path.relative(process.cwd(), out) || '.'}: ${String(manifest.description.triggers.length)} triggers.`)
@@ -184,7 +185,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			const buildAndDeploy = async () => {
 				try {
 					const abortSignal = AbortSignal.any([stopping.signal, buildTimeout.toAbortSignal()])
-					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), abortSignal })
+					await buildApp({ directory, out, platform: sandboxPlatform(options.cpu), check: modelsOfConfig, abortSignal })
 					const deployed = await withPackedApp(out, (tarball) => client().deploy(tarball, abortSignal), abortSignal)
 					log(`Deployed ${deployed.version}.`)
 					reportMissing(deployed.missing)
@@ -252,7 +253,10 @@ export async function main(argv: readonly string[]): Promise<void> {
 			if (options.generate) console.log(secret)
 		})
 
-	addProviderCommands(program, gatewayHome)
+	addProviderCommands(program, {
+		gatewayHome,
+		declared: async (abortSignal) => (await deployedApp(client(), abortSignal)).manifest.description.providers,
+	})
 	addCredentialCommands(program, gatewayHome)
 	addConnectorCommands(program, home)
 	addLoginCommand(program, {
@@ -395,8 +399,13 @@ async function readJsonOrFile(value: string): Promise<unknown> {
 }
 
 /** The current version of the deployed app. */
-async function deployedApp(client: ControlClient): Promise<DeployedApp> {
-	const found = await client.app(requestSignal())
+/** A build's check: every agent's models are offered by a provider the app's config declares. */
+function modelsOfConfig(description: WorkflowsDescription): string[] {
+	return undeclaredModels(description.providers, description.models)
+}
+
+async function deployedApp(client: ControlClient, abortSignal = requestSignal()): Promise<DeployedApp> {
+	const found = await client.app(abortSignal)
 	if (found === undefined) throw new Error('There is no app. Deploy it with `mesh-flow deploy`, or run `mesh-flow dev`.')
 	return found
 }
