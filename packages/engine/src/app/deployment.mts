@@ -32,7 +32,9 @@ export interface Deployment {
 	readonly current: () => DeploymentVersion | undefined
 	/**
 	 * Calls `use` with the current version, and keeps that version on disk until what `use` returns
-	 * settles, also when a deploy makes another version current meanwhile. For copying it.
+	 * settles, even if a deploy makes another version current in the meantime. Use it to copy the
+	 * version's tarball, such as when a run starts. It waits for nothing but `use`, which takes its
+	 * own abort signal.
 	 */
 	readonly withCurrent: <Result>(use: (current: DeploymentVersion | undefined) => Promise<Result>) => Promise<Result>
 	/** Waits for the writes under way and refuses new ones, so the engine's home can be let go. */
@@ -49,7 +51,12 @@ const versionLength = 12
 const versionPattern = new RegExp(`^[0-9a-f]{${String(versionLength)}}$`)
 
 const tarballFile = 'app.tgz'
-const currentFile = 'current'
+
+/** The file in the deployment's root that names the current version. */
+export const currentFile = 'current'
+
+/** How often a removal tries again when a folder is briefly in use, such as by a virus scanner on Windows. */
+const removeRetries = 3
 
 /**
  * The app in `root`: a folder for the current version, and a `current` file that names it. Loads
@@ -57,8 +64,10 @@ const currentFile = 'current'
  * `log` and left out, so the engine still starts and a deploy fixes it. Writes go one after another.
  *
  * A deploy writes the new version's folder whole before `current` names it, then removes the other
- * folders that no `withCurrent` holds; a folder held is removed once it's let go. A removal that
- * fails is reported to `log` and tried again after the next deploy, or the next open.
+ * folders that no `withCurrent` holds; a folder held is removed once it's let go, or at the next
+ * open when it's let go after `close`. A folder that can't be removed is reported to `log` and tried
+ * again at the next deploy, release or open. Only one process may use `root` at a time, since each
+ * removes the versions it doesn't know.
  */
 export async function openDeployment(
 	root: string,
@@ -71,8 +80,8 @@ export async function openDeployment(
 		log(`Left out the app: ${messageOf(error)} Deploy it again.`)
 		return undefined
 	})
-	/** How many `withCurrent` calls hold each version. */
-	const holders = new Map<string, number>()
+	/** How many `withCurrent` calls hold each version, by version. */
+	const holdCounts = new Map<string, number>()
 	let writing: Promise<unknown> = Promise.resolve()
 	let closed = false
 	const queued = <Result,>(write: () => Promise<Result>): Promise<Result> => {
@@ -81,19 +90,27 @@ export async function openDeployment(
 		writing = next.catch(() => undefined)
 		return next
 	}
-	/** Removes the version folders that aren't current and that nothing holds. Never throws: what's left is tried again later. */
-	const removeOldVersions = async () => {
-		try {
-			for (const entry of await readdir(root, { withFileTypes: true })) {
-				if (!entry.isDirectory() || entry.name === current?.version || holders.has(entry.name)) continue
-				await rm(path.join(root, entry.name), { recursive: true, force: true })
-			}
-		} catch (error) {
-			log(`Removing an older version in ${root} failed, so it's tried again later: ${messageOf(error)}`)
+	/**
+	 * Removes the version folders that aren't current and that nothing holds, one by one, and stops
+	 * once the deployment closes or `abortSignal` aborts. Never throws: a folder it can't remove is
+	 * reported to `log`, and the next removal tries it again.
+	 */
+	const removeOldVersions = async (abortSignal?: AbortSignal) => {
+		const entries = await readdir(root, { withFileTypes: true }).catch((error: unknown) => {
+			log(`Listing the versions in ${root} failed, so older ones are removed later: ${messageOf(error)}`)
+			return []
+		})
+		for (const entry of entries) {
+			if (closed || abortSignal?.aborted === true) return
+			if (!entry.isDirectory() || entry.name === current?.version || holdCounts.has(entry.name)) continue
+			await rm(path.join(root, entry.name), { recursive: true, force: true, maxRetries: removeRetries }).catch((error: unknown) => {
+				log(`Removing version ${entry.name} in ${root} failed, so it's tried again later: ${messageOf(error)}`)
+			})
 		}
 	}
 	// Removed when a crash or a failed removal left them, before anything can hold one.
-	if (current !== undefined) await removeOldVersions()
+	if (current !== undefined) await removeOldVersions(openSignal)
+	openSignal.throwIfAborted()
 	return Object.freeze({
 		deploy: (tarball, abortSignal) =>
 			queued(async () => {
@@ -102,15 +119,21 @@ export async function openDeployment(
 				const folder = path.join(root, version)
 				const manifest = await manifestIn(tarball)
 				abortSignal.throwIfAborted()
-				// Runs may be copying it right now: a redeploy of the same build leaves it be.
-				if (!(await versionIsComplete(folder))) {
-					await mkdir(folder, { recursive: true })
-					await copyTarball(tarball, path.join(folder, tarballFile), abortSignal)
-					// Written last: it marks the version complete.
-					await replaceFile(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'), { abortSignal })
+				try {
+					// Runs may be copying it right now: a redeploy of the same build leaves it be.
+					if (!(await versionIsComplete(folder))) {
+						await mkdir(folder, { recursive: true })
+						await copyTarball(tarball, path.join(folder, tarballFile), abortSignal)
+						// Written last: it marks the version complete.
+						await replaceFile(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'), { abortSignal })
+					}
+					abortSignal.throwIfAborted()
+					await replaceFile(path.join(root, currentFile), version, { abortSignal })
+				} catch (error) {
+					// What was written of the version isn't current, so it goes with the other old ones.
+					await removeOldVersions()
+					throw error
 				}
-				abortSignal.throwIfAborted()
-				await replaceFile(path.join(root, currentFile), version, { abortSignal })
 				const deployed: DeploymentVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
 				current = deployed
 				await removeOldVersions()
@@ -121,15 +144,16 @@ export async function openDeployment(
 			// Taken before anything is awaited, so a deploy that lands meanwhile leaves this version be.
 			const held = current
 			if (held === undefined) return use(undefined)
-			holders.set(held.version, (holders.get(held.version) ?? 0) + 1)
+			holdCounts.set(held.version, (holdCounts.get(held.version) ?? 0) + 1)
 			try {
 				return await use(held)
 			} finally {
-				const left = (holders.get(held.version) ?? 1) - 1
-				if (left > 0) holders.set(held.version, left)
+				const remainingHolds = (holdCounts.get(held.version) ?? 1) - 1
+				if (remainingHolds > 0) holdCounts.set(held.version, remainingHolds)
 				else {
-					holders.delete(held.version)
-					if (held.version !== current?.version && !closed) void queued(removeOldVersions)
+					holdCounts.delete(held.version)
+					// Only a `log` that throws can fail it, and that mustn't fail what `use` returned.
+					if (held.version !== current?.version && !closed) void queued(removeOldVersions).catch(() => undefined)
 				}
 			}
 		},

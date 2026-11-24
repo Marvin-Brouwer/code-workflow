@@ -81,6 +81,7 @@ const ampleDeadlines = () => ({ pause: duration.of('10s').toAbortSignal(), backe
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
 	const deployment = await openDeployment(path.join(home, 'app'), signal)
+	onTestFinished(() => deployment.close())
 	await deployTestApp(deployment, { hello: runtimeScript('') })
 	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), deployment }, signal)
 	onTestFinished(() => engine.close(shortDeadlines()))

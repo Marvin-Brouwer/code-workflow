@@ -93,6 +93,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			const home = await temporaryDirectory()
 			const store = () => openRunStore(path.join(home, 'runs'))
 			const deployment = await openDeployment(path.join(home, 'app'), signal)
+			onTestFinished(() => deployment.close())
 			await deployTestApp(deployment, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
 			const first = await Engine.open({ backend: await openBackend(), store: store(), deployment }, signal)
 			onTestFinished(() => first.close(deadlines()))
@@ -156,6 +157,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 				fetch,
 			})
 			const deployment = await openDeployment(path.join(home, 'app'), signal)
+			onTestFinished(() => deployment.close())
 			const built = path.join(home, 'built')
 			await buildApp({ directory: restoringApp, out: built, abortSignal: buildTimeout.toAbortSignal() })
 			await withPackedApp(built, (tarball) => deployment.deploy(tarball, signal), signal)

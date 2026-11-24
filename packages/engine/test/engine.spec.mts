@@ -33,6 +33,7 @@ async function openEngine({ home, wrap = (backend) => backend, wrapStore = (stor
 	const backend = { ...wrap(host), root: host.root }
 	const store = wrapStore(openRunStore(path.join(directory, 'runs')))
 	const deployment = await openDeployment(path.join(directory, 'app'), signal)
+	onTestFinished(() => deployment.close())
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open({ backend, store, deployment, layout: hostSandboxLayout, log }, signal)
 	onTestFinished(() => engine.close(deadlines()))
@@ -359,6 +360,39 @@ if (!restarted) {
 		await untilStatus(engine, id, 'stopped')
 		await vi.waitFor(async () => {
 			expect(await backend.list(signal)).toEqual([])
+		})
+	})
+
+	test('starts a run whole from the version it copies while another is deployed, then removes that version', async () => {
+		// Arrange
+		const copying = deferred<undefined>()
+		const copyStarted = deferred<undefined>()
+		const { deployment, engine } = await openEngine({
+			wrapStore: (store) => ({
+				...store,
+				saveApp: async (id, tarball, abortSignal) => {
+					copyStarted.resolve(undefined)
+					await copying.promise
+					return store.saveApp(id, tarball, abortSignal)
+				},
+			}),
+		})
+		const first = await deployTestApp(deployment, { ask: askAndEcho })
+
+		// Act
+		const starting = engine.startRun({ ...userRun('ask'), abortSignal: signal })
+		await copyStarted.promise
+		await deployTestApp(deployment, { ask: askAndEcho, other: runtimeScript('') })
+		const keptWhileCopying = existsSync(first.tarball)
+		copying.resolve(undefined)
+		const { id } = await starting
+		await untilPending(engine, id, 'story')
+
+		// Assert
+		expect(keptWhileCopying).toBe(true)
+		expect(engine.get(id).app.version).toBe(first.version)
+		await vi.waitFor(() => {
+			expect(existsSync(path.dirname(first.tarball))).toBe(false)
 		})
 	})
 

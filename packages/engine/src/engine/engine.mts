@@ -18,7 +18,7 @@ import {
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
-import { noAppMessage, type DeploymentVersion, type Deployment } from '../app/deployment.mts'
+import { noAppMessage, type Deployment, type DeploymentVersion } from '../app/deployment.mts'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
@@ -298,7 +298,7 @@ export class Engine {
 	 * Checks that `deployed` lists the trigger and that the app can run now, then copies its tarball
 	 * next to the run's record, so the run keeps its code when the app is deployed again.
 	 */
-	async #copyApp(
+	async #prepareRunApp(
 		id: RunId,
 		deployed: DeploymentVersion | undefined,
 		options: StartRunOptions,
@@ -339,7 +339,7 @@ export class Engine {
 		const waitSignal = this.#withLifetime(options.abortSignal)
 		const id = newRunId()
 		// Held until the run has its copy, so a deploy meanwhile doesn't remove the version under it.
-		const { app, listed } = await this.#deployment.withCurrent((deployed) => this.#copyApp(id, deployed, options, waitSignal))
+		const { app, listed } = await this.#deployment.withCurrent((deployed) => this.#prepareRunApp(id, deployed, options, waitSignal))
 		waitSignal.throwIfAborted()
 		// Only the kind and the id, whatever else the caller's object holds: this goes into the record.
 		const trigger: TriggerReference = { kind: options.trigger.kind, id: options.trigger.id }

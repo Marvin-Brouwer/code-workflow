@@ -22,13 +22,6 @@ export const StartRunBody = z.object({
 /** The body of `PUT /app`: the built app, packed, on this machine. */
 export const DeployBody = z.object({ tarball: z.string().min(1) })
 
-/** The deployed app, and what to do when a new version is deployed. */
-export interface ControlApp {
-	readonly deployment: Deployment
-	/** Called after a version was deployed, such as to arm its schedules. */
-	readonly afterDeploy: () => void
-}
-
 /** What the control API says about the deployed app. */
 function shownApp({ version, manifest }: DeploymentVersion) {
 	return { version, manifest }
@@ -36,8 +29,10 @@ function shownApp({ version, manifest }: DeploymentVersion) {
 
 /** What the control API answers for, besides the engine's runs. */
 export interface ControlApiOptions {
-	/** The deployed app. Without it, there are no app routes. */
-	readonly app?: ControlApp | undefined
+	/** The deployed app. Without it, there are no `/app` routes. */
+	readonly deployment?: Deployment | undefined
+	/** Called after a version was deployed, such as to arm its schedules. */
+	readonly afterDeploy?: (() => void) | undefined
 	/** The connectors the engine loaded, for `GET /connectors`. */
 	readonly connectors?: readonly ShownConnector[] | undefined
 }
@@ -74,7 +69,7 @@ export const engineErrorStatus: Record<EngineErrorCode, ContentfulStatusCode> = 
  *
  * Errors come back as `{ error }`, with 404, 409 or 400 for what the engine refused.
  */
-export function controlApi(engine: Engine, { app, connectors = [] }: ControlApiOptions = {}): Hono {
+export function controlApi(engine: Engine, { deployment, afterDeploy = () => undefined, connectors = [] }: ControlApiOptions = {}): Hono {
 	const api = new Hono()
 
 	api.get('/runs', (context) => context.json(engine.list()))
@@ -105,8 +100,7 @@ export function controlApi(engine: Engine, { app, connectors = [] }: ControlApiO
 		return context.json({ signedIn: connector })
 	})
 
-	if (app !== undefined) {
-		const { deployment, afterDeploy } = app
+	if (deployment !== undefined) {
 		api.get('/app', (context) => {
 			const current = deployment.current()
 			return context.json(current === undefined ? null : shownApp(current))

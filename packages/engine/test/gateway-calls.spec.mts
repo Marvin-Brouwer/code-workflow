@@ -80,6 +80,7 @@ async function openEngine({
 	const backend: SandboxBackend =
 		sandboxes === undefined ? host : { ...host, create: async (...parameters) => sandboxes(await host.create(...parameters)) }
 	const deployment = await openDeployment(path.join(directory, 'app'), abortSignal)
+	onTestFinished(() => deployment.close())
 	const log = vi.fn<(message: string) => void>()
 	const engine = await Engine.open(
 		{

@@ -21,6 +21,7 @@ const promptly = duration.of('5s')
 async function openEngine(signIn: (context: SignInContext) => Promise<void>, home?: string) {
 	const directory = home ?? (await temporaryDirectory())
 	const deployment = await openDeployment(path.join(directory, 'app'), abortSignal)
+	onTestFinished(() => deployment.close())
 	const engine = await Engine.open(
 		{
 			backend: hostBackend(path.join(directory, 'sandboxes')),
