@@ -410,7 +410,9 @@ directly. Package managers keep working through the proxy on `HTTPS_PROXY`.
 - Agents name a **model id**, or several as a fallback in order (`['claude-opus-5-5', 'gpt-5.5']`).
   The gateway resolves them model-first: the agent's first model that a provider with a key offers,
   on the first such provider in the config's order. The model is picked when a loop starts; there's
-  no failover during a loop.
+  no failover during a loop. What a provider offers is what it lists for that key, asked once a
+  run; pi-ai's catalog stands in for a provider without a model list or one that can't say now.
+  The settings show the same list per provider.
 - Agents are module-level, so the build's description ([Triggers](#triggers)) tells the engine a
   workflow's models before a run starts. `mesh-flow build` fails when an agent's model isn't
   offered by any declared provider kind; each trigger checks the keys up front. A run keeps the

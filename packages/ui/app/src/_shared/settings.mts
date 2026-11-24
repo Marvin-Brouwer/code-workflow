@@ -11,6 +11,20 @@ import { z } from 'zod'
 export const ListedProvider = z.object({ name: z.string(), kind: z.string(), baseUrl: z.string().optional(), hasKey: z.boolean() })
 export type ListedProvider = z.infer<typeof ListedProvider>
 
+/** A model a provider offers, and whether agents can use it: `ListedModel` in `@mesh-flow/engine`. */
+export const ListedModel = z.object({ id: z.string(), usable: z.boolean() })
+export type ListedModel = z.infer<typeof ListedModel>
+
+/** The models a provider offers its key: `ProviderModelList` in `@mesh-flow/engine`. */
+export const ProviderModelList = z.discriminatedUnion('source', [
+	z.object({
+		source: z.enum(['provider', 'catalog']),
+		models: z.array(ListedModel),
+	}),
+	z.object({ source: z.literal('failed'), reason: z.string() }),
+])
+export type ProviderModelList = z.infer<typeof ProviderModelList>
+
 /** A connector package the engine loads: `ConnectorSetting` in `@mesh-flow/engine`. */
 export const ConnectorPackage = z.object({ package: z.string() })
 export type ConnectorPackage = z.infer<typeof ConnectorPackage>

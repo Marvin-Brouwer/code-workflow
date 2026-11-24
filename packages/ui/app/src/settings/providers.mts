@@ -1,11 +1,12 @@
-import { choice, component } from '@rooted/components'
+import { choice, component, optional } from '@rooted/components'
 import { z } from 'zod'
 import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
 import { Table } from '../_layout/table.mts'
-import { read, send } from '../_shared/api.mts'
+import { read, send, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { ListedProvider, NoContent } from '../_shared/settings.mts'
 import { ConfirmButton } from './confirm-button.mts'
+import { ProviderModels } from './provider-models.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
@@ -47,17 +48,22 @@ export const ProvidersPage = component({
 							}),
 						],
 					}),
-					...(provider.hasKey
-						? [
-								create(ConfirmButton, {
-									summary: 'Remove key',
-									label: `Remove the key of ${provider.name}`,
-									confirmed() {
-										void removeKey(provider.name)
-									},
-								}),
-							]
-						: []),
+					optional(
+						provider.hasKey,
+						create(ProviderModels, {
+							provider: provider.name,
+						}),
+					),
+					optional(
+						provider.hasKey,
+						create(ConfirmButton, {
+							summary: 'Remove key',
+							label: `Remove the key of ${provider.name}`,
+							confirmed() {
+								void removeKey(provider.name)
+							},
+						}),
+					),
 				],
 			})
 
@@ -85,7 +91,9 @@ export const ProvidersPage = component({
 				],
 			})
 
-		const view = (providers: Awaited<ReturnType<typeof readProviders>>) => {
+		const readProviders = () => read('/settings/providers', z.array(ListedProvider), signal)
+
+		const view = (providers: Answer<ListedProvider[]>) => {
 			if (!providers.ok) return errorText(element, providers.error)
 			if (providers.value.length === 0)
 				return element('p', {
@@ -96,8 +104,6 @@ export const ProvidersPage = component({
 				rows: providers.value.map(row),
 			})
 		}
-
-		const readProviders = () => read('/settings/providers', z.array(ListedProvider), signal)
 
 		async function show(): Promise<void> {
 			list.replaceChildren(view(await readProviders()))

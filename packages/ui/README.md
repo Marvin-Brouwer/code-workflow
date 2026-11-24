@@ -61,7 +61,7 @@ This is the local way in. The token only goes to the terminal, never on a comman
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/app`, `GET /api/engine/app/missing` | the deployed app (`null` before the first deploy), and what it still needs before it can run |
-| `GET /api/settings/providers`, `PUT` and `DELETE /api/settings/providers/:name/key` | the providers the deployed app's config declares, whether each has a key, and setting and removing a key, as `mesh-flow provider`; all but `DELETE` are 503 when no engine runs |
+| `GET /api/settings/providers`, `GET /api/settings/providers/:name/models`, `PUT` and `DELETE /api/settings/providers/:name/key` | the providers the deployed app's config declares, whether each has a key, the models a provider with a key lists (asked of the provider), and setting and removing a key, as `mesh-flow provider`; all but `DELETE` are 503 when no engine runs |
 | `/api/settings/credentials`, `/credentials/:name` | credential names, setting and removing them; values never come back |
 | `GET /api/settings/connectors` | the connector packages the engine loads |
 
@@ -79,7 +79,7 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 | `/start/` | the app's user triggers, when it has more than one | pick one |
 | `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
 | `/setup/` | what the app still needs before a run can start | set what's missing |
-| `/settings/providers/` | the providers the app's config declares, in the order models are looked up: kind, base URL, whether each has a key | set a key, remove a key |
+| `/settings/providers/` | the providers the app's config declares, in the order models are looked up: kind, base URL, whether each has a key, and, for one with a key, its models (asked when opened) and which agents can use | set a key, remove a key |
 | `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
 

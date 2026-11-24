@@ -1,9 +1,17 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { openEngineGatewayHome } from '../src/serve/engine-gateway.mts'
-import { listProviders, removeProviderKey, setProviderKey } from '../src/settings/providers.mts'
+import { listProviderModels, listProviders, removeProviderKey, setProviderKey } from '../src/settings/providers.mts'
 import { temporaryDirectory } from './support/temporary-directory.mts'
 
 const abortSignal = new AbortController().signal
+
+/** A provider that answers every request with `status`. */
+function answering(status: number): typeof fetch {
+	return () => Promise.resolve(new Response('', { status }))
+}
+
+/** A provider of Anthropic's kind, as a config declares it. */
+const anthropic = { name: 'anthropic', kind: 'anthropic' }
 
 async function gatewayHome() {
 	return openEngineGatewayHome(await temporaryDirectory(), abortSignal, { keychain: false })
@@ -52,5 +60,72 @@ describe('the provider settings', () => {
 
 		// Assert
 		await expect(setting).rejects.toMatchObject({ code: 'invalid' })
+	})
+
+	test('asks a provider for its models with its key, and says which ones agents can use', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		const fetchFromHost = vi.fn<typeof fetch>(() =>
+			Promise.resolve(Response.json({ data: [{ id: 'claude-opus-5-5' }, { id: 'claude-unreleased' }] })),
+		)
+
+		// Act
+		const models = await listProviderModels(home, [anthropic], 'anthropic', abortSignal, fetchFromHost)
+
+		// Assert
+		const [url, init] = fetchFromHost.mock.calls[0] ?? []
+		expect(url).toBe('https://api.anthropic.com/v1/models?limit=1000')
+		expect(init?.headers).toMatchObject({ 'x-api-key': 'sk-secret' })
+		expect(models).toEqual({
+			source: 'provider',
+			models: [
+				{ id: 'claude-opus-5-5', usable: true },
+				{ id: 'claude-unreleased', usable: false },
+			],
+		})
+	})
+
+	test("lists pi-ai's models of the kind when the provider has no model list", async () => {
+		// Arrange
+		const home = await gatewayHome()
+		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+
+		// Act
+		const models = await listProviderModels(home, [anthropic], 'anthropic', abortSignal, answering(404))
+
+		// Assert
+		expect(models).toMatchObject({
+			source: 'catalog',
+			models: expect.arrayContaining([{ id: 'claude-opus-5-5', usable: true }]) as unknown,
+		})
+	})
+
+	test("says why a provider didn't list its models", async () => {
+		// Arrange
+		const home = await gatewayHome()
+		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+
+		// Act
+		const models = await listProviderModels(home, [anthropic], 'anthropic', abortSignal, answering(401))
+
+		// Assert
+		expect(models).toEqual({ source: 'failed', reason: "Provider anthropic didn't list its models: it answered 401." })
+	})
+
+	test.each([
+		['without a key', 'anthropic', 'invalid'],
+		["the config doesn't declare", 'openai', 'not-found'],
+	])("doesn't ask a provider %s", async (_case, name, code) => {
+		// Arrange
+		const home = await gatewayHome()
+		const fetchFromHost = vi.fn<typeof fetch>()
+
+		// Act
+		const refused = await listProviderModels(home, [anthropic], name, abortSignal, fetchFromHost).catch((error: unknown) => error)
+
+		// Assert
+		expect(refused).toMatchObject({ code })
+		expect(fetchFromHost).not.toHaveBeenCalled()
 	})
 })

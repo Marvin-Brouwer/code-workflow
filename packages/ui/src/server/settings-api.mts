@@ -1,4 +1,11 @@
-import { listProviders, removeProviderKey, setProviderKey, type ConnectorSettings, type ControlClient } from '@mesh-flow/engine'
+import {
+	listProviderModels,
+	listProviders,
+	removeProviderKey,
+	setProviderKey,
+	type ConnectorSettings,
+	type ControlClient,
+} from '@mesh-flow/engine'
 import { CredentialName, type GatewayHome } from '@mesh-flow/gateway'
 import { Hono } from 'hono'
 import { z } from 'zod'
@@ -21,15 +28,22 @@ export interface SettingsApiOptions {
 /**
  * The settings: the keys of the app's providers, credentials and connectors. Through the same
  * functions as `mesh-flow provider` and `mesh-flow credential`, on the home's files, so a running
- * engine sees a change at once. Secrets go in and never come out. Only the list of providers needs
- * the running engine, since the app's config declares them.
+ * engine sees a change at once. Secrets go in and never come out. Only the providers and their
+ * models need the running engine, since the app's config declares them. A provider's models are
+ * asked of the provider itself, with its key.
  */
 export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOptions): Hono {
 	const api = new Hono()
+	/** The providers the deployed app's config declares. */
+	const declaredProviders = async (abortSignal: AbortSignal) => (await client.app(abortSignal))?.manifest.description.providers ?? []
 	api.get('/providers', async (context) => {
-		const { signal } = context.req.raw
-		const declared = (await client.app(signal))?.manifest.description.providers ?? []
-		return context.json(await listProviders(await gatewayHome(signal), declared, signal))
+		const abortSignal = context.req.raw.signal
+		return context.json(await listProviders(await gatewayHome(abortSignal), await declaredProviders(abortSignal), abortSignal))
+	})
+	api.get('/providers/:name/models', async (context) => {
+		const abortSignal = context.req.raw.signal
+		const declared = await declaredProviders(abortSignal)
+		return context.json(await listProviderModels(await gatewayHome(abortSignal), declared, context.req.param('name'), abortSignal))
 	})
 	api.put('/providers/:name/key', jsonBody(KeyBody), async (context) => {
 		const { key } = context.req.valid('json')

@@ -350,6 +350,14 @@ const anthropicRequest = {
 	body: JSON.stringify({ model: 'claude-opus-5-5', max_tokens: 10, messages: [] }),
 } as const
 
+/** The address a fetch goes to. */
+function urlOf(input: string | URL | Request): string {
+	return input instanceof Request ? input.url : input.toString()
+}
+
+/** An Anthropic key that lists only Sonnet, as one without access to Opus does. */
+const listsOnlySonnet = () => Promise.resolve(Response.json({ data: [{ id: 'claude-sonnet-5-5' }] }))
+
 /** A LiteLLM proxy in the app's config. */
 const litellm = { name: 'team-litellm', kind: 'openai-compatible', baseUrl: 'https://litellm.example.com/v1' }
 
@@ -419,11 +427,144 @@ describe('model calls', () => {
 
 	test("passes over a compatible server that doesn't list the model, to the next provider that offers it", async () => {
 		// Arrange
-		const { gateway, credentials } = await testGateway({ fetch: () => Promise.resolve(Response.json(teamModels)) })
+		const listings: Record<string, unknown> = {
+			'https://litellm.example.com/v1/models': teamModels,
+			'https://api.anthropic.com/v1/models?limit=1000': { data: [{ id: 'claude-opus-5-5' }] },
+		}
+		const { gateway, credentials } = await testGateway({ fetch: (url) => Promise.resolve(Response.json(listings[urlOf(url)])) })
 		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
 		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
 		const providers = [litellm, { name: 'anthropic', kind: 'anthropic' }]
 		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['claude-opus-5-5'] }),
+		)
+
+		// Assert
+		expect(ResolvedModel.parse(resultOf(answer))).toEqual({ provider: 'anthropic', kind: 'anthropic', model: 'claude-opus-5-5' })
+	})
+
+	test("passes over a provider whose key can't use the model, as the provider lists it, and asks each provider once a run", async () => {
+		// Arrange
+		const listings: Record<string, unknown> = {
+			'https://limited.example.com/v1/models?limit=1000': { data: [{ id: 'claude-sonnet-5-5' }] },
+			'https://api.anthropic.com/v1/models?limit=1000': { data: [{ id: 'claude-opus-5-5' }, { id: 'claude-sonnet-5-5' }] },
+		}
+		const listed = vi.fn<typeof fetch>((url) => Promise.resolve(Response.json(listings[urlOf(url)])))
+		const { gateway, credentials } = await testGateway({ fetch: listed })
+		await credentials.set('provider/limited', 'sk-limited', abortSignal)
+		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		const providers = [
+			{ name: 'limited', kind: 'anthropic', baseUrl: 'https://limited.example.com' },
+			{ name: 'anthropic', kind: 'anthropic' },
+		]
+		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
+		const resolve = (token: number) =>
+			callGateway(gateway, runId, callOf(grant.endpoint, tokenOf(grant, token), { type: 'resolve-model', models: ['claude-opus-5-5'] }))
+
+		// Act
+		const first = await resolve(0)
+		const second = await resolve(1)
+
+		// Assert
+		expect(ResolvedModel.parse(resultOf(first.answer))).toEqual({ provider: 'anthropic', kind: 'anthropic', model: 'claude-opus-5-5' })
+		expect(ResolvedModel.parse(resultOf(second.answer))).toMatchObject({ provider: 'anthropic' })
+		expect(listed).toHaveBeenCalledTimes(2)
+	})
+
+	test("passes a loop over a compatible server that didn't list its models now, to a provider that did", async () => {
+		// Arrange
+		const listings: Record<string, Response> = {
+			'https://litellm.example.com/v1/models': new Response('down', { status: 503 }),
+			'https://api.anthropic.com/v1/models?limit=1000': Response.json({ data: [{ id: 'claude-opus-5-5' }] }),
+		}
+		const { gateway, credentials } = await testGateway({
+			fetch: (url) => Promise.resolve(listings[urlOf(url)] ?? new Response('', { status: 500 })),
+		})
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		const providers = [litellm, { name: 'anthropic', kind: 'anthropic' }]
+		const grant = await gateway.openRun(runId, { tools: [], providers }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['claude-opus-5-5'] }),
+		)
+
+		// Assert
+		expect(ResolvedModel.parse(resultOf(answer))).toEqual({ provider: 'anthropic', kind: 'anthropic', model: 'claude-opus-5-5' })
+	})
+
+	test("tells a loop why a compatible server it needs didn't list its models, not to set its key again", async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway({ fetch: () => Promise.resolve(new Response('down', { status: 503 })) })
+		await credentials.set('provider/team-litellm', 'sk-litellm', abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [], providers: [litellm] }, abortSignal)
+
+		// Act
+		const { answer } = await callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['team-model'] }),
+		)
+
+		// Assert
+		expect(errorOf(answer)).toBe(
+			"Provider team-litellm didn't list its models: it answered 503. It may offer model team-model: try again once it answers.",
+		)
+	})
+
+	test("says a provider's key doesn't list a model it would offer, with the key as the fix", async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway({ fetch: listsOnlySonnet })
+		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+
+		// Act
+		const unavailable = await gateway.unavailableModels([{ name: 'anthropic', kind: 'anthropic' }], [['claude-opus-5-5']], abortSignal)
+
+		// Assert
+		expect(unavailable).toEqual([
+			{
+				message: expect.stringContaining("Provider anthropic doesn't list model claude-opus-5-5 for its key") as unknown,
+				fix: { kind: 'provider-key', provider: 'anthropic' },
+			},
+		])
+	})
+
+	test("stops asking for a run's model lists when the run closes", async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(never)
+		const { gateway, credentials } = await testGateway({ fetch: sent })
+		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [], providers: [{ name: 'anthropic', kind: 'anthropic' }] }, abortSignal)
+		const resolving = callGateway(
+			gateway,
+			runId,
+			callOf(grant.endpoint, tokenOf(grant), { type: 'resolve-model', models: ['claude-opus-5-5'] }),
+		)
+		await vi.waitFor(() => {
+			expect(sent).toHaveBeenCalled()
+		})
+
+		// Act
+		await gateway.closeRun(runId, abortSignal)
+
+		// Assert
+		expect(sent.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+		await resolving.catch(() => undefined)
+	})
+
+	test("goes by pi-ai's catalog when a provider can't list its models now", async () => {
+		// Arrange
+		const { gateway, credentials } = await testGateway({ fetch: () => Promise.reject(new Error('connect ECONNREFUSED')) })
+		await credentials.set('provider/anthropic', 'sk-anthropic', abortSignal)
+		const grant = await gateway.openRun(runId, { tools: [], providers: [{ name: 'anthropic', kind: 'anthropic' }] }, abortSignal)
 
 		// Act
 		const { answer } = await callGateway(

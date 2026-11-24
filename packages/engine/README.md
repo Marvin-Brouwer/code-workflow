@@ -149,11 +149,12 @@ Keys and secrets are sealed in the engine's home, in `gateway/credentials.json`,
 mesh-flow provider list                                     # the config's providers, and whether each has a key
 mesh-flow provider key anthropic < anthropic-key.txt
 mesh-flow provider remove-key anthropic                     # models go to the next provider that offers them
+mesh-flow provider models anthropic                         # asks the provider which models its key may use
 mesh-flow provider kinds                                    # the kinds of provider the gateway can call
 mesh-flow credential set github/token < token.txt           # for connectors' host tools
 ```
 
-Keys work on the home's files, so they work without a running engine, and a running one sees a change at once. `provider list` asks the running engine, since the app it has deployed declares the providers. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
+Keys work on the home's files, so they work without a running engine, and a running one sees a change at once. `provider list` and `provider models` ask the running engine, since the app it has deployed declares the providers; `provider models` then asks the provider itself, with its key. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
 
 `mesh-flow build` (and `dev`) fails when an agent's model isn't offered by any provider kind the config declares: that's a change to the config, not a setting. Every trigger checks the keys before it makes a sandbox: when no provider with a key offers any of an agent's models, the run isn't started and the error says which key to set. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
 
