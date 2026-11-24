@@ -62,7 +62,7 @@ mesh-flow show 2026-11-16-a1b2c3
 mesh-flow login aws
 ```
 
-The settings an app needs follow from what it declares: a provider with a key for each of its models, a loaded connector for each of its host tools. `mesh-flow deploy` and `mesh-flow dev` print what is still missing, and a trigger refuses a run before it makes a sandbox until it's in.
+The settings an app needs follow from what it declares: a key for a provider that offers each agent's model, a loaded connector for each of its host tools. `mesh-flow deploy` and `mesh-flow dev` print what is still missing, and a trigger refuses a run before it makes a sandbox until it's in.
 
 ### Build and deploy an app
 
@@ -141,20 +141,21 @@ The engine follows the schedules of the app's current version, and starts each r
 
 ### Model providers and credentials
 
-Agents name a model id; the engine's gateway ([`@mesh-flow/gateway`](../gateway/README.md)) resolves it to the first provider in your list that offers it, and sends the model calls with that provider's key. Keys and secrets are sealed in the engine's home, in `gateway/credentials.json`, with a key in the OS keychain or, where there is none, `gateway/store.key`. `--no-keychain` keeps it in the file. Nothing of it is in the app, in a `.env` file or in the sandbox.
+The app's config declares its model providers, in order, with `modelProviders` in `defineMeshFlow` (see [`@mesh-flow/core`](../core/README.md#apps)): which kind each is and, for a proxy or a compatible server, its base URL. That's in git, so nobody adds a provider or a base URL here. Each user only sets the keys, and can leave a provider without one. Agents name a model id, or several to fall back on; the engine's gateway ([`@mesh-flow/gateway`](../gateway/README.md)) resolves them to the first provider in the config's order that offers the model and has a key, and sends the model calls with that key.
+
+Keys and secrets are sealed in the engine's home, in `gateway/credentials.json`, with a key in the OS keychain or, where there is none, `gateway/store.key`. `--no-keychain` keeps it in the file. Nothing of it is in the app, in a `.env` file or in the sandbox.
 
 ```bash
+mesh-flow provider list                                     # the config's providers, and whether each has a key
+mesh-flow provider key anthropic < anthropic-key.txt
+mesh-flow provider remove-key anthropic                     # models go to the next provider that offers them
 mesh-flow provider kinds                                    # the kinds of provider the gateway can call
-mesh-flow provider add anthropic --kind anthropic < anthropic-key.txt
-mesh-flow provider add router --kind openrouter < openrouter-key.txt
-mesh-flow provider order router anthropic                   # model first: router is asked first
-mesh-flow provider list
-mesh-flow credential set github/token < token.txt          # for connectors' host tools
+mesh-flow credential set github/token < token.txt           # for connectors' host tools
 ```
 
-These work on the home's files, so they work without a running engine, and a running one sees a change at once. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
+Keys work on the home's files, so they work without a running engine, and a running one sees a change at once. `provider list` asks the running engine, since the app it has deployed declares the providers. `mesh-flow show <run>` lists what a finished run's model calls used, per model, with the cost from pi-ai's prices.
 
-The build lists the models of the app's agents. Every trigger checks them before it makes a sandbox: when no provider offers one, or the one that does has no key, the run isn't started and the error says what to set up. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
+`mesh-flow build` (and `dev`) fails when an agent's model isn't offered by any provider kind the config declares: that's a change to the config, not a setting. Every trigger checks the keys before it makes a sandbox: when no provider with a key offers any of an agent's models, the run isn't started and the error says which key to set. A webhook delivery gets a 503 then, and a schedule tick is logged and skipped.
 
 ### The UI
 
@@ -177,7 +178,7 @@ const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
 const deployment = await openDeployment('/var/lib/my-app/mesh-flow/app', abortSignal)
 await deployment.deploy('/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
 const gatewayHome = await openGatewayHome('/var/lib/my-app/mesh-flow/gateway', abortSignal)
-const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials, providers: gatewayHome.providers })
+const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials })
 const engine = await Engine.open({ backend: microsandboxBackend(), store, deployment, gateway, log: console.error }, abortSignal)
 
 const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })

@@ -1,6 +1,6 @@
 # `@mesh-flow/ui`
 
-The mesh-flow UI: the runs and their requests, starting a workflow from its button, and the settings (providers, keys and credentials), in a browser on the machine the engine runs on. It's a wireframe on purpose: plain elements, borders, greys. The design comes later.
+The mesh-flow UI: the runs and their requests, starting a workflow from its button, and the settings (provider keys and credentials), in a browser on the machine the engine runs on. It's a wireframe on purpose: plain elements, borders, greys. The design comes later.
 
 The page is a [rooted](https://github.com/rooted-org/rooted) app. Its server, which `mesh-flow ui` loads, serves the page and an API over the engine's control socket and the home's settings, on 127.0.0.1 only.
 
@@ -61,7 +61,7 @@ This is the local way in. The token only goes to the terminal, never on a comman
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/app`, `GET /api/engine/app/missing` | the deployed app (`null` before the first deploy), and what it still needs before it can run |
-| `/api/settings/providers`, `/providers/:name`, `/providers/:name/key`, `/provider-order`, `/provider-kinds` | model providers and their keys, as `mesh-flow provider` |
+| `GET /api/settings/providers`, `PUT` and `DELETE /api/settings/providers/:name/key` | the providers the deployed app's config declares, whether each has a key, and setting and removing a key, as `mesh-flow provider`; the list is 503 when no engine runs |
 | `/api/settings/credentials`, `/credentials/:name` | credential names, setting and removing them; values never come back |
 | `GET /api/settings/connectors` | the connector packages the engine loads |
 
@@ -79,7 +79,7 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 | `/start/` | the app's user triggers, when it has more than one | pick one |
 | `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
 | `/setup/` | what the app still needs before a run can start | set what's missing |
-| `/settings/providers/` | providers in the order models are looked up, whether each has a key | add one, set a key, move one up or down, remove one |
+| `/settings/providers/` | the providers the app's config declares, in the order models are looked up: kind, base URL, whether each has a key | set a key, remove a key |
 | `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
 
@@ -87,7 +87,7 @@ Runs and sign-ins update as they change. The runs list and the sign-ins follow t
 
 The run view reads top to bottom as bars, one per step: a tool call from code (titled by its `describe` line), an agent (its text, with its calls as chips that open their input and result), a question, a wait, and a node of `inDependencyOrder` with its own bars inside. Bars are closed but for the latest and failed ones.
 
-Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: a flat object of text, numbers, yes or no and options gets a field each, anything else a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider, a provider's key or a credential.
+Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: a flat object of text, numbers, yes or no and options gets a field each, anything else a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider's key or a credential. A model no provider in the config offers only gets its message: that's a change to the config in git.
 
 ## Develop
 

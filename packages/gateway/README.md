@@ -15,17 +15,29 @@ const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
 
 await home.credentials.set('provider/anthropic', 'sk-ant-...', abortSignal)
-await home.providers.put({ name: 'anthropic', kind: 'anthropic' }, abortSignal)
-await home.providers.put({ name: 'router', kind: 'openrouter' }, abortSignal)
 ```
 
 Every read opens the file again, so a secret set with the CLI counts at once in a running engine.
 
 ## Model providers
 
-A provider is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name of the user's, with an optional base URL of its own and its API key in the credential store as `provider/<name>`. The order matters: an agent names a model id, and the gateway resolves it **model first**, to the first provider that offers it.
+The app's config declares its providers, in git: each is one of pi-ai's providers (`anthropic`, `openai`, `openrouter`, `groq`, ...) under a name, with an optional base URL of its own, for a proxy or a compatible server. Only the API key is per user, in the credential store as `provider/<name>`, and a user can leave a provider without one. A run's providers come with `openRun`, from the app version it started on:
 
-`gateway.unavailableModels(models, abortSignal)` says why each of a list of models can't run now, which a trigger uses to refuse a run before it starts.
+```ts
+const access = {
+	tools: [],
+	providers: [
+		{ name: 'anthropic', kind: 'anthropic' },
+		{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
+	],
+}
+const grant = await gateway.openRun('run-1', access, abortSignal)
+```
+
+An agent names a model id, or several in the order they're tried. The gateway resolves them **model first**: the agent's first model that a provider with a key offers, on the first such provider in the config's order.
+
+- `gateway.unavailableModels(providers, agentModels, abortSignal)` says why each agent can't run now: the provider that offers its model has no key, or no provider in the config offers it. A trigger uses it to refuse a run before it starts.
+- `undeclaredModels(providers, agentModels)` says which agent models no declared provider kind offers at all, and which kinds the gateway can't send for. `mesh-flow build` fails with those: it's a change to the config, not a setting.
 
 The provider's SDK runs in the sandbox, as pi-ai always runs it, and makes the provider's own request. The gateway only checks it and adds the key:
 
@@ -54,7 +66,7 @@ import type { ConnectorRegistry } from '@mesh-flow/protocol'
 import { npmRegistry } from '@mesh-flow/toolchain-node'
 
 const abortSignal = AbortSignal.timeout(10_000)
-const { directory, credentials, providers } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
+const { directory, credentials } = await openGatewayHome('/srv/mesh-flow/gateway', abortSignal)
 
 const packages: ConnectorRegistry = {
 	connector: 'cloud',
@@ -74,7 +86,6 @@ const cloud: ResolveRegistryTarget = async ({ registry, path }, fetchAbortSignal
 const gateway = openGateway({
 	home: directory,
 	credentials,
-	providers,
 	registries: { cloud },
 })
 const access = {
@@ -216,7 +227,7 @@ import type { CallAnswer, CallMessage } from '@mesh-flow/protocol'
 
 const abortSignal = AbortSignal.timeout(10_000)
 const home = await openGatewayHome('/home/me/.local/share/mesh-flow/gateway', abortSignal)
-const gateway = openGateway({ home: home.directory, credentials: home.credentials, providers: home.providers, tools: [] })
+const gateway = openGateway({ home: home.directory, credentials: home.credentials, tools: [] })
 
 // Before the runtime starts: the run's own endpoint, for the host tools its app lists. The engine
 // writes the grant to the mailbox's `gateway.json`, where the runtime takes it.
