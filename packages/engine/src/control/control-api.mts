@@ -2,7 +2,7 @@ import { TriggerReference } from '@mesh-flow/protocol'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
-import { noAppMessage, type Deployment, type AppVersion } from '../app/deployment.mts'
+import { noAppMessage, type Deployment, type DeploymentVersion } from '../app/deployment.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
 import { engineEventStream } from './engine-event-stream.mts'
@@ -30,7 +30,7 @@ export interface ControlApp {
 }
 
 /** What the control API says about the deployed app. */
-function shownApp({ version, manifest }: AppVersion) {
+function shownApp({ version, manifest }: DeploymentVersion) {
 	return { version, manifest }
 }
 

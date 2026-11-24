@@ -5,7 +5,7 @@
  *
  * @module
  */
-export { openDeployment, type Deployment, type AppVersion } from '../app/deployment.mts'
+export { openDeployment, type Deployment, type DeploymentVersion } from '../app/deployment.mts'
 export { controlClient, ControlError, DeployedApp, DeployOutcome, type ControlClient } from '../control/control-client.mts'
 export { AnswerBody, controlApi, engineErrorStatus, StartRunBody, type ControlApiOptions } from '../control/control-api.mts'
 export { ShownConnector } from '../control/shown-connector.mts'

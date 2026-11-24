@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppManifest } from '@mesh-flow/protocol'
 import { describe, expect, test, vi } from 'vitest'
-import { openDeployment, type AppVersion, type Deployment } from '../src/app/deployment.mts'
+import { openDeployment, type DeploymentVersion, type Deployment } from '../src/app/deployment.mts'
 import { withPackedApp } from '../src/cli/with-packed-app.mts'
 import { deferred } from './support/deferred.mts'
 import { builtApp, runtimeScript } from './support/test-app.mts'
@@ -13,7 +13,7 @@ const abortSignal = new AbortController().signal
 const hello = { hello: runtimeScript(`mailbox.send({ type: 'succeeded' })`) }
 
 /** Builds a test app with `workflows` and deploys it. */
-async function deployBuilt(deployment: Deployment, workflows: Record<string, string>): Promise<AppVersion> {
+async function deployBuilt(deployment: Deployment, workflows: Record<string, string>): Promise<DeploymentVersion> {
 	return withPackedApp(await builtApp(workflows), (tarball) => deployment.deploy(tarball, abortSignal), abortSignal)
 }
 

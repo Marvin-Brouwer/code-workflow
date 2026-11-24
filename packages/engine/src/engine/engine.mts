@@ -18,7 +18,7 @@ import {
 	type WorkflowsDescription,
 } from '@mesh-flow/protocol'
 import { abortable, SandboxSpecification, type PausedSandbox, type Sandbox, type SandboxBackend } from '@mesh-flow/sandbox'
-import { noAppMessage, type AppVersion, type Deployment } from '../app/deployment.mts'
+import { noAppMessage, type DeploymentVersion, type Deployment } from '../app/deployment.mts'
 import { messageOf } from '../errors.mts'
 import { SandboxChannel } from '../mailbox/sandbox-channel.mts'
 import { applyRunChange, type RunChange } from '../runs/run-change.mts'
@@ -300,7 +300,7 @@ export class Engine {
 	 */
 	async #copyApp(
 		id: RunId,
-		deployed: AppVersion | undefined,
+		deployed: DeploymentVersion | undefined,
 		options: StartRunOptions,
 		waitSignal: AbortSignal,
 	): Promise<{ app: RunApp; listed: TriggerDescription }> {

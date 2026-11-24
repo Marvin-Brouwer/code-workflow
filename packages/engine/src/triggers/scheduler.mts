@@ -1,6 +1,6 @@
 import type { TriggerDescription } from '@mesh-flow/protocol'
 import { Cron } from 'croner'
-import type { AppVersion } from '../app/deployment.mts'
+import type { DeploymentVersion } from '../app/deployment.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { wakeAt } from '../engine/wake-at.mts'
 import { messageOf } from '../errors.mts'
@@ -19,7 +19,7 @@ export interface SchedulerOptions {
 /** Starts schedule runs on the wall clock, for the schedules it was last given. */
 export interface Scheduler {
 	/** Follows this app version's schedules from now on: new ones are armed, changed or gone ones disarmed. */
-	update(app: AppVersion | undefined): void
+	update(app: DeploymentVersion | undefined): void
 	/** Stops every timer, and arms none from then on. Runs that were started go on. */
 	close(): void
 }

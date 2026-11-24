@@ -13,7 +13,7 @@ import { hasErrorCode, messageOf } from '../errors.mts'
 import { copyTarball } from './copy-tarball.mts'
 
 /** One deployed version of the app: its tarball and what it declares. A version never changes. */
-export interface AppVersion {
+export interface DeploymentVersion {
 	/** The first characters of the tarball's SHA-256: the same build deploys as the same version. */
 	readonly version: string
 	readonly manifest: AppManifest
@@ -27,14 +27,14 @@ export interface AppVersion {
  */
 export interface Deployment {
 	/** Makes the built app packed in `tarball` the current version. */
-	readonly deploy: (tarball: string, abortSignal: AbortSignal) => Promise<AppVersion>
+	readonly deploy: (tarball: string, abortSignal: AbortSignal) => Promise<DeploymentVersion>
 	/** The current version, if the app was ever deployed. */
-	readonly current: () => AppVersion | undefined
+	readonly current: () => DeploymentVersion | undefined
 	/**
 	 * Calls `use` with the current version, and keeps that version on disk until what `use` returns
 	 * settles, also when a deploy makes another version current meanwhile. For copying it.
 	 */
-	readonly withCurrent: <Result>(use: (current: AppVersion | undefined) => Promise<Result>) => Promise<Result>
+	readonly withCurrent: <Result>(use: (current: DeploymentVersion | undefined) => Promise<Result>) => Promise<Result>
 	/** Waits for the writes under way and refuses new ones, so the engine's home can be let go. */
 	readonly close: () => Promise<void>
 }
@@ -111,7 +111,7 @@ export async function openDeployment(
 				}
 				abortSignal.throwIfAborted()
 				await replaceFile(path.join(root, currentFile), version, { abortSignal })
-				const deployed: AppVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
+				const deployed: DeploymentVersion = { version, manifest, tarball: path.join(folder, tarballFile) }
 				current = deployed
 				await removeOldVersions()
 				return deployed
@@ -159,7 +159,7 @@ async function pathExists(file: string): Promise<boolean> {
  * The version `current` names, or nothing before the first deploy, when there is no `current`. A
  * `current` that names no complete version, such as one whose folder was removed by hand, throws.
  */
-async function loadCurrent(root: string): Promise<AppVersion | undefined> {
+async function loadCurrent(root: string): Promise<DeploymentVersion | undefined> {
 	const named = await readFile(path.join(root, currentFile), 'utf8').catch((error: unknown) => {
 		if (hasErrorCode(error, 'ENOENT')) return undefined
 		throw error

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { AppVersion } from '../app/deployment.mts'
+import type { DeploymentVersion } from '../app/deployment.mts'
 import { startRunTimeout, type Engine } from '../engine/engine.mts'
 import { EngineError } from '../engine/engine-error.mts'
 import { messageOf } from '../errors.mts'
@@ -13,7 +13,7 @@ import type { WebhookSecrets } from './webhook-secrets.mts'
 export interface WebhookApiOptions {
 	readonly engine: Pick<Engine, 'runWithKey' | 'startRun'>
 	/** The current version of the deployed app, which says what webhooks it has. */
-	readonly current: () => AppVersion | undefined
+	readonly current: () => DeploymentVersion | undefined
 	readonly secrets: WebhookSecrets
 	/** Where the details of a refused delivery go; the sender only gets a short answer. */
 	readonly log: (message: string) => void
