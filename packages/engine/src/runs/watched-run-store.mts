@@ -1,0 +1,38 @@
+import { fanOut } from '../fan-out.mts'
+import type { RunId } from './run-id.mts'
+import type { RunStore } from './run-store.mts'
+
+/** Says which run was written to, once its record or events are written, for views that follow the runs. */
+export interface RunWriteFeed {
+	/** Calls `listener` with a run's id after each write to it, until `abortSignal` aborts. */
+	readonly onChange: (listener: (run: RunId) => void, abortSignal: AbortSignal) => void
+}
+
+/** A run store that tells its feed about every write. */
+export interface WatchedRunStore {
+	readonly store: RunStore
+	readonly writes: RunWriteFeed
+}
+
+/**
+ * `store`, telling `writes` about each record saved, events appended and run removed, after the
+ * write. A listener that reads the run then sees the change.
+ */
+export function watchedRunStore(store: RunStore): WatchedRunStore {
+	const written = fanOut<RunId>()
+	const after = async (run: RunId, writing: Promise<void>): Promise<void> => {
+		await writing
+		written.announce(run)
+	}
+	return {
+		store: Object.freeze<RunStore>({
+			...store,
+			save: (record) => after(record.id, store.save(record)),
+			appendEvents: (id, events) => (events.length === 0 ? Promise.resolve() : after(id, store.appendEvents(id, events))),
+			removeRun: (id) => after(id, store.removeRun(id)),
+		}),
+		writes: Object.freeze<RunWriteFeed>({
+			onChange: written.onChange,
+		}),
+	}
+}

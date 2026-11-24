@@ -2,21 +2,14 @@ import { component, optional } from '@rooted/components'
 import { z } from 'zod'
 import { Table } from '../_layout/table.mts'
 import { read, send, type Answer } from '../_shared/api.mts'
-import { poll } from '../_shared/poll.mts'
-import { ConnectorPackage, ShownConnector, SignInState } from '../_shared/settings.mts'
+import { ConnectorPackage, ShownConnector } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
-
-const webProtocols: readonly string[] = ['http:', 'https:']
-
-/** Whether `url` is a web address, and so safe to link to. */
-function isWebAddress(url: string): boolean {
-	return webProtocols.includes(URL.parse(url)?.protocol ?? '')
-}
+import { SignInsUnderWay } from './sign-ins.mts'
 
 /**
  * The connector packages the engine loads, and with a running engine, the connectors it loaded and
- * their sign-ins: start one, and see where to sign in and with which code.
+ * their sign-ins: start one, and see where to sign in and with which code below.
  */
 export const ConnectorsPage = component({
 	name: 'connectors-page',
@@ -26,9 +19,6 @@ export const ConnectorsPage = component({
 			classes: styles.section,
 		})
 		const loaded = element('div', {
-			classes: styles.section,
-		})
-		const signIns = element('div', {
 			classes: styles.section,
 		})
 		const status = element('p', {
@@ -110,63 +100,11 @@ export const ConnectorsPage = component({
 			})
 		}
 
-		const signInAt = (prompt: SignInState['prompt']) => {
-			if (prompt === undefined) return 'Waiting for a code'
-			if (!isWebAddress(prompt.url)) return prompt.url
-			return element('a', {
-				href: prompt.url,
-				target: '_blank',
-				rel: 'noreferrer',
-				textContent: prompt.url,
-			})
-		}
-
-		const signInRow = ({ connector, prompt, error }: SignInState) =>
-			element('tr', {
-				children: [
-					element('td', {
-						textContent: connector,
-					}),
-					element('td', {
-						children: signInAt(prompt),
-					}),
-					element('td', {
-						children:
-							prompt === undefined
-								? undefined
-								: element('code', {
-										textContent: prompt.code,
-									}),
-					}),
-					element('td', {
-						textContent: prompt === undefined ? '' : new Date(prompt.expiresAt).toLocaleTimeString(),
-					}),
-					element('td', {
-						textContent: error ?? '',
-					}),
-				],
-			})
-
-		const signInsView = (underWay: Answer<SignInState[]>) => {
-			if (!underWay.ok || underWay.value.length === 0)
-				return element('p', {
-					classes: styles.muted,
-					textContent: 'No sign-ins under way.',
-				})
-			return create(Table, {
-				headings: ['Connector', 'Sign in at', 'Code', 'Until', 'Last try'],
-				rows: underWay.value.map(signInRow),
-			})
-		}
-
 		const showPackages = async () => {
 			packages.replaceChildren(packagesView(await read('/settings/connectors', z.array(ConnectorPackage), signal)))
 		}
 		const showLoaded = async () => {
 			loaded.replaceChildren(loadedView(await read('/engine/connectors', z.array(ShownConnector), signal)))
-		}
-		const showSignIns = async (abortSignal: AbortSignal) => {
-			signIns.replaceChildren(signInsView(await read('/engine/sign-ins', z.array(SignInState), abortSignal)))
 		}
 
 		append(
@@ -192,12 +130,8 @@ export const ConnectorsPage = component({
 			}),
 			loaded,
 			status,
-			element('h2', {
-				textContent: 'Sign-ins under way',
-			}),
-			signIns,
+			create(SignInsUnderWay),
 		)
 		await Promise.all([showPackages(), showLoaded()])
-		poll(showSignIns, signal)
 	},
 })

@@ -3,6 +3,7 @@ import { abortable } from '@mesh-flow/sandbox'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { messageOf } from '../errors.mts'
 import { EngineError } from './engine-error.mts'
+import { fanOut } from '../fan-out.mts'
 import { signInFailedLine, signInPromptMessage } from './sign-in-lines.mts'
 import { shownSignInPrompt, type SignInState } from './sign-in-state.mts'
 
@@ -22,6 +23,11 @@ export interface SignIns {
 	readonly waitFor: (connector: string, abortSignal: AbortSignal) => Promise<void>
 	/** The sign-ins under way. */
 	readonly list: () => SignInState[]
+	/**
+	 * Calls `listener` with a connector's name each time its sign-in starts, shows a new code, fails a
+	 * try or ends, until `abortSignal` aborts. For views that follow the sign-ins.
+	 */
+	readonly onChange: (listener: (connector: string) => void, abortSignal: AbortSignal) => void
 	/** Stops every sign-in, also those nobody waits for, such as when the engine shuts down. */
 	readonly close: () => void
 }
@@ -92,11 +98,14 @@ export function openSignIns(options: SignInsOptions): SignIns {
 	const idle = options.idle ?? defaultIdle
 	const signInTo = new Map(options.connectors.flatMap(({ name, signIn }) => (signIn === undefined ? [] : [[name, signIn] as const])))
 	const underWay = new Map<string, SignIn>()
+	const signInChanges = fanOut<string>()
 
 	/** Drops `signIn` from those under way, with its idle timer. */
 	const forget = (connector: string, signIn: SignIn) => {
 		clearTimeout(signIn.idle)
-		if (underWay.get(connector) === signIn) underWay.delete(connector)
+		if (underWay.get(connector) !== signIn) return
+		underWay.delete(connector)
+		signInChanges.announce(connector)
 	}
 
 	const stop = (connector: string, signIn: SignIn, reason: string) => {
@@ -118,6 +127,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 							delete shown.error
 							shown.prompt = shownSignInPrompt(prompt)
 							log(signInPromptMessage(connector, shown.prompt))
+							signInChanges.announce(connector)
 						},
 						abortSignal,
 					})
@@ -130,6 +140,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 					if (message !== shown.error) log(signInFailedLine(connector, message))
 					shown.error = message
 					delete shown.prompt
+					signInChanges.announce(connector)
 					await sleep(retryWaits[Math.min(failedTries, retryWaits.length - 1)] ?? retryWaits[0], abortSignal)
 					failedTries++
 				}
@@ -142,6 +153,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 		}
 		void signIn.settled.then(forgetThisSignIn, forgetThisSignIn)
 		underWay.set(connector, signIn)
+		signInChanges.announce(connector)
 		return signIn
 	}
 
@@ -171,6 +183,7 @@ export function openSignIns(options: SignInsOptions): SignIns {
 			}
 		},
 		list: () => [...underWay].map(([connector, { shown }]) => ({ connector, ...shown })),
+		onChange: signInChanges.onChange,
 		close: () => {
 			for (const [connector, signIn] of underWay) stop(connector, signIn, 'The engine is shutting down.')
 		},

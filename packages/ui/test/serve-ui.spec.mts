@@ -1,8 +1,10 @@
+import { request } from 'node:http'
 import { createServer, type Socket } from 'node:net'
 import { duration } from '@mesh-flow/duration'
 import { controlSocketPath, openEngineGatewayHome } from '@mesh-flow/engine'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { send, servedUi, testPage } from './support/served-ui.mts'
+import { standInEngine } from './support/stand-in-engine.mts'
 
 const abortSignal = duration.of('20s').toAbortSignal()
 
@@ -26,15 +28,31 @@ describe('access', () => {
 	})
 
 	test.each([
-		{ request: 'another token', route: '/?token=not-it', cookie: undefined, status: 401 },
-		{ request: 'no cookie', route: '/api/settings/providers', cookie: undefined, status: 401 },
-		{ request: 'another cookie', route: '/api/settings/providers', cookie: 'not-it', status: 401 },
-	])('refuses $request', async ({ route, cookie, status }) => {
+		{ request: 'another token', route: '/?token=not-it', cookie: undefined, headers: {}, status: 401 },
+		{ request: 'no cookie', route: '/api/settings/providers', cookie: undefined, headers: {}, status: 401 },
+		{ request: 'another cookie', route: '/api/settings/providers', cookie: 'not-it', headers: {}, status: 401 },
+		{
+			request: "the engine's event stream without the cookie",
+			route: '/api/engine/events',
+			cookie: undefined,
+			headers: { accept: 'text/event-stream' },
+			status: 401,
+		},
+		{
+			request: "a run's event stream without the cookie",
+			route: '/api/engine/runs/run-000000000001/events',
+			cookie: undefined,
+			headers: { accept: 'text/event-stream' },
+			status: 401,
+		},
+	])('refuses $request', async ({ route, cookie, headers, status }) => {
 		// Arrange
 		const { url, cookieName } = await servedUi()
 
 		// Act
-		const refused = await send(url, route, { headers: cookie === undefined ? {} : { cookie: `${cookieName}=${cookie}` } })
+		const refused = await send(url, route, {
+			headers: cookie === undefined ? headers : { ...headers, cookie: `${cookieName}=${cookie}` },
+		})
 
 		// Assert
 		expect(refused.status).toBe(status)
@@ -306,5 +324,38 @@ describe.skipIf(process.platform === 'win32')('closing', () => {
 		// Assert
 		expect(await open).toBeInstanceOf(Error)
 		await expect.poll(() => engine.closedSockets.length).toBe(1)
+	})
+})
+
+describe.skipIf(process.platform === 'win32')("the engine's change stream", () => {
+	test('passes through, and does not hold up closing while it is open', async () => {
+		// Arrange
+		const { url, cookie, home, stopping, served } = await servedUi()
+		await standInEngine(home)
+		const stream = new Promise<{ text: () => string }>((resolve, reject) => {
+			const outgoing = request(
+				{ host: url.hostname, port: url.port, path: '/api/engine/events', headers: { host: url.host, cookie } },
+				(response) => {
+					let text = ''
+					response.on('data', (chunk: Buffer) => {
+						text += chunk.toString('utf8')
+						resolve({ text: () => text })
+					})
+					response.on('error', () => undefined)
+				},
+			)
+			outgoing.on('error', reject)
+			outgoing.end()
+		})
+		const { text } = await stream
+
+		// Act
+		const started = Date.now()
+		stopping.abort()
+		await served.closed
+
+		// Assert
+		expect(text()).toContain('event: ready')
+		expect(Date.now() - started).toBeLessThan(duration.of('2s').to('ms'))
 	})
 })

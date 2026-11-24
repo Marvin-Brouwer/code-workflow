@@ -4,6 +4,19 @@ Deterministic development pipelines
 Workflows are plain TypeScript in git that dispatch to AI agents where that makes sense. Start
 with [`docs/design.md`](docs/design.md) and [`CLAUDE.md`](CLAUDE.md).
 
+## Try it
+
+One command per example app builds everything, then runs the engine, the app (redeployed on
+every change) and the UI together. Open the UI link it prints to add providers and credentials.
+
+```sh
+pnpm start:github-issue
+pnpm start:big-repo
+```
+
+The engine's home is `.mesh-flow/home`, kept between starts. Arguments after the command go to
+`mesh-flow serve`, such as `pnpm start:github-issue --backend gvisor`. Ctrl+C stops all three.
+
 ## Packages
 
 | Package | What |

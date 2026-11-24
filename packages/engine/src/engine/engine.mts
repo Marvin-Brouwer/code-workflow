@@ -24,6 +24,7 @@ import { applyRunChange, type RunChange } from '../runs/run-change.mts'
 import { newRunId, RunId } from '../runs/run-id.mts'
 import { finishedStatuses, type RunApp, type RunRecord, type RunStatus } from '../runs/run-record.mts'
 import type { RunStore } from '../runs/run-store.mts'
+import { watchedRunStore, type RunWriteFeed } from '../runs/watched-run-store.mts'
 import type { ConnectorSettingsCheck } from './connector-settings-check.mts'
 import { EngineError } from './engine-error.mts'
 import { reconcile } from './reconcile.mts'
@@ -84,7 +85,7 @@ export interface StartRunOptions {
 	 */
 	readonly input?: unknown
 	/** Names what the run is for, such as a webhook delivery. A run with this key already is returned instead. */
-	readonly key?: string
+	readonly key?: string | undefined
 	/** Bounds copying the app and saving the record. The run itself goes on in the background. */
 	readonly abortSignal: AbortSignal
 }
@@ -138,6 +139,7 @@ export const startRunTimeout = duration.of('1m')
 export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
+	readonly #writes: RunWriteFeed
 	readonly #apps: AppStore
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
@@ -156,7 +158,9 @@ export class Engine {
 
 	private constructor(options: EngineOptions) {
 		this.#backend = options.backend
-		this.#store = options.store
+		const watched = watchedRunStore(options.store)
+		this.#store = watched.store
+		this.#writes = watched.writes
 		this.#apps = options.apps
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
@@ -196,9 +200,30 @@ export class Engine {
 
 	/** One run as it is now. Throws `not-found` for an unknown id. */
 	get(id: string): RunRecord {
-		const record = RunId.safeParse(id).success ? this.#records.get(id) : undefined
+		const record = this.find(id)
 		if (!record) throw new EngineError('not-found', `There is no run ${id}.`)
 		return record
+	}
+
+	/** One run as it is now, or `undefined` when there is none of that id, such as after it was removed. */
+	find(id: string): RunRecord | undefined {
+		return RunId.safeParse(id).success ? this.#records.get(id) : undefined
+	}
+
+	/**
+	 * Calls `listener` with a run's id each time its record or events change, after the change is
+	 * written, until `abortSignal` aborts or the engine shuts down. For views that follow the runs.
+	 */
+	onRunChange(listener: (run: RunId) => void, abortSignal: AbortSignal): void {
+		this.#writes.onChange(listener, this.#withLifetime(abortSignal))
+	}
+
+	/**
+	 * Calls `listener` with a connector's name each time its sign-in starts, shows a new code, fails a
+	 * try or ends, until `abortSignal` aborts or the engine shuts down. For views that follow the sign-ins.
+	 */
+	onSignInChange(listener: (connector: string) => void, abortSignal: AbortSignal): void {
+		this.#signIns?.onChange(listener, this.#withLifetime(abortSignal))
 	}
 
 	/** The sign-ins under way, for runs or for `mesh-flow login`, with where to sign in. */

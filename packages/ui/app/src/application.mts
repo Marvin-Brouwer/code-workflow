@@ -5,6 +5,7 @@ import { EngineBanner } from './_layout/engine-banner.mts'
 import { NavigationMenu } from './_layout/navigation-menu.mts'
 import { appRoutes } from './_routes.g.mts'
 import { watchEngineStatus } from './_shared/engine-status.mts'
+import { watchEngineEvents } from './_shared/live-events.mts'
 import styles from './application.css'
 import { HomePage } from './navigation/home.mts'
 import { NotFoundPage } from './navigation/not-found.mts'
@@ -21,6 +22,7 @@ export const Application = component({
 	styles,
 	onMount({ append, element, create, signal }) {
 		watchEngineStatus(signal)
+		watchEngineEvents(signal)
 		append(
 			element('header', {
 				children: [create(NavigationMenu), create(EngineBanner)],
