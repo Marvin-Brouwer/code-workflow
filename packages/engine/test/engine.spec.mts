@@ -316,7 +316,7 @@ if (!restarted) {
 		const unlisted = deployed.engine.startRun({ ...userRun('missing'), abortSignal: signal })
 
 		// Assert
-		await expect(undeployed).rejects.toMatchObject({ code: 'not-found', message: 'There is no deployment: deploy it first.' })
+		await expect(undeployed).rejects.toMatchObject({ code: 'not-found', message: 'There is no app: deploy it first.' })
 		await expect(unlisted).rejects.toMatchObject({
 			code: 'not-found',
 			message: `Version ${version} of the app has no user trigger missing.`,

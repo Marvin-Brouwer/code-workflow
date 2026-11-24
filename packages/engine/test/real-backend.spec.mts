@@ -44,7 +44,7 @@ async function openBackend(): Promise<SandboxBackend> {
 	})
 }
 
-/** The deployment in `fixtures/restoring-app`, which runs `npm install` with the real runtime. */
+/** The app in `fixtures/restoring-app`, which runs `npm install` with the real runtime. */
 const restoringApp = path.join(import.meta.dirname, 'fixtures', 'restoring-app')
 
 /**
