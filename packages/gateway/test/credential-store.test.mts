@@ -91,4 +91,15 @@ describe('openCredentialStore', () => {
 		// Assert
 		await expect(setting).rejects.toThrow()
 	})
+
+	test.each(['a/./b', 'x/../provider-order', '..'])('refuses %s, which a URL path would fold away', async (name) => {
+		// Arrange
+		const { credentials } = await openTestStore()
+
+		// Act
+		const setting = credentials.set(name, 'secret', abortSignal)
+
+		// Assert
+		await expect(setting).rejects.toThrow('No part of the name can be . or ..')
+	})
 })

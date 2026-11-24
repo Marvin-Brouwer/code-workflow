@@ -11,9 +11,12 @@ export const credentialsFileName = 'credentials.json'
 
 /**
  * Names a credential, such as `provider/anthropic` or `webhook/team/fix-issue`: letters, digits and
- * `_ . / -`, up to 128.
+ * `_ . / -`, up to 128. No part between slashes is `.` or `..`, which a URL path would fold away.
  */
-export const CredentialName = z.string().regex(/^[\w./-]{1,128}$/, 'Use 1 to 128 letters, digits, _, ., / or -.')
+export const CredentialName = z
+	.string()
+	.regex(/^[\w./-]{1,128}$/, 'Use 1 to 128 letters, digits, _, ., / or -.')
+	.refine((name) => !name.split('/').some((part) => part === '.' || part === '..'), 'No part of the name can be . or ..')
 export type CredentialName = z.infer<typeof CredentialName>
 
 /** Reads credentials. What host tools get: they never write. */

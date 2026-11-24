@@ -139,6 +139,15 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
   it is.
 - The settings functions the CLI's provider commands had inline (`putProvider`, `setProviderKey`,
   `removeProvider`, `listProviders`) moved into the engine, so the CLI and the UI share them.
+- The engine's control API lists the connectors it loaded (`GET /connectors`: name, package, whether
+  it signs in), so the connectors page can offer a sign-in by connector name; the settings only know
+  package names.
+- The wizard's fix-to-form mapping is a switch in the `FixForm` component, too small to test apart.
+  The tests cover the JSON Schema form logic (`fieldsOf`, `valueOf`, `checkAgainst`) and that the
+  page's copies of the engine's answer schemas match the originals, since the page can't import the
+  Node packages.
+- Forms check a value with `z.fromJSONSchema` of the same schema the engine checks it with; a schema
+  zod can't read is left to the server.
 - The page's Vite config is plain, with rooted's CSS loader and route discovery, not
   `rootedManifest` from `@rooted/application`: its PWA, SEO and pre-rendering are for public sites.
 

@@ -8,6 +8,7 @@ import type { SandboxBackend } from '@mesh-flow/sandbox'
 import { openAppStore, type AppStore } from '../apps/app-store.mts'
 import type { LoadedConnector } from '../connectors/load-connectors.mts'
 import { controlApi } from '../control/control-api.mts'
+import type { ShownConnector } from '../control/shown-connector.mts'
 import { controlSocketPath, listenOnControlSocket } from '../control/control-socket.mts'
 import { connectorSettingsOf } from '../engine/connector-settings-check.mts'
 import { Engine, type CloseDeadlines } from '../engine/engine.mts'
@@ -93,10 +94,16 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let engine: Engine
 	let apps: AppStore
 	let gatewayHome: GatewayHome
+	let shownConnectors: ShownConnector[]
 	try {
 		gatewayHome = await openEngineGatewayHome(options.home, options.abortSignal, options)
 		log(`The gateway's credentials are sealed with a key in ${gatewayHome.keyLocation}.`)
 		const connectors = (await options.connectors?.(gatewayHome.credentials, options.abortSignal)) ?? []
+		shownConnectors = connectors.map((connector) => ({
+			name: connector.name,
+			package: connector.package,
+			signsIn: connector.signIn !== undefined,
+		}))
 		const gateway = openGateway({
 			home: gatewayHome.directory,
 			credentials: gatewayHome.credentials,
@@ -128,7 +135,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		scheduler.update(apps.list())
 	}
 	armSchedules()
-	const api = getRequestListener(controlApi(engine, { store: apps, changed: armSchedules }).fetch)
+	const api = getRequestListener(
+		controlApi(engine, {
+			apps: { store: apps, changed: armSchedules },
+			connectors: shownConnectors,
+		}).fetch,
+	)
 	listener = (request, response) => {
 		void api(request, response)
 	}

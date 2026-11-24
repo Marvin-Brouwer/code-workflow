@@ -6,6 +6,7 @@ import type { AppStore, AppVersion } from '../apps/app-store.mts'
 import { AppName } from '../apps/names.mts'
 import type { Engine } from '../engine/engine.mts'
 import { EngineError, type EngineErrorCode } from '../engine/engine-error.mts'
+import type { ShownConnector } from './shown-connector.mts'
 
 /** The body of `POST /runs`: which trigger of which app, and its parameters or payload. */
 export const StartRunBody = z.object({ app: AppName, trigger: TriggerRef, input: z.unknown().optional() })
@@ -25,6 +26,14 @@ function shownApp({ name, version, manifest }: AppVersion) {
 	return { name, version, manifest }
 }
 
+/** What the control API answers for, besides the engine's runs. */
+export interface ControlApiOptions {
+	/** The deployed apps. Without them, there are no app routes. */
+	readonly apps?: ControlApps | undefined
+	/** The connectors the engine loaded, for `GET /connectors`. */
+	readonly connectors?: readonly ShownConnector[] | undefined
+}
+
 /** The body of `POST /runs/:run/answers/:request`. */
 export const AnswerBody = z.object({ value: z.unknown() }).refine((body) => 'value' in body, { message: 'An answer needs a value.' })
 
@@ -41,6 +50,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  * | `GET /runs/:run/events` | the run's event tree so far |
  * | `POST /runs/:run/answers/:request` | answers an input request: `{ value }` |
  * | `POST /runs/:run/stop`, `/resume`, `/restart` | as the engine's methods of those names |
+ * | `GET /connectors` | the connectors the engine loaded, and whether each signs in |
  * | `GET /sign-ins` | the sign-ins under way, with where to sign in |
  * | `POST /sign-ins/:connector` | waits until the user signed in to the connector, joining the sign-in runs wait for |
  * | `GET /apps` | every deployed app's current version and what it declares |
@@ -50,7 +60,7 @@ const statusOf: Record<EngineErrorCode, ContentfulStatusCode> = { 'not-found': 4
  *
  * Errors come back as `{ error }`, with 404, 409 or 400 for what the engine refused.
  */
-export function controlApi(engine: Engine, apps?: ControlApps): Hono {
+export function controlApi(engine: Engine, { apps, connectors = [] }: ControlApiOptions = {}): Hono {
 	const api = new Hono()
 
 	api.get('/runs', (c) => c.json(engine.list()))
@@ -67,6 +77,7 @@ export function controlApi(engine: Engine, apps?: ControlApps): Hono {
 	api.post('/runs/:run/stop', async (c) => c.json(await engine.stop(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/resume', async (c) => c.json(await engine.resume(c.req.param('run'), c.req.raw.signal)))
 	api.post('/runs/:run/restart', async (c) => c.json(await engine.restart(c.req.param('run'), c.req.raw.signal)))
+	api.get('/connectors', (c) => c.json(connectors))
 	api.get('/sign-ins', (c) => c.json(engine.signIns()))
 	api.post('/sign-ins/:connector', async (c) => {
 		const connector = c.req.param('connector')

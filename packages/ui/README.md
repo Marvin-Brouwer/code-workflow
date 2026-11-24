@@ -57,6 +57,7 @@ This is the local way in. The token is on the command line that opens the browse
 |---|---|
 | `GET /api/engine/status` | `{ running }`: whether an engine answers on the home's socket |
 | `/api/engine/runs`, `/runs/:run`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
+| `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
 | `GET /api/engine/sign-ins`, `POST /api/engine/sign-ins/:connector` | sign-ins under way, and waiting for one |
 | `GET /api/engine/apps`, `GET /api/engine/apps/:name/missing` | deployed apps, and what one still needs before it can run |
 | `/api/settings/providers`, `/providers/:name`, `/providers/:name/key`, `/provider-order`, `/provider-kinds` | model providers and their keys, as `mesh-flow provider` |
@@ -64,6 +65,16 @@ This is the local way in. The token is on the command line that opens the browse
 | `GET /api/settings/connectors` | the connector packages the engine loads |
 
 Deploying isn't in it: that stays with the CLI and CI.
+
+## The pages
+
+| Page | Shows | Does |
+|---|---|---|
+| `/settings/providers/` | providers in the order models are looked up, whether each has a key | add one, set a key, move one up or down, remove one |
+| `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
+| `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
+
+Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: a flat object of text, numbers, yes or no and options gets a field each, anything else a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider, a provider's key or a credential.
 
 ## Develop
 
