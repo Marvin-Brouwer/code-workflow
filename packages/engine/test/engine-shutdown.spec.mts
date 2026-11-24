@@ -80,9 +80,9 @@ const ampleDeadlines = () => ({ pause: duration.of('10s').toAbortSignal(), backe
 /** Starts a run on `backend` in a new engine, closed when the test ends if it isn't already. */
 async function startRun(backend: SandboxBackend) {
 	const home = await temporaryDirectory()
-	const app = await openDeployment(path.join(home, 'app'), signal)
-	await deployTestApp(app, { hello: runtimeScript('') })
-	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), app }, signal)
+	const deployment = await openDeployment(path.join(home, 'app'), signal)
+	await deployTestApp(deployment, { hello: runtimeScript('') })
+	const engine = await Engine.open({ backend, store: openRunStore(path.join(home, 'runs')), deployment }, signal)
 	onTestFinished(() => engine.close(shortDeadlines()))
 	const { id } = await engine.startRun({ ...userRun('hello'), abortSignal: signal })
 	return { engine, id }

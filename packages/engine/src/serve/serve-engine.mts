@@ -59,7 +59,7 @@ export interface ServeEngineOptions {
 export interface ServedEngine {
 	readonly engine: Engine
 	/** The deployed app, in the home's `app` folder. */
-	readonly app: Deployment
+	readonly deployment: Deployment
 	/** The gateway's credentials and providers, in the home's `gateway` folder. */
 	readonly gateway: GatewayHome
 	readonly socketPath: string
@@ -92,7 +92,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 
 	let engine: Engine
-	let app: Deployment
+	let deployment: Deployment
 	let gatewayHome: GatewayHome
 	let shownConnectors: ShownConnector[]
 	try {
@@ -111,12 +111,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			tools: connectors.flatMap((connector) => connector.tools),
 			registries: Object.fromEntries(connectors.flatMap(({ name, registries }) => (registries === undefined ? [] : [[name, registries]]))),
 		})
-		app = await openDeployment(path.join(options.home, 'app'), options.abortSignal, log)
+		deployment = await openDeployment(path.join(options.home, 'app'), options.abortSignal, log)
 		engine = await Engine.open(
 			{
 				backend: options.backend,
 				store: openRunStore(path.join(options.home, 'runs')),
-				app,
+				deployment,
 				gateway,
 				signIns: openSignIns({ connectors, log }),
 				connectorSettings: connectorSettingsOf(connectors),
@@ -132,12 +132,12 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 	const scheduler = createScheduler({ engine, log })
 	const armSchedules = () => {
-		scheduler.update(app.current())
+		scheduler.update(deployment.current())
 	}
 	armSchedules()
 	const api = getRequestListener(
 		controlApi(engine, {
-			app: { deployment: app, afterDeploy: armSchedules },
+			app: { deployment, afterDeploy: armSchedules },
 			connectors: shownConnectors,
 		}).fetch,
 	)
@@ -148,7 +148,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	let webhooks: { server: Server; url: string } | undefined
 	if (options.webhooks) {
 		const secrets = openWebhookSecrets(gatewayHome.credentials)
-		const ingress = getRequestListener(webhookApi({ engine, current: app.current, secrets, log }).fetch)
+		const ingress = getRequestListener(webhookApi({ engine, current: deployment.current, secrets, log }).fetch)
 		const webhookServer = createServer((request, response) => {
 			void ingress(request, response)
 		})
@@ -157,7 +157,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 		} catch (error) {
 			scheduler.close()
 			await closeServer(server)
-			await app.close()
+			await deployment.close()
 			await engine.close({ pause: closeStep.toAbortSignal(), backend: closeStep.toAbortSignal() })
 			await unlock()
 			throw error
@@ -170,7 +170,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 			await Promise.all([closeServer(server), webhooks ? closeServer(webhooks.server) : undefined])
 			scheduler.close()
 			// A deploy that was under way when the servers closed finishes before the home is let go.
-			await settleWithin(app.close(), deadlines.backend)
+			await settleWithin(deployment.close(), deadlines.backend)
 			await engine.close(deadlines)
 		} finally {
 			// Reported, not thrown: an error closing the engine is the one to see.
@@ -181,7 +181,7 @@ export async function serveEngine(options: ServeEngineOptions): Promise<ServedEn
 	}
 	return {
 		engine,
-		app,
+		deployment,
 		gateway: gatewayHome,
 		socketPath,
 		...(webhooks ? { webhookUrl: webhooks.url } : {}),

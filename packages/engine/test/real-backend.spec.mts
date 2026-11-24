@@ -44,7 +44,7 @@ async function openBackend(): Promise<SandboxBackend> {
 	})
 }
 
-/** The app in `fixtures/restoring-app`, which runs `npm install` with the real runtime. */
+/** The deployment in `fixtures/restoring-app`, which runs `npm install` with the real runtime. */
 const restoringApp = path.join(import.meta.dirname, 'fixtures', 'restoring-app')
 
 /**
@@ -92,9 +92,9 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 			// Arrange
 			const home = await temporaryDirectory()
 			const store = () => openRunStore(path.join(home, 'runs'))
-			const app = await openDeployment(path.join(home, 'app'), signal)
-			await deployTestApp(app, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
-			const first = await Engine.open({ backend: await openBackend(), store: store(), app }, signal)
+			const deployment = await openDeployment(path.join(home, 'app'), signal)
+			await deployTestApp(deployment, { ask: twoQuestions }, { image: 'node:26-slim', copyMailbox: true })
+			const first = await Engine.open({ backend: await openBackend(), store: store(), deployment }, signal)
 			onTestFinished(() => first.close(deadlines()))
 			const { id } = await first.startRun({ ...userRun('ask'), abortSignal: signal })
 			await vi.waitFor(
@@ -114,7 +114,7 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 
 			// Act
 			const backend = await openBackend()
-			const second = await Engine.open({ backend, store: store(), app }, signal)
+			const second = await Engine.open({ backend, store: store(), deployment }, signal)
 			onTestFinished(() => second.close(deadlines()))
 			await second.resume(id, signal)
 			await second.answer(id, 'second', 2, signal)
@@ -155,11 +155,14 @@ describe.runIf(backendName)(`the engine on ${backendName ?? 'a real backend'}`, 
 				tools: [],
 				fetch,
 			})
-			const app = await openDeployment(path.join(home, 'app'), signal)
+			const deployment = await openDeployment(path.join(home, 'app'), signal)
 			const built = path.join(home, 'built')
 			await buildApp({ directory: restoringApp, out: built, abortSignal: buildTimeout.toAbortSignal() })
-			await withPackedApp(built, (tarball) => app.deploy(tarball, signal), signal)
-			const engine = await Engine.open({ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), app, gateway }, signal)
+			await withPackedApp(built, (tarball) => deployment.deploy(tarball, signal), signal)
+			const engine = await Engine.open(
+				{ backend: await openBackend(), store: openRunStore(path.join(home, 'runs')), deployment, gateway },
+				signal,
+			)
 			onTestFinished(() => engine.close(deadlines()))
 
 			// Act

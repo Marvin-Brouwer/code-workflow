@@ -174,11 +174,11 @@ import { microsandboxBackend } from '@mesh-flow/sandbox/microsandbox'
 
 const abortSignal = AbortSignal.timeout(60_000)
 const store = openRunStore('/var/lib/my-app/mesh-flow/runs')
-const app = await openDeployment('/var/lib/my-app/mesh-flow/app', abortSignal)
-await app.deploy('/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
+const deployment = await openDeployment('/var/lib/my-app/mesh-flow/app', abortSignal)
+await deployment.deploy('/builds/example.tgz', abortSignal) // a tarball of what `mesh-flow build` wrote
 const gatewayHome = await openGatewayHome('/var/lib/my-app/mesh-flow/gateway', abortSignal)
 const gateway = openGateway({ home: gatewayHome.directory, credentials: gatewayHome.credentials, providers: gatewayHome.providers })
-const engine = await Engine.open({ backend: microsandboxBackend(), store, app, gateway, log: console.error }, abortSignal)
+const engine = await Engine.open({ backend: microsandboxBackend(), store, deployment, gateway, log: console.error }, abortSignal)
 
 const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { key: 'ABC-123' }, abortSignal })
 // ... later, when the run waits for input:

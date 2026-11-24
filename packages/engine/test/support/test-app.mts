@@ -109,10 +109,14 @@ export async function builtApp(workflows: Record<string, string>, options: TestA
 	return directory
 }
 
-/** Builds a test app with {@link builtApp} and deploys it to `app`. */
-export async function deployTestApp(app: Deployment, workflows: Record<string, string>, options: TestAppOptions = {}): Promise<AppVersion> {
+/** Builds a test app with {@link builtApp} and deploys it to `deployment`. */
+export async function deployTestApp(
+	deployment: Deployment,
+	workflows: Record<string, string>,
+	options: TestAppOptions = {},
+): Promise<AppVersion> {
 	const folder = await builtApp(workflows, options)
-	return withPackedApp(folder, (tarball) => app.deploy(tarball, deploySignal()), deploySignal())
+	return withPackedApp(folder, (tarball) => deployment.deploy(tarball, deploySignal()), deploySignal())
 }
 
 /** Starts `workflow` of the test app through its user trigger. */

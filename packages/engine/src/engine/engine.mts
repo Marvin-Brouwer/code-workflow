@@ -49,7 +49,7 @@ export interface EngineOptions {
 	/** Where the run records are kept. */
 	readonly store: RunStore
 	/** The deployed app runs start from. */
-	readonly app: Deployment
+	readonly deployment: Deployment
 	/** Where things go inside a sandbox. */
 	readonly layout?: SandboxLayout
 	/** Where the engine reports what it did on its own, such as reconciling. Default: nowhere. */
@@ -128,8 +128,8 @@ export const startRunTimeout = duration.of('1m')
  * @example
  * ```ts
  * const store = openRunStore(path.join(home, 'runs'))
- * const app = await openDeployment(path.join(home, 'app'), abortSignal)
- * const engine = await Engine.open({ backend, store, app }, abortSignal)
+ * const deployment = await openDeployment(path.join(home, 'app'), abortSignal)
+ * const engine = await Engine.open({ backend, store, deployment }, abortSignal)
  * const run = await engine.startRun({ trigger: { kind: 'user', id: 'develop' }, input: { story: 'ABC-1' }, abortSignal })
  * // ... later, on Ctrl+C:
  * await engine.close({ pause: duration.of('30s').toAbortSignal(), backend: duration.of('1m').toAbortSignal() })
@@ -139,7 +139,7 @@ export class Engine {
 	readonly #backend: SandboxBackend
 	readonly #store: RunStore
 	readonly #writes: RunWriteFeed
-	readonly #app: Deployment
+	readonly #deployment: Deployment
 	readonly #layout: SandboxLayout
 	readonly #log: (message: string) => void
 	readonly #now: () => Date
@@ -160,7 +160,7 @@ export class Engine {
 		const watched = watchedRunStore(options.store)
 		this.#store = watched.store
 		this.#writes = watched.writes
-		this.#app = options.app
+		this.#deployment = options.deployment
 		this.#layout = options.layout ?? defaultSandboxLayout
 		this.#log = options.log ?? (() => undefined)
 		this.#now = options.now ?? (() => new Date())
@@ -339,7 +339,7 @@ export class Engine {
 		const waitSignal = this.#withLifetime(options.abortSignal)
 		const id = newRunId()
 		// Held until the run has its copy, so a deploy meanwhile doesn't remove the version under it.
-		const { app, listed } = await this.#app.withCurrent((deployed) => this.#copyApp(id, deployed, options, waitSignal))
+		const { app, listed } = await this.#deployment.withCurrent((deployed) => this.#copyApp(id, deployed, options, waitSignal))
 		waitSignal.throwIfAborted()
 		// Only the kind and the id, whatever else the caller's object holds: this goes into the record.
 		const trigger: TriggerReference = { kind: options.trigger.kind, id: options.trigger.id }
