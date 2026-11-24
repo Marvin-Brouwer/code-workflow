@@ -149,7 +149,7 @@ describe('openAppStore', () => {
 	})
 
 	test.each([
-		['names a version whose folder is gone', (root: string, folder: string) => rm(folder, { recursive: true })],
+		['names a version whose folder is gone', (_: string, folder: string) => rm(folder, { recursive: true })],
 		['names no version at all', (root: string) => writeFile(path.join(root, 'current'), '')],
 	])('says so when its current file %s, instead of starting as if nothing was deployed', async (_name, breakIt) => {
 		// Arrange

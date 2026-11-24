@@ -1,8 +1,8 @@
 /**
  * Starts one example app with everything around it, for trying mesh-flow by hand from the repo root:
- * `pnpm start:github-issue`. It builds what the app and the UI need, adds the app's connectors to a
- * home of its own in `.mesh-flow/home`, then runs the engine (`mesh-flow serve`), the app's watch
- * (`mesh-flow dev`) and the UI (`mesh-flow ui`) together. Ctrl+C stops all three.
+ * `pnpm start:github-issue`. It builds what the app and the UI need, adds the app's connectors to
+ * the examples' shared home in `.mesh-flow/home`, then runs the engine (`mesh-flow serve`), the
+ * app's watch (`mesh-flow dev`) and the UI (`mesh-flow ui`) together. Ctrl+C stops all three.
  *
  * The home stays between starts, so providers and credentials set in the UI are there next time.
  * An engine runs one app, so starting another example deploys it in place of the last one, whose
