@@ -65,6 +65,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 			signal,
 		)
 		const listed = await client.apps(signal)
+		const stillMissing = await client.missingSettings(testAppName, signal)
 		await client.removeApp(testAppName, signal)
 
 		// Assert
@@ -72,6 +73,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 		const { missing, ...shown } = deployed
 		expect(listed).toEqual([shown])
 		expect(missing).toEqual([])
+		expect(stillMissing).toEqual([])
 		expect(deployed.manifest.description.triggers).toEqual([{ kind: 'user', id: 'ask', workflow: 'ask' }])
 		expect(await client.apps(signal)).toEqual([])
 	})
@@ -79,6 +81,7 @@ describe.skipIf(process.platform !== 'linux')('the control API', () => {
 	test.each([
 		['an unknown run', (client: ControlClient) => client.get('run-000000000000', signal), 404],
 		['an app that is not deployed', (client: ControlClient) => client.startRun({ ...userRun('develop'), abortSignal: signal }), 404],
+		['the settings of an app that is not deployed', (client: ControlClient) => client.missingSettings(testAppName, signal), 404],
 		['removing an app that was never deployed', (client: ControlClient) => client.removeApp(testAppName, signal), 404],
 		['removing an app name that is not one', (client: ControlClient) => client.removeApp('Not An App', signal), 400],
 		['deploying a tarball that is not there', (client: ControlClient) => client.deploy(testAppName, '/nowhere/app.tgz', signal), 400],

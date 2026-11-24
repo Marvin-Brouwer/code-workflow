@@ -49,6 +49,8 @@ export interface ControlClient {
 	waitForSignIn(connector: string, abortSignal: AbortSignal): Promise<void>
 	/** Every deployed app's current version. */
 	apps(abortSignal: AbortSignal): Promise<DeployedApp[]>
+	/** The settings the current version of app `name` still needs before it can run. Empty when it can. */
+	missingSettings(name: string, abortSignal: AbortSignal): Promise<MissingSetting[]>
 	/** Deploys the built app packed in `tarball`, on this machine, as the new current version of `name`. */
 	deploy(name: string, tarball: string, abortSignal: AbortSignal): Promise<DeployOutcome>
 	removeApp(name: string, abortSignal: AbortSignal): Promise<void>
@@ -78,6 +80,8 @@ export function controlClient(socketPath: string): ControlClient {
 			await call(socketPath, z.object({ signedIn: z.string() }), 'POST', `/sign-ins/${encodeURIComponent(connector)}`, {}, abortSignal)
 		},
 		apps: (abortSignal) => call(socketPath, z.array(DeployedApp), 'GET', '/apps', undefined, abortSignal),
+		missingSettings: (name, abortSignal) =>
+			call(socketPath, z.array(MissingSetting), 'GET', `/apps/${encodeURIComponent(name)}/missing`, undefined, abortSignal),
 		deploy: (name, tarball, abortSignal) =>
 			call(socketPath, DeployOutcome, 'PUT', `/apps/${encodeURIComponent(name)}`, { tarball }, abortSignal),
 		removeApp: async (name, abortSignal) => {
