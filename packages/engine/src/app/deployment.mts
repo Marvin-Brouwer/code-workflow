@@ -91,7 +91,10 @@ export async function openDeployment(
 		writing = next.catch(() => undefined)
 		return next
 	}
-	/** Removes the folder of `version`. Never throws: a failure is reported to `log`, and the next removal tries it again. */
+	/**
+	 * Removes the folder of `version`. Never throws: a failure is reported to `log`, and the next
+	 * removal tries it again.
+	 */
 	const removeVersion = async (version: string) => {
 		await rm(path.join(root, version), { recursive: true, force: true, maxRetries: removeMaxRetries }).catch((removalError: unknown) => {
 			log(`Removing version ${version} in ${root} failed, so it's tried again later: ${messageOf(removalError)}`)
@@ -133,7 +136,7 @@ export async function openDeployment(
 						// Written last: it marks the version complete.
 						await replaceFile(path.join(folder, appManifestFile), JSON.stringify(manifest, null, '\t'), { abortSignal })
 					} catch (error) {
-						// A folder that isn't complete is neither current nor held, so what's in it came from this deploy.
+						// A folder that isn't complete is neither current nor held, so no run needs what's in it.
 						await removeVersion(version)
 						throw error
 					}
