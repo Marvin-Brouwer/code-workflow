@@ -1,6 +1,6 @@
 import type { ModelRequest, ModelResponse } from '@mesh-flow/protocol'
 import { modelApi } from './model-apis.mts'
-import type { ModelChoice } from './resolve-model.mts'
+import type { OfferedModel } from './offering-provider.mts'
 
 /** A URL or path without the slashes it ends with. */
 function withoutTrailingSlash(url: string): string {
@@ -8,7 +8,7 @@ function withoutTrailingSlash(url: string): string {
 }
 
 /** The provider's base URL for a model: the config's override, or pi-ai's. */
-function baseUrlOf({ provider, model }: ModelChoice): string {
+function baseUrlOf({ provider, model }: OfferedModel): string {
 	return withoutTrailingSlash(provider.baseUrl ?? model.baseUrl)
 }
 
@@ -38,7 +38,7 @@ const droppedResponseHeaders = new Set(['set-cookie', 'content-encoding', 'conte
  * the key does nothing but this model's calls.
  */
 export async function sendModelRequest(
-	choice: ModelChoice,
+	choice: OfferedModel,
 	request: ModelRequest,
 	key: string,
 	options: { readonly fetch: typeof fetch; readonly abortSignal: AbortSignal },

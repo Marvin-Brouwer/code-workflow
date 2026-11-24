@@ -2,8 +2,8 @@ import type { Api, Model } from '@earendil-works/pi-ai'
 import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
 import { compatibleModel, modelsOfKind } from './model-apis.mts'
 
-/** A model id resolved to the provider that serves it, with pi-ai's description of the model. */
-export interface ModelChoice {
+/** A model id resolved to the provider that offers it, with pi-ai's description of the model. */
+export interface OfferedModel {
 	readonly provider: ModelProviderDescription
 	readonly model: Model<Api>
 }
@@ -28,7 +28,7 @@ export function offeringProvider(
 	modelIds: readonly string[],
 	hasKey: (provider: string) => boolean,
 	served: ServedModels = notAsked,
-): ModelChoice | undefined {
+): OfferedModel | undefined {
 	for (const modelId of modelIds) {
 		for (const provider of providers) {
 			if (!hasKey(provider.name)) continue
@@ -51,41 +51,10 @@ export function offeredModel(provider: ModelProviderDescription, modelId: string
 }
 
 /** The provider called `name`, offering `modelId`: what a model call names. Throws when it's not so. */
-export function chosenModel(providers: readonly ModelProviderDescription[], name: string, modelId: string): ModelChoice {
+export function chosenModel(providers: readonly ModelProviderDescription[], name: string, modelId: string): OfferedModel {
 	const provider = providers.find((known) => known.name === name)
 	if (provider === undefined) throw new Error(`The app has no provider ${name}.`)
 	const model = offeredModel(provider, modelId)
 	if (model === undefined) throw new Error(`Provider ${name} doesn't offer model ${modelId}.`)
 	return { provider, model }
-}
-
-/** Whether the gateway can send model calls for the kind of `provider`. */
-function isSendable(provider: ModelProviderDescription): boolean {
-	return provider.kind === openAiCompatibleKind || (modelsOfKind(provider.kind)?.length ?? 0) > 0
-}
-
-/**
- * What the app's config gets wrong about its models, each a line: a provider kind the gateway can't
- * send for, or an agent's model no declared provider offers. Empty when every agent has a model
- * that a declared provider offers. A compatible server isn't asked here, so it counts as offering
- * every model. `mesh-flow build` fails with these.
- */
-export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly (readonly string[])[]): string[] {
-	const unknownKinds = providers
-		.filter((provider) => !isSendable(provider))
-		.map(
-			(provider) =>
-				`The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}). See \`mesh-flow provider kinds\`.`,
-		)
-	const unoffered = [...new Set(agentModels.flat())]
-		.filter((modelId) => !providers.some((provider) => offeredModel(provider, modelId) !== undefined))
-		.map((modelId) => notOfferedMessage(providers, modelId))
-	return [...unknownKinds, ...unoffered]
-}
-
-/** Says that no provider of the app's config offers `modelId`: a change to the config in git, not a setting. */
-export function notOfferedMessage(providers: readonly ModelProviderDescription[], modelId: string): string {
-	if (providers.length === 0)
-		return `Model ${modelId} isn't offered by any provider in the config: it declares none. Add one to \`modelProviders\` in \`defineMeshFlow\`.`
-	return `Model ${modelId} isn't offered by any provider in the config (${providers.map((provider) => provider.name).join(', ')}).`
 }

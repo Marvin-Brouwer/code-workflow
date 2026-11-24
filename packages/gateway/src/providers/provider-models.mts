@@ -1,6 +1,8 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { openAiCompatibleKind, type ModelProviderDescription } from '@mesh-flow/protocol'
+import { duration, type Duration } from '@mesh-flow/duration'
 import { z } from 'zod'
+import { messageOf } from '../errors.mts'
 import { untilAborted } from '../until-aborted.mts'
 import { compatibleModel, modelApi, modelsOfKind, type ModelApi } from './model-apis.mts'
 
@@ -30,6 +32,18 @@ export interface UnlistedModels {
 
 export type ProviderModels = ListedModels | UnlistedModels
 
+/** How long a provider has to list its models before it counts as one that can't say now. */
+export const modelListTimeout = duration({ seconds: 15 })
+
+/** What {@link providerModels} asks with. */
+export interface ProviderModelsOptions {
+	/** The provider's key, which the list is for. */
+	readonly key: string
+	readonly fetchFromHost: typeof fetch
+	/** How long the provider has to list its models. Default: {@link modelListTimeout}. */
+	readonly timeout?: Duration | undefined
+}
+
 /** How a provider lists its models: the URL, and the API whose headers carry the key. */
 interface ModelListing {
 	readonly url: string
@@ -50,6 +64,12 @@ function listingOf(provider: ModelProviderDescription): ModelListing | undefined
 	return { url: `${(provider.baseUrl ?? first.baseUrl).replace(/\/+$/, '')}${api.list.path}`, api }
 }
 
+/** A provider that didn't list its models, and why. */
+function unlisted(provider: ModelProviderDescription, why: string): UnlistedModels {
+	return { source: 'failed', reason: `Provider ${provider.name} didn't list its models: ${why}.` }
+}
+
+/** Sends the list request and reads what it answers, under `abortSignal`. */
 async function askedModels(
 	provider: ModelProviderDescription,
 	key: string,
@@ -61,11 +81,14 @@ async function askedModels(
 	if (listing === undefined) return { source: 'catalog', usable: catalog, unusable: [] }
 	const { url, api } = listing
 	const response = await fetchFromHost(url, { headers: { ...api.list.headers, ...api.credential(key) }, signal: abortSignal })
-	if (noListStatuses.has(response.status)) return { source: 'catalog', usable: catalog, unusable: [] }
-	if (!response.ok) return { source: 'failed', reason: `Provider ${provider.name} didn't list its models: it answered ${response.status}.` }
+	if (!response.ok) {
+		// The body isn't read, so the connection goes back to the pool now.
+		await response.body?.cancel()
+		if (noListStatuses.has(response.status)) return { source: 'catalog', usable: catalog, unusable: [] }
+		return unlisted(provider, `it answered ${response.status}`)
+	}
 	const listed = ModelList.safeParse(await response.json().catch(() => undefined))
-	if (!listed.success)
-		return { source: 'failed', reason: `Provider ${provider.name} didn't list its models: its answer isn't a model list.` }
+	if (!listed.success) return unlisted(provider, "its answer isn't a model list")
 	const ids = listed.data.data.map((model) => model.id)
 	if (provider.kind === openAiCompatibleKind)
 		return { source: 'provider', usable: ids.map((id) => compatibleModel(provider, id)), unusable: [] }
@@ -77,15 +100,28 @@ async function askedModels(
 }
 
 /**
- * Asks `provider`, with its key, which models it offers, or why it didn't say. A provider without a
- * model list gets pi-ai's catalog of its kind. Throws only when the provider can't be reached.
+ * Asks `provider`, with its key, which models it offers, or why it didn't say: such as a key it
+ * doesn't take, no answer within the timeout, or no way to reach it. A provider without a model
+ * list gets pi-ai's catalog of its kind. Only an abort of `abortSignal` rejects.
  */
-export function providerModels(
+export async function providerModels(
 	provider: ModelProviderDescription,
-	key: string,
-	fetchFromHost: typeof fetch,
+	{ key, fetchFromHost, timeout = modelListTimeout }: ProviderModelsOptions,
 	abortSignal: AbortSignal,
 ): Promise<ProviderModels> {
-	// A provider that ignores the signal, or never finishes its answer, can't hold up a stop.
-	return untilAborted(askedModels(provider, key, fetchFromHost, abortSignal), abortSignal)
+	const noAnswer = new AbortController()
+	const timer = setTimeout(() => {
+		noAnswer.abort()
+	}, timeout.to('ms'))
+	const listingSignal = AbortSignal.any([abortSignal, noAnswer.signal])
+	try {
+		// A provider that ignores the signal, or never finishes its answer, can't hold up a stop.
+		return await untilAborted(askedModels(provider, key, fetchFromHost, listingSignal), listingSignal)
+	} catch (error) {
+		abortSignal.throwIfAborted()
+		if (noAnswer.signal.aborted) return unlisted(provider, `no answer within ${timeout.toString()}`)
+		return unlisted(provider, messageOf(error))
+	} finally {
+		clearTimeout(timer)
+	}
 }

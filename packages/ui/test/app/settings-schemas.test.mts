@@ -26,11 +26,15 @@ describe("the page's copies of the engine's answers", () => {
 		// Arrange
 		const listed: ProviderModelList[] = [
 			{ source: 'provider', models: [{ id: 'claude-opus-5-5', usable: true }] },
+			{ source: 'catalog', models: [{ id: 'claude-sonnet-5-5', usable: true }] },
 			{ source: 'failed', reason: 'It answered 401.' },
 		]
 
+		// Act
+		const taken = listed.map((answer) => page.ProviderModelList.safeParse(answer).success)
+
 		// Assert
-		expect(listed.map((answer) => page.ProviderModelList.safeParse(answer).success)).toEqual([true, true])
+		expect(taken).toEqual([true, true, true])
 	})
 
 	test('ListedProvider and ConnectorPackage take what the originals hold', () => {

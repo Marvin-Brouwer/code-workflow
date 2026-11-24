@@ -34,15 +34,16 @@ export interface SettingsApiOptions {
  */
 export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOptions): Hono {
 	const api = new Hono()
+	/** The providers the deployed app's config declares. */
+	const declaredProviders = async (abortSignal: AbortSignal) => (await client.app(abortSignal))?.manifest.description.providers ?? []
 	api.get('/providers', async (context) => {
-		const { signal } = context.req.raw
-		const declared = (await client.app(signal))?.manifest.description.providers ?? []
-		return context.json(await listProviders(await gatewayHome(signal), declared, signal))
+		const abortSignal = context.req.raw.signal
+		return context.json(await listProviders(await gatewayHome(abortSignal), await declaredProviders(abortSignal), abortSignal))
 	})
 	api.get('/providers/:name/models', async (context) => {
-		const { signal } = context.req.raw
-		const declared = (await client.app(signal))?.manifest.description.providers ?? []
-		return context.json(await listProviderModels(await gatewayHome(signal), declared, context.req.param('name'), signal))
+		const abortSignal = context.req.raw.signal
+		const declared = await declaredProviders(abortSignal)
+		return context.json(await listProviderModels(await gatewayHome(abortSignal), declared, context.req.param('name'), abortSignal))
 	})
 	api.put('/providers/:name/key', jsonBody(KeyBody), async (context) => {
 		const { key } = context.req.valid('json')

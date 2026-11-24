@@ -52,7 +52,7 @@ export async function listProviderModels(
 	if (provider === undefined) throw new EngineError('not-found', `The app's config declares no provider ${name}.`)
 	const key = await home.credentials.get(providerCredential(name), abortSignal)
 	if (key === undefined) throw new EngineError('invalid', `Provider ${name} has no key, so it can't be asked for its models.`)
-	const models = await providerModels(provider, key, fetchFromHost, abortSignal)
+	const models = await providerModels(provider, { key, fetchFromHost }, abortSignal)
 	if (models.source === 'failed') return models
 	return {
 		source: models.source,
@@ -72,6 +72,7 @@ export async function removeProviderKey(home: GatewayHome, name: string, abortSi
 		throw new EngineError('not-found', `Provider ${name} has no key.`)
 }
 
+/** `name` as a provider's name, or an `invalid` refusal that says why it can't be one. */
 function checkedName(name: string): string {
 	const checked = ProviderName.safeParse(name)
 	if (!checked.success)

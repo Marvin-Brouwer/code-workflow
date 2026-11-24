@@ -16,6 +16,12 @@ const bearer = (key: string) => ({ authorization: `Bearer ${key}` })
 
 const openAiList = { path: '/models', headers: {} }
 
+/** The version of Anthropic's API the list is asked in; its model calls name their own. */
+const anthropicApiVersion = '2023-06-01'
+
+/** The most models Anthropic lists on one page. One page is all there is, so the list is never cut short. */
+const anthropicModelPageSize = 1000
+
 /**
  * The model APIs the gateway can send with an API key. Each provider SDK in the sandbox makes its
  * native request; the gateway only checks the path and adds the key, so provider features
@@ -25,7 +31,7 @@ const modelApis: Readonly<Partial<Record<Api, ModelApi>>> = {
 	'anthropic-messages': {
 		paths: ['/v1/messages'],
 		credential: (key) => ({ 'x-api-key': key }),
-		list: { path: '/v1/models?limit=1000', headers: { 'anthropic-version': '2023-06-01' } },
+		list: { path: `/v1/models?limit=${String(anthropicModelPageSize)}`, headers: { 'anthropic-version': anthropicApiVersion } },
 	},
 	'openai-completions': { paths: ['/chat/completions'], credential: bearer, list: openAiList },
 	'openai-responses': { paths: ['/responses'], credential: bearer, list: openAiList },
@@ -52,6 +58,9 @@ function catalogOfKinds(): ReadonlyMap<string, readonly Model<Api>[]> {
 	return catalog
 }
 
+/** What a compatible server's models cost here: nothing is known, so they're counted without a price. */
+const unpriced = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+
 /** What a model of a compatible server gets when pi-ai's catalog doesn't know its id. */
 const compatibleDefaults = { contextWindow: 128_000, maxTokens: 16_384, reasoning: false }
 
@@ -72,7 +81,7 @@ export function compatibleModel(provider: ModelProviderDescription, modelId: str
 		maxTokens: known.maxTokens,
 		reasoning: known.reasoning,
 		input: ['text'],
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		cost: unpriced,
 	}
 }
 
