@@ -14,7 +14,7 @@ mesh-flow ui            # serves it on a free port and prints the address
 mesh-flow ui --port 4800
 ```
 
-Open the address it prints in the browser you choose: its token lets one browser in. Credentials, connectors and removing a provider's key work without a running engine; the providers, setting a key, runs and triggers need `mesh-flow serve`, since the deployed app declares the providers. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
+Open the address it prints in the browser you choose: its token lets one browser in. Credentials, connectors and removing a provider's key work without a running engine; the providers, setting a key, runs and triggers need `mesh-flow serve`, since the deployed app declares the providers and a key is set for where its provider sends it. Ctrl+C stops it. The page needs a current browser: Chrome 117, Firefox 119 or Safari 17.4, or later.
 
 To serve it from code of your own:
 

@@ -7,8 +7,17 @@
  */
 import { z } from 'zod'
 
-/** A provider of the app's config, as the settings list it: never its key, only whether it has one. */
-export const ListedProvider = z.object({ name: z.string(), kind: z.string(), baseUrl: z.string().optional(), hasKey: z.boolean() })
+/**
+ * A provider of the app's config, as the settings list it: never its key, only whether it has one
+ * for where the config sends it, and else where its key was set for.
+ */
+export const ListedProvider = z.object({
+	name: z.string(),
+	kind: z.string(),
+	baseUrl: z.string().optional(),
+	hasKey: z.boolean(),
+	keySetFor: z.string().optional(),
+})
 export type ListedProvider = z.infer<typeof ListedProvider>
 
 /** A model a provider offers, and whether agents can use it: `ListedModel` in `@mesh-flow/engine`. */

@@ -1,11 +1,6 @@
-import { openAiCompatibleKind, type ModelConfiguration, type ModelProviderDescription } from '@mesh-flow/protocol'
-import { modelsOfKind } from './model-apis.mts'
+import type { ModelConfiguration, ModelProviderDescription } from '@mesh-flow/protocol'
 import { offeredModel } from './offering-provider.mts'
-
-/** Whether the gateway can send model calls for the kind of `provider`. */
-function isSendable(provider: ModelProviderDescription): boolean {
-	return provider.kind === openAiCompatibleKind || (modelsOfKind(provider.kind)?.length ?? 0) > 0
-}
+import { isSendable, unsendableKindMessage } from './sendable-kind.mts'
 
 /**
  * What the app's config gets wrong about its models, each a line: a provider kind the gateway can't
@@ -14,12 +9,7 @@ function isSendable(provider: ModelProviderDescription): boolean {
  * every model. `mesh-flow build` fails with these.
  */
 export function undeclaredModels(providers: readonly ModelProviderDescription[], agentModels: readonly ModelConfiguration[]): string[] {
-	const kindProblems = providers
-		.filter((provider) => !isSendable(provider))
-		.map(
-			(provider) =>
-				`The gateway can't send model calls for provider kind ${provider.kind} (provider ${provider.name}). See \`mesh-flow provider kinds\`.`,
-		)
+	const kindProblems = providers.filter((provider) => !isSendable(provider)).map(unsendableKindMessage)
 	const unoffered = [...new Set(agentModels.flat())]
 		.filter((modelId) => !providers.some((provider) => offeredModel(provider, modelId) !== undefined))
 		.map((modelId) => notOfferedMessage(providers, modelId))

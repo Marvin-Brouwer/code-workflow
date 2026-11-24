@@ -28,13 +28,14 @@ import type { ResolveRegistryTarget } from './packages/connector-registry.mts'
 import { connectorRegistryFetch, fetchFromConnectorRegistry } from './packages/fetch-from-connector-registry.mts'
 import { fetchFromPublicRegistry, type RegistryAnswer } from './packages/fetch-from-public-registry.mts'
 import { openPackageCache, type PackageCache } from './packages/package-cache.mts'
-import { providerCredential } from './providers/provider-credential.mts'
+import { providerKeyOf, providerOrigin, type ProviderKey } from './providers/provider-key.mts'
 import { chosenModel, offeredModel, offeringProvider, type OfferedModel, type ServedModels } from './providers/offering-provider.mts'
 import { providerModels, type ProviderModels } from './providers/provider-models.mts'
-import { sendModelRequest } from './providers/send-model-request.mts'
+import { baseUrlOf, sendModelRequest } from './providers/send-model-request.mts'
+import { webOrigin } from './providers/web-origin.mts'
 import { notOfferedMessage } from './providers/undeclared-models.mts'
 import { addUsage, usageOf, type RunUsage } from './providers/usage.mts'
-import type { MissingSetting } from './settings/missing-setting.mts'
+import type { MissingSetting, SettingFix } from './settings/missing-setting.mts'
 import { isTransient, type HostTool } from './tools/host-tool.mts'
 import { signInOf } from './tools/sign-in-needed.mts'
 import { untilAborted } from './until-aborted.mts'
@@ -187,18 +188,19 @@ function setKeyHint(provider: string): string {
 /**
  * Says why none of an agent's models can run, when no provider with a key offers one: a provider
  * with a key that would offer one didn't list its models now, or didn't list that one for its key;
- * the first provider that offers one has no key; or no provider in the config offers any.
+ * the first provider that offers one has no key, or one set for where the config sent it before;
+ * or no provider in the config offers any.
  */
 function unavailableMessage(
 	providers: readonly ModelProviderDescription[],
 	modelIds: readonly string[],
-	hasKey: (provider: string) => boolean,
+	keys: ReadonlyMap<string, ProviderKey>,
 	listed: ReadonlyMap<string, ProviderModels>,
 	served: ServedModels,
 ): MissingSetting {
 	for (const modelId of modelIds) {
 		for (const provider of providers) {
-			if (!hasKey(provider.name) || offeredModel(provider, modelId) === undefined) continue
+			if (!hasKeyIn(keys)(provider.name) || offeredModel(provider, modelId) === undefined) continue
 			const models = listed.get(provider.name)
 			if (models?.source === 'failed')
 				return { message: `${models.reason} It may offer model ${modelId}: try again once it answers.`, fix: { kind: 'other' } }
@@ -212,10 +214,15 @@ function unavailableMessage(
 	const keyless = offeringProvider(providers, modelIds, () => true, served)
 	if (keyless === undefined)
 		return { message: modelIds.map((modelId) => notOfferedMessage(providers, modelId)).join(' '), fix: { kind: 'other' } }
-	return {
-		message: `Provider ${keyless.provider.name} offers model ${keyless.model.id} but has no API key. ${setKeyHint(keyless.provider.name)}`,
-		fix: { kind: 'provider-key', provider: keyless.provider.name },
-	}
+	const { name } = keyless.provider
+	const key = keys.get(name)
+	const fix: SettingFix = { kind: 'provider-key', provider: name }
+	if (key?.status === 'elsewhere')
+		return {
+			message: `Provider ${name}'s key was set for ${key.origin}, but the config now sends it to ${originText(keyless.provider)}, so it isn't used there. ${setKeyHint(name)}`,
+			fix,
+		}
+	return { message: `Provider ${name} offers model ${keyless.model.id} but has no API key. ${setKeyHint(name)}`, fix }
 }
 
 /**
@@ -237,6 +244,16 @@ function servedModelsFrom(
 			return use === 'loop' && provider.kind === openAiCompatibleKind ? [[provider.name, []]] : []
 		}),
 	)
+}
+
+/** Where the config sends `provider`'s requests, for a message: its origin, or a description for a kind the gateway doesn't know. */
+function originText(provider: ModelProviderDescription): string {
+	return providerOrigin(provider) ?? "an address the gateway doesn't know"
+}
+
+/** Whether a provider, by name, has a key for where the config sends it, in `keys`. */
+function hasKeyIn(keys: ReadonlyMap<string, ProviderKey>): (provider: string) => boolean {
+	return (provider) => keys.get(provider)?.status === 'set'
 }
 
 /** A model choice as the sandbox gets it: for a compatible server, which pi-ai doesn't know, with the model described. */
@@ -308,11 +325,11 @@ export function openGateway(options: GatewayOptions): Gateway {
 		if (call.type === 'close') return { result: await closeLoop(runId, call.endpoint, abortSignal) }
 		if (call.type === 'resolve-model') {
 			const listings = runListingsOf(runId)
-			const hasKey = await providerHasKey(abortSignal)
-			const listed = await listedModels(state.providers, listings, abortSignal)
+			const keys = await keysOf(state.providers, abortSignal)
+			const listed = await listedModels(state.providers, keys, listings, abortSignal)
 			const served = servedModelsFrom(state.providers, listed, 'loop')
-			const choice = offeringProvider(state.providers, call.models, hasKey, served)
-			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models, hasKey, listed, served).message)
+			const choice = offeringProvider(state.providers, call.models, hasKeyIn(keys), served)
+			if (choice === undefined) throw new Error(unavailableMessage(state.providers, call.models, keys, listed, served).message)
 			return { result: resolvedModel(choice) }
 		}
 		if (call.type === 'package') {
@@ -399,13 +416,15 @@ export function openGateway(options: GatewayOptions): Gateway {
 	 */
 	const listedModels = async (
 		providers: readonly ModelProviderDescription[],
+		keys: ReadonlyMap<string, ProviderKey>,
 		listings: RunListings | undefined,
 		abortSignal: AbortSignal,
 	): Promise<ReadonlyMap<string, ProviderModels>> => {
 		const listed = await Promise.all(
 			providers.map(async (provider): Promise<[string, ProviderModels][]> => {
-				const key = await options.credentials.get(providerCredential(provider.name), abortSignal)
-				if (key === undefined) return []
+				const providerKey = keys.get(provider.name)
+				if (providerKey?.status !== 'set') return []
+				const { key } = providerKey
 				const models =
 					listings === undefined
 						? await providerModels(provider, { key, fetchFromHost }, abortSignal)
@@ -416,23 +435,25 @@ export function openGateway(options: GatewayOptions): Gateway {
 		return new Map(listed.flat())
 	}
 
-	/** Whether a provider, by name, has a key now. */
-	const providerHasKey = async (abortSignal: AbortSignal): Promise<(provider: string) => boolean> => {
-		const names = new Set(await options.credentials.names(abortSignal))
-		return (provider) => names.has(providerCredential(provider))
-	}
+	/** Each provider's key now, by name: whether it has one for where the config sends it. */
+	const keysOf = async (providers: readonly ModelProviderDescription[], abortSignal: AbortSignal) =>
+		new Map(
+			await Promise.all(
+				providers.map(async (provider) => [provider.name, await providerKeyOf(options.credentials, provider, abortSignal)] as const),
+			),
+		)
 
 	const unavailableModels = async (
 		providers: readonly ModelProviderDescription[],
 		agentModels: readonly ModelConfiguration[],
 		abortSignal: AbortSignal,
 	) => {
-		const hasKey = await providerHasKey(abortSignal)
-		const listed = await listedModels(providers, undefined, abortSignal)
+		const keys = await keysOf(providers, abortSignal)
+		const listed = await listedModels(providers, keys, undefined, abortSignal)
 		const served = servedModelsFrom(providers, listed, 'check')
 		const missing = agentModels.flatMap((modelIds): MissingSetting[] => {
-			if (offeringProvider(providers, modelIds, hasKey, served) !== undefined) return []
-			return [unavailableMessage(providers, modelIds, hasKey, listed, served)]
+			if (offeringProvider(providers, modelIds, hasKeyIn(keys), served) !== undefined) return []
+			return [unavailableMessage(providers, modelIds, keys, listed, served)]
 		})
 		// Two agents that need the same key say so once.
 		return [...new Map(missing.map((setting) => [setting.message, setting])).values()]
@@ -445,8 +466,16 @@ export function openGateway(options: GatewayOptions): Gateway {
 		abortSignal: AbortSignal,
 	) => {
 		const choice = chosenModel(providers, request.provider, request.model)
-		const key = await options.credentials.get(providerCredential(choice.provider.name), abortSignal)
-		if (key === undefined) throw new Error(`Provider ${choice.provider.name} has no API key. ${setKeyHint(choice.provider.name)}`)
+		const providerKey = await providerKeyOf(options.credentials, choice.provider, abortSignal)
+		// Checked again for each call: the key only goes where it was set for.
+		if (providerKey.status !== 'set')
+			throw new Error(
+				`Provider ${choice.provider.name} has no API key for ${originText(choice.provider)}. ${setKeyHint(choice.provider.name)}`,
+			)
+		// The key goes only to the origin it was set for, also when a model's base URL isn't its kind's.
+		if (webOrigin(baseUrlOf(choice)) !== providerOrigin(choice.provider))
+			throw new Error(`Model ${choice.model.id} of provider ${choice.provider.name} isn't at the origin its key was set for.`)
+		const { key } = providerKey
 		const response: ModelResponse = await sendModelRequest(choice, request, key, { fetch: fetchFromHost, abortSignal })
 		const used = usageOf(response.body, choice.model)
 		await states.update(

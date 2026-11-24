@@ -25,7 +25,7 @@ describe('the provider settings', () => {
 			{ name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' },
 			{ name: 'anthropic', kind: 'anthropic' },
 		]
-		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		await setProviderKey(home, declared, 'anthropic', 'sk-secret', abortSignal)
 
 		// Act
 		const listed = await listProviders(home, declared, abortSignal)
@@ -37,10 +37,66 @@ describe('the provider settings', () => {
 		])
 	})
 
+	test('shows a key as not set, and where it was set for, once the config sends the provider elsewhere', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		const proxy = { name: 'proxy', kind: 'openrouter', baseUrl: 'https://llm-proxy.example.com/api/v1' }
+		await setProviderKey(home, [proxy], 'proxy', 'sk-secret', abortSignal)
+		const moved = { ...proxy, baseUrl: 'https://elsewhere.example.com/api/v1' }
+
+		// Act
+		const listed = await listProviders(home, [moved], abortSignal)
+
+		// Assert
+		expect(listed).toEqual([{ ...moved, hasKey: false, keySetFor: 'https://llm-proxy.example.com' }])
+	})
+
+	test('lists a provider without an origin, and a key stored without one, as having no key', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		await home.credentials.set('provider/anthropic', 'sk-secret', abortSignal)
+		const declared = [anthropic, { name: 'azure', kind: 'azure' }]
+
+		// Act
+		const listed = await listProviders(home, declared, abortSignal)
+
+		// Assert
+		expect(listed).toEqual([
+			{ ...anthropic, hasKey: false },
+			{ name: 'azure', kind: 'azure', hasKey: false },
+		])
+	})
+
+	test('refuses a key for a provider without an origin to tie it to', async () => {
+		// Arrange
+		const home = await gatewayHome()
+		const azure = { name: 'azure', kind: 'azure' }
+
+		// Act
+		const setting = setProviderKey(home, [azure], 'azure', 'sk-secret', abortSignal)
+
+		// Assert
+		await expect(setting).rejects.toMatchObject({
+			code: 'invalid',
+			message: 'Provider azure has no base URL to tie its key to: give it an http(s) `baseUrl` in `modelProviders`.',
+		})
+	})
+
+	test("refuses a key for a provider the config doesn't declare", async () => {
+		// Arrange
+		const home = await gatewayHome()
+
+		// Act
+		const setting = setProviderKey(home, [anthropic], 'openai', 'sk-secret', abortSignal)
+
+		// Assert
+		await expect(setting).rejects.toMatchObject({ code: 'not-found' })
+	})
+
 	test("removes a provider's key, and says so when it had none", async () => {
 		// Arrange
 		const home = await gatewayHome()
-		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		await setProviderKey(home, [anthropic], 'anthropic', 'sk-secret', abortSignal)
 
 		// Act
 		await removeProviderKey(home, 'anthropic', abortSignal)
@@ -56,7 +112,7 @@ describe('the provider settings', () => {
 		const home = await gatewayHome()
 
 		// Act
-		const setting = setProviderKey(home, '../webhook/x', 'sk-secret', abortSignal)
+		const setting = setProviderKey(home, [anthropic], '../webhook/x', 'sk-secret', abortSignal)
 
 		// Assert
 		await expect(setting).rejects.toMatchObject({ code: 'invalid' })
@@ -65,7 +121,7 @@ describe('the provider settings', () => {
 	test('asks a provider for its models with its key, and says which ones agents can use', async () => {
 		// Arrange
 		const home = await gatewayHome()
-		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		await setProviderKey(home, [anthropic], 'anthropic', 'sk-secret', abortSignal)
 		const fetchFromHost = vi.fn<typeof fetch>(() =>
 			Promise.resolve(Response.json({ data: [{ id: 'claude-opus-5-5' }, { id: 'claude-unreleased' }] })),
 		)
@@ -89,7 +145,7 @@ describe('the provider settings', () => {
 	test("lists pi-ai's models of the kind when the provider has no model list", async () => {
 		// Arrange
 		const home = await gatewayHome()
-		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		await setProviderKey(home, [anthropic], 'anthropic', 'sk-secret', abortSignal)
 
 		// Act
 		const models = await listProviderModels(home, [anthropic], 'anthropic', abortSignal, answering(404))
@@ -104,7 +160,7 @@ describe('the provider settings', () => {
 	test("says why a provider didn't list its models", async () => {
 		// Arrange
 		const home = await gatewayHome()
-		await setProviderKey(home, 'anthropic', 'sk-secret', abortSignal)
+		await setProviderKey(home, [anthropic], 'anthropic', 'sk-secret', abortSignal)
 
 		// Act
 		const models = await listProviderModels(home, [anthropic], 'anthropic', abortSignal, answering(401))

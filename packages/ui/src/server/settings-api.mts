@@ -6,7 +6,7 @@ import {
 	type ConnectorSettings,
 	type ControlClient,
 } from '@mesh-flow/engine'
-import { CredentialName, type GatewayHome } from '@mesh-flow/gateway'
+import { CredentialName, isProviderCredential, providerKeyRefusal, type GatewayHome } from '@mesh-flow/gateway'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { jsonBody, pathParameters } from './checked-request.mts'
@@ -46,8 +46,10 @@ export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOpti
 		return context.json(await listProviderModels(await gatewayHome(abortSignal), declared, context.req.param('name'), abortSignal))
 	})
 	api.put('/providers/:name/key', jsonBody(KeyBody), async (context) => {
+		const abortSignal = context.req.raw.signal
 		const { key } = context.req.valid('json')
-		await setProviderKey(await gatewayHome(context.req.raw.signal), context.req.param('name'), key, context.req.raw.signal)
+		const declared = await declaredProviders(abortSignal)
+		await setProviderKey(await gatewayHome(abortSignal), declared, context.req.param('name'), key, abortSignal)
 		return context.body(null, 204)
 	})
 	api.delete('/providers/:name/key', async (context) => {
@@ -61,6 +63,7 @@ export function settingsApi({ gatewayHome, client, connectors }: SettingsApiOpti
 	api.put('/credentials/:name{.+}', pathParameters(CredentialRoute), jsonBody(SecretBody), async (context) => {
 		const { name } = context.req.valid('param')
 		const { value } = context.req.valid('json')
+		if (isProviderCredential(name)) return context.json({ error: providerKeyRefusal(name) }, 400)
 		await (await gatewayHome(context.req.raw.signal)).credentials.set(name, value, context.req.raw.signal)
 		return context.body(null, 204)
 	})

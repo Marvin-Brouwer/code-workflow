@@ -2,7 +2,7 @@ import { text } from 'node:stream/consumers'
 import { knownKinds, type GatewayHome } from '@mesh-flow/gateway'
 import type { ModelProviderDescription } from '@mesh-flow/protocol'
 import type { Command } from 'commander'
-import { listProviderModels, listProviders, removeProviderKey, setProviderKey } from '../settings/providers.mts'
+import { listProviderModels, listProviders, removeProviderKey, setProviderKey, type ListedProvider } from '../settings/providers.mts'
 import { homeCommandAbortSignal } from './home-command-abort-signal.mts'
 
 /** What the provider commands work on. */
@@ -12,11 +12,18 @@ export interface ProviderCommandsOptions {
 	readonly declared: (abortSignal: AbortSignal) => Promise<readonly ModelProviderDescription[]>
 }
 
+/** Whether `provider` has a key, and when its key was set for another origin, which one. */
+function keyText(provider: ListedProvider): string {
+	if (provider.hasKey) return 'key set'
+	if (provider.keySetFor === undefined) return 'no key'
+	return `no key (set for ${provider.keySetFor} before)`
+}
+
 /**
  * `mesh-flow provider ...`: the API keys of the model providers the app's config declares. The
- * providers themselves, their order and base URLs, are in the config, in git. Setting a key works on
- * the engine's home directly, so it works without a running engine, and a running one sees the
- * change at once.
+ * providers themselves, their order and base URLs, are in the config, in git. Setting a key asks the
+ * running engine for them, since a key is tied to the origin its provider is at; removing one works
+ * on the engine's home directly, so it works without a running engine.
  */
 export function addProviderCommands(program: Command, { gatewayHome, declared }: ProviderCommandsOptions): void {
 	const provider = program
@@ -30,7 +37,7 @@ export function addProviderCommands(program: Command, { gatewayHome, declared }:
 			const abortSignal = homeCommandAbortSignal()
 			const providers = await declared(abortSignal)
 			for (const known of await listProviders(await gatewayHome(abortSignal), providers, abortSignal)) {
-				const key = known.hasKey ? 'key set' : 'no key'
+				const key = keyText(known)
 				console.log(`${known.name}  ${known.kind}  ${key}${known.baseUrl === undefined ? '' : `  ${known.baseUrl}`}`)
 			}
 		})
@@ -56,7 +63,7 @@ export function addProviderCommands(program: Command, { gatewayHome, declared }:
 			if (key.length === 0) throw new Error('No key on stdin. Pipe one in.')
 			// Started once the key is in, so typing it doesn't use up the time.
 			const abortSignal = homeCommandAbortSignal()
-			await setProviderKey(await gatewayHome(abortSignal), name, key, abortSignal)
+			await setProviderKey(await gatewayHome(abortSignal), await declared(abortSignal), name, key, abortSignal)
 		})
 
 	provider
