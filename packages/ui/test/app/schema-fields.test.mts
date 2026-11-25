@@ -41,8 +41,37 @@ describe('fieldsOf', () => {
 		])
 	})
 
+	test('gives a group of fields for a nested object, and shows a fixed value instead of asking for it', () => {
+		// Act
+		const fields = fieldsOf(
+			jsonSchema(
+				z.object({
+					issue: z.object({
+						repository: z.literal('octo/dice'),
+						number: z.number().int(),
+					}),
+				}),
+			),
+		)
+
+		// Assert
+		expect(fields).toEqual([
+			{
+				name: 'issue',
+				label: 'issue',
+				description: undefined,
+				required: true,
+				kind: 'object',
+				fields: [
+					{ name: 'repository', label: 'repository', description: undefined, required: true, kind: 'fixed', value: 'octo/dice' },
+					{ name: 'number', label: 'number', description: undefined, required: true, kind: 'integer' },
+				],
+			},
+		])
+	})
+
 	test.each([
-		['a nested object', z.object({ repository: z.object({ owner: z.string() }) })],
+		['an object with an array of text in it', z.object({ issue: z.object({ paths: z.array(z.string()) }) })],
 		['an array of text', z.object({ paths: z.array(z.string()) })],
 		['a union', z.object({ target: z.union([z.string(), z.number()]) })],
 		['no object at all', z.string()],
@@ -56,6 +85,35 @@ describe('fieldsOf', () => {
 })
 
 describe('valueOf', () => {
+	test('reads a nested object from the fields named after it, with its fixed values', () => {
+		// Arrange
+		const schema = jsonSchema(
+			z.object({
+				issue: z.object({
+					repository: z.literal('octo/dice'),
+					number: z.number().int(),
+				}),
+				reviewer: z
+					.object({
+						name: z.string().optional(),
+					})
+					.optional(),
+			}),
+		)
+		const fields = fieldsOf(schema) ?? []
+		const form = formData([
+			['issue.number', '63'],
+			['reviewer.name', ''],
+		])
+
+		// Act
+		const value = valueOf(fields, form)
+
+		// Assert
+		expect(value).toEqual({ issue: { repository: 'octo/dice', number: 63 } })
+		expect(checkAgainst(schema, value)).toEqual({ ok: true, value })
+	})
+
 	test('reads each field as its kind, and leaves out empty fields that are not required', () => {
 		// Arrange
 		const fields = fieldsOf(parameters) ?? []

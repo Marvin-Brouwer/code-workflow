@@ -87,7 +87,7 @@ Runs and sign-ins update as they change. The runs list and the sign-ins follow t
 
 The run view reads top to bottom as bars, one per step: a tool call from code (titled by its `describe` line), an agent (its text, with its calls as chips that open their input and result), a question, a wait, and a node of `inDependencyOrder` with its own bars inside. Bars are closed but for the latest and failed ones.
 
-Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: a flat object of text, numbers, yes or no and options gets a field each, anything else a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider's key or a credential. A model no provider in the config offers only gets its message: that's a change to the config in git.
+Forms for a JSON Schema (workflow parameters, input requests) come from `SchemaForm`: an object of text, numbers, yes or no, options and fixed values gets a field each, with a group of fields for each object in it, such as `{ issue: { repository, number } }`; a fixed value (a JSON Schema `const`, from `z.literal`) is shown, not asked for. Anything else gets a JSON text area. The value is checked against the schema before it's sent. `FixForm` shows the form that sets a missing setting: a provider's key or a credential. A model no provider in the config offers only gets its message: that's a change to the config in git.
 
 ## Develop
 

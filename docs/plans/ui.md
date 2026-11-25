@@ -120,8 +120,8 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 - **The wizard** is the start page asking the engine what the app is missing first, and showing
   one form per `fix` before the parameters. Nothing missing, no wizard.
 - **Forms** come from JSON Schema, which both workflow parameters and input request `fields` are.
-  A small renderer covers flat objects of strings, numbers, booleans, enums and arrays of enums,
-  which is what `input.text/yesNo/choice/choices` make; anything else gets a JSON text area that is
+  A small renderer covers objects of strings, numbers, booleans, enums, arrays of enums and fixed
+  values (`const`), nested objects as groups of fields; anything else gets a JSON text area that is
   checked by the same schema before it's sent.
 - **Updates** poll the API on the pages that change (runs, one run, sign-ins) every `pollInterval`,
   a `Duration` of two seconds. They stop with the component's abort signal (rooted's mount `signal`,

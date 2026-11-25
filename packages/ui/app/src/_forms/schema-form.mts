@@ -20,8 +20,8 @@ export interface SchemaFormOptions {
 }
 
 /**
- * A form for a JSON Schema. A flat object of text, numbers, yes or no and options gets a field per
- * property; anything else gets a JSON text area. Either way the value is checked against the schema
+ * A form for a JSON Schema. An object of text, numbers, yes or no, options and fixed values gets a
+ * field per property, and a group of fields per object in it; anything else gets a JSON text area. Either way the value is checked against the schema
  * before it's sent, and the server checks it again.
  */
 export const SchemaForm = component<SchemaFormOptions>({
@@ -32,7 +32,8 @@ export const SchemaForm = component<SchemaFormOptions>({
 		const status = formStatus(element)
 		const fields = fieldsOf(schema)
 
-		const fieldElement = (field: SchemaField) => {
+		const fieldElement = (field: SchemaField, prefix: string): HTMLElement => {
+			const formName = `${prefix}${field.name}`
 			const hint =
 				field.description === undefined
 					? undefined
@@ -40,12 +41,33 @@ export const SchemaForm = component<SchemaFormOptions>({
 							classes: styles.hint,
 							textContent: field.description,
 						})
+			if (field.kind === 'object')
+				return element('fieldset', {
+					children: [
+						element('legend', {
+							textContent: field.label,
+						}),
+						hint,
+						...field.fields.map((nested) => fieldElement(nested, `${formName}.`)),
+					],
+				})
+			if (field.kind === 'fixed')
+				return element('label', {
+					children: [
+						field.label,
+						hint,
+						element('input', {
+							value: String(field.value),
+							readOnly: true,
+						}),
+					],
+				})
 			if (field.kind === 'boolean')
 				return element('label', {
 					classes: styles.inline,
 					children: [
 						element('input', {
-							name: field.name,
+							name: formName,
 							type: 'checkbox',
 						}),
 						field.label,
@@ -64,7 +86,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 								classes: styles.inline,
 								children: [
 									element('input', {
-										name: field.name,
+										name: formName,
 										type: 'checkbox',
 										value: option,
 									}),
@@ -77,7 +99,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 			const input =
 				field.kind === 'choice'
 					? element('select', {
-							name: field.name,
+							name: formName,
 							required: field.required,
 							children: [
 								element('option', {
@@ -93,7 +115,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 							],
 						})
 					: element('input', {
-							name: field.name,
+							name: formName,
 							required: field.required,
 							type: choice(field.kind === 'text', 'text', 'number'),
 							// An empty step is the default one, which an integer wants.
@@ -134,7 +156,7 @@ export const SchemaForm = component<SchemaFormOptions>({
 									],
 								}),
 							]
-						: fields.map(fieldElement)),
+						: fields.map((field) => fieldElement(field, ''))),
 					submitActions(element, submitLabel),
 					status,
 				],
