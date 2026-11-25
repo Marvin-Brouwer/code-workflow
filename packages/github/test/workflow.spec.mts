@@ -4,7 +4,7 @@ import { signed, withHeader } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { duration } from '@mesh-flow/duration'
 import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
-import type { RuntimeMessage } from '@mesh-flow/protocol'
+import type { RuntimeEvent, RuntimeMessage } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
 import { deletedItemHeader, quoteHeader } from '../src/host/reply-header.mts'
@@ -51,10 +51,14 @@ const promptly = duration.of('1s')
 const secondLook = duration.of('300ms')
 
 /** The tools a run called, split by whether a `poll` event is above the call, with the polls' descriptions. */
-function toolCallsByPoll(messages: readonly RuntimeMessage[]) {
+function toolCallsByPoll(messages: readonly RuntimeMessage[]): {
+	readonly descriptions: readonly unknown[]
+	readonly inPolls: readonly unknown[]
+	readonly outsidePolls: readonly unknown[]
+} {
 	const events = messages.flatMap((message) => (message.type === 'event' ? [message.event] : []))
 	const byId = new Map(events.map((event) => [event.id, event]))
-	const pollAbove = (event: (typeof events)[number]): (typeof events)[number] | undefined => {
+	const pollAbove = (event: RuntimeEvent): RuntimeEvent | undefined => {
 		const parent = event.parentId === undefined ? undefined : byId.get(event.parentId)
 		if (parent === undefined) return undefined
 		return parent.type === 'poll' ? parent : pollAbove(parent)
