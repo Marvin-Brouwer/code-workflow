@@ -193,6 +193,9 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.goto(new URL('/runs/', url).href)
 		const restartableRow = page.getByRole('row', { name: /run-f00000000001/ })
 		const stoppedRow = page.getByRole('row', { name: /run-f00000000002/ })
+		// The rows draw their buttons once the runs are read: read them after that.
+		await page.getByRole('button', { name: 'Continue run-f00000000001' }).waitFor()
+		await page.getByRole('button', { name: 'Archive run-f00000000002' }).waitFor()
 		const restartableButtons = await restartableRow.getByRole('button').allTextContents()
 		const stoppedButtons = await stoppedRow.getByRole('button').allTextContents()
 		await page.getByRole('button', { name: 'Continue run-f00000000001' }).click()
