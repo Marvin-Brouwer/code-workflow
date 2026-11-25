@@ -82,9 +82,10 @@ describe('fieldsOf', () => {
 		// Assert
 		expect(fields).toBeUndefined()
 	})
+
 	test("gives no fields for a property name with a dot, whose form name could be a nested field's", () => {
 		// Act
-		const fields = fieldsOf(jsonSchema(z.object({ 'a.b': z.string(), a: z.object({ b: z.string() }) })))
+		const fields = fieldsOf(jsonSchema(z.object({ 'issue.number': z.string(), issue: z.object({ number: z.string() }) })))
 
 		// Assert
 		expect(fields).toBeUndefined()
@@ -157,6 +158,7 @@ describe('valueOf', () => {
 		// Assert
 		expect(value).toEqual({ story: '', draft: false, size: 'small', labels: [], retries: 3 })
 	})
+
 	test('leaves out an object that may be left out while nothing in it is filled in, whatever its fields are', () => {
 		// Arrange
 		const schema = jsonSchema(
