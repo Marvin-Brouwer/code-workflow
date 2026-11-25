@@ -225,5 +225,5 @@ export function onIssueLabeled<Shape extends z.ZodRawShape>(workflow: TakesIssue
 		// GitHub may case the name otherwise than the pin, which the workflow's parameters fix exactly.
 		issue: { repository: repository ?? event.repository.full_name, number: event.issue.number },
 	}))
-	return webhook(takingIssue, schema, { name: `${workflow.name}-labeled-${checked}`, ...triggerOptions })
+	return webhook(takingIssue, schema, { name: `${takingIssue.name}-labeled-${checked}`, ...triggerOptions })
 }
