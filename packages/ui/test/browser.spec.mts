@@ -35,10 +35,10 @@ async function openUi(): Promise<{ page: Page; url: string }> {
 	return { page, url: served.url }
 }
 
-/** Whether the page is scrolled to its bottom, as the run view follows it: run in the page. */
 /** As `follow-bottom.mts` has it: how close to the bottom counts as at the bottom. */
 const bottomSlackPx = 48
 
+/** Whether the page is scrolled to its bottom, as the run view follows it: run in the page. */
 const atBottom = `window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - ${String(bottomSlackPx)}`
 
 describe.skipIf(process.platform === 'win32')('the page', () => {
@@ -71,7 +71,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
 		const questionBox = await page.getByLabel('answer').boundingBox()
 		const viewport = page.viewportSize()
-		const questionInView = questionBox !== null && viewport !== null && questionBox.y + questionBox.height <= viewport.height
+		const questionInView =
+			questionBox !== null && viewport !== null && questionBox.y >= 0 && questionBox.y + questionBox.height <= viewport.height
 		await page.getByLabel('answer').fill('the red one')
 		await page.getByRole('button', { name: 'Answer' }).click()
 
