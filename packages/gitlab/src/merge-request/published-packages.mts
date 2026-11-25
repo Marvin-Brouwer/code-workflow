@@ -30,6 +30,18 @@ export interface PublishedPackagesOptions {
 	readonly toleratedOutage?: Duration
 }
 
+/** How `processedPackages` waits for GitLab to process a pipeline's packages. */
+interface ProcessedPackagesOptions {
+	/** What is waited for: the waiting bar's title. */
+	readonly description: string
+	/** How long to wait between looks. */
+	readonly every: Duration
+	/** Whether the packages may still be processing for another look. */
+	readonly mayProcess: LookBudget
+	/** The pipeline, for the error when processing takes too long. */
+	readonly url: string
+}
+
 /**
  * The packages a pipeline published, once GitLab processed them all: it reads a NuGet package's
  * name and version after the upload, in the background. Fails when that takes longer than
@@ -37,12 +49,7 @@ export interface PublishedPackagesOptions {
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
-	{
-		description,
-		every,
-		mayProcess,
-		url,
-	}: { readonly description: string; readonly every: Duration; readonly mayProcess: LookBudget; readonly url: string },
+	{ description, every, mayProcess, url }: ProcessedPackagesOptions,
 ): Promise<readonly PublishedPackage[]> {
 	for (;;) {
 		const { packages, processing } = await list()
@@ -95,7 +102,8 @@ export async function publishedPackages(
 	const pipelineMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
 	const mayProcess = lookBudget(options.processWithin ?? defaultProcessWithin, every)
 	const description = `packages published by the merge of ${on.repository}!${String(on.number)}`
-	const look = patientLook({ description, every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const retrying = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const look = async <Result,>(attempt: () => Promise<Result>) => poll(description, () => retrying(attempt))
 	const merged = await look(() => stubs.getMergeRequest({ repository: on.repository, number: on.number }, context))
 	if (!merged.merged || merged.mergedSha === undefined) throw new Error(`${merged.url} isn't merged, so it published nothing.`)
 	const { mergedSha } = merged
