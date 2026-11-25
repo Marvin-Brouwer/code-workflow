@@ -8,7 +8,7 @@ import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunRecord } from '../_shared/runs.mts'
 import { RunRoute } from './_routes.mts'
-import { actOn, runActions, type RunAction } from './run-actions.mts'
+import { actOn, isArchived, runActions, type RunAction } from './run-actions.mts'
 import { inListOrder, shownTime, waitsOn } from './run-labels.mts'
 
 /** What a run's row lets a person do: carry it on, or put it away. Stopping is on the run's own page. */
@@ -21,7 +21,7 @@ const rowActions: readonly RunAction[] = ['resume', 'restart', 'archive', 'unarc
 export const RunsList = component({
 	name: 'runs-list',
 	onMount({ append, element, create, signal }) {
-		const status = element('p', {
+		const actionError = element('p', {
 			role: 'alert',
 		})
 		let showArchived = false
@@ -40,12 +40,17 @@ export const RunsList = component({
 			}),
 		)
 		const list = append(element('div'))
-		append(status)
+		append(actionError)
 
+		// One action per run at a time, so a double click doesn't send a second one that's refused.
+		const acting = new Set<string>()
 		const act = async (id: string, action: RunAction) => {
+			if (acting.has(id)) return
+			acting.add(id)
 			const answer = await actOn(id, action, signal)
+			acting.delete(id)
 			if (signal.aborted) return
-			status.textContent = answer.ok ? '' : answer.error
+			actionError.textContent = answer.ok ? '' : answer.error
 			refresh()
 		}
 
@@ -89,20 +94,26 @@ export const RunsList = component({
 
 		const runsView = (runs: Answer<RunRecord[]>) => {
 			if (!runs.ok) return errorText(element, runs.error)
-			const shown = runs.value.filter(({ archivedAt }) => (archivedAt !== undefined) === showArchived)
+			const shown = runs.value.filter((record) => isArchived(record) === showArchived)
 			if (shown.length === 0)
 				return element('p', {
 					textContent: choice(showArchived, 'No archived runs.', 'No runs yet.'),
 				})
 			return create(Table, {
-				headings: ['Run', 'Workflow', 'Status', 'Waits on', 'Last change', ''],
+				headings: ['Run', 'Workflow', 'Status', 'Waits on', 'Last change', 'Actions'],
 				rows: inListOrder(shown).map(row),
 			})
 		}
 
+		// A run's events change no record, but tell the list too: it's drawn again only when what it shows changed,
+		// so a busy run doesn't replace the buttons under someone's pointer.
+		let drawn = ''
 		const show = async (abortSignal: AbortSignal) => {
 			const runs = await read('/engine/runs', z.array(RunRecord), abortSignal)
 			if (abortSignal.aborted) return
+			const shown = JSON.stringify({ runs, showArchived })
+			if (shown === drawn) return
+			drawn = shown
 			list.replaceChildren(runsView(runs))
 		}
 

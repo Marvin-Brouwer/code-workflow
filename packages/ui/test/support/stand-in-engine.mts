@@ -73,6 +73,20 @@ interface StandInRun {
 	archivedAt?: string | undefined
 }
 
+/** The width of the number in a run id, as the engine makes them. */
+const runNumberWidth = 11
+
+/**
+ * The id of the stand-in's `position`th run it starts with, from 1. The `f` keeps these apart from
+ * the runs a test starts.
+ */
+export function standInRunId(position: number): string {
+	return `run-f${String(position).padStart(runNumberWidth, '0')}`
+}
+
+/** The runs the engine's `archive` takes: those that are over. */
+const finishedStatuses = new Set(['succeeded', 'failed', 'stopped', 'skipped'])
+
 /** What the stand-in engine starts with besides its app. */
 export interface StandInOptions {
 	/** Runs it has already, by status, such as a stopped one to archive. */
@@ -87,7 +101,7 @@ export interface StandInOptions {
 export async function standInEngine(home: string, options: StandInOptions = {}) {
 	const runs = new Map<string, StandInRun>(
 		(options.runs ?? []).map((status, index) => {
-			const id = `run-f${String(index + 1).padStart(11, '0')}`
+			const id = standInRunId(index + 1)
 			return [id, { id, status, pending: [], events: [], updatedAt: builtAt }]
 		}),
 	)
@@ -207,6 +221,8 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 	})
 	api.post('/runs/:run/archive', (context) => {
 		const run = found(context.req.param('run'))
+		// As the engine: only a run that's over is archived.
+		if (!finishedStatuses.has(run.status)) return context.json({ error: `Run ${run.id} is ${run.status}.` }, 409)
 		run.archivedAt = new Date().toISOString()
 		changed(run)
 		return context.json(record(run))

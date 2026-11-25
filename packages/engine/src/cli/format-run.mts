@@ -40,6 +40,7 @@ export function formatRun(record: RunRecord, signIns: readonly SignInState[] = [
 		field('started', record.createdAt),
 		field('updated', record.updatedAt),
 	]
+	if (record.archivedAt) lines.push(field('archived', record.archivedAt))
 	if (record.sandbox) lines.push(field('sandbox', `${record.sandbox.id} on ${record.sandbox.backend}`))
 	if (record.error) lines.push(field('error', record.error))
 	for (const [model, used] of Object.entries(record.usage ?? {})) {

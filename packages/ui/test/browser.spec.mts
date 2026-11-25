@@ -5,7 +5,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { serveUiFrom } from '../src/_module/server.mts'
 import { temporaryDirectory } from './support/served-ui.mts'
-import { standInEngine, standInSchedule, type StandInOptions } from './support/stand-in-engine.mts'
+import { standInEngine, standInRunId, standInSchedule, type StandInOptions } from './support/stand-in-engine.mts'
 
 /** The page as `pnpm build` makes it: this test runs against the real one. */
 const builtPage = fileURLToPath(new URL('../dist/app', import.meta.url))
@@ -186,32 +186,37 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 	test('continues a restartable run and archives a stopped one from the runs list', async () => {
 		// Arrange
 		const { page, url } = await openUi({ runs: ['restartable', 'stopped'] })
+		const restartable = standInRunId(1)
+		const stopped = standInRunId(2)
+		const restartableRow = page.getByRole('row', { name: restartable })
+		const stoppedRow = page.getByRole('row', { name: stopped })
+		const continueButton = page.getByRole('button', { name: `Continue ${restartable}` })
+		const archiveButton = page.getByRole('button', { name: `Archive ${stopped}` })
+		const unarchiveButton = page.getByRole('button', { name: `Unarchive ${stopped}` })
 
 		// Act
 		await page.goto(url)
 		await page.goto(new URL('/runs/', url).href)
-		const restartableRow = page.getByRole('row', { name: /run-f00000000001/ })
-		const stoppedRow = page.getByRole('row', { name: /run-f00000000002/ })
 		// The rows draw their buttons once the runs are read: read them after that.
-		await page.getByRole('button', { name: 'Continue run-f00000000001' }).waitFor()
-		await page.getByRole('button', { name: 'Archive run-f00000000002' }).waitFor()
+		await continueButton.waitFor()
+		await archiveButton.waitFor()
 		const restartableButtons = await restartableRow.getByRole('button').allTextContents()
 		const stoppedButtons = await stoppedRow.getByRole('button').allTextContents()
-		await page.getByRole('button', { name: 'Continue run-f00000000001' }).click()
+		await continueButton.click()
 		await expect.poll(() => restartableRow.textContent()).toContain('starting')
-		await page.getByRole('button', { name: 'Archive run-f00000000002' }).click()
+		await archiveButton.click()
 		await stoppedRow.waitFor({ state: 'detached' })
 		await page.getByLabel('Show archived runs').check()
-		await page.getByRole('button', { name: 'Unarchive run-f00000000002' }).waitFor()
-		const archivedRows = await page.getByRole('row', { name: /run-f0/ }).allTextContents()
-		await page.getByRole('button', { name: 'Unarchive run-f00000000002' }).click()
+		await unarchiveButton.waitFor()
+		const archivedRows = await page.locator('main tbody tr').allTextContents()
+		await unarchiveButton.click()
 		await page.getByText('No archived runs.').waitFor()
 
 		// Assert
 		expect(restartableButtons).toEqual(['Continue'])
 		expect(stoppedButtons).toEqual(['Continue', 'Archive'])
 		expect(archivedRows).toHaveLength(1)
-		expect(archivedRows[0]).toContain('run-f00000000002')
+		expect(archivedRows[0]).toContain(stopped)
 	})
 
 	test("keeps what's typed in one row while another credential is set, and clears a provider's key back to not set", async () => {

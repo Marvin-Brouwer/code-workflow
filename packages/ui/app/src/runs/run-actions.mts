@@ -4,21 +4,64 @@ import { RunRecord, type RunStatus } from '../_shared/runs.mts'
 /** What a person can do to a run, as the engine's routes of those names. */
 export type RunAction = 'stop' | 'resume' | 'restart' | 'archive' | 'unarchive'
 
-/** A run that's over: nothing of it runs any more, so it can be archived. */
-const overStatuses: readonly RunStatus[] = ['succeeded', 'failed', 'stopped', 'skipped']
+/** An action as a button shows it. */
+export interface ShownRunAction {
+	readonly action: RunAction
+	readonly label: string
+}
+
+/** An action, and the runs the engine takes it for. */
+interface RunActionRule extends ShownRunAction {
+	readonly takes: (record: RunRecord) => boolean
+}
+
+/** The runs the engine's `stop` takes. */
+const stoppableStatuses: ReadonlySet<RunStatus> = new Set(['starting', 'running', 'paused', 'restartable'])
+
+/** The runs the engine's `restart` takes. */
+const continuableStatuses: ReadonlySet<RunStatus> = new Set(['restartable', 'failed', 'stopped'])
+
+/** A run that's over, as the engine's set of the same name: nothing of it runs any more, so it can be archived. */
+const finishedStatuses: ReadonlySet<RunStatus> = new Set(['succeeded', 'failed', 'stopped', 'skipped'])
+
+/** Whether a run is in the archive. */
+export function isArchived(record: RunRecord): boolean {
+	return record.archivedAt !== undefined
+}
 
 /** What can be done to a run, and to which runs the engine takes it. */
-const actions: readonly { readonly action: RunAction; readonly label: string; readonly takes: (record: RunRecord) => boolean }[] = [
-	{ action: 'stop', label: 'Stop', takes: ({ status }) => ['starting', 'running', 'paused', 'restartable'].includes(status) },
-	{ action: 'resume', label: 'Resume', takes: ({ status }) => status === 'paused' },
-	// A restart runs the code again, but finished loops keep their results and branches and pull requests are reused: it continues.
-	{ action: 'restart', label: 'Continue', takes: ({ status }) => ['restartable', 'failed', 'stopped'].includes(status) },
-	{ action: 'archive', label: 'Archive', takes: ({ status, archivedAt }) => overStatuses.includes(status) && archivedAt === undefined },
-	{ action: 'unarchive', label: 'Unarchive', takes: ({ archivedAt }) => archivedAt !== undefined },
+const actions: readonly RunActionRule[] = [
+	{
+		action: 'stop',
+		label: 'Stop',
+		takes: ({ status }) => stoppableStatuses.has(status),
+	},
+	{
+		action: 'resume',
+		label: 'Resume',
+		takes: ({ status }) => status === 'paused',
+	},
+	// A restart runs the code again, but finished loops keep their results and branches and pull
+	// requests are reused: it continues.
+	{
+		action: 'restart',
+		label: 'Continue',
+		takes: ({ status }) => continuableStatuses.has(status),
+	},
+	{
+		action: 'archive',
+		label: 'Archive',
+		takes: (record) => finishedStatuses.has(record.status) && !isArchived(record),
+	},
+	{
+		action: 'unarchive',
+		label: 'Unarchive',
+		takes: isArchived,
+	},
 ]
 
 /** The actions the engine takes for `record` now, of those in `shown`, in a fixed order. */
-export function runActions(record: RunRecord, shown: readonly RunAction[]): { readonly action: RunAction; readonly label: string }[] {
+export function runActions(record: RunRecord, shown: readonly RunAction[]): ShownRunAction[] {
 	return actions.filter(({ action, takes }) => shown.includes(action) && takes(record))
 }
 

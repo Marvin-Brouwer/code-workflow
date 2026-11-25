@@ -249,6 +249,29 @@ mailbox.send({ type: 'succeeded' })
 		expect(engine.list().map((record) => record.id)).toEqual([id])
 	})
 
+	test('keeps a run archived when the engine opens its home again, and refuses to unarchive an unknown run', async () => {
+		// Arrange
+		const first = await openEngine()
+		await deployTestApp(
+			first.deployment,
+			{ main: runtimeScript(`await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: 'No dice.' })`) },
+			{ triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }] },
+		)
+		const { id } = await first.engine.startRun({ ...userRun('greet'), abortSignal: signal })
+		await untilStatus(first.engine, id, 'failed')
+		const archived = await first.engine.archive(id, signal)
+		await first.engine.close(deadlines())
+
+		// Act
+		const second = await openEngine({ home: first.home })
+		const reopened = second.engine.get(id)
+		const unarchiving = second.engine.unarchive('run-000000000000', signal)
+
+		// Assert
+		expect(reopened.archivedAt).toBe(archived.archivedAt)
+		await expect(unarchiving).rejects.toMatchObject({ code: 'not-found' })
+	})
+
 	test('refuses to archive a run that is not over', async () => {
 		// Arrange
 		const { deployment, engine } = await openEngine()

@@ -272,8 +272,10 @@ export async function main(argv: readonly string[]): Promise<void> {
 		.description('Lists the runs, without the archived ones.')
 		.option('--archived', 'list the archived runs instead')
 		.action(async ({ archived }: { archived?: boolean }) => {
+			const showArchived = archived === true
 			for (const record of await client().list(requestSignal())) {
-				if ((record.archivedAt !== undefined) === (archived === true)) console.log(formatRunLine(record))
+				const isArchived = record.archivedAt !== undefined
+				if (isArchived === showArchived) console.log(formatRunLine(record))
 			}
 		})
 

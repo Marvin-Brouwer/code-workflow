@@ -472,20 +472,21 @@ export class Engine {
 	/**
 	 * Archives a run that's over: it's kept, with its events, but lists leave it out unless asked for
 	 * archived runs. Archiving it again keeps the first time. Continuing it with `restart` takes it out
-	 * of the archive.
+	 * of the archive. A restartable run isn't over: stop it first. Archiving is a change of the run,
+	 * so it moves `updatedAt`.
 	 */
-	async archive(id: string, signal: AbortSignal): Promise<RunRecord> {
+	async archive(id: string, abortSignal: AbortSignal): Promise<RunRecord> {
 		this.#assertOpen()
-		signal.throwIfAborted()
+		abortSignal.throwIfAborted()
 		const record = this.#requireStatus(id, [...finishedStatuses])
 		if (record.archivedAt !== undefined) return record
 		return this.#update(record.id, { archivedAt: this.#now().toISOString() })
 	}
 
 	/** Takes a run out of the archive, so lists show it again. */
-	async unarchive(id: string, signal: AbortSignal): Promise<RunRecord> {
+	async unarchive(id: string, abortSignal: AbortSignal): Promise<RunRecord> {
 		this.#assertOpen()
-		signal.throwIfAborted()
+		abortSignal.throwIfAborted()
 		const record = this.get(id)
 		if (record.archivedAt === undefined) return record
 		return this.#update(record.id, { archivedAt: undefined })

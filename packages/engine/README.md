@@ -110,7 +110,7 @@ mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge re
 mesh-flow archive run-3f2a9c0d1e7b  # a run that's over: kept, but left out of `list` (`list --archived` shows them)
 ```
 
-A restart replays the workflow code, but a finished loop returns its stored result, an unfinished one continues its conversation, and branches and pull requests are reused, so it carries on rather than starting over. The UI calls it Continue. A restart also takes a run out of the archive.
+A restart replays the workflow code, but a finished loop returns its stored result, an unfinished one continues its conversation, and branches and pull requests are reused, so it carries on rather than starting over. The UI calls it Continue. A restart also takes a run out of the archive. Only a run that's over can be archived: stop a restartable one first.
 
 ### Triggers
 

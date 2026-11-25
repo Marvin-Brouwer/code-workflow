@@ -64,8 +64,14 @@ export const RunPage = component<RunPageOptions>({
 		// The request forms stay as they are while the run waits on them, so a refresh doesn't clear what's typed.
 		let shownRequests = ''
 
+		// One action at a time, so a double click doesn't send a second one that's refused.
+		let acting = false
 		const act = async (action: RunAction) => {
+			if (acting) return
+			acting = true
 			const answer = await actOn(id, action, signal)
+			acting = false
+			if (signal.aborted) return
 			status.textContent = answer.ok ? '' : answer.error
 		}
 
