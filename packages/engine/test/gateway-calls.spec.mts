@@ -602,4 +602,55 @@ mailbox.send({ type: 'succeeded' })
 			expect.objectContaining({ resolved: { ok: true, result: { provider: 'work', kind: 'anthropic', model: appModel } } }),
 		])
 	})
+	test('shows what a run used so far while it goes on, and keeps it as its usage once it is over', async () => {
+		// Arrange
+		const sent = vi.fn<typeof fetch>(() =>
+			Promise.resolve(
+				new Response(JSON.stringify({ usage: { input_tokens: 12, output_tokens: 3 } }), {
+					headers: { 'content-type': 'application/json' },
+				}),
+			),
+		)
+		const { engine, deployment, gatewayHome } = await openEngine({ fetch: sent })
+		await deployModelApp(
+			deployment,
+			[workProvider],
+			callingScript(`
+const request = {
+	provider: 'work',
+	model: '${appModel}',
+	path: '/v1/messages',
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: JSON.stringify({ model: '${appModel}', max_tokens: 10, messages: [] }),
+}
+await call('call-1', { type: 'model', request }, grant.tokens[0])
+mailbox.send({ type: 'request', request: { kind: 'input', id: 'more', question: 'Go on?', fields: {} } })
+await mailbox.answer('more', signal)
+mailbox.send({ type: 'succeeded' })
+`),
+		)
+		await withKey(gatewayHome, 'sk-test')
+		const run = await engine.startRun({ ...userRun('calls'), input: { story: 'ABC-1' }, abortSignal })
+
+		// Act
+		const waiting = await vi.waitFor(
+			() => {
+				const record = engine.get(run.id)
+				if (record.pending.length === 0 || record.liveUsage === undefined) throw new Error(`Run is ${record.status}`)
+				return record
+			},
+			{ timeout: duration.of('20s').to('ms'), interval: 50 },
+		)
+		await engine.answer(run.id, 'more', true, abortSignal)
+		const over = await untilStatus(engine, run.id, 'succeeded')
+
+		// Assert
+		const used = { [appModel]: { requests: 1, inputTokens: 12, outputTokens: 3 } }
+		expect(waiting.liveUsage).toMatchObject(used)
+		expect(waiting.usage).toBeUndefined()
+		expect(over.usage).toMatchObject(used)
+		expect(over.liveUsage).toBeUndefined()
+		expect(await engine.input(run.id)).toEqual({ story: 'ABC-1' })
+	})
 })

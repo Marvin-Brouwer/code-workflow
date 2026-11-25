@@ -15,6 +15,9 @@ export function runsApi(client: ControlClient): Hono {
 		return context.json(await client.startRun({ trigger, input, key, abortSignal: context.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', async (context) => context.json(await client.get(context.req.param('run'), context.req.raw.signal)))
+	api.get('/runs/:run/input', async (context) =>
+		context.json({ input: await client.input(context.req.param('run'), context.req.raw.signal) }),
+	)
 	api.get('/runs/:run/events', async (context) => {
 		const run = context.req.param('run')
 		const abortSignal = context.req.raw.signal

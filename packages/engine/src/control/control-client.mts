@@ -46,6 +46,8 @@ export interface ControlClient {
 	stop(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	/** What the run was started with: its workflow's parameters. `undefined` for a workflow without any. */
+	input(run: string, abortSignal: AbortSignal): Promise<unknown>
 	/** Archives a run that's over: kept, but left out of lists. */
 	archive(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/** Takes a run out of the archive. */
@@ -87,6 +89,8 @@ export function controlClient(socketPath: string): ControlClient {
 	return Object.freeze({
 		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
 		get: (run, abortSignal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, abortSignal),
+		input: async (run, abortSignal) =>
+			(await call(socketPath, z.object({ input: z.unknown() }), 'GET', `${runPath(run)}/input`, undefined, abortSignal)).input,
 		events: (run, abortSignal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, abortSignal),
 		startRun: ({ trigger, input, key, abortSignal }) => call(socketPath, RunRecord, 'POST', '/runs', { trigger, input, key }, abortSignal),
 		answer: (run, requestId, value, abortSignal) =>

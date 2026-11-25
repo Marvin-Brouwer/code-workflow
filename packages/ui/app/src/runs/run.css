@@ -28,3 +28,11 @@
 .section {
 	margin-bottom: var(--space-l);
 }
+
+.input {
+	max-height: 20rem;
+	overflow: auto;
+	border: var(--line);
+	padding: var(--space-s) var(--space-m);
+	tab-size: 2;
+}

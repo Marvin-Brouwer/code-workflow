@@ -64,6 +64,9 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		const shownMarkup = await page.locator('main').textContent()
 		const madeElements = await page.locator('main script, main img').count()
 		const ranScript = await page.evaluate(() => 'injected' in globalThis)
+		const shownInput = await page.locator('main pre').first().textContent()
+		const liveUsage = await page.getByRole('row', { name: /claude-sonnet-5-5/ }).textContent()
+		const liveHeading = await page.getByRole('heading', { name: 'Usage so far' }).count()
 		// The steps don't fit, so the page has followed them down.
 		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
 		await page.getByLabel('answer').fill('the red one')
@@ -79,6 +82,11 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(ranScript).toBe(false)
 		await expect.poll(() => page.locator('dd').first().textContent()).toBe('succeeded')
 		await expect.poll(() => page.getByRole('status').filter({ hasText: 'Live' }).count()).toBe(1)
+		await expect.poll(() => page.getByRole('heading', { name: 'Usage', exact: true }).count()).toBe(1)
+		expect(JSON.parse(shownInput ?? 'null')).toEqual({ issue: { repository: 'octo/dice', number: 63 } })
+		expect(liveHeading).toBe(1)
+		expect(liveUsage).toContain('100')
+		expect(await page.getByRole('row', { name: /claude-sonnet-5-5/ }).textContent()).toContain('200')
 	})
 
 	test('sets up what is missing, then hides the bar and shows the triggers', async () => {

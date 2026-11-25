@@ -55,7 +55,7 @@ This is the local way in. The token only goes to the terminal, never on a comman
 | Route | Does |
 |---|---|
 | `GET /api/engine/status` | `{ running }`: whether an engine answers on the home's socket |
-| `/api/engine/runs`, `/runs/:run`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart`, `/archive`, `/unarchive` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
+| `/api/engine/runs`, `/runs/:run`, `/runs/:run/input`, `/runs/:run/events`, `/runs/:run/answers/:request`, `/runs/:run/stop`, `/resume`, `/restart`, `/archive`, `/unarchive` | the engine's control API, the same calls as the CLI; 503 when no engine runs |
 | `GET /api/engine/events` | the engine's event stream, as server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds |
 | `GET /api/engine/runs/:run/events` as `text/event-stream` | one run's stream: its record and its events, first all of them and then each change, and its sign-ins |
 | `GET /api/engine/connectors` | the connectors the engine loaded, and which sign in |
@@ -74,7 +74,7 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 | Page | Shows | Does |
 |---|---|---|
 | `/` and `/runs/` | a bar when the app still needs settings, and every run that isn't archived: workflow, status, what it waits on; those that need someone on top | open a run, start a new one when the app has a user trigger; continue, resume, archive or unarchive a run in its row; show the archived runs instead |
-| `/runs/:id/` | its status, what it waits on, its steps as bars, its usage once done | answer a question, stop, resume, continue (a restart), archive, unarchive |
+| `/runs/:id/` | its status, the input it was started with, what it waits on, its steps as bars, its usage (so far while it goes on) | answer a question, stop, resume, continue (a restart), archive, unarchive |
 | `/triggers/` | the app's version and its triggers: a schedule's cron, a webhook's secret set or not | start a workflow from its user trigger |
 | `/start/` | the app's user triggers, when it has more than one | pick one |
 | `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
