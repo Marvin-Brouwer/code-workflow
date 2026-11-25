@@ -1,62 +1,22 @@
-import { choice, component } from '@rooted/components'
+import { component } from '@rooted/components'
 import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
 import { CredentialRowForm } from '../_forms/credential-row-form.mts'
 import { keepRows, Table } from '../_layout/table.mts'
 import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
-import { ListedProvider, providerCredential, providerKeyText, providerOfCredential, setText } from '../_shared/settings.mts'
+import { ListedProvider } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
-
-/** A credential on the page: one that's stored, or the key of a provider the app's config declares. */
-interface ShownCredential {
-	/** Its name in the credential store, which is also its row's id. */
-	readonly name: string
-	/** Whether it's set, and for a provider's key, whether it's used. */
-	readonly stateText: string
-	/** Whether the credential store holds a value, so it can be replaced and cleared. */
-	readonly stored: boolean
-	/** Whether a value can be sent: a provider's key only for a provider the config declares. */
-	readonly settable: boolean
-}
-
-/** What a stored provider key shows when no provider the config declares, as far as the page knows, is its provider. */
-const unknownProviderText = 'set, for no provider the config declares'
+import { rowKey, shownCredentials, type ShownCredential } from './shown-credentials.mts'
 
 /**
- * The stored credentials, and the keys of the declared providers, set or not, by name. Without the
- * declared providers, a stored provider key can only be cleared.
+ * The credentials by name, never their values, and the keys of the app's providers: set, replace
+ * or clear one in its row, or set another one, such as a generated webhook secret. A refresh keeps
+ * the rows that didn't change in place, with what's typed in them. A stored provider key whose
+ * provider the config doesn't declare can only be cleared. A link to `#<name>` puts the cursor in
+ * that credential's row.
  */
-function shownCredentials(names: readonly string[], providers: readonly ListedProvider[]): ShownCredential[] {
-	const keys = providers.map((provider) => {
-		const name = providerCredential(provider.name)
-		return {
-			name,
-			stateText: providerKeyText(provider),
-			stored: names.includes(name),
-			settable: true,
-		}
-	})
-	const others = names
-		.filter((name) => !keys.some((key) => key.name === name))
-		.map((name) => {
-			const settable = providerOfCredential(name) === undefined
-			return {
-				name,
-				stateText: choice(settable, setText, unknownProviderText),
-				stored: true,
-				settable,
-			}
-		})
-	return [...keys, ...others].toSorted((left, right) => left.name.localeCompare(right.name))
-}
-
-/** What a row shows: a row whose credential shows the same is kept as it is, with what's typed in it. */
-function rowKey({ name, stateText, stored, settable }: ShownCredential): string {
-	return JSON.stringify([name, stateText, stored, settable])
-}
-
 export const CredentialsPage = component({
 	name: 'credentials-page',
 	styles,
@@ -99,6 +59,7 @@ export const CredentialsPage = component({
 			headings: ['Name', 'State', ''],
 			rows: body,
 		})
+		table.hidden = true
 		const problems = element('div')
 		const empty = element('p', {
 			textContent: 'No credentials yet.',
@@ -113,6 +74,7 @@ export const CredentialsPage = component({
 		const view = (names: Answer<string[]>, providers: Answer<ListedProvider[]>) => {
 			if (!names.ok) {
 				showProblems(names.error)
+				table.hidden = shownRows.size === 0
 				return
 			}
 			// Without the running engine there are no declared providers: the stored credentials still show.
@@ -120,6 +82,7 @@ export const CredentialsPage = component({
 			shownRows = new Map(shown.map((credential) => [rowKey(credential), rowOf(credential)]))
 			keepRows(body, [...shownRows.values()])
 			empty.hidden = shown.length > 0
+			table.hidden = shown.length === 0
 			showProblems(...(providers.ok ? [] : [`Provider keys can't be set now: ${providers.error}`]))
 		}
 
@@ -136,7 +99,7 @@ export const CredentialsPage = component({
 			view(names, providers)
 		}
 
-		/** Puts the cursor in the row the address links to, such as `#provider/anthropic`: a credential's name needs no escaping. */
+		/** Puts the cursor in the row the address links to, such as `#provider/anthropic`. The hash is used as it is: a credential's name needs no URL decoding. */
 		const focusLinked = () => {
 			const linked = location.hash.slice(1)
 			if (linked === '') return

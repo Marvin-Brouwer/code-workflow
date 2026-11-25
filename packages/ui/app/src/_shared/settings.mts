@@ -114,11 +114,11 @@ export function isWebhookCredential(name: string): boolean {
 }
 
 /** How a credential that's stored and used is shown. */
-export const setText = 'set'
+export const credentialSetText = 'set'
 
 /** Whether `provider` has a key, and when its key was set for another origin, which one: it isn't used until it's set again. */
 export function providerKeyText(provider: ListedProvider): string {
-	if (provider.hasKey) return setText
+	if (provider.hasKey) return credentialSetText
 	if (provider.keySetFor === undefined) return 'not set'
 	return `not set (set for ${provider.keySetFor} before)`
 }
