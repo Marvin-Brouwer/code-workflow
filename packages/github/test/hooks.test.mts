@@ -49,7 +49,7 @@ function submitted(state: string, body: string | null) {
 describe('github hooks', () => {
 	test('issueLabeled fits only the label it was made for', () => {
 		// Arrange
-		const schema = github.issueLabeled('ai-fix')
+		const schema = github.issueLabeled({ label: 'ai-fix' })
 
 		// Act
 		const fits = schema.safeParse(labeled('ai-fix'))
@@ -94,29 +94,58 @@ describe('github hooks', () => {
 		expect(JSON.stringify(described.triggers[0])).toContain('"const":"ai-fix"')
 	})
 
-	test('onIssueLabeled for a workflow pinned to one repository fits only that repository', async () => {
+	test('onIssueLabeled for a workflow pinned to one repository fits only that repository, in any case', async () => {
 		// Arrange
-		const fixIssue = workflow('fix-issue', { issue: issueIn('team/app') }, async () => undefined)
-		const elsewhere = { ...labeled('ai-fix'), repository: { full_name: 'team/other' } }
+		const repository = 'Team/App'
+		const fixIssue = workflow('fix-issue', { issue: issueIn(repository) }, async () => undefined)
+		const otherRepositoryDelivery = { ...labeled('ai-fix'), repository: { full_name: 'team/other' } }
 
 		// Act
 		const trigger = github.onIssueLabeled(fixIssue, 'ai-fix')
 		const parameters = await trigger.schema.parseAsync(labeled('ai-fix'))
-		const other = await trigger.schema.safeParseAsync(elsewhere)
+		const accepted = fixIssue.parameters.safeParse(parameters)
+		const otherRepositoryResult = await trigger.schema.safeParseAsync(otherRepositoryDelivery)
 
 		// Assert
-		expect(parameters).toEqual({ issue: { repository: 'team/app', number: 7 } })
-		expect(fixIssue.parameters.safeParse(parameters).success).toBe(true)
-		expect(other.success).toBe(false)
+		expect(parameters).toEqual({ issue: { repository, number: 7 } })
+		expect(accepted.success).toBe(true)
+		expect(otherRepositoryResult.success).toBe(false)
 	})
 
-	test('issueIn fixes the repository, so only the number is asked for', () => {
+	test('onIssueLabeled for a pinned workflow skips other repositories in the structure the engine checks, in any case', () => {
+		// Arrange
+		const fixIssue = workflow('fix-issue-pinned', { issue: issueIn('Team/App') }, async () => undefined)
+		const repositoryPattern = z.object({
+			properties: z.object({ repository: z.object({ properties: z.object({ full_name: z.object({ pattern: z.string() }) }) }) }),
+		})
+		const { schema } = github.onIssueLabeled(fixIssue, 'ai-fix')
+		const { pattern } = repositoryPattern.parse(z.toJSONSchema(schema, { io: 'input' })).properties.repository.properties.full_name
+		const fitsStructure = (repository: string) => new RegExp(pattern, 'u').test(repository)
+
+		// Act
+		const fits = ['team/app', 'TEAM/APP', 'team/other', 'team/app2'].map(fitsStructure)
+
+		// Assert
+		expect(fits).toEqual([true, true, false, false])
+	})
+
+	test('issueIn pins the repository, so only the number is asked for', () => {
 		// Act
 		const schema = z.toJSONSchema(issueIn('team/app'), { io: 'input' })
 
 		// Assert
 		expect(schema).toMatchObject({ properties: { repository: { const: 'team/app' } }, required: ['repository', 'number'] })
-		expect(() => issueIn('not a repository')).toThrow()
+	})
+
+	test('issueIn turns down a repository that is not owner/name', () => {
+		// Arrange
+		const notRepository = 'not a repository'
+
+		// Act
+		const pinning = () => issueIn(notRepository)
+
+		// Assert
+		expect(pinning).toThrow('Use owner/name, as on GitHub.')
 	})
 
 	test('only compiles for a workflow that takes the issue', () => {
@@ -125,13 +154,17 @@ describe('github hooks', () => {
 		const takesNumber = workflow('takes-number', { issue: z.number() }, async () => undefined)
 		const needsMore = workflow('needs-more', { issue, branch: z.string() }, async () => undefined)
 		const pinned = workflow('pinned', { issue: issueIn('team/app') }, async () => undefined)
+		const optionalIssue = workflow('optional-issue', { issue: issue.optional() }, async () => undefined)
 
 		// Act
 		const trigger = github.onIssueLabeled(takesIssue, 'ai-fix')
+		const pinnedTrigger = github.onIssueLabeled(pinned, 'ai-fix')
 
 		// Assert
 		expectTypeOf(trigger.kind).toEqualTypeOf<'webhook'>()
-		expectTypeOf(github.onIssueLabeled(pinned, 'ai-fix').kind).toEqualTypeOf<'webhook'>()
+		expectTypeOf(pinnedTrigger.kind).toEqualTypeOf<'webhook'>()
+		// @ts-expect-error An event always gives an issue, so a workflow whose issue is optional isn't one for it.
+		github.onIssueLabeled(optionalIssue, 'ai-fix')
 		// @ts-expect-error The issue is a number there, not { repository, number }.
 		github.onIssueLabeled(takesNumber, 'ai-fix')
 		// @ts-expect-error The workflow needs a branch too, which the event doesn't give.
