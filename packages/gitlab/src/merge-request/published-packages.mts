@@ -102,8 +102,8 @@ export async function publishedPackages(
 	const pipelineMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
 	const mayProcess = lookBudget(options.processWithin ?? defaultProcessWithin, every)
 	const description = `packages published by the merge of ${on.repository}!${String(on.number)}`
-	const retrying = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
-	const look = async <Result,>(attempt: () => Promise<Result>) => poll(description, () => retrying(attempt))
+	const retryingLook = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const look = <Result,>(attempt: () => Promise<Result>) => poll(description, () => retryingLook(attempt))
 	const merged = await look(() => stubs.getMergeRequest({ repository: on.repository, number: on.number }, context))
 	if (!merged.merged || merged.mergedSha === undefined) throw new Error(`${merged.url} isn't merged, so it published nothing.`)
 	const { mergedSha } = merged
