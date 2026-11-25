@@ -51,7 +51,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.getByLabel('Value').fill('ghp_test')
 		await page.getByRole('button', { name: 'Set' }).click()
 		await page.getByLabel('number').fill('63')
-		const pinnedRepository = await page.getByLabel('repository').inputValue()
+		const pinnedRepository = await page.locator('form p', { hasText: 'repository:' }).textContent()
+		const repositoryFields = await page.getByLabel('repository').count()
 		await page.getByRole('button', { name: 'Start' }).click()
 		await page.getByText('Which die is wrong?').first().waitFor()
 		const startedBar = await page.getByText('Collected issue octo/dice#63').isVisible()
@@ -62,7 +63,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.getByRole('button', { name: 'Answer' }).click()
 
 		// Assert
-		expect(pinnedRepository).toBe('octo/dice')
+		expect(pinnedRepository).toBe('repository: octo/dice')
+		expect(repositoryFields).toBe(0)
 		expect(startedBar).toBe(true)
 		expect(shownMarkup).toContain('<script>window.injected = true</script>')
 		expect(shownMarkup).toContain('<img src=x onerror="window.injected = true">')

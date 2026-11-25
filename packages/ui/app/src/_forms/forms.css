@@ -40,3 +40,7 @@
 	align-items: center;
 	gap: var(--space-xs);
 }
+
+.fixed {
+	margin: 0;
+}
