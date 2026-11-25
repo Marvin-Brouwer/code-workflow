@@ -4,7 +4,7 @@ import { formText } from './form-text.mts'
 
 /** One field of a form made from a JSON Schema: what to ask for, under its property name. */
 export type SchemaField = {
-	/** The property's name. A nested field's form name is its object's, a `.`, then this. */
+	/** The property's name. A nested field's form name is its object's, then this: see {@link formNameOf}. */
 	readonly name: string
 	/** The schema's `title`, or else the property name. */
 	readonly label: string
@@ -18,6 +18,18 @@ export type SchemaField = {
 	/** An object of its own, asked for as a group of fields. */
 	| { readonly kind: 'object'; readonly fields: readonly SchemaField[] }
 )
+
+/** What goes between an object's form name and its field's name in a nested field's form name. */
+const nestedNameSeparator = '.'
+
+/**
+ * The name `field` has in the form: its own name, or for a field of an object, the object's form
+ * name, {@link nestedNameSeparator}, then its own.
+ */
+export function formNameOf(field: SchemaField, objectFormName?: string): string {
+	if (objectFormName === undefined) return field.name
+	return `${objectFormName}${nestedNameSeparator}${field.name}`
+}
 
 const FixedValue = z.union([z.string(), z.number(), z.boolean()])
 type FixedValue = z.infer<typeof FixedValue>
@@ -51,13 +63,15 @@ const ObjectSchema = z.object({
 /**
  * The fields of a form for `schema`, when it's an object whose properties are text, numbers, yes
  * or no, one of a few options, several of them, a fixed value, or objects of those in turn.
- * `undefined` for any other schema: that one gets a JSON text area instead.
+ * `undefined` for any other schema, and for a property name with {@link nestedNameSeparator} in it,
+ * whose form name could be a nested field's: that one gets a JSON text area instead.
  */
 export function fieldsOf(schema: unknown): SchemaField[] | undefined {
 	const object = ObjectSchema.safeParse(schema)
 	if (!object.success) return undefined
 	const fields: SchemaField[] = []
 	for (const [name, propertySchema] of Object.entries(object.data.properties)) {
+		if (name.includes(nestedNameSeparator)) return undefined
 		const field = fieldOf(name, propertySchema, object.data.required.includes(name))
 		if (field === undefined) return undefined
 		fields.push(field)
@@ -83,25 +97,42 @@ function fieldOf(name: string, propertySchema: unknown, required: boolean): Sche
 }
 
 /**
- * The value a form with `fields` holds, its form names starting with `prefix`. An empty field that
- * isn't required is left out; a number that isn't one stays text, so the schema says what's wrong
- * with it.
+ * The value a form with `fields` holds, the fields of object `objectFormName` when it's given. An
+ * empty field that isn't required is left out; a number that isn't one stays text, so the schema
+ * says what's wrong with it.
  */
-export function valueOf(fields: readonly SchemaField[], form: FormData, prefix = ''): Record<string, unknown> {
+export function valueOf(fields: readonly SchemaField[], form: FormData, objectFormName?: string): Record<string, unknown> {
 	return Object.fromEntries(
 		fields.flatMap((field) => {
-			const value = fieldValue(field, form, `${prefix}${field.name}`)
+			const value = fieldValue(field, form, formNameOf(field, objectFormName))
 			return value === undefined ? [] : [[field.name, value]]
 		}),
 	)
 }
 
-/** What one field holds, under `formName` in the form, or `undefined` when it's empty and may be left out. */
+/**
+ * Whether anything is filled in among `fields` of object `objectFormName`: text, an option, a ticked
+ * box. A fixed value isn't, since the person didn't give it.
+ */
+function filledIn(fields: readonly SchemaField[], form: FormData, objectFormName: string): boolean {
+	return fields.some((field) => {
+		const formName = formNameOf(field, objectFormName)
+		if (field.kind === 'fixed') return false
+		if (field.kind === 'object') return filledIn(field.fields, form, formName)
+		return form.getAll(formName).some((value) => value !== '')
+	})
+}
+
+/**
+ * What one field holds, under `formName` in the form, or `undefined` when it's empty and may be left
+ * out. An object that isn't required is left out unless something in it is filled in: then it's
+ * read whole, and the schema says what it still lacks.
+ */
 function fieldValue(field: SchemaField, form: FormData, formName: string): unknown {
 	if (field.kind === 'fixed') return field.value
 	if (field.kind === 'object') {
-		const value = valueOf(field.fields, form, `${formName}.`)
-		return !field.required && Object.keys(value).length === 0 ? undefined : value
+		if (!field.required && !filledIn(field.fields, form, formName)) return undefined
+		return valueOf(field.fields, form, formName)
 	}
 	if (field.kind === 'boolean') return form.has(formName)
 	if (field.kind === 'choices') return form.getAll(formName).map(String)
