@@ -15,7 +15,14 @@ export interface PatientLookOptions {
  * the network or the code host is down for longer than the host's own retries cover, the look is tried
  * again after `every`. It gives up once failed looks in a row, `every` apart, have covered
  * `toleratedOutage`; the time the failing calls take comes on top. Only transient gateway errors
- * are tolerated; a bad token, a missing permission or a stop is thrown at once.
+ * are tolerated; a bad token, a missing permission or a stop is thrown at once. A look that only
+ * reads goes in a `poll`, so the run view folds it into a waiting bar; a write, such as showing
+ * comments as being read, stays outside one, so it shows as it happens.
+ *
+ * ```ts
+ * const look = patientLook({ every, toleratedOutage })
+ * const current = await poll(description, () => look(() => watch.read()))
+ * ```
  */
 export function patientLook(options: PatientLookOptions): <Result>(attempt: () => Promise<Result>) => Promise<Result> {
 	return async (attempt) => {

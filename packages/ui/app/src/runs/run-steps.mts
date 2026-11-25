@@ -27,12 +27,14 @@ export type StreamItem =
  * - `tool`: a tool called from code, titled by its `describe` line or its name;
  * - `agent`: an agent's loop, read as a stream of text and calls;
  * - `input`, `wait`: a question to a person, a wait until a time;
+ * - `poll`: looks at something outside until it changes, such as a pull request's review, folded
+ *   into one bar for as long as nothing else happens;
  * - `group`: a node of `inDependencyOrder`, with its own steps as bars inside;
  * - `note`: anything else that happened, such as nodes that were blocked.
  */
 export interface Step {
 	readonly id: string
-	readonly kind: 'tool' | 'agent' | 'input' | 'wait' | 'group' | 'note'
+	readonly kind: 'tool' | 'agent' | 'input' | 'wait' | 'poll' | 'group' | 'note'
 	readonly title: string
 	readonly status: StepStatus
 	readonly at: string
@@ -151,22 +153,44 @@ export function stepsOf(events: readonly RunEvent[], over: boolean): Step[] {
 	})
 
 	const stepsUnder = (parent: RunEvent | undefined): Step[] =>
-		childrenOf(parent).flatMap((event): Step[] => {
-			if (parent !== undefined && (event.type === `${parent.type}-succeeded` || event.type === `${parent.type}-failed`)) return []
-			if (framing.has(event.type)) return stepsUnder(event)
-			if (event.type === 'tool-call') {
-				const call = callOf(event, textOf(event.tool) ?? 'tool')
-				return [step(event, { kind: 'tool', title: call.title, status: call.status, call, steps: stepsUnder(event) })]
-			}
-			if (event.type === 'loop')
-				return [step(event, { kind: 'agent', title: `Agent on ${modelText(event.model) ?? 'a model'}`, stream: streamOf(event) })]
-			if (event.type === 'input') return [step(event, { kind: 'input', title: textOf(event.question) ?? 'A question' })]
-			if (event.type === 'wait') return [step(event, { kind: 'wait', title: `Waits ${textOf(event.time) ?? ''}`.trim() })]
-			if (event.type === 'node') return [step(event, { kind: 'group', title: textOf(event.node) ?? 'node', steps: stepsUnder(event) })]
-			return [step(event, { kind: 'note', title: event.type, status: 'succeeded' })]
-		})
+		foldedPolls(
+			childrenOf(parent).flatMap((event): Step[] => {
+				if (parent !== undefined && (event.type === `${parent.type}-succeeded` || event.type === `${parent.type}-failed`)) return []
+				if (framing.has(event.type)) return stepsUnder(event)
+				if (event.type === 'tool-call') {
+					const call = callOf(event, textOf(event.tool) ?? 'tool')
+					return [step(event, { kind: 'tool', title: call.title, status: call.status, call, steps: stepsUnder(event) })]
+				}
+				if (event.type === 'loop')
+					return [step(event, { kind: 'agent', title: `Agent on ${modelText(event.model) ?? 'a model'}`, stream: streamOf(event) })]
+				if (event.type === 'input') return [step(event, { kind: 'input', title: textOf(event.question) ?? 'A question' })]
+				if (event.type === 'wait') return [step(event, { kind: 'wait', title: `Waits ${textOf(event.time) ?? ''}`.trim() })]
+				if (event.type === 'node') return [step(event, { kind: 'group', title: textOf(event.node) ?? 'node', steps: stepsUnder(event) })]
+				if (event.type === 'poll') {
+					// What a look read is the same each time: only a failed look shows its calls, for the error.
+					const { status } = statusOf(event)
+					const title = `Waits for ${textOf(event.description) ?? 'a change'}`
+					return [step(event, { kind: 'poll', title, status, steps: status === 'failed' ? stepsUnder(event) : [] })]
+				}
+				return [step(event, { kind: 'note', title: event.type, status: 'succeeded' })]
+			}),
+		)
 
 	return stepsUnder(undefined)
+}
+
+/**
+ * Polls next to each other that wait for the same thing, as one bar: it started with the first, and
+ * is where the latest is, so it reads as waiting until something else happens. A failed poll
+ * isn't folded into, so a later poll for the same thing, such as a try again, keeps its error.
+ */
+function foldedPolls(steps: readonly Step[]): Step[] {
+	return steps.reduce<Step[]>((folded, current) => {
+		const previous = folded.at(-1)
+		if (current.kind !== 'poll' || previous?.kind !== 'poll' || previous.status === 'failed' || previous.title !== current.title)
+			return [...folded, current]
+		return [...folded.slice(0, -1), { ...previous, status: current.status, steps: current.steps }]
+	}, [])
 }
 
 /** A call's status: a self-contained call's from its `failed` flag, any other's from its end, failed when it has an error. */

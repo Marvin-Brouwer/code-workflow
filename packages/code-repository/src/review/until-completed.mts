@@ -1,4 +1,4 @@
-import { wait } from '@mesh-flow/core'
+import { poll, wait } from '@mesh-flow/core'
 import type { Duration } from '@mesh-flow/duration'
 import { lookBudget } from './look-budget.mts'
 import { defaultAppearWithin, defaultLookEvery, defaultToleratedOutage } from './look-interval.mts'
@@ -20,9 +20,11 @@ export interface UntilCompletedOptions {
  * failed. Checks take a while to appear after a push, so a commit without any is looked at again
  * until `appearWithin` has passed, and counts as passed after that. A look that fails is tried
  * again on the next one, for up to `toleratedOutage`. It is what `checksPass` and
- * `pipelinePasses` are made of; each connector only says how it looks.
+ * `pipelinePasses` are made of; each connector only says how it looks. The looks and the waits
+ * between them are `poll`s for `description`, so the run view shows one waiting bar.
  */
 export async function untilCompleted<Failure>(
+	description: string,
 	lookAt: () => Promise<CommitChecks<Failure>>,
 	options: UntilCompletedOptions = {},
 ): Promise<readonly Failure[]> {
@@ -30,8 +32,8 @@ export async function untilCompleted<Failure>(
 	const checksMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
 	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	for (;;) {
-		const checks = await look(lookAt)
+		const checks = await poll(description, () => look(lookAt))
 		if (checks.status === 'completed' || (checks.status === 'none' && !checksMayAppear())) return checks.failures
-		await wait(every)
+		await poll(description, () => wait(every))
 	}
 }

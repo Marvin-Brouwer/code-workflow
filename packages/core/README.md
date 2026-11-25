@@ -208,10 +208,10 @@ if (outcome.state === 'merged') await github.close(issue)
 
 Each of these functions is a connector's, and how it waits is the connector's concern, not the workflow's. Today they look at GitHub at an interval; the engine is to deliver webhook events into waiting runs ([design: Triggers](../../docs/design.md#triggers)), after which they wait for the event instead, without a change to their signature.
 
-A connector waits with `wait`: a pause on the engine's clock, so the sandbox can be paused meanwhile and a timer that disagrees across a pause never matters. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`. It belongs in a connector's function, behind an `await` that names what the workflow waits for, not in workflow code.
+A connector waits with `wait`: a pause on the engine's clock, so the sandbox can be paused meanwhile and a timer that disagrees across a pause never matters. Inside a loop, as from a check that waits for a pipeline, the wait doesn't count toward the loop's `limit`. It belongs in a connector's function, behind an `await` that names what the workflow waits for, not in workflow code. Each look and each wait goes in a `poll` that says what is waited for, so the UI's run view shows one waiting bar instead of every look; what the connector does with what it found stays outside the poll, so that shows as it happens.
 
 ```ts
-import { duration, hostToolStub, wait } from '@mesh-flow/core'
+import { duration, hostToolStub, poll, wait } from '@mesh-flow/core'
 import { z } from 'zod'
 
 const pipeline = hostToolStub({
@@ -225,7 +225,12 @@ const lookEvery = duration.of('30s')
 
 /** Returns once the pipeline has finished: what a workflow awaits. */
 export async function finished(id: string): Promise<void> {
-	while (!(await pipeline({ id })).done) await wait(lookEvery)
+	const description = `pipeline ${id}`
+	for (;;) {
+		const state = await poll(description, () => pipeline({ id }))
+		if (state.done) return
+		await poll(description, () => wait(lookEvery))
+	}
 }
 ```
 

@@ -48,6 +48,7 @@ export { schedule, scheduleShorthands, type ScheduleShorthand, type ScheduleWhen
 export type { ScheduleTrigger, Trigger, UserTrigger, WebhookTrigger } from '../triggers/trigger.mts'
 export { userTrigger } from '../triggers/user-trigger.mts'
 export { webhook, type WebhookOptions, type WebhookSignature } from '../triggers/webhook.mts'
+export { poll } from '../wait/poll.mts'
 export { wait } from '../wait/wait.mts'
 export { duration, sleep, type Duration, type DurationText } from '@mesh-flow/duration'
 export { DependencyOrderFailed, inDependencyOrder, type DependencyNode } from '../workflow/in-dependency-order.mts'

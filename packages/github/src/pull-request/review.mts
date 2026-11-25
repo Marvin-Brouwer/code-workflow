@@ -91,6 +91,7 @@ export async function review(
 	const { checksFailed } = handlers
 	const { state, request } = await watchReview<PullRequest, ReviewItem, CheckFailure>(
 		{
+			description: `review of ${on.repository}#${String(on.number)}`,
 			read: async () => pullRequestOf(await stubs.getPullRequest(where, context)),
 			activity: (since) => stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context),
 			showBeingRead: (items) =>

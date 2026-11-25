@@ -4,6 +4,7 @@ import { signed, withHeader } from '@mesh-flow/code-repository/host'
 import { runCheck, toPrompt, workspace } from '@mesh-flow/core'
 import { duration } from '@mesh-flow/duration'
 import { defaultFetchRetry, type FetchRetryOptions } from '@mesh-flow/gateway'
+import type { RuntimeEvent, RuntimeMessage } from '@mesh-flow/protocol'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { githubHostTools } from '../src/host/connector.mts'
 import { deletedItemHeader, quoteHeader } from '../src/host/reply-header.mts'
@@ -48,6 +49,27 @@ const promptly = duration.of('1s')
 
 /** Long enough for a second answer that didn't wait its turn to have listed the comments. */
 const secondLook = duration.of('300ms')
+
+/** The tools a run called, split by whether a `poll` event is above the call, with the polls' descriptions. */
+function toolCallsByPoll(messages: readonly RuntimeMessage[]): {
+	readonly descriptions: readonly unknown[]
+	readonly inPolls: readonly unknown[]
+	readonly outsidePolls: readonly unknown[]
+} {
+	const events = messages.flatMap((message) => (message.type === 'event' ? [message.event] : []))
+	const byId = new Map(events.map((event) => [event.id, event]))
+	const pollAbove = (event: RuntimeEvent): RuntimeEvent | undefined => {
+		const parent = event.parentId === undefined ? undefined : byId.get(event.parentId)
+		if (parent === undefined) return undefined
+		return parent.type === 'poll' ? parent : pollAbove(parent)
+	}
+	const calls = events.filter((event) => event.type === 'tool-call')
+	return {
+		descriptions: [...new Set(events.filter((event) => event.type === 'poll').map((event) => event.description))],
+		inPolls: [...new Set(calls.filter((call) => pollAbove(call) !== undefined).map((call) => call.tool))],
+		outsidePolls: [...new Set(calls.filter((call) => pollAbove(call) === undefined).map((call) => call.tool))],
+	}
+}
 
 /** The marker key of the 👀 reaction on a comment, as the reply that says it's being read carries it. */
 function eyesKeyOf(item: FakeComment | undefined): string {
@@ -235,6 +257,12 @@ describe('github', () => {
 			[signed('👀 Reading...', run.runId, ['reply', 'seen:review-comment/6', eyesKeyOf(pull.reviewComments[1])]), 1],
 		])
 		expect(run.wakes).toBeGreaterThanOrEqual(1)
+		// The looks are what the waiting bar folds; showing items as being read and the handler's work show on their own.
+		expect(toolCallsByPoll(run.messages)).toEqual({
+			descriptions: ['review of team/app#3'],
+			inPolls: ['githubPullRequest', 'githubReviewActivity'],
+			outsidePolls: ['githubShowBeingRead', 'reply', 'githubReply'],
+		})
 	})
 
 	test('marks a review as being read with a reply on the conversation, which the first answer to the review replaces', async () => {
@@ -772,6 +800,11 @@ describe('github', () => {
 
 		// Assert
 		expect(findings).toEqual([{ source: 'check: tests', message: '2 failed (https://ci.example/1)' }])
+		expect(toolCallsByPoll(checked.messages)).toEqual({
+			descriptions: ['checks of team/app#4'],
+			inPolls: ['githubPullRequest', 'githubChecks'],
+			outsidePolls: [],
+		})
 		expect(checksFailed).toHaveBeenCalledTimes(1)
 		expect(checksFailed.mock.calls[0]?.[0]).toMatchObject({
 			sha,
