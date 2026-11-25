@@ -75,7 +75,7 @@ export const RunPage = component<RunPageOptions>({
 				},
 			},
 		})
-		append(heading, facts, buttons, status, input, waiting, steps, usage, tailButton)
+		append(heading, facts, buttons, status, input, steps, waiting, usage, tailButton)
 
 		const opened = new Map<string, boolean>()
 		const open: OpenState = {

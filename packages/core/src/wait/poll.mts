@@ -1,10 +1,12 @@
 import { inEvent } from '../run/run-events.mts'
+import { untilAborted } from '../run/until-aborted.mts'
 
 /**
  * One look of a poll: the calls that read something outside, such as a pull request's state, or
  * the wait before the next look. In the run's events it is a `poll` event around them, which the
  * run view folds with the polls next to it into one waiting bar, until something else happens.
- * What a poll finds and acts on runs outside it, so that shows as it happens.
+ * What a poll finds and acts on runs outside it, so that shows as it happens. A stop of the run
+ * ends the poll at once, also when `body` never settles.
  *
  * ```ts
  * const description = `merge of ${String(pullRequest.number)}`
@@ -20,5 +22,5 @@ import { inEvent } from '../run/run-events.mts'
  * @returns What `body` resolves to.
  */
 export async function poll<Result>(description: string, body: () => Promise<Result>): Promise<Result> {
-	return inEvent('poll', { description }, body)
+	return inEvent('poll', { description }, (scope) => untilAborted(body(), scope.run.abortSignal))
 }

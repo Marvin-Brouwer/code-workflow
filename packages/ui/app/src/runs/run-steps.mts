@@ -181,12 +181,14 @@ export function stepsOf(events: readonly RunEvent[], over: boolean): Step[] {
 
 /**
  * Polls next to each other that wait for the same thing, as one bar: it started with the first, and
- * is where the latest is, so it reads as waiting until something else happens.
+ * is where the latest is, so it reads as waiting until something else happens. A failed poll
+ * isn't folded into, so a later poll for the same thing, such as a try again, keeps its error.
  */
 function foldedPolls(steps: readonly Step[]): Step[] {
 	return steps.reduce<Step[]>((folded, current) => {
 		const previous = folded.at(-1)
-		if (current.kind !== 'poll' || previous?.kind !== 'poll' || previous.title !== current.title) return [...folded, current]
+		if (current.kind !== 'poll' || previous?.kind !== 'poll' || previous.status === 'failed' || previous.title !== current.title)
+			return [...folded, current]
 		return [...folded.slice(0, -1), { ...previous, status: current.status, steps: current.steps }]
 	}, [])
 }

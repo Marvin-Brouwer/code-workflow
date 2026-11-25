@@ -226,7 +226,11 @@ const lookEvery = duration.of('30s')
 /** Returns once the pipeline has finished: what a workflow awaits. */
 export async function finished(id: string): Promise<void> {
 	const description = `pipeline ${id}`
-	while (!(await poll(description, () => pipeline({ id }))).done) await poll(description, () => wait(lookEvery))
+	for (;;) {
+		const state = await poll(description, () => pipeline({ id }))
+		if (state.done) return
+		await poll(description, () => wait(lookEvery))
+	}
 }
 ```
 
