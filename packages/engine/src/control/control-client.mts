@@ -90,7 +90,7 @@ export function controlClient(socketPath: string): ControlClient {
 		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
 		get: (run, abortSignal) => call(socketPath, RunRecord, 'GET', runPath(run), undefined, abortSignal),
 		input: async (run, abortSignal) =>
-			(await call(socketPath, z.object({ input: z.unknown() }), 'GET', `${runPath(run)}/input`, undefined, abortSignal)).input,
+			(await call(socketPath, z.object({ input: z.unknown().optional() }), 'GET', `${runPath(run)}/input`, undefined, abortSignal)).input,
 		events: (run, abortSignal) => call(socketPath, z.array(RuntimeEvent), 'GET', `${runPath(run)}/events`, undefined, abortSignal),
 		startRun: ({ trigger, input, key, abortSignal }) => call(socketPath, RunRecord, 'POST', '/runs', { trigger, input, key }, abortSignal),
 		answer: (run, requestId, value, abortSignal) =>

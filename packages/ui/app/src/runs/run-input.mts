@@ -13,7 +13,7 @@ export const RunInput = component<RunInputOptions>({
 	name: 'run-input',
 	styles,
 	async onMount({ append, element, options, signal }) {
-		const answer = await read(`/engine/runs/${encodeURIComponent(options.run)}/input`, z.object({ input: z.unknown() }), signal)
+		const answer = await read(`/engine/runs/${encodeURIComponent(options.run)}/input`, z.object({ input: z.unknown().optional() }), signal)
 		if (signal.aborted) return
 		if (!answer.ok) {
 			append(
