@@ -27,7 +27,17 @@ const app = {
 					name: 'fix-issue',
 					parameters: {
 						type: 'object',
-						properties: { issue: { type: 'integer', description: 'The issue to fix' } },
+						properties: {
+							issue: {
+								type: 'object',
+								description: 'The issue to fix',
+								properties: {
+									repository: { type: 'string', const: 'octo/dice' },
+									number: { type: 'integer', exclusiveMinimum: 0 },
+								},
+								required: ['repository', 'number'],
+							},
+						},
 						required: ['issue'],
 					},
 				},
@@ -123,7 +133,9 @@ export async function standInEngine(home: string) {
 		])
 	})
 	api.post('/runs', async (context) => {
-		const { input } = z.object({ input: z.object({ issue: z.number() }) }).parse(await context.req.json())
+		const { input } = z
+			.object({ input: z.object({ issue: z.object({ repository: z.string(), number: z.number() }) }) })
+			.parse(await context.req.json())
 		const run: StandInRun = {
 			id: `run-${String(runs.size + 1).padStart(12, '0')}`,
 			status: 'running',
@@ -134,7 +146,10 @@ export async function standInEngine(home: string) {
 		runs.set(run.id, run)
 		const root = event(run, 'workflow', undefined, { workflow: 'fix-issue' })
 		const call = event(run, 'tool-call', root, { tool: 'githubIssue', from: 'code', input })
-		event(run, 'tool-call-succeeded', call, { title: `Collected issue #${String(input.issue)}`, result: '{"title":"The dice roll a 7"}' })
+		event(run, 'tool-call-succeeded', call, {
+			title: `Collected issue ${input.issue.repository}#${String(input.issue.number)}`,
+			result: '{"title":"The dice roll a 7"}',
+		})
 		// What a sandbox writes can carry markup meant to run in the page: it has to show as text.
 		const loop = event(run, 'loop', root, { model: 'claude-sonnet-5-5' })
 		event(run, 'turn', loop, { turn: 1, text: '<script>window.injected = true</script>' })
