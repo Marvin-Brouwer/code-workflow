@@ -85,6 +85,8 @@ export const StepBar = component<StepBarOptions>({
 			return chip(item.call, `${step.id}/${String(index)}`)
 		}
 
+		// A poll's bar is a wait to the reader, whatever it looked at.
+		const shownKind = choice(step.kind === 'poll', 'wait', step.kind)
 		const body = element('div', {
 			classes: styles.body,
 			children: [
@@ -114,7 +116,7 @@ export const StepBar = component<StepBarOptions>({
 							}),
 							element('span', {
 								classes: styles.meta,
-								textContent: `${choice(step.kind === 'poll', 'wait', step.kind)} · ${statusLabel(step.status)} · ${shownTime(step.at)}`,
+								textContent: `${shownKind} · ${statusLabel(step.status)} · ${shownTime(step.at)}`,
 							}),
 						],
 					}),

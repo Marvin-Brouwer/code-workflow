@@ -62,7 +62,8 @@ export interface WatchOutcome<Request> {
  * head commit, once per commit. The checks are looked at only on a look that handed no items, so
  * a head that a handler replaced is never reported. The wait between looks is on the engine's
  * clock, where the run can be paused. Looks and waits are `poll`s for the watch's `description`,
- * so the run view shows one waiting bar between the handlers' work.
+ * so the run view shows one waiting bar between the handlers' work. Showing items as being read is
+ * a write, so it stays outside the polls, with the handlers' work.
  */
 export async function watchReview<Request extends WatchedRequest, Item extends { readonly id: string }, Failure>(
 	watch: ReviewWatch<Request, Item, Failure>,
@@ -71,7 +72,8 @@ export async function watchReview<Request extends WatchedRequest, Item extends {
 ): Promise<WatchOutcome<Request>> {
 	const every = options.every ?? defaultLookEvery
 	const { description } = watch
-	const look = patientLook({ description, every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const retrying = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const look = async <Result,>(attempt: () => Promise<Result>) => poll(description, () => retrying(attempt))
 	let since: string | undefined
 	// Activity is listed from the latest moment seen, inclusive, so an item at that second comes again.
 	const handled = new Set<string>()
@@ -86,7 +88,7 @@ export async function watchReview<Request extends WatchedRequest, Item extends {
 		for (const item of comments) handled.add(item.id)
 		let handedComments = false
 		if (comments.length > 0 && handlers.comments !== undefined) {
-			const { answered } = await look(() => watch.showBeingRead(comments))
+			const { answered } = await retrying(() => watch.showBeingRead(comments))
 			// Answered before the run started over: the reviewer has the answer already, and writes a new comment if it doesn't settle it.
 			const unanswered = comments.filter((item) => !answered.includes(item.id))
 			if (unanswered.length > 0) await handlers.comments(unanswered)

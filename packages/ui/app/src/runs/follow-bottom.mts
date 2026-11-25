@@ -1,9 +1,9 @@
 /** How close to the bottom still counts as at the bottom, so a pixel off doesn't stop following. */
-const bottomSlack = 48
+const bottomSlackPx = 48
 
 /** Whether the page is scrolled to its bottom. */
 function atBottom(): boolean {
-	return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomSlack
+	return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomSlackPx
 }
 
 /** Scrolls the page to its bottom. */
@@ -25,7 +25,7 @@ export interface BottomFollower {
  * again. `following` hears each change.
  *
  * ```ts
- * const bottom = followBottom(signal, (following) => {
+ * const bottom = followBottom(abortSignal, (following) => {
  * 	tailButton.hidden = following
  * })
  * steps.replaceChildren(...bars)
@@ -34,11 +34,15 @@ export interface BottomFollower {
  */
 export function followBottom(abortSignal: AbortSignal, following: (isFollowing: boolean) => void): BottomFollower {
 	let isFollowing = true
-	// Content that grows doesn't scroll, so only someone scrolling, or a scroll from here, changes this.
+	let lastScrollY = window.scrollY
+	// Only scrolling up stops following: content that grew between a scroll to the bottom and its
+	// scroll event leaves the page above the bottom without anyone having scrolled.
 	window.addEventListener(
 		'scroll',
 		() => {
-			const now = atBottom()
+			const scrolledUp = window.scrollY < lastScrollY
+			lastScrollY = window.scrollY
+			const now = atBottom() || (isFollowing && !scrolledUp)
 			if (now === isFollowing) return
 			isFollowing = now
 			following(isFollowing)
