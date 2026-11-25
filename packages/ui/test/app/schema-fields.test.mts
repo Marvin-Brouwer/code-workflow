@@ -82,6 +82,13 @@ describe('fieldsOf', () => {
 		// Assert
 		expect(fields).toBeUndefined()
 	})
+	test("gives no fields for a property name with a dot, whose form name could be a nested field's", () => {
+		// Act
+		const fields = fieldsOf(jsonSchema(z.object({ 'a.b': z.string(), a: z.object({ b: z.string() }) })))
+
+		// Assert
+		expect(fields).toBeUndefined()
+	})
 })
 
 describe('valueOf', () => {
@@ -149,6 +156,89 @@ describe('valueOf', () => {
 
 		// Assert
 		expect(value).toEqual({ story: '', draft: false, size: 'small', labels: [], retries: 3 })
+	})
+	test('leaves out an object that may be left out while nothing in it is filled in, whatever its fields are', () => {
+		// Arrange
+		const schema = jsonSchema(
+			z.object({
+				reviewer: z
+					.object({
+						kind: z.literal('person'),
+						name: z.string(),
+						age: z.number().int(),
+						active: z.boolean(),
+						roles: z.array(z.enum(['lead', 'member'])),
+					})
+					.optional(),
+			}),
+		)
+		const fields = fieldsOf(schema) ?? []
+		const form = formData([
+			['reviewer.name', ''],
+			['reviewer.age', ''],
+		])
+
+		// Act
+		const value = valueOf(fields, form)
+
+		// Assert
+		expect(value).toEqual({})
+		expect(checkAgainst(schema, value)).toEqual({ ok: true, value })
+	})
+
+	test('reads an object that may be left out whole once something in it is filled in, so the schema says what it lacks', () => {
+		// Arrange
+		const schema = jsonSchema(
+			z.object({
+				reviewer: z
+					.object({
+						name: z.string(),
+						age: z.number().int(),
+						active: z.boolean(),
+						roles: z.array(z.enum(['lead', 'member'])),
+					})
+					.optional(),
+			}),
+		)
+		const fields = fieldsOf(schema) ?? []
+		const form = formData([
+			['reviewer.name', ''],
+			['reviewer.age', ''],
+			['reviewer.roles', 'lead'],
+		])
+
+		// Act
+		const value = valueOf(fields, form)
+
+		// Assert
+		expect(value).toEqual({ reviewer: { name: '', age: '', active: false, roles: ['lead'] } })
+		expect(checkAgainst(schema, value).ok).toBe(false)
+	})
+
+	test('reads a yes or no and options in a nested object under its form name, and fixed values of any kind', () => {
+		// Arrange
+		const schema = jsonSchema(
+			z.object({
+				settings: z.object({
+					draft: z.boolean(),
+					labels: z.array(z.enum(['bug', 'chore'])),
+					attempts: z.literal(3),
+					pinned: z.literal(true),
+				}),
+			}),
+		)
+		const fields = fieldsOf(schema) ?? []
+		const form = formData([
+			['settings.draft', 'on'],
+			['settings.labels', 'chore'],
+		])
+
+		// Act
+		const value = valueOf(fields, form)
+
+		// Assert
+		expect(value).toEqual({ settings: { draft: true, labels: ['chore'], attempts: 3, pinned: true } })
+		expect(checkAgainst(schema, value)).toEqual({ ok: true, value })
 	})
 })
 
