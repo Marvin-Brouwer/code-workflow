@@ -114,16 +114,17 @@ describe('github hooks', () => {
 
 	test('onIssueLabeled for a pinned workflow skips other repositories in the structure the engine checks, in any case', () => {
 		// Arrange
-		const fixIssue = workflow('fix-issue-pinned', { issue: issueIn('Team/App') }, async () => undefined)
+		const fixIssue = workflow('fix-issue-pinned', { issue: issueIn('Team/My-App.js') }, async () => undefined)
 		const repositoryPattern = z.object({
 			properties: z.object({ repository: z.object({ properties: z.object({ full_name: z.object({ pattern: z.string() }) }) }) }),
 		})
-		const { schema } = github.onIssueLabeled(fixIssue, 'ai-fix')
-		const { pattern } = repositoryPattern.parse(z.toJSONSchema(schema, { io: 'input' })).properties.repository.properties.full_name
-		const fitsStructure = (repository: string) => new RegExp(pattern, 'u').test(repository)
+		const deliveredNames = ['team/my-app.js', 'TEAM/MY-APP.JS', 'team/my-appxjs', 'team/other']
 
 		// Act
-		const fits = ['team/app', 'TEAM/APP', 'team/other', 'team/app2'].map(fitsStructure)
+		const { schema } = github.onIssueLabeled(fixIssue, 'ai-fix')
+		const { pattern } = repositoryPattern.parse(z.toJSONSchema(schema, { io: 'input' })).properties.repository.properties.full_name
+		// The engine reads a pattern with the u flag, as here.
+		const fits = deliveredNames.map((name) => new RegExp(pattern, 'u').test(name))
 
 		// Assert
 		expect(fits).toEqual([true, true, false, false])
