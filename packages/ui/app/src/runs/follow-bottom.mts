@@ -6,27 +6,52 @@ function atBottom(): boolean {
 	return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomSlack
 }
 
+/** Scrolls the page to its bottom. */
+function toBottom(): void {
+	window.scrollTo({ top: document.documentElement.scrollHeight })
+}
+
+/** Keeps a page at its bottom: see {@link followBottom}. */
+export interface BottomFollower {
+	/** Scrolls to the bottom if the page still follows it: call after each change is drawn. */
+	readonly follow: () => void
+	/** Scrolls to the bottom and follows it again, as after someone scrolled back down. */
+	readonly tail: () => void
+}
+
 /**
  * Keeps the page at its bottom as a run's steps come in, until someone scrolls up to read; once they
- * scroll back to the bottom, it follows again. Call what it returns after each change is drawn.
+ * scroll back to the bottom, or `tail` is called, it follows again. `following` hears each change.
  *
  * ```ts
- * const follow = followBottom(signal)
+ * const bottom = followBottom(signal, (following) => {
+ * 	tailButton.hidden = following
+ * })
  * steps.replaceChildren(...bars)
- * follow()
+ * bottom.follow()
  * ```
  */
-export function followBottom(abortSignal: AbortSignal): () => void {
-	let following = true
-	// Content that grows doesn't scroll, so only someone scrolling, or the scroll below, changes this.
+export function followBottom(abortSignal: AbortSignal, following: (isFollowing: boolean) => void): BottomFollower {
+	let isFollowing = true
+	// Content that grows doesn't scroll, so only someone scrolling, or a scroll from here, changes this.
 	window.addEventListener(
 		'scroll',
 		() => {
-			following = atBottom()
+			const now = atBottom()
+			if (now === isFollowing) return
+			isFollowing = now
+			following(isFollowing)
 		},
 		{ passive: true, signal: abortSignal },
 	)
-	return () => {
-		if (following) window.scrollTo({ top: document.documentElement.scrollHeight })
+	return {
+		follow: () => {
+			if (isFollowing) toBottom()
+		},
+		tail: () => {
+			isFollowing = true
+			following(true)
+			toBottom()
+		},
 	}
 }

@@ -1,5 +1,6 @@
 import { send, type Answer } from '../_shared/api.mts'
 import { RunRecord, type RunStatus } from '../_shared/runs.mts'
+import { readTheApp } from '../_shared/the-app.mts'
 
 /** What a person can do to a run, as the engine's routes of those names. */
 export type RunAction = 'stop' | 'resume' | 'restart' | 'archive' | 'unarchive'
@@ -25,4 +26,16 @@ export function runActions(record: RunRecord, shown: readonly RunAction[]): { re
 /** Asks the engine to do `action` to run `id`. A refusal, such as a run that changed meanwhile, is an answer. */
 export function actOn(id: string, action: RunAction, abortSignal: AbortSignal): Promise<Answer<RunRecord>> {
 	return send('POST', `/engine/runs/${encodeURIComponent(id)}/${action}`, {}, RunRecord, abortSignal)
+}
+
+/**
+ * What to ask before `action` on `record`, or `undefined` when it can go ahead: a run continues on
+ * the build it started on, so continuing one from an older build than the deployed app runs that
+ * older code. When the deployed app can't be read, the engine's answer to the action says why.
+ */
+export async function askBefore(record: RunRecord, action: RunAction, abortSignal: AbortSignal): Promise<string | undefined> {
+	if (action !== 'restart') return undefined
+	const app = await readTheApp(abortSignal)
+	if (!app.ok || app.value === undefined || app.value.version === record.app.version) return undefined
+	return `This run started on build ${record.app.version}, and build ${app.value.version} is deployed now. Continue runs the run's own, older build, not the deployed one.`
 }

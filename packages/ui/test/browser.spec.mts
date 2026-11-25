@@ -181,7 +181,7 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 
 	test('continues a restartable run and archives a stopped one from the runs list', async () => {
 		// Arrange
-		const { page, url } = await openUi({ runs: ['restartable', 'stopped'] })
+		const { page, url } = await openUi({ runs: [{ status: 'restartable' }, { status: 'stopped' }] })
 
 		// Act
 		await page.goto(url)
@@ -205,5 +205,51 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(stoppedButtons).toEqual(['Continue', 'Archive'])
 		expect(archivedRows).toHaveLength(1)
 		expect(archivedRows[0]).toContain('run-f00000000002')
+	})
+
+	test('asks before continuing a run on an older build, and continues it only on yes', async () => {
+		// Arrange
+		const { page, url } = await openUi({ runs: [{ status: 'stopped', version: 'v0' }] })
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/runs/', url).href)
+		const row = page.getByRole('row', { name: /run-f00000000001/ })
+		const dialog = page.getByRole('dialog')
+		await page.getByRole('button', { name: 'Continue run-f00000000001' }).click()
+		const question = await dialog.textContent()
+		await dialog.getByRole('button', { name: 'Cancel' }).click()
+		await dialog.waitFor({ state: 'detached' })
+		const afterCancel = await row.textContent()
+		await page.getByRole('button', { name: 'Continue run-f00000000001' }).click()
+		await dialog.getByRole('button', { name: 'Continue' }).click()
+
+		// Assert
+		expect(question).toContain('build v0')
+		expect(question).toContain('build v1 is deployed')
+		expect(afterCancel).toContain('stopped')
+		await expect.poll(() => row.textContent()).toContain('starting')
+	})
+
+	test('shows a tail button once someone scrolls up, which follows the newest steps again', async () => {
+		// Arrange
+		const { page, url } = await openUi({ runs: [{ status: 'stopped' }] })
+		// Short, so the run page doesn't fit.
+		await page.setViewportSize({ width: 1000, height: 200 })
+		const tail = page.getByRole('button', { name: 'Tail' })
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/runs/run-f00000000001/', url).href)
+		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
+		const shownWhileFollowing = await tail.isVisible()
+		await page.evaluate('window.scrollTo(0, 0)')
+		await tail.waitFor()
+		await tail.click()
+
+		// Assert
+		expect(shownWhileFollowing).toBe(false)
+		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
+		await expect.poll(() => tail.isVisible()).toBe(false)
 	})
 })

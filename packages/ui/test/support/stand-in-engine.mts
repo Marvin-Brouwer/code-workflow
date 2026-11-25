@@ -85,13 +85,15 @@ interface StandInRun {
 	updatedAt: string
 	archivedAt?: string | undefined
 	input?: unknown
+	/** The app version it started on. */
+	version: string
 	usage?: { kind: 'live' | 'final'; requests: number } | undefined
 }
 
 /** What the stand-in engine starts with besides its app. */
 export interface StandInOptions {
-	/** Runs it has already, by status, such as a stopped one to archive. */
-	readonly runs?: readonly string[]
+	/** Runs it has already, such as a stopped one to archive: on the deployed version unless another is given. */
+	readonly runs?: readonly { readonly status: string; readonly version?: string }[]
 }
 
 /**
@@ -101,9 +103,9 @@ export interface StandInOptions {
  */
 export async function standInEngine(home: string, options: StandInOptions = {}) {
 	const runs = new Map<string, StandInRun>(
-		(options.runs ?? []).map((status, index) => {
+		(options.runs ?? []).map(({ status, version = app.version }, index) => {
 			const id = `run-f${String(index + 1).padStart(11, '0')}`
-			return [id, { id, status, pending: [], events: [], updatedAt: builtAt }]
+			return [id, { id, status, pending: [], events: [], updatedAt: builtAt, version }]
 		}),
 	)
 	const listeners = new Set<(id: string) => void>()
@@ -117,7 +119,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 			workflow: 'fix-issue',
 			trigger: { kind: 'user', id: 'fix-issue' },
 			app: {
-				version: 'v1',
+				version: run.version,
 				entry: 'main.mjs',
 				sandbox: { image: 'node:26', cpus: 1, memoryMb: 512 },
 				tools: [],
@@ -172,6 +174,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 			events: [],
 			updatedAt: builtAt,
 			input,
+			version: app.version,
 		}
 		runs.set(run.id, run)
 		const root = event(run, 'workflow', undefined, { workflow: 'fix-issue' })

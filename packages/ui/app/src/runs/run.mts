@@ -1,12 +1,13 @@
 import { choice, component } from '@rooted/components'
 import { z } from 'zod'
+import { confirmed } from '../_layout/confirm-dialog.mts'
 import { read } from '../_shared/api.mts'
 import { followStream } from '../_shared/follow-stream.mts'
 import { announce, withOwnStream } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunEvent, RunRecord } from '../_shared/runs.mts'
 import { followBottom } from './follow-bottom.mts'
-import { actOn, runActions, type RunAction } from './run-actions.mts'
+import { actOn, askBefore, runActions, type RunAction } from './run-actions.mts'
 import { RunFacts } from './run-facts.mts'
 import { runFeed } from './run-feed.mts'
 import { RunInput } from './run-input.mts'
@@ -59,7 +60,22 @@ export const RunPage = component<RunPageOptions>({
 		const usage = element('section', {
 			classes: styles.section,
 		})
-		append(heading, facts, buttons, status, input, waiting, steps, usage)
+		const bottom = followBottom(signal, (following) => {
+			tailButton.hidden = following
+		})
+		const tailButton = element('button', {
+			type: 'button',
+			classes: styles.tail,
+			textContent: 'Tail',
+			title: 'Scroll to the newest step and keep following it',
+			hidden: true,
+			on: {
+				click() {
+					bottom.tail()
+				},
+			},
+		})
+		append(heading, facts, buttons, status, input, waiting, steps, usage, tailButton)
 
 		const opened = new Map<string, boolean>()
 		const open: OpenState = {
@@ -71,7 +87,10 @@ export const RunPage = component<RunPageOptions>({
 		// The request forms stay as they are while the run waits on them, so a refresh doesn't clear what's typed.
 		let shownRequests = ''
 
-		const act = async (action: RunAction) => {
+		const act = async (record: RunRecord, action: RunAction, label: string) => {
+			const question = await askBefore(record, action, signal)
+			// Aborted, the question can't be read, and the action's own answer below is aborted too.
+			if (question !== undefined && !(await confirmed(buttons, { message: question, confirmLabel: label }))) return
 			const answer = await actOn(id, action, signal)
 			status.textContent = answer.ok ? '' : answer.error
 		}
@@ -144,7 +163,7 @@ export const RunPage = component<RunPageOptions>({
 						textContent: label,
 						on: {
 							click() {
-								void act(action)
+								void act(record, action, label)
 							},
 						},
 					}),
@@ -169,7 +188,6 @@ export const RunPage = component<RunPageOptions>({
 
 		// What the run's stream sent so far, drawn once for each burst of it, with the newest steps in view.
 		const feed = runFeed()
-		const follow = followBottom(signal)
 		let drawing = false
 		const draw = () => {
 			if (drawing) return
@@ -180,7 +198,7 @@ export const RunPage = component<RunPageOptions>({
 				if (record === undefined || signal.aborted) return
 				showRecord(record)
 				showSteps(record, events)
-				follow()
+				bottom.follow()
 			})
 		}
 

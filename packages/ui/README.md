@@ -74,7 +74,7 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 | Page | Shows | Does |
 |---|---|---|
 | `/` and `/runs/` | a bar when the app still needs settings, and every run that isn't archived: workflow, status, what it waits on; those that need someone on top | open a run, start a new one when the app has a user trigger; continue, resume, archive or unarchive a run in its row; show the archived runs instead |
-| `/runs/:id/` | its status, the input it was started with, what it waits on, its steps as bars, its usage (so far while it goes on) | answer a question, stop, resume, continue (a restart), archive, unarchive |
+| `/runs/:id/` | its status, the input it was started with, what it waits on, its steps as bars, its usage (so far while it goes on) | answer a question, stop, resume, continue (a restart, which asks first when the run started on an older build than the deployed one), archive, unarchive; follows the newest steps until scrolled up, then a Tail button follows them again |
 | `/triggers/` | the app's version and its triggers: a schedule's cron, a webhook's secret set or not | start a workflow from its user trigger |
 | `/start/` | the app's user triggers, when it has more than one | pick one |
 | `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |

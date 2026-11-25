@@ -36,3 +36,9 @@
 	padding: var(--space-s) var(--space-m);
 	tab-size: 2;
 }
+
+.tail {
+	position: fixed;
+	right: var(--space-m);
+	bottom: var(--space-m);
+}
