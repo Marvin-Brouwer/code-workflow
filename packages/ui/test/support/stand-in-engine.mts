@@ -73,7 +73,7 @@ interface StandInRun {
 	archivedAt?: string | undefined
 }
 
-/** The width of the number in a run id, as the engine makes them. */
+/** The width of the number after the `f` in a stand-in run id, so the id is as long as the engine's. */
 const runNumberWidth = 11
 
 /**

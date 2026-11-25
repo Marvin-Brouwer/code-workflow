@@ -111,9 +111,9 @@ export const RunsList = component({
 		const show = async (abortSignal: AbortSignal) => {
 			const runs = await read('/engine/runs', z.array(RunRecord), abortSignal)
 			if (abortSignal.aborted) return
-			const shown = JSON.stringify({ runs, showArchived })
-			if (shown === drawn) return
-			drawn = shown
+			const drawing = JSON.stringify({ runs, showArchived })
+			if (drawing === drawn) return
+			drawn = drawing
 			list.replaceChildren(runsView(runs))
 		}
 
