@@ -20,8 +20,9 @@ export interface BottomFollower {
 }
 
 /**
- * Keeps the page at its bottom as a run's steps come in, until someone scrolls up to read; once they
- * scroll back to the bottom, or `tail` is called, it follows again. `following` hears each change.
+ * Keeps the page at its bottom as a run's steps come in, and as anything else on it grows, until
+ * someone scrolls up to read; once they scroll back to the bottom, or `tail` is called, it follows
+ * again. `following` hears each change.
  *
  * ```ts
  * const bottom = followBottom(signal, (following) => {
@@ -44,10 +45,17 @@ export function followBottom(abortSignal: AbortSignal, following: (isFollowing: 
 		},
 		{ passive: true, signal: abortSignal },
 	)
+	const follow = () => {
+		if (isFollowing) toBottom()
+	}
+	// What grows after a draw, such as the run's input once it's read, is followed too.
+	const growing = new ResizeObserver(follow)
+	growing.observe(document.body)
+	abortSignal.addEventListener('abort', () => {
+		growing.disconnect()
+	})
 	return {
-		follow: () => {
-			if (isFollowing) toBottom()
-		},
+		follow,
 		tail: () => {
 			isFollowing = true
 			following(true)
