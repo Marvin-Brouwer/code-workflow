@@ -107,7 +107,10 @@ After a restart of the engine, a run that was paused stays paused until you resu
 mesh-flow resume run-3f2a9c0d1e7b   # carries on where it was, same process, same pending requests
 mesh-flow restart run-3f2a9c0d1e7b  # from the top, in a new sandbox, with the code it first ran
 mesh-flow stop run-3f2a9c0d1e7b     # removes its sandbox; branches and merge requests stay
+mesh-flow archive run-3f2a9c0d1e7b  # a run that's over: kept, but left out of `list` (`list --archived` shows them)
 ```
+
+A restart replays the workflow code, but a finished loop returns its stored result, an unfinished one continues its conversation, and branches and pull requests are reused, so it carries on rather than starting over. The UI calls it Continue. A restart also takes a run out of the archive.
 
 ### Triggers
 
@@ -244,7 +247,7 @@ The home's lock comes first: a second engine on the same home refuses to start, 
 
 ### The control API
 
-The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, { app, connectors })` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume` and `/restart`, `GET /events` (server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds; `GET /runs/:run/events` streams one run the same way when asked for `text/event-stream`), `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /app` (`null` before the first deploy), `GET /app/missing` and `PUT /app`. `controlClient(socketPath)` returns the functions that call it.
+The CLI talks to the engine over HTTP on a Unix socket in the home directory, or a named pipe on Windows. On Linux and macOS only the user who owns the directory can reach the socket. A named pipe on Windows isn't limited to one user yet (see Known gaps). `controlApi(engine, { app, connectors })` is a [Hono](https://hono.dev) app with `GET /runs`, `POST /runs`, `GET /runs/:run`, `GET /runs/:run/events`, `POST /runs/:run/answers/:request`, `POST /runs/:run/stop`, `/resume`, `/restart`, `/archive` and `/unarchive`, `GET /events` (server-sent events: which run or sign-in changed, and a heartbeat every 15 seconds; `GET /runs/:run/events` streams one run the same way when asked for `text/event-stream`), `GET /connectors`, `GET /sign-ins`, `POST /sign-ins/:connector`, `GET /app` (`null` before the first deploy), `GET /app/missing` and `PUT /app`. `controlClient(socketPath)` returns the functions that call it.
 
 ## Tests
 

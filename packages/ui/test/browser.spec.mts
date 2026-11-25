@@ -5,7 +5,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
 import { describe, expect, onTestFinished, test } from 'vitest'
 import { serveUiFrom } from '../src/_module/server.mts'
 import { temporaryDirectory } from './support/served-ui.mts'
-import { standInEngine, standInSchedule } from './support/stand-in-engine.mts'
+import { standInEngine, standInSchedule, type StandInOptions } from './support/stand-in-engine.mts'
 
 /** The page as `pnpm build` makes it: this test runs against the real one. */
 const builtPage = fileURLToPath(new URL('../dist/app', import.meta.url))
@@ -19,10 +19,10 @@ async function openBrowser(): Promise<Browser> {
 }
 
 /** The built page, served against a stand-in engine, in a new browser page. */
-async function openUi(): Promise<{ page: Page; url: string }> {
+async function openUi(options: StandInOptions = {}): Promise<{ page: Page; url: string }> {
 	if (!existsSync(builtPage)) throw new Error('Build the page first: pnpm --filter @mesh-flow/ui build')
 	const home = await temporaryDirectory()
-	await standInEngine(home)
+	await standInEngine(home, options)
 	const stopping = new AbortController()
 	const served = await serveUiFrom(builtPage, { home, keychain: false, port: 0, abortSignal: stopping.signal })
 	onTestFinished(async () => {
@@ -169,5 +169,33 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(disclosures).toBe(0)
 		expect(shown).not.toContain('github/token')
 		expect(shown).not.toContain('ghp_')
+	})
+
+	test('continues a restartable run and archives a stopped one from the runs list', async () => {
+		// Arrange
+		const { page, url } = await openUi({ runs: ['restartable', 'stopped'] })
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/runs/', url).href)
+		const restartableRow = page.getByRole('row', { name: /run-f00000000001/ })
+		const stoppedRow = page.getByRole('row', { name: /run-f00000000002/ })
+		const restartableButtons = await restartableRow.getByRole('button').allTextContents()
+		const stoppedButtons = await stoppedRow.getByRole('button').allTextContents()
+		await page.getByRole('button', { name: 'Continue run-f00000000001' }).click()
+		await expect.poll(() => restartableRow.textContent()).toContain('starting')
+		await page.getByRole('button', { name: 'Archive run-f00000000002' }).click()
+		await stoppedRow.waitFor({ state: 'detached' })
+		await page.getByLabel('Show archived runs').check()
+		await page.getByRole('button', { name: 'Unarchive run-f00000000002' }).waitFor()
+		const archivedRows = await page.getByRole('row', { name: /run-f0/ }).allTextContents()
+		await page.getByRole('button', { name: 'Unarchive run-f00000000002' }).click()
+		await page.getByText('No archived runs.').waitFor()
+
+		// Assert
+		expect(restartableButtons).toEqual(['Continue'])
+		expect(stoppedButtons).toEqual(['Continue', 'Archive'])
+		expect(archivedRows).toHaveLength(1)
+		expect(archivedRows[0]).toContain('run-f00000000002')
 	})
 })
