@@ -51,15 +51,16 @@ export const SchemaForm = component<SchemaFormOptions>({
 						...field.fields.map((nested) => fieldElement(nested, `${formName}.`)),
 					],
 				})
+			// Fixed by the workflow, so it's said, not asked: no field that looks like it could be changed.
 			if (field.kind === 'fixed')
-				return element('label', {
+				return element('p', {
+					classes: styles.fixed,
 					children: [
-						field.label,
-						hint,
-						element('input', {
-							value: String(field.value),
-							readOnly: true,
+						`${field.label}: `,
+						element('code', {
+							textContent: String(field.value),
 						}),
+						hint,
 					],
 				})
 			if (field.kind === 'boolean')
