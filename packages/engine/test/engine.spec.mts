@@ -223,6 +223,50 @@ mailbox.send({ type: 'succeeded' })
 		})
 	})
 
+	test('archives a run that is over, keeps it, and takes it out of the archive on a restart', async () => {
+		// Arrange
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(
+			deployment,
+			{ main: runtimeScript(`await mailbox.readStart(signal)\nmailbox.send({ type: 'failed', error: 'No dice.' })`) },
+			{ triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }] },
+		)
+		const { id } = await engine.startRun({ ...userRun('greet'), abortSignal: signal })
+		await untilStatus(engine, id, 'failed')
+
+		// Act
+		const archived = await engine.archive(id, signal)
+		const again = await engine.archive(id, signal)
+		const unarchived = await engine.unarchive(id, signal)
+		await engine.archive(id, signal)
+		const restarted = await engine.restart(id, signal)
+
+		// Assert
+		expect(archived.archivedAt).toBeDefined()
+		expect(again.archivedAt).toBe(archived.archivedAt)
+		expect(unarchived.archivedAt).toBeUndefined()
+		expect(restarted.archivedAt).toBeUndefined()
+		expect(engine.list().map((record) => record.id)).toEqual([id])
+	})
+
+	test('refuses to archive a run that is not over', async () => {
+		// Arrange
+		const { deployment, engine } = await openEngine()
+		await deployTestApp(
+			deployment,
+			{ main: runtimeScript(`await mailbox.readStart(signal)\nawait new Promise(() => undefined)`) },
+			{ triggers: [{ kind: 'user', id: 'greet', workflow: 'greet' }] },
+		)
+		const { id } = await engine.startRun({ ...userRun('greet'), abortSignal: signal })
+		await untilStatus(engine, id, 'running')
+
+		// Act
+		const archiving = engine.archive(id, signal)
+
+		// Assert
+		await expect(archiving).rejects.toThrow(`Run ${id} is running.`)
+	})
+
 	test('does not let a wake of a failed attempt answer the restarted one', async () => {
 		// Arrange
 		const marker = path.join(await temporaryDirectory(), 'attempted')

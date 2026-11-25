@@ -46,6 +46,10 @@ export interface ControlClient {
 	stop(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	resume(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	restart(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	/** Archives a run that's over: kept, but left out of lists. */
+	archive(run: string, abortSignal: AbortSignal): Promise<RunRecord>
+	/** Takes a run out of the archive. */
+	unarchive(run: string, abortSignal: AbortSignal): Promise<RunRecord>
 	/**
 	 * The engine's event stream, as server-sent events (see `GET /events`), once the engine
 	 * answered. It ends when the engine closes or `abortSignal` aborts.
@@ -78,7 +82,7 @@ function runPath(run: string): string {
 
 /** A client for the engine that serves on `socketPath`. */
 export function controlClient(socketPath: string): ControlClient {
-	const act = (action: 'stop' | 'resume' | 'restart') => (run: string, abortSignal: AbortSignal) =>
+	const act = (action: 'stop' | 'resume' | 'restart' | 'archive' | 'unarchive') => (run: string, abortSignal: AbortSignal) =>
 		call(socketPath, RunRecord, 'POST', `${runPath(run)}/${action}`, {}, abortSignal)
 	return Object.freeze({
 		list: (abortSignal) => call(socketPath, z.array(RunRecord), 'GET', '/runs', undefined, abortSignal),
@@ -90,6 +94,8 @@ export function controlClient(socketPath: string): ControlClient {
 		stop: act('stop'),
 		resume: act('resume'),
 		restart: act('restart'),
+		archive: act('archive'),
+		unarchive: act('unarchive'),
 		followEngine: (abortSignal) => openStream(socketPath, '/events', {}, abortSignal),
 		followRun: (run, { lastEventId, abortSignal }) =>
 			openStream(socketPath, `${runPath(run)}/events`, runStreamHeaders(lastEventId), abortSignal),

@@ -91,6 +91,10 @@ export function controlApi(engine: Engine, { deployment, afterDeploy = () => und
 	api.post('/runs/:run/stop', async (context) => context.json(await engine.stop(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/resume', async (context) => context.json(await engine.resume(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/restart', async (context) => context.json(await engine.restart(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/archive', async (context) => context.json(await engine.archive(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/unarchive', async (context) =>
+		context.json(await engine.unarchive(context.req.param('run'), context.req.raw.signal)),
+	)
 	api.get('/events', engineEventStream(engine))
 	api.get('/connectors', (context) => context.json(connectors))
 	api.get('/sign-ins', (context) => context.json(engine.signIns()))

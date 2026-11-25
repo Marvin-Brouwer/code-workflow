@@ -452,6 +452,7 @@ export class Engine {
 		// is refused and a stop sees the run as taken.
 		const saving = this.#update(record.id, {
 			status: 'starting',
+			archivedAt: undefined,
 			sandbox: undefined,
 			paused: undefined,
 			cursor: 0,
@@ -466,6 +467,28 @@ export class Engine {
 			await this.#start(record.id, active, runSignal)
 		})
 		return saving
+	}
+
+	/**
+	 * Archives a run that's over: it's kept, with its events, but lists leave it out unless asked for
+	 * archived runs. Archiving it again keeps the first time. Continuing it with `restart` takes it out
+	 * of the archive.
+	 */
+	async archive(id: string, signal: AbortSignal): Promise<RunRecord> {
+		this.#assertOpen()
+		signal.throwIfAborted()
+		const record = this.#requireStatus(id, [...finishedStatuses])
+		if (record.archivedAt !== undefined) return record
+		return this.#update(record.id, { archivedAt: this.#now().toISOString() })
+	}
+
+	/** Takes a run out of the archive, so lists show it again. */
+	async unarchive(id: string, signal: AbortSignal): Promise<RunRecord> {
+		this.#assertOpen()
+		signal.throwIfAborted()
+		const record = this.get(id)
+		if (record.archivedAt === undefined) return record
+		return this.#update(record.id, { archivedAt: undefined })
 	}
 
 	/**

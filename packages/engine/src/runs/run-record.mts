@@ -63,6 +63,8 @@ export const RunRecord = z.object({
 	reason: z.string().optional(),
 	/** What the run's model calls used, counted by the gateway, once the run is over. All attempts together. */
 	usage: RunUsage.optional(),
+	/** When the run was archived: it's kept, but lists leave it out unless asked for archived runs. */
+	archivedAt: z.iso.datetime().optional(),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 })

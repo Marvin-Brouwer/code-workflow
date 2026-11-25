@@ -40,6 +40,7 @@ export const RunRecord = z.looseObject({
 	error: z.string().optional(),
 	reason: z.string().optional(),
 	usage: z.record(z.string(), ModelUsage).optional(),
+	archivedAt: z.string().optional(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
 })
