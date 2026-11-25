@@ -36,7 +36,10 @@ async function openUi(options: StandInOptions = {}): Promise<{ page: Page; url: 
 }
 
 /** Whether the page is scrolled to its bottom, as the run view follows it: run in the page. */
-const atBottom = 'window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 48'
+/** As `follow-bottom.mts` has it: how close to the bottom counts as at the bottom. */
+const bottomSlackPx = 48
+
+const atBottom = `window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - ${String(bottomSlackPx)}`
 
 describe.skipIf(process.platform === 'win32')('the page', () => {
 	test('starts a run through the wizard, and answers its question as it comes in', async () => {
@@ -68,8 +71,11 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		const shownInput = await page.locator('h2:text-is("Input") + pre').textContent()
 		const liveUsage = await page.getByRole('row', { name: /claude-sonnet-5-5/ }).textContent()
 		const liveHeading = await page.getByRole('heading', { name: 'Usage so far' }).count()
-		// The steps don't fit, so the page has followed them down.
+		// The steps don't fit, so the page has followed them down, to the question below them.
 		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
+		const questionBox = await page.getByLabel('answer').boundingBox()
+		const viewport = page.viewportSize()
+		const questionInView = questionBox !== null && viewport !== null && questionBox.y + questionBox.height <= viewport.height
 		await page.getByLabel('answer').fill('the red one')
 		await page.getByRole('button', { name: 'Answer' }).click()
 
@@ -81,6 +87,7 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(shownMarkup).toContain('<img src=x onerror="window.injected = true">')
 		expect(madeElements).toBe(0)
 		expect(ranScript).toBe(false)
+		expect(questionInView).toBe(true)
 		await expect.poll(() => page.locator('dd').first().textContent()).toBe('succeeded')
 		await expect.poll(() => page.getByRole('status').filter({ hasText: 'Live' }).count()).toBe(1)
 		await expect.poll(() => page.getByRole('heading', { name: 'Usage', exact: true }).count()).toBe(1)

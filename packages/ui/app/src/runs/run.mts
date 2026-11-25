@@ -59,7 +59,7 @@ export const RunPage = component<RunPageOptions>({
 		const usage = element('section', {
 			classes: styles.section,
 		})
-		append(heading, facts, buttons, status, input, waiting, steps, usage)
+		append(heading, facts, buttons, status, input, steps, waiting, usage)
 
 		const opened = new Map<string, boolean>()
 		const open: OpenState = {

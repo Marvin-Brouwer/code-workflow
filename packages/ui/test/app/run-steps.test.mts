@@ -88,35 +88,39 @@ describe('stepsOf', () => {
 
 	test('folds the looks of a poll into one waiting bar until something else happens', () => {
 		// Arrange
-		const waiting = 'review of octo/dice#12'
+		const reviewDescription = 'review of octo/dice#12'
+		const checksDescription = 'checks of octo/dice#12'
 		const polled: RunEvent[] = [
 			event('1-1', 'workflow', undefined, { workflow: 'fix-issue' }),
-			event('1-2', 'poll', '1-1', { description: waiting }),
+			event('1-2', 'poll', '1-1', { description: reviewDescription }),
 			event('1-3', 'tool-call', '1-2', { tool: 'githubPullRequest', from: 'code', input: {} }),
 			event('1-4', 'tool-call-succeeded', '1-3'),
 			event('1-5', 'poll-succeeded', '1-2'),
-			event('1-6', 'poll', '1-1', { description: waiting }),
+			event('1-6', 'poll', '1-1', { description: reviewDescription }),
 			event('1-7', 'wait', '1-6', { time: '10s' }),
 			event('1-8', 'wait-succeeded', '1-7'),
 			event('1-9', 'poll-succeeded', '1-6'),
 			event('1-10', 'loop', '1-1', { model: 'claude-sonnet-5-5' }),
 			event('1-11', 'loop-succeeded', '1-10'),
-			event('1-12', 'poll', '1-1', { description: waiting }),
+			event('1-12', 'poll', '1-1', { description: reviewDescription }),
 			event('1-13', 'tool-call', '1-12', { tool: 'githubPullRequest', from: 'code', input: {} }),
 			event('1-14', 'tool-call-failed', '1-13', { error: 'Bad credentials' }),
 			event('1-15', 'poll-failed', '1-12', { error: 'Bad credentials' }),
-			event('1-16', 'poll', '1-1', { description: 'checks of octo/dice#12' }),
-			event('1-17', 'poll', '1-1', { description: 'checks of octo/dice#12' }),
+			event('1-16', 'poll', '1-1', { description: reviewDescription }),
+			event('1-17', 'poll-succeeded', '1-16'),
+			event('1-18', 'poll', '1-1', { description: checksDescription }),
+			event('1-19', 'poll', '1-1', { description: checksDescription }),
 		]
 
 		// Act
 		const steps = stepsOf(polled, false)
 
 		// Assert
-		expect(steps.map(({ kind, title, status, steps: inner }) => [kind, title, status, inner.length])).toEqual([
+		expect(steps.map(({ kind, title, status, steps: innerSteps }) => [kind, title, status, innerSteps.length])).toEqual([
 			['poll', 'Waits for review of octo/dice#12', 'succeeded', 0],
 			['agent', 'Agent on claude-sonnet-5-5', 'succeeded', 0],
 			['poll', 'Waits for review of octo/dice#12', 'failed', 1],
+			['poll', 'Waits for review of octo/dice#12', 'succeeded', 0],
 			['poll', 'Waits for checks of octo/dice#12', 'running', 0],
 		])
 		expect(steps[2]?.steps[0]?.call?.error).toBe('Bad credentials')

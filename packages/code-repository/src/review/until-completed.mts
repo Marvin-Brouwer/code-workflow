@@ -30,9 +30,9 @@ export async function untilCompleted<Failure>(
 ): Promise<readonly Failure[]> {
 	const every = options.every ?? defaultLookEvery
 	const checksMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
-	const look = patientLook({ description, every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	for (;;) {
-		const checks = await look(lookAt)
+		const checks = await poll(description, () => look(lookAt))
 		if (checks.status === 'completed' || (checks.status === 'none' && !checksMayAppear())) return checks.failures
 		await poll(description, () => wait(every))
 	}
