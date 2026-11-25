@@ -2,7 +2,7 @@ import { choice, component, optional } from '@rooted/components'
 import type { ElementFactory } from '@rooted/components/elements'
 import { read } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
-import { ProviderModelList, type ListedModel } from '../_shared/settings.mts'
+import { ProviderModelList, providerPath, type ListedModel } from '../_shared/settings.mts'
 
 /** Whose models to show. */
 interface ProviderModelsOptions {
@@ -47,7 +47,7 @@ export const ProviderModels = component<ProviderModelsOptions>({
 			textContent: 'Asking the provider...',
 		})
 		append(body)
-		const answer = await read(`/settings/providers/${encodeURIComponent(provider)}/models`, ProviderModelList, signal)
+		const answer = await read(`${providerPath(provider)}/models`, ProviderModelList, signal)
 		if (signal.aborted) return
 		body.replaceChildren(answer.ok ? modelsView(element, answer.value) : errorText(element, answer.error))
 	},
