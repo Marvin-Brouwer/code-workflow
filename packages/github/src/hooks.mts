@@ -1,6 +1,7 @@
 import { NotByConnector } from '@mesh-flow/code-repository'
 import { webhook, type WebhookSignature, type WebhookTrigger, type Workflow } from '@mesh-flow/core'
 import { z } from 'zod'
+import { pinnedRepository } from './pinned-repository.mts'
 import type { IssueReference } from './tools/issue-tools.mts'
 
 /** How GitHub signs a delivery: the hex HMAC-SHA256 of the body in `x-hub-signature-256`, after `sha256=`. */
@@ -50,12 +51,12 @@ const PullRequest = z.object({ number: z.int().positive(), title: z.string(), ht
  * webhook(triage, labeled, { name: 'triage-on-label', ...github.triggerOptions })
  * ```
  */
-export function issueLabeled(label?: string) {
+export function issueLabeled(label?: string, repository?: string) {
 	return z.object({
 		action: z.literal('labeled'),
 		label: z.object({ name: label === undefined ? z.string() : z.literal(label) }),
 		issue: Issue,
-		repository: Repository,
+		repository: z.object({ full_name: repository === undefined ? z.string() : z.literal(repository) }),
 		sender: User,
 	})
 }
@@ -153,9 +154,17 @@ export const pullRequestReviewCommentCreated = z.object({
 })
 export type PullRequestReviewCommentCreated = z.infer<typeof pullRequestReviewCommentCreated>
 
-/** A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional. */
-export type TakesIssue<Shape extends z.ZodRawShape> =
-	{ readonly issue: z.input<typeof IssueReference> } extends z.input<z.ZodObject<Shape>> ? Workflow<Shape> : never
+/**
+ * A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional, where the
+ * issue may be one of a single repository, as `github.issueIn` makes it.
+ */
+export type TakesIssue<Shape extends z.ZodRawShape> = Shape extends { readonly issue: infer IssueSchema extends z.ZodType }
+	? z.input<IssueSchema> extends z.input<typeof IssueReference>
+		? { readonly issue: z.input<IssueSchema> } extends z.input<z.ZodObject<Shape>>
+			? Workflow<Shape>
+			: never
+		: never
+	: never
 
 /** The name of a label, as GitHub takes it and as it fits in a webhook's name. */
 const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes.')
@@ -164,7 +173,7 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * Starts `workflow` with `{ issue: { repository, number } }` whenever `label` is put on an issue.
  * The webhook is named `<workflow>-labeled-<label>`, signed as GitHub signs, and keyed by GitHub's
  * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue`
- * parameter.
+ * parameter. With `github.issueIn('owner/name')` as its `issue`, only that repository's events fit.
  *
  * Point a GitHub webhook for `Issues` events at `/webhooks/<workflow>-labeled-<label>` on the
  * engine. Set its secret with `mesh-flow webhook secret <workflow>-labeled-<label> --generate`
@@ -190,10 +199,12 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  */
 export function onIssueLabeled<Shape extends z.ZodRawShape>(workflow: TakesIssue<Shape>, label: string): WebhookTrigger {
 	const checked = LabelName.parse(label)
-	const schema = issueLabeled(checked).transform((event) => ({
-		issue: { repository: event.repository.full_name, number: event.issue.number },
-	}))
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- TakesIssue has checked that { issue } is enough to start it
 	const takingIssue = workflow as unknown as Workflow<{ issue: typeof IssueReference }>
-	return webhook(takingIssue, schema, { name: `${workflow.name}-labeled-${checked}`, ...triggerOptions })
+	// A workflow for one repository only fits that repository's events, so the others are skipped before a sandbox.
+	const repository = pinnedRepository(takingIssue.parameters.shape.issue)
+	const schema = issueLabeled(checked, repository).transform((event) => ({
+		issue: { repository: event.repository.full_name, number: event.issue.number },
+	}))
+	return webhook(takingIssue, schema, { name: `${takingIssue.name}-labeled-${checked}`, ...triggerOptions })
 }

@@ -1,4 +1,6 @@
 import { tool, toPrompt, workspace, type ToolContext } from '@mesh-flow/core'
+import { z } from 'zod'
+import { RepositoryName } from '../repository-name.mts'
 import { stubs } from '../stubs.mts'
 import { IssueReference, type IssueData, type PostedComment } from '../tools/issue-tools.mts'
 
@@ -20,6 +22,30 @@ import { IssueReference, type IssueData, type PostedComment } from '../tools/iss
  */
 export const issue = IssueReference
 export type { IssueReference }
+
+/**
+ * Names an issue in `repository` only, `{ repository, number }`: for a workflow meant for one
+ * repository. The repository is fixed in the schema, so a form only asks for the number, a run for
+ * another repository is refused, and `github.onIssueLabeled` skips other repositories' events
+ * before it makes a sandbox.
+ *
+ * @param repository - The repository, as `owner/name`.
+ * @throws When `repository` isn't `owner/name`.
+ *
+ * @example
+ * ```ts
+ * export const fixIssue = workflow('fix-issue', { issue: github.issueIn('octo/dice') }, async ({ parameters }) => {
+ * 	const issue = await github.collect(parameters.issue)
+ * })
+ * ```
+ */
+export function issueIn<const Repository extends string>(repository: Repository) {
+	RepositoryName.parse(repository)
+	return z.object({
+		repository: z.literal(repository),
+		number: IssueReference.shape.number,
+	})
+}
 
 /**
  * The parameters of a workflow that works on one issue, `{ issue }`, so a workflow declares them

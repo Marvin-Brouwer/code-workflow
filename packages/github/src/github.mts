@@ -1,5 +1,5 @@
 export { BranchName, type ReplyInput } from '@mesh-flow/code-repository'
-export { close, collect, comment, issue, label, type Issue, type IssueReference } from './issue/issue.mts'
+export { close, collect, comment, issue, issueIn, label, type Issue, type IssueReference } from './issue/issue.mts'
 export { checksPass, type ChecksPassOptions } from './pull-request/checks-pass.mts'
 export { describe, type DescribeOptions } from './pull-request/describe.mts'
 export { PullRequestText, type PullRequestContent } from './pull-request/pull-request-text.mts'

@@ -3,7 +3,7 @@ import { describeApp, defineMeshFlow, image, workflow } from '@mesh-flow/core'
 import { describe, expect, expectTypeOf, test } from 'vitest'
 import { z } from 'zod'
 import { github } from '../src/_module/hooks.mts'
-import { issue } from '../src/issue/issue.mts'
+import { issue, issueIn } from '../src/issue/issue.mts'
 
 /** A delivery of the `issues` event for label `name`. */
 function labeled(name: string) {
@@ -94,17 +94,44 @@ describe('github hooks', () => {
 		expect(JSON.stringify(described.triggers[0])).toContain('"const":"ai-fix"')
 	})
 
+	test('onIssueLabeled for a workflow pinned to one repository fits only that repository', async () => {
+		// Arrange
+		const fixIssue = workflow('fix-issue', { issue: issueIn('team/app') }, async () => undefined)
+		const elsewhere = { ...labeled('ai-fix'), repository: { full_name: 'team/other' } }
+
+		// Act
+		const trigger = github.onIssueLabeled(fixIssue, 'ai-fix')
+		const parameters = await trigger.schema.parseAsync(labeled('ai-fix'))
+		const other = await trigger.schema.safeParseAsync(elsewhere)
+
+		// Assert
+		expect(parameters).toEqual({ issue: { repository: 'team/app', number: 7 } })
+		expect(fixIssue.parameters.safeParse(parameters).success).toBe(true)
+		expect(other.success).toBe(false)
+	})
+
+	test('issueIn fixes the repository, so only the number is asked for', () => {
+		// Act
+		const schema = z.toJSONSchema(issueIn('team/app'), { io: 'input' })
+
+		// Assert
+		expect(schema).toMatchObject({ properties: { repository: { const: 'team/app' } }, required: ['repository', 'number'] })
+		expect(() => issueIn('not a repository')).toThrow()
+	})
+
 	test('only compiles for a workflow that takes the issue', () => {
 		// Arrange
 		const takesIssue = workflow('takes-issue', { issue, verbose: z.boolean().optional() }, async () => undefined)
 		const takesNumber = workflow('takes-number', { issue: z.number() }, async () => undefined)
 		const needsMore = workflow('needs-more', { issue, branch: z.string() }, async () => undefined)
+		const pinned = workflow('pinned', { issue: issueIn('team/app') }, async () => undefined)
 
 		// Act
 		const trigger = github.onIssueLabeled(takesIssue, 'ai-fix')
 
 		// Assert
 		expectTypeOf(trigger.kind).toEqualTypeOf<'webhook'>()
+		expectTypeOf(github.onIssueLabeled(pinned, 'ai-fix').kind).toEqualTypeOf<'webhook'>()
 		// @ts-expect-error The issue is a number there, not { repository, number }.
 		github.onIssueLabeled(takesNumber, 'ai-fix')
 		// @ts-expect-error The workflow needs a branch too, which the event doesn't give.
