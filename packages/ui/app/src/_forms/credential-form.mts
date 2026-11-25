@@ -5,6 +5,7 @@ import { CredentialName, credentialPath, NoContent } from '../_shared/settings.m
 import styles from './forms.css'
 import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
+import { randomSecret } from './random-secret.mts'
 import { submitForm } from './submit-form.mts'
 
 /** What the credential form sets, and what it does after. */
@@ -19,9 +20,6 @@ export interface CredentialFormOptions {
 	/** Called once the credential is set. */
 	readonly done?: (() => void) | undefined
 }
-
-/** How many random bytes "Generate" makes: as many as `mesh-flow credential set --generate`. */
-const generatedSecretBytes = 32
 
 /**
  * Sets a credential. The value goes in and never comes back. "Generate" fills in a random value,
@@ -100,8 +98,3 @@ export const CredentialForm = component<CredentialFormOptions>({
 		)
 	},
 })
-
-/** Random bytes as hex: a webhook secret or anything else nobody has to type. */
-function randomSecret(): string {
-	return Array.from(crypto.getRandomValues(new Uint8Array(generatedSecretBytes)), (byte) => byte.toString(16).padStart(2, '0')).join('')
-}

@@ -1,15 +1,22 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
-import { Table } from '../_layout/table.mts'
-import { read, send, type Answer } from '../_shared/api.mts'
+import { CredentialRowForm } from '../_forms/credential-row-form.mts'
+import { keepRows, Table } from '../_layout/table.mts'
+import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
-import { credentialPath, NoContent } from '../_shared/settings.mts'
-import { ConfirmButton } from './confirm-button.mts'
+import { ListedProvider } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
+import { rowKey, shownCredentials, type ShownCredential } from './shown-credentials.mts'
 
-/** The credentials by name, never their values: set one, generate a webhook secret, remove one. */
+/**
+ * The credentials by name, never their values, and the keys of the app's providers: set, replace
+ * or clear one in its row, or set another one, such as a generated webhook secret. A refresh keeps
+ * the rows that didn't change in place, with what's typed in them. A stored provider key whose
+ * provider the config doesn't declare can only be cleared. A link to `#<name>` puts the cursor in
+ * that credential's row.
+ */
 export const CredentialsPage = component({
 	name: 'credentials-page',
 	styles,
@@ -17,18 +24,10 @@ export const CredentialsPage = component({
 		const list = element('div', {
 			classes: styles.section,
 		})
-		const status = element('p', {
-			role: 'alert',
-		})
 
-		const remove = async (name: string) => {
-			const answer = await send('DELETE', credentialPath(name), {}, NoContent, signal)
-			status.textContent = answer.ok ? '' : answer.error
-			await show()
-		}
-
-		const row = (name: string) =>
+		const newRow = ({ name, stateText, stored, settable }: ShownCredential) =>
 			element('tr', {
+				id: name,
 				children: [
 					element('td', {
 						children: element('code', {
@@ -36,31 +35,82 @@ export const CredentialsPage = component({
 						}),
 					}),
 					element('td', {
-						children: create(ConfirmButton, {
-							summary: 'Remove',
-							label: `Remove ${name}`,
-							confirmed() {
-								void remove(name)
+						textContent: stateText,
+					}),
+					element('td', {
+						children: create(CredentialRowForm, {
+							name,
+							stored,
+							settable,
+							done() {
+								void show()
 							},
 						}),
 					}),
 				],
 			})
 
-		const view = (names: Answer<string[]>) => {
-			if (!names.ok) return errorText(element, names.error)
-			if (names.value.length === 0)
-				return element('p', {
-					textContent: 'No credentials yet.',
-				})
-			return create(Table, {
-				headings: ['Name', ''],
-				rows: names.value.toSorted().map(row),
-			})
+		// The rows shown now, by what they show: a refresh keeps the rows that didn't change in place, so a
+		// row being typed in or sent from isn't rebuilt, and its request isn't aborted, when another one is done.
+		let shownRows = new Map<string, HTMLElement>()
+		const rowOf = (credential: ShownCredential) => shownRows.get(rowKey(credential)) ?? newRow(credential)
+		const body = element('tbody')
+		const table = create(Table, {
+			headings: ['Name', 'State', ''],
+			rows: body,
+		})
+		// The hidden attribute goes on a plain element: a component's host always shows its children.
+		const tableBox = element('div', {
+			hidden: true,
+			children: table,
+		})
+		const problems = element('div')
+		const empty = element('p', {
+			textContent: 'No credentials yet.',
+			hidden: true,
+		})
+		list.replaceChildren(problems, empty, tableBox)
+
+		const showProblems = (...messages: string[]) => {
+			problems.replaceChildren(...messages.map((message) => errorText(element, message)))
 		}
 
+		const view = (names: Answer<string[]>, providers: Answer<ListedProvider[]>) => {
+			if (!names.ok) {
+				showProblems(names.error)
+				tableBox.hidden = shownRows.size === 0
+				return
+			}
+			// Without the running engine there are no declared providers: the stored credentials still show.
+			const shown = shownCredentials(names.value, providers.ok ? providers.value : [])
+			shownRows = new Map(shown.map((credential) => [rowKey(credential), rowOf(credential)]))
+			keepRows(body, [...shownRows.values()])
+			empty.hidden = shown.length > 0
+			tableBox.hidden = shown.length === 0
+			showProblems(...(providers.ok ? [] : [`Provider keys can't be set now: ${providers.error}`]))
+		}
+
+		// Only the latest refresh is shown, so a slower earlier one can't put older rows back.
+		let latestRefresh = 0
 		async function show(): Promise<void> {
-			list.replaceChildren(view(await read('/settings/credentials', z.array(z.string()), signal)))
+			latestRefresh += 1
+			const refresh = latestRefresh
+			const [names, providers] = await Promise.all([
+				read('/settings/credentials', z.array(z.string()), signal),
+				read('/settings/providers', z.array(ListedProvider), signal),
+			])
+			if (signal.aborted || refresh !== latestRefresh) return
+			view(names, providers)
+		}
+
+		/** Puts the cursor in the row the address links to, such as `#provider/anthropic`. The hash is used as it is: a credential's name needs no URL decoding. */
+		const focusLinked = () => {
+			const linked = location.hash.slice(1)
+			if (linked === '') return
+			list
+				.querySelector(`tr[id="${CSS.escape(linked)}"]`)
+				?.querySelector('input')
+				?.focus()
 		}
 
 		append(
@@ -70,10 +120,9 @@ export const CredentialsPage = component({
 			}),
 			element('p', {
 				textContent:
-					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<webhook>. Sealed on this machine; a value never comes back.',
+					"Tokens and settings connectors look up, such as github/token, webhook secrets, as webhook/<webhook>, and the keys of the app's providers, as provider/<name>. Sealed on this machine; a value never comes back.",
 			}),
 			list,
-			status,
 			element('section', {
 				classes: styles.section,
 				children: [
@@ -93,6 +142,8 @@ export const CredentialsPage = component({
 				],
 			}),
 		)
+		window.addEventListener('hashchange', focusLinked, { signal })
 		await show()
+		focusLinked()
 	},
 })

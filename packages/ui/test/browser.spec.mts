@@ -97,7 +97,7 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(webhookDetail).toContain('No secret: set webhook/issue-opened under credentials')
 	})
 
-	test("lists the config's providers without a way to add, move or remove one, and sets and removes a key", async () => {
+	test("lists the config's providers without a way to change them, and links each key to its credential", async () => {
 		// Arrange
 		const { page, url } = await openUi()
 
@@ -105,26 +105,90 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		await page.goto(url)
 		await page.goto(new URL('/settings/providers/', url).href)
 		const proxyRow = await page.getByRole('row', { name: /proxy/ }).textContent()
-		const formFields = await page.getByLabel(/Name|Kind|Base URL/).count()
-		const moveButtons = await page.getByRole('button', { name: /Up|Down/ }).count()
+		const formFields = await page.locator('main input').count()
+		const disclosures = await page.locator('main summary').count()
 		await page
 			.getByRole('row', { name: /anthropic/ })
-			.locator('summary', { hasText: 'Set key' })
+			.getByRole('link', { name: 'Set key' })
 			.click()
-		await page.getByLabel('API key of anthropic').fill('sk-test')
-		await page.getByRole('button', { name: 'Set key' }).click()
-		const removeKey = page.locator('summary', { hasText: 'Remove key' })
-		await removeKey.waitFor()
-		const keySet = await page.getByRole('row', { name: /anthropic/ }).textContent()
-		await removeKey.click()
-		await page.getByRole('button', { name: 'Remove the key of anthropic' }).click()
-		await removeKey.waitFor({ state: 'detached' })
+		const keyField = page.getByLabel('Value of provider/anthropic')
+		await keyField.waitFor()
+		const focused = await page.locator('input:focus').getAttribute('aria-label')
+		await keyField.fill('sk-test')
+		await page.getByRole('button', { name: 'Set provider/anthropic' }).click()
+		await page.getByRole('button', { name: 'Clear provider/anthropic' }).waitFor()
+		const keyState = await page
+			.getByRole('row', { name: /provider\/anthropic/ })
+			.getByRole('cell')
+			.nth(1)
+			.textContent()
+		await page.getByRole('link', { name: 'Providers' }).click()
+		const changeKey = page.getByRole('row', { name: /anthropic/ }).getByRole('link', { name: 'Change key' })
+		await changeKey.waitFor()
 
 		// Assert
 		expect(proxyRow).toContain('https://llm-proxy.example.com/api/v1')
 		expect(proxyRow).toContain('not set')
+		expect(proxyRow).toContain('Listed once it has a key.')
 		expect(formFields).toBe(0)
-		expect(moveButtons).toBe(0)
-		expect(keySet).not.toContain('not set')
+		expect(disclosures).toBe(0)
+		expect(focused).toBe('Value of provider/anthropic')
+		expect(keyState).toBe('set')
+	})
+
+	test('replaces and clears a credential from its row, without opening anything first', async () => {
+		// Arrange
+		const { page, url } = await openUi()
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/settings/credentials/', url).href)
+		await page.getByLabel('Name').fill('github/token')
+		await page.getByLabel('Value', { exact: true }).fill('ghp_first')
+		await page.getByRole('button', { name: 'Set', exact: true }).click()
+		const newValue = page.getByLabel('Value of github/token')
+		await newValue.fill('ghp_second')
+		await page.getByRole('button', { name: 'Replace github/token' }).click()
+		// The replaced value is taken once the field is emptied.
+		await expect.poll(() => newValue.inputValue()).toBe('')
+		const generateButtons = await page.getByRole('button', { name: 'Generate' }).count()
+		const disclosures = await page.locator('table summary').count()
+		await page.getByRole('button', { name: 'Clear github/token' }).click()
+		await newValue.waitFor({ state: 'detached' })
+		const shown = await page.locator('main table').textContent()
+
+		// Assert
+		expect(generateButtons).toBe(1)
+		expect(disclosures).toBe(0)
+		expect(shown).not.toContain('github/token')
+		expect(shown).not.toContain('ghp_')
+	})
+
+	test("keeps what's typed in one row while another credential is set, and clears a provider's key back to not set", async () => {
+		// Arrange
+		const { page, url } = await openUi()
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/settings/credentials/', url).href)
+		const keyField = page.getByLabel('Value of provider/anthropic')
+		await keyField.fill('sk-typing')
+		await page.getByLabel('Name').fill('github/token')
+		await page.getByLabel('Value', { exact: true }).fill('ghp_first')
+		await page.getByRole('button', { name: 'Set', exact: true }).click()
+		await page.getByRole('button', { name: 'Clear github/token' }).waitFor()
+		const typed = await keyField.inputValue()
+		await page.getByRole('button', { name: 'Set provider/anthropic' }).click()
+		await page.getByRole('button', { name: 'Clear provider/anthropic' }).click()
+		await page.getByRole('button', { name: 'Clear provider/anthropic' }).waitFor({ state: 'detached' })
+		const keyState = await page
+			.getByRole('row', { name: /provider\/anthropic/ })
+			.getByRole('cell')
+			.nth(1)
+			.textContent()
+
+		// Assert
+		expect(typed).toBe('sk-typing')
+		expect(keyState).toBe('not set')
 	})
 })
