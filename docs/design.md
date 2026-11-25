@@ -258,7 +258,7 @@ export default defineMeshFlow({
 	}),
 	workflows: [
 		userTrigger(fixIssue),
-		webhook(fixIssue, github.issueLabeled('ai-fix').transform((event) => ({ issue: event.issue.number }))),
+		webhook(fixIssue, github.issueLabeled({ label: 'ai-fix' }).transform((event) => ({ issue: event.issue.number }))),
 		schedule(weeklyReport, '0 7 * * 1'),
 	],
 })
@@ -278,7 +278,7 @@ export default defineMeshFlow({
   engine checks it on the host, where workflow code never runs. The secret is set in the UI and
   checked by the engine before anything else, so the sandbox never sees it.
 - **Connectors add shortcuts on top, never something `webhook` can't do.** A schema per event with
-  its signature scheme filled in (`github.issueLabeled(label)`, `gitlab.mergeRequestOpened`), and
+  its signature scheme filled in (`github.issueLabeled({ label })`, `gitlab.mergeRequestOpened`), and
   ready-made triggers built from those for the common case, which also do the mapping:
   `github.onIssueLabeled(fixIssue, 'ai-fix')` starts `fixIssue` with `{ issue }`, and only compiles
   for a workflow whose parameters take that. The delivery id is the run's key: a
@@ -318,7 +318,7 @@ export default defineMeshFlow({
   disable a webhook that keeps getting a 4xx. `.refine` and `.transform` are code, so they run in
   the sandbox when the run starts; a payload they reject ends the run as *not for this workflow*,
   which isn't a failure. Filters belong in the schema's structure where they can
-  (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled(label)`
+  (`label: z.object({ name: z.literal('ai-fix') })`), which is what `github.issueLabeled({ label })`
   does.
 
 ### Plan deviations (preset pattern)
@@ -481,7 +481,7 @@ export const aws = connector({
   connector's settings and credentials are named entries in the credential store, such as
   `github/token` or `aws/start-url`.
 - Connectors with webhooks may export a zod schema per event with its signature scheme filled in
-  (`github.issueLabeled(label)`) and ready-made triggers built on them
+  (`github.issueLabeled({ label })`) and ready-made triggers built on them
   (`github.onIssueLabeled(workflow, label)`), as shortcuts for `webhook` triggers and for events
   into a running run (review watching). `webhook` itself doesn't need a connector.
 

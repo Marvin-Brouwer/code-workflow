@@ -25,21 +25,30 @@ export type { IssueReference }
 
 /**
  * Names an issue in `repository` only, `{ repository, number }`: for a workflow meant for one
- * repository. The repository is fixed in the schema, so a form only asks for the number, a run for
+ * repository. The repository is pinned in the schema, so a form only asks for the number, a run for
  * another repository is refused, and `github.onIssueLabeled` skips other repositories' events
- * before it makes a sandbox.
+ * before it makes a sandbox. Those events fit in any case, as GitHub names repositories.
  *
  * @param repository - The repository, as `owner/name`.
+ * @returns The schema, for the `issue` parameter of a workflow.
  * @throws When `repository` isn't `owner/name`.
  *
  * @example
  * ```ts
- * export const fixIssue = workflow('fix-issue', { issue: github.issueIn('octo/dice') }, async ({ parameters }) => {
+ * import { succeed, workflow } from '@mesh-flow/core'
+ * import { github } from '@mesh-flow/github'
+ * import { developer } from '../agents.mts'
+ *
+ * const repository = 'octo/dice'
+ *
+ * export const fixIssue = workflow('fix-issue', { issue: github.issueIn(repository) }, async ({ parameters }) => {
  * 	const issue = await github.collect(parameters.issue)
+ * 	await developer.loop`Fix ${issue}, then ${succeed()}.`
  * })
  * ```
  */
 export function issueIn<const Repository extends string>(repository: Repository) {
+	// Throws on anything but owner/name; the literal keeps the type the caller wrote.
 	RepositoryName.parse(repository)
 	return z.object({
 		repository: z.literal(repository),
