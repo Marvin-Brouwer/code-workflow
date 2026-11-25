@@ -59,13 +59,17 @@ export const CredentialsPage = component({
 			headings: ['Name', 'State', ''],
 			rows: body,
 		})
-		table.hidden = true
+		// The hidden attribute goes on a plain element: a component's host always shows its children.
+		const tableBox = element('div', {
+			hidden: true,
+			children: table,
+		})
 		const problems = element('div')
 		const empty = element('p', {
 			textContent: 'No credentials yet.',
 			hidden: true,
 		})
-		list.replaceChildren(problems, empty, table)
+		list.replaceChildren(problems, empty, tableBox)
 
 		const showProblems = (...messages: string[]) => {
 			problems.replaceChildren(...messages.map((message) => errorText(element, message)))
@@ -74,7 +78,7 @@ export const CredentialsPage = component({
 		const view = (names: Answer<string[]>, providers: Answer<ListedProvider[]>) => {
 			if (!names.ok) {
 				showProblems(names.error)
-				table.hidden = shownRows.size === 0
+				tableBox.hidden = shownRows.size === 0
 				return
 			}
 			// Without the running engine there are no declared providers: the stored credentials still show.
@@ -82,7 +86,7 @@ export const CredentialsPage = component({
 			shownRows = new Map(shown.map((credential) => [rowKey(credential), rowOf(credential)]))
 			keepRows(body, [...shownRows.values()])
 			empty.hidden = shown.length > 0
-			table.hidden = shown.length === 0
+			tableBox.hidden = shown.length === 0
 			showProblems(...(providers.ok ? [] : [`Provider keys can't be set now: ${providers.error}`]))
 		}
 
