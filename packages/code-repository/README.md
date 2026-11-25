@@ -31,7 +31,7 @@ const repository: Checkout = await checkoutRepository(
 )
 ```
 
-`describeChange`, `triageItems` and `watchReview` hold the loops and the watch of a connector's `describe`, `triage` and `review`. The connector says how its code host is read and written:
+`describeChange`, `triageItems` and `watchReview` hold the loops and the watch of a connector's `describe`, `triage` and `review`. The connector says how its code host is read and written; a `ReviewWatch` also carries a `description`, such as `review of owner/name#12`, which titles the run view's waiting bar while the watch looks and waits. `patientLook` retries a look through an outage of the code host:
 
 ```ts
 import {
@@ -73,7 +73,7 @@ export function describe(agent: Agent, repository: Checkout, options: DescribeCh
 }
 ```
 
-`untilCompleted(look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `replyTool` makes a connector's `reply` tool, and `branchHeadTool` the tool that reads which commit a checkout's branch is at. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
+`untilCompleted(description, look, { every, appearWithin, toleratedOutage })` is the wait of a check such as `github.checksPass`: it looks at a commit's checks until they completed, and resolves to the ones that failed. `description`, such as `pipeline of <sha>`, is the title of the run view's waiting bar. `replyTool` makes a connector's `reply` tool, and `branchHeadTool` the tool that reads which commit a checkout's branch is at. `ReplyStage`, `defaultReplyStage`, `GoneReply`, `isGoneReply` and `UpdateSkip` are the schemas the connectors' reply and update tools share.
 
 ```ts
 import { untilCompleted, type CommitChecks } from '@mesh-flow/code-repository'
@@ -85,7 +85,8 @@ const lookEvery = duration.of('10s')
 
 const pipelinePasses = (sha: string) =>
 	check('pipeline', async () => {
-		const failures = await untilCompleted(() => pipelineOf(sha), { every: lookEvery })
+		const description = `pipeline of ${sha}`
+		const failures = await untilCompleted(description, () => pipelineOf(sha), { every: lookEvery })
 		return failures.map((failure) => ({ source: `pipeline: ${failure.name}`, message: 'failed' }))
 	})
 ```
