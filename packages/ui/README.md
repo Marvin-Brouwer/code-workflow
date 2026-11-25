@@ -80,7 +80,7 @@ A tab follows one stream at a time: the run page's own stream takes the place of
 | `/start/:trigger/` | what the app still needs, then the workflow's parameters | set what's missing, start the run |
 | `/setup/` | what the app still needs before a run can start | set what's missing |
 | `/settings/providers/` | the providers the app's config declares, in the order models are looked up: kind, base URL, whether each has a key, and, for one with a key, its models (asked when opened) and which agents can use | set a key, remove a key |
-| `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, remove one |
+| `/settings/credentials/` | credential names, never values | set one, generate a webhook secret, replace or clear one from its row |
 | `/settings/connectors/` | connector packages; with a running engine, the connectors it loaded and the sign-ins under way with their URL and code | sign in |
 
 Runs and sign-ins update as they change. The runs list and the sign-ins follow the engine's event stream and refetch what changed; the run view follows that run's own stream, which sends its record and events, so it needs no other request. A stream that goes quiet for 35 seconds counts as dead; while it's down the page says so, refreshes every two seconds and connects again, and every connect is a new stream that starts over from what is now. The streams sit behind the same access check as every other route.

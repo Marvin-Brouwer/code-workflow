@@ -127,4 +127,31 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		expect(moveButtons).toBe(0)
 		expect(keySet).not.toContain('not set')
 	})
+
+	test('replaces and clears a credential from its row, without opening anything first', async () => {
+		// Arrange
+		const { page, url } = await openUi()
+
+		// Act
+		await page.goto(url)
+		await page.goto(new URL('/settings/credentials/', url).href)
+		await page.getByLabel('Name').fill('github/token')
+		await page.getByLabel('Value', { exact: true }).fill('ghp_first')
+		await page.getByRole('button', { name: 'Set', exact: true }).click()
+		const newValue = page.getByLabel('New value of github/token')
+		await newValue.fill('ghp_second')
+		await page.getByRole('button', { name: 'Replace' }).click()
+		await page.getByRole('row', { name: /github\/token/ }).waitFor()
+		const generateButtons = await page.getByRole('button', { name: 'Generate' }).count()
+		const disclosures = await page.locator('table summary').count()
+		await page.getByRole('button', { name: 'Clear github/token' }).click()
+		await newValue.waitFor({ state: 'detached' })
+		const shown = await page.locator('main').textContent()
+
+		// Assert
+		expect(generateButtons).toBe(1)
+		expect(disclosures).toBe(0)
+		expect(shown).toContain('No credentials yet.')
+		expect(shown).not.toContain('ghp_')
+	})
 })

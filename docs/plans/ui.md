@@ -93,7 +93,7 @@ Vertical slices, as rooted lays an app out, one folder per page with its `_route
 | `triggers` | the app's triggers; webhooks and schedules with whether a secret is set | start a workflow from its user trigger |
 | `start` | the user triggers when there are several; the workflow's parameters as a form, after the wizard; `/setup/` for the wizard alone | start a run (with an idempotency key per form, so a double click starts only one run), then go to it |
 | `settings/providers` | providers in order, kind, whether a key is set | add, set key, reorder, remove |
-| `settings/credentials` | credential names, never their values | set, remove; generate a webhook secret |
+| `settings/credentials` | credential names, never their values | set; replace or clear from its row; generate a webhook secret |
 | `settings/connectors` | loaded connectors, and sign-ins under way with their URL and code | sign in |
 
 - **The run view** reads top to bottom as bars, one per step, built from the event tree:

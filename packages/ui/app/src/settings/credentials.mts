@@ -2,14 +2,13 @@ import { component } from '@rooted/components'
 import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
 import { Table } from '../_layout/table.mts'
-import { read, send, type Answer } from '../_shared/api.mts'
+import { ReplaceCredentialForm } from '../_forms/replace-credential-form.mts'
+import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
-import { credentialPath, NoContent } from '../_shared/settings.mts'
-import { ConfirmButton } from './confirm-button.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
-/** The credentials by name, never their values: set one, generate a webhook secret, remove one. */
+/** The credentials by name, never their values: set one, generate a webhook secret, replace or clear one. */
 export const CredentialsPage = component({
 	name: 'credentials-page',
 	styles,
@@ -17,15 +16,6 @@ export const CredentialsPage = component({
 		const list = element('div', {
 			classes: styles.section,
 		})
-		const status = element('p', {
-			role: 'alert',
-		})
-
-		const remove = async (name: string) => {
-			const answer = await send('DELETE', credentialPath(name), {}, NoContent, signal)
-			status.textContent = answer.ok ? '' : answer.error
-			await show()
-		}
 
 		const row = (name: string) =>
 			element('tr', {
@@ -36,11 +26,10 @@ export const CredentialsPage = component({
 						}),
 					}),
 					element('td', {
-						children: create(ConfirmButton, {
-							summary: 'Remove',
-							label: `Remove ${name}`,
-							confirmed() {
-								void remove(name)
+						children: create(ReplaceCredentialForm, {
+							name,
+							done() {
+								void show()
 							},
 						}),
 					}),
@@ -73,7 +62,6 @@ export const CredentialsPage = component({
 					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<webhook>. Sealed on this machine; a value never comes back.',
 			}),
 			list,
-			status,
 			element('section', {
 				classes: styles.section,
 				children: [
