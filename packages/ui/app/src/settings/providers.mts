@@ -1,25 +1,18 @@
-import { component, optional } from '@rooted/components'
+import { choice, component } from '@rooted/components'
+import { href, Link } from '@rooted/router'
 import { z } from 'zod'
-import { ProviderKeyForm } from '../_forms/provider-key-form.mts'
 import { Table } from '../_layout/table.mts'
-import { read, send, type Answer } from '../_shared/api.mts'
+import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
-import { ListedProvider, NoContent } from '../_shared/settings.mts'
-import { ConfirmButton } from './confirm-button.mts'
+import { ListedProvider, providerCredential, providerKeyText } from '../_shared/settings.mts'
+import { CredentialsRoute } from './_routes.mts'
 import { ProviderModels } from './provider-models.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
-/** Whether `provider` has a key, and when its key was set for another origin, which one: it isn't used until it's set again. */
-function keyText(provider: ListedProvider): string {
-	if (provider.hasKey) return 'set'
-	if (provider.keySetFor === undefined) return 'not set'
-	return `not set (set for ${provider.keySetFor} before)`
-}
-
 /**
- * The model providers the app's config declares, in the order models are looked up. They come from
- * git, so only their keys are set here.
+ * The model providers the app's config declares, in the order models are looked up, with the models
+ * each offers its key. They come from git; their keys are set on the credentials page.
  */
 export const ProvidersPage = component({
 	name: 'providers-page',
@@ -28,51 +21,20 @@ export const ProvidersPage = component({
 		const list = element('div', {
 			classes: styles.section,
 		})
-		const status = element('p', {
-			role: 'alert',
-		})
+		const keyLink = (provider: ListedProvider) =>
+			create(Link, {
+				href: `${href.for(CredentialsRoute).href}#${providerCredential(provider.name)}`,
+				children: choice(provider.hasKey, 'Change key', 'Set key'),
+			})
 
-		const removeKey = async (name: string) => {
-			const answer = await send('DELETE', `/settings/providers/${encodeURIComponent(name)}/key`, {}, NoContent, signal)
-			status.textContent = answer.ok ? '' : answer.error
-			await show()
-		}
-
-		const keyActions = (provider: ListedProvider) => {
-			const storesKey = provider.hasKey || provider.keySetFor !== undefined
-			return element('div', {
-				classes: styles.actions,
-				children: [
-					element('details', {
-						children: [
-							element('summary', {
-								textContent: 'Set key',
-							}),
-							create(ProviderKeyForm, {
-								provider: provider.name,
-								done() {
-									void show()
-								},
-							}),
-						],
-					}),
-					optional(
-						provider.hasKey,
-						create(ProviderModels, {
-							provider: provider.name,
-						}),
-					),
-					optional(
-						storesKey,
-						create(ConfirmButton, {
-							summary: 'Remove key',
-							label: `Remove the key of ${provider.name}`,
-							confirmed() {
-								void removeKey(provider.name)
-							},
-						}),
-					),
-				],
+		const models = (provider: ListedProvider) => {
+			if (!provider.hasKey)
+				return element('span', {
+					classes: styles.muted,
+					textContent: 'Listed once it has a key.',
+				})
+			return create(ProviderModels, {
+				provider: provider.name,
 			})
 		}
 
@@ -92,10 +54,13 @@ export const ProvidersPage = component({
 						textContent: provider.baseUrl ?? '',
 					}),
 					element('td', {
-						textContent: keyText(provider),
+						children: element('div', {
+							classes: styles.actions,
+							children: [providerKeyText(provider), keyLink(provider)],
+						}),
 					}),
 					element('td', {
-						children: keyActions(provider),
+						children: models(provider),
 					}),
 				],
 			})
@@ -109,7 +74,7 @@ export const ProvidersPage = component({
 					textContent: "The app's config declares no providers. Add them to modelProviders in defineMeshFlow.",
 				})
 			return create(Table, {
-				headings: ['', 'Name', 'Kind', 'Base URL', 'Key', ''],
+				headings: ['', 'Name', 'Kind', 'Base URL', 'Key', 'Models'],
 				rows: providers.value.map(row),
 			})
 		}
@@ -128,7 +93,6 @@ export const ProvidersPage = component({
 					"The app's config declares these, in git. A model goes to the first one that offers it and has a key. Keys are sealed on this machine and never come back.",
 			}),
 			list,
-			status,
 		)
 		await show()
 	},

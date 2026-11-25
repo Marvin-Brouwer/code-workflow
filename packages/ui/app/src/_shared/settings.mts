@@ -80,3 +80,23 @@ export const CredentialName = z
 export function credentialPath(name: string): string {
 	return `/settings/credentials/${name.split('/').map(encodeURIComponent).join('/')}`
 }
+
+/** What a provider's key is stored as in the credential store: `provider/<name>`. */
+const providerCredentialPrefix = 'provider/'
+
+/** The credential provider `provider`'s key is stored as. */
+export function providerCredential(provider: string): string {
+	return `${providerCredentialPrefix}${provider}`
+}
+
+/** The provider whose key credential `name` is, if it's one. */
+export function providerOfCredential(name: string): string | undefined {
+	return name.startsWith(providerCredentialPrefix) ? name.slice(providerCredentialPrefix.length) : undefined
+}
+
+/** Whether `provider` has a key, and when its key was set for another origin, which one: it isn't used until it's set again. */
+export function providerKeyText(provider: ListedProvider): string {
+	if (provider.hasKey) return 'set'
+	if (provider.keySetFor === undefined) return 'not set'
+	return `not set (set for ${provider.keySetFor} before)`
+}

@@ -1,14 +1,47 @@
 import { component } from '@rooted/components'
 import { z } from 'zod'
 import { CredentialForm } from '../_forms/credential-form.mts'
-import { Table } from '../_layout/table.mts'
 import { ReplaceCredentialForm } from '../_forms/replace-credential-form.mts'
+import { Table } from '../_layout/table.mts'
 import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
+import { ListedProvider, providerCredential, providerKeyText } from '../_shared/settings.mts'
 import styles from './settings.css'
 import { SettingsMenu } from './settings-menu.mts'
 
-/** The credentials by name, never their values: set one, generate a webhook secret, replace or clear one. */
+/** A credential on the page: one that's stored, or the key of a provider the app's config declares. */
+interface ShownCredential {
+	readonly name: string
+	/** Whether it's set, and for a provider's key, whether it's used. */
+	readonly state: string
+	readonly stored: boolean
+}
+
+/** The stored credentials, and the keys of the declared providers, set or not, by name. */
+function shownCredentials(names: readonly string[], providers: readonly ListedProvider[]): ShownCredential[] {
+	const keys = providers.map((provider) => {
+		const name = providerCredential(provider.name)
+		return {
+			name,
+			state: providerKeyText(provider),
+			stored: names.includes(name),
+		}
+	})
+	const others = names
+		.filter((name) => !keys.some((key) => key.name === name))
+		.map((name) => ({
+			name,
+			state: 'set',
+			stored: true,
+		}))
+	return [...keys, ...others].toSorted((left, right) => left.name.localeCompare(right.name))
+}
+
+/**
+ * The credentials by name, never their values, and the keys of the app's providers: set, replace
+ * or clear one in its row, or set another one, such as a generated webhook secret. A link to
+ * `#<name>` puts the cursor in that credential's row.
+ */
 export const CredentialsPage = component({
 	name: 'credentials-page',
 	styles,
@@ -17,8 +50,9 @@ export const CredentialsPage = component({
 			classes: styles.section,
 		})
 
-		const row = (name: string) =>
+		const row = ({ name, state, stored }: ShownCredential) =>
 			element('tr', {
+				id: name,
 				children: [
 					element('td', {
 						children: element('code', {
@@ -26,8 +60,12 @@ export const CredentialsPage = component({
 						}),
 					}),
 					element('td', {
+						textContent: state,
+					}),
+					element('td', {
 						children: create(ReplaceCredentialForm, {
 							name,
+							stored,
 							done() {
 								void show()
 							},
@@ -36,20 +74,34 @@ export const CredentialsPage = component({
 				],
 			})
 
-		const view = (names: Answer<string[]>) => {
+		const view = (names: Answer<string[]>, providers: Answer<ListedProvider[]>) => {
 			if (!names.ok) return errorText(element, names.error)
-			if (names.value.length === 0)
+			// Without the running engine there are no declared providers: the stored credentials still show.
+			const shown = shownCredentials(names.value, providers.ok ? providers.value : [])
+			if (shown.length === 0)
 				return element('p', {
 					textContent: 'No credentials yet.',
 				})
 			return create(Table, {
-				headings: ['Name', ''],
-				rows: names.value.toSorted().map(row),
+				headings: ['Name', 'State', ''],
+				rows: shown.map(row),
 			})
 		}
 
 		async function show(): Promise<void> {
-			list.replaceChildren(view(await read('/settings/credentials', z.array(z.string()), signal)))
+			const [names, providers] = await Promise.all([
+				read('/settings/credentials', z.array(z.string()), signal),
+				read('/settings/providers', z.array(ListedProvider), signal),
+			])
+			list.replaceChildren(view(names, providers))
+		}
+
+		/** Puts the cursor in the row the address links to, such as `#provider/anthropic`. */
+		const focusLinked = () => {
+			const linked = decodeURIComponent(location.hash.slice(1))
+			if (linked === '') return
+			const linkedRow = [...list.querySelectorAll('tr')].find((tableRow) => tableRow.id === linked)
+			linkedRow?.querySelector('input')?.focus()
 		}
 
 		append(
@@ -59,7 +111,7 @@ export const CredentialsPage = component({
 			}),
 			element('p', {
 				textContent:
-					'Tokens and settings connectors look up, such as github/token, and webhook secrets, as webhook/<webhook>. Sealed on this machine; a value never comes back.',
+					"Tokens and settings connectors look up, such as github/token, webhook secrets, as webhook/<webhook>, and the keys of the app's providers, as provider/<name>. Sealed on this machine; a value never comes back.",
 			}),
 			list,
 			element('section', {
@@ -82,5 +134,6 @@ export const CredentialsPage = component({
 			}),
 		)
 		await show()
+		focusLinked()
 	},
 })
