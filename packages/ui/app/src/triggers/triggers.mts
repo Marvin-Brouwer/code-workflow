@@ -6,6 +6,7 @@ import { read } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
 import { noAppText } from '../_shared/no-app-text.mts'
 import type { TriggerDescription } from '../_shared/runs.mts'
+import { webhookCredential } from '../_shared/settings.mts'
 import { readTheApp } from '../_shared/the-app.mts'
 import { shownTime } from '../runs/run-labels.mts'
 import { CredentialsRoute } from '../settings/_routes.mts'
@@ -45,7 +46,7 @@ export const TriggersPage = component({
 				return element('code', {
 					textContent: trigger.cron,
 				})
-			const name = `webhook/${trigger.id}`
+			const name = webhookCredential(trigger.id)
 			if (secrets.has(name))
 				return element('span', {
 					textContent: 'Secret set',

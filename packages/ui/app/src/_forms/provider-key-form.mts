@@ -1,6 +1,6 @@
 import { component } from '@rooted/components'
 import { send } from '../_shared/api.mts'
-import { NoContent } from '../_shared/settings.mts'
+import { NoContent, providerPath } from '../_shared/settings.mts'
 import styles from './forms.css'
 import { formStatus, submitActions } from './form-parts.mts'
 import { formText } from './form-text.mts'
@@ -44,13 +44,7 @@ export const ProviderKeyForm = component<ProviderKeyFormOptions>({
 						status,
 						abortSignal: signal,
 						send: (form, abortSignal) =>
-							send(
-								'PUT',
-								`/settings/providers/${encodeURIComponent(provider)}/key`,
-								{ key: formText(form, 'key') },
-								NoContent,
-								abortSignal,
-							),
+							send('PUT', `${providerPath(provider)}/key`, { key: formText(form, 'key') }, NoContent, abortSignal),
 						done,
 					}),
 				},
