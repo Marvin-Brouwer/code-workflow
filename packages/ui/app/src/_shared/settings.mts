@@ -89,14 +89,36 @@ export function providerCredential(provider: string): string {
 	return `${providerCredentialPrefix}${provider}`
 }
 
-/** The provider whose key credential `name` is, if it's one. */
+/** The provider that credential `name` is the key of, or `undefined` when it isn't a provider's key. */
 export function providerOfCredential(name: string): string | undefined {
-	return name.startsWith(providerCredentialPrefix) ? name.slice(providerCredentialPrefix.length) : undefined
+	if (!name.startsWith(providerCredentialPrefix)) return undefined
+	return name.slice(providerCredentialPrefix.length)
 }
+
+/** The settings route of provider `provider`, below which its key and its models are. */
+export function providerPath(provider: string): string {
+	return `/settings/providers/${encodeURIComponent(provider)}`
+}
+
+/** What a webhook's secret is stored as in the credential store: `webhook/<webhook>`. */
+const webhookCredentialPrefix = 'webhook/'
+
+/** The credential webhook `webhook`'s secret is stored as. */
+export function webhookCredential(webhook: string): string {
+	return `${webhookCredentialPrefix}${webhook}`
+}
+
+/** Whether credential `name` is a webhook's secret, which can be generated. */
+export function isWebhookCredential(name: string): boolean {
+	return name.startsWith(webhookCredentialPrefix)
+}
+
+/** How a credential that's stored and used is shown. */
+export const credentialSetText = 'set'
 
 /** Whether `provider` has a key, and when its key was set for another origin, which one: it isn't used until it's set again. */
 export function providerKeyText(provider: ListedProvider): string {
-	if (provider.hasKey) return 'set'
+	if (provider.hasKey) return credentialSetText
 	if (provider.keySetFor === undefined) return 'not set'
 	return `not set (set for ${provider.keySetFor} before)`
 }
