@@ -7,8 +7,9 @@ function atBottom(): boolean {
 }
 
 /**
- * Keeps the page at its bottom as a run's steps come in, until someone scrolls up to read; once they
- * scroll back to the bottom, it follows again. Call what it returns after each change is drawn.
+ * Keeps the page at its bottom as a run's steps come in, and as anything else on it grows, until
+ * someone scrolls up to read; once they scroll back to the bottom, it follows again. Call what it
+ * returns after each change is drawn.
  *
  * ```ts
  * const follow = followBottom(signal)
@@ -26,7 +27,14 @@ export function followBottom(abortSignal: AbortSignal): () => void {
 		},
 		{ passive: true, signal: abortSignal },
 	)
-	return () => {
+	const follow = () => {
 		if (following) window.scrollTo({ top: document.documentElement.scrollHeight })
 	}
+	// What grows after a draw, such as the run's input once it's read, is followed too.
+	const growing = new ResizeObserver(follow)
+	growing.observe(document.body)
+	abortSignal.addEventListener('abort', () => {
+		growing.disconnect()
+	})
+	return follow
 }

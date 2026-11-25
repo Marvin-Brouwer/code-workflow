@@ -64,7 +64,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		const shownMarkup = await page.locator('main').textContent()
 		const madeElements = await page.locator('main script, main img').count()
 		const ranScript = await page.evaluate(() => 'injected' in globalThis)
-		const shownInput = await page.locator('main pre').first().textContent()
+		// The input is read on its own, after the run shows.
+		const shownInput = await page.locator('h2:text-is("Input") + pre').textContent()
 		const liveUsage = await page.getByRole('row', { name: /claude-sonnet-5-5/ }).textContent()
 		const liveHeading = await page.getByRole('heading', { name: 'Usage so far' }).count()
 		// The steps don't fit, so the page has followed them down.
