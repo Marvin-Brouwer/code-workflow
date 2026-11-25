@@ -5,6 +5,7 @@ import { followStream } from '../_shared/follow-stream.mts'
 import { announce, withOwnStream } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunEvent, RunRecord, type RunStatus } from '../_shared/runs.mts'
+import { followBottom } from './follow-bottom.mts'
 import { RunFacts } from './run-facts.mts'
 import { runFeed } from './run-feed.mts'
 import { RunRequestView } from './run-requests.mts'
@@ -165,8 +166,9 @@ export const RunPage = component<RunPageOptions>({
 			)
 		}
 
-		// What the run's stream sent so far, drawn once for each burst of it.
+		// What the run's stream sent so far, drawn once for each burst of it, with the newest steps in view.
 		const feed = runFeed()
+		const follow = followBottom(signal)
 		let drawing = false
 		const draw = () => {
 			if (drawing) return
@@ -177,6 +179,7 @@ export const RunPage = component<RunPageOptions>({
 				if (record === undefined || signal.aborted) return
 				showRecord(record)
 				showSteps(record, events)
+				follow()
 			})
 		}
 

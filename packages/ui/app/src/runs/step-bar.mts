@@ -1,4 +1,4 @@
-import { component, cssClass, type CssClass } from '@rooted/components'
+import { choice, component, cssClass, type CssClass } from '@rooted/components'
 import { shownTime, statusLabel } from './run-labels.mts'
 import type { Call, Step, StreamItem } from './run-steps.mts'
 import styles from './step-bar.css'
@@ -114,7 +114,7 @@ export const StepBar = component<StepBarOptions>({
 							}),
 							element('span', {
 								classes: styles.meta,
-								textContent: `${step.kind} · ${statusLabel(step.status)} · ${shownTime(step.at)}`,
+								textContent: `${choice(step.kind === 'poll', 'wait', step.kind)} · ${statusLabel(step.status)} · ${shownTime(step.at)}`,
 							}),
 						],
 					}),

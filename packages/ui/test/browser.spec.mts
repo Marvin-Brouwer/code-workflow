@@ -35,10 +35,15 @@ async function openUi(): Promise<{ page: Page; url: string }> {
 	return { page, url: served.url }
 }
 
+/** Whether the page is scrolled to its bottom, as the run view follows it: run in the page. */
+const atBottom = 'window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 48'
+
 describe.skipIf(process.platform === 'win32')('the page', () => {
 	test('starts a run through the wizard, and answers its question as it comes in', async () => {
 		// Arrange
 		const { page, url } = await openUi()
+		// Short, so the run's steps don't fit.
+		await page.setViewportSize({ width: 1000, height: 300 })
 
 		// Act
 		await page.goto(url)
@@ -58,6 +63,8 @@ describe.skipIf(process.platform === 'win32')('the page', () => {
 		const shownMarkup = await page.locator('main').textContent()
 		const madeElements = await page.locator('main script, main img').count()
 		const ranScript = await page.evaluate(() => 'injected' in globalThis)
+		// The steps don't fit, so the page has followed them down.
+		await expect.poll(() => page.evaluate(atBottom)).toBe(true)
 		await page.getByLabel('answer').fill('the red one')
 		await page.getByRole('button', { name: 'Answer' }).click()
 

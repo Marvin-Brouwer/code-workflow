@@ -62,13 +62,17 @@ export interface PipelinePassesOptions {
 export function pipelinePasses(on: MergeRequestReference, options: PipelinePassesOptions = {}): Check {
 	return check('pipeline', async (context) => {
 		const where = { repository: on.repository, number: on.number }
-		const failures = await untilCompleted(async () => {
-			const sha =
-				options.checkout === undefined
-					? (await stubs.getMergeRequest(where, context)).head.sha
-					: await branchHeadOf(options.checkout, true, context)
-			return stubs.pipelineOnCommit({ repository: on.repository, sha, mergeRequest: on.number }, context)
-		}, options)
+		const failures = await untilCompleted(
+			`pipeline of ${on.repository}!${String(on.number)}`,
+			async () => {
+				const sha =
+					options.checkout === undefined
+						? (await stubs.getMergeRequest(where, context)).head.sha
+						: await branchHeadOf(options.checkout, true, context)
+				return stubs.pipelineOnCommit({ repository: on.repository, sha, mergeRequest: on.number }, context)
+			},
+			options,
+		)
 		return failures.map((failure) => ({
 			source: `pipeline: ${failure.stage}/${failure.name}`,
 			message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,

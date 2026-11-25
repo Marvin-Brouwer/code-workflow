@@ -6,7 +6,7 @@ import {
 	patientLook,
 	type LookBudget,
 } from '@mesh-flow/code-repository'
-import { wait, type ToolContext } from '@mesh-flow/core'
+import { poll, wait, type ToolContext } from '@mesh-flow/core'
 import { duration, type Duration } from '@mesh-flow/duration'
 import { stubs } from '../stubs.mts'
 import type { MergeRequestReference } from '../tools/merge-request-tools.mts'
@@ -37,13 +37,18 @@ export interface PublishedPackagesOptions {
  */
 async function processedPackages(
 	list: () => Promise<{ readonly packages: readonly PublishedPackage[]; readonly processing: number }>,
-	{ every, mayProcess, url }: { readonly every: Duration; readonly mayProcess: LookBudget; readonly url: string },
+	{
+		description,
+		every,
+		mayProcess,
+		url,
+	}: { readonly description: string; readonly every: Duration; readonly mayProcess: LookBudget; readonly url: string },
 ): Promise<readonly PublishedPackage[]> {
 	for (;;) {
 		const { packages, processing } = await list()
 		if (processing === 0) return packages
 		if (!mayProcess()) throw new Error(`GitLab is still processing ${String(processing)} package(s) of ${url}.`)
-		await wait(every)
+		await poll(description, () => wait(every))
 	}
 }
 
@@ -89,7 +94,8 @@ export async function publishedPackages(
 	const every = options.every ?? defaultLookEvery
 	const pipelineMayAppear = lookBudget(options.appearWithin ?? defaultAppearWithin, every)
 	const mayProcess = lookBudget(options.processWithin ?? defaultProcessWithin, every)
-	const look = patientLook({ every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
+	const description = `packages published by the merge of ${on.repository}!${String(on.number)}`
+	const look = patientLook({ description, every, toleratedOutage: options.toleratedOutage ?? defaultToleratedOutage })
 	const merged = await look(() => stubs.getMergeRequest({ repository: on.repository, number: on.number }, context))
 	if (!merged.merged || merged.mergedSha === undefined) throw new Error(`${merged.url} isn't merged, so it published nothing.`)
 	const { mergedSha } = merged
@@ -104,6 +110,7 @@ export async function publishedPackages(
 				)
 			const { id, url } = pipeline.pipeline
 			return processedPackages(() => look(() => stubs.pipelinePackages({ repository: on.repository, pipeline: id, type }, context)), {
+				description,
 				every,
 				mayProcess,
 				url,
@@ -111,6 +118,6 @@ export async function publishedPackages(
 		}
 		if (pipeline.status === 'none' && !pipelineMayAppear())
 			throw new Error(`No pipeline ran on the merge of ${merged.url} (${mergedSha}), so it published nothing.`)
-		await wait(every)
+		await poll(description, () => wait(every))
 	}
 }

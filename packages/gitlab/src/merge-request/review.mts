@@ -99,6 +99,7 @@ export async function review(
 	const { pipelineFailed } = handlers
 	const { state, request } = await watchReview<MergeRequest, ReviewItem, JobFailure>(
 		{
+			description: `review of ${on.repository}!${String(on.number)}`,
 			read: async () => mergeRequestOf(await stubs.getMergeRequest(where, context)),
 			activity: (since) => stubs.reviewActivity({ ...where, ...(since === undefined ? {} : { since }) }, context),
 			showBeingRead: (items) => stubs.showBeingRead({ ...where, items: items.map((item) => item.id) }, context),

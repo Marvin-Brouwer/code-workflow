@@ -61,13 +61,17 @@ export interface ChecksPassOptions {
 export function checksPass(on: PullRequestReference, options: ChecksPassOptions = {}): Check {
 	return check('checks', async (context) => {
 		const where = { repository: on.repository, number: on.number }
-		const failures = await untilCompleted(async () => {
-			const sha =
-				options.checkout === undefined
-					? (await stubs.getPullRequest(where, context)).head.sha
-					: await branchHeadOf(options.checkout, true, context)
-			return stubs.checksOnReference({ repository: on.repository, ref: sha }, context)
-		}, options)
+		const failures = await untilCompleted(
+			`checks of ${on.repository}#${String(on.number)}`,
+			async () => {
+				const sha =
+					options.checkout === undefined
+						? (await stubs.getPullRequest(where, context)).head.sha
+						: await branchHeadOf(options.checkout, true, context)
+				return stubs.checksOnReference({ repository: on.repository, ref: sha }, context)
+			},
+			options,
+		)
 		return failures.map((failure) => ({
 			source: `check: ${failure.name}`,
 			message: failure.url === undefined ? failure.summary : `${failure.summary} (${failure.url})`,
