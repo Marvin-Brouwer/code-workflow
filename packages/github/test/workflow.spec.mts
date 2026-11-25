@@ -265,6 +265,33 @@ describe('github', () => {
 		})
 	})
 
+	test('hands over a comment on a whole file, which has no line', async () => {
+		// Arrange
+		const { api, gateway } = await connected()
+		const pull = api.pullRequest(repositoryName, 9, { head: { ref: 'fix/7', sha: shaOf('fix/7') } })
+		pull.reviewComments.push({
+			id: 1,
+			body: 'This file does not follow Arrange/Act/Assert.',
+			user: { login: 'reviewer' },
+			html_url: `${pull.html_url}#r1`,
+			created_at: new Date().toISOString(),
+			path: 'fix.txt',
+			line: null,
+		})
+		const comments = vi.fn<(items: readonly { id: string }[]) => Promise<void>>(async () => {
+			pull.merged = true
+			pull.state = 'closed'
+		})
+
+		// Act
+		const run = await runOnGateway(gateway, () => review({ repository: repositoryName, number: 9 }, { comments }))
+
+		// Assert
+		await expect(run.result).resolves.toMatchObject({ state: 'merged' })
+		expect(comments.mock.calls[0]?.[0]).toMatchObject([{ id: 'review-comment/1', path: 'fix.txt' }])
+		expect(comments.mock.calls[0]?.[0][0]).not.toHaveProperty('line')
+	})
+
 	test('marks a review as being read with a reply on the conversation, which the first answer to the review replaces', async () => {
 		// Arrange
 		const { api, gateway } = await connected()

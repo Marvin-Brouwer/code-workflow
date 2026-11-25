@@ -208,7 +208,8 @@ export function pullRequestHostTools(api: ApiClient): HostTool[] {
 						url: comment.html_url,
 						at: comment.created_at,
 						path: comment.path,
-						...(comment.line === undefined ? {} : { line: comment.line }),
+						// A comment on the whole file, or on a line that's gone since, has no line: GitHub sends null.
+						...(typeof comment.line === 'number' ? { line: comment.line } : {}),
 						...(comment.in_reply_to_id === undefined ? {} : { inReplyTo: itemId('review-comment', comment.in_reply_to_id) }),
 					})),
 				...reviews
