@@ -1,6 +1,7 @@
 import { choice, component } from '@rooted/components'
 import { href, Link } from '@rooted/router'
 import { z } from 'zod'
+import { confirmed } from '../_layout/confirm-dialog.mts'
 import { Table } from '../_layout/table.mts'
 import { read, type Answer } from '../_shared/api.mts'
 import { errorText } from '../_shared/error-text.mts'
@@ -8,7 +9,7 @@ import { onChange } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
 import { RunRecord } from '../_shared/runs.mts'
 import { RunRoute } from './_routes.mts'
-import { actOn, runActions, type RunAction } from './run-actions.mts'
+import { actOn, askBefore, runActions, type RunAction } from './run-actions.mts'
 import { inListOrder, shownTime, waitsOn } from './run-labels.mts'
 
 /** What a run's row lets a person do: carry it on, or put it away. Stopping is on the run's own page. */
@@ -42,8 +43,11 @@ export const RunsList = component({
 		const list = append(element('div'))
 		append(status)
 
-		const act = async (id: string, action: RunAction) => {
-			const answer = await actOn(id, action, signal)
+		const act = async (record: RunRecord, action: RunAction, label: string) => {
+			const question = await askBefore(record, action, signal)
+			// Aborted, the question can't be read, and the action's own answer below is aborted too.
+			if (question !== undefined && !(await confirmed(list, { message: question, confirmLabel: label }))) return
+			const answer = await actOn(record.id, action, signal)
 			if (signal.aborted) return
 			status.textContent = answer.ok ? '' : answer.error
 			refresh()
@@ -78,7 +82,7 @@ export const RunsList = component({
 								ariaLabel: `${label} ${record.id}`,
 								on: {
 									click() {
-										void act(record.id, action)
+										void act(record, action, label)
 									},
 								},
 							}),

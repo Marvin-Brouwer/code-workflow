@@ -6,19 +6,34 @@ function atBottom(): boolean {
 	return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomSlackPx
 }
 
+/** Scrolls the page to its bottom. */
+function toBottom(): void {
+	window.scrollTo({ top: document.documentElement.scrollHeight })
+}
+
+/** Keeps a page at its bottom: see {@link followBottom}. */
+export interface BottomFollower {
+	/** Scrolls to the bottom if the page still follows it: call after each change is drawn. */
+	readonly follow: () => void
+	/** Scrolls to the bottom and follows it again, as after someone scrolled back down. */
+	readonly tail: () => void
+}
+
 /**
  * Keeps the page at its bottom as a run's steps come in, and as anything else on it grows, until
- * someone scrolls up to read; once they scroll back to the bottom, it follows again. Call what it
- * returns after each change is drawn.
+ * someone scrolls up to read; once they scroll back to the bottom, or `tail` is called, it follows
+ * again. `following` hears each change.
  *
  * ```ts
- * const follow = followBottom(abortSignal)
+ * const bottom = followBottom(abortSignal, (following) => {
+ * 	tailButton.hidden = following
+ * })
  * steps.replaceChildren(...bars)
- * follow()
+ * bottom.follow()
  * ```
  */
-export function followBottom(abortSignal: AbortSignal): () => void {
-	let following = true
+export function followBottom(abortSignal: AbortSignal, following: (isFollowing: boolean) => void): BottomFollower {
+	let isFollowing = true
 	let lastScrollY = window.scrollY
 	// Only scrolling up stops following: content that grew between a scroll to the bottom and its
 	// scroll event leaves the page above the bottom without anyone having scrolled.
@@ -27,13 +42,15 @@ export function followBottom(abortSignal: AbortSignal): () => void {
 		() => {
 			const scrolledUp = window.scrollY < lastScrollY
 			lastScrollY = window.scrollY
-			if (atBottom()) following = true
-			else if (scrolledUp) following = false
+			const now = atBottom() || (isFollowing && !scrolledUp)
+			if (now === isFollowing) return
+			isFollowing = now
+			following(isFollowing)
 		},
 		{ passive: true, signal: abortSignal },
 	)
 	const follow = () => {
-		if (following) window.scrollTo({ top: document.documentElement.scrollHeight })
+		if (isFollowing) toBottom()
 	}
 	// What grows after a draw, such as the run's input once it's read, is followed too.
 	const growing = new ResizeObserver(follow)
@@ -41,5 +58,12 @@ export function followBottom(abortSignal: AbortSignal): () => void {
 	abortSignal.addEventListener('abort', () => {
 		growing.disconnect()
 	})
-	return follow
+	return {
+		follow,
+		tail: () => {
+			isFollowing = true
+			following(true)
+			toBottom()
+		},
+	}
 }
