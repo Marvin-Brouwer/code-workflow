@@ -48,3 +48,14 @@ export function githubRemoteUrl(repository: RepositoryName): string {
 export function sameRepositoryName(one: string, other: string): boolean {
 	return one.toLowerCase() === other.toLowerCase()
 }
+
+/**
+ * A pattern that fits `name` in any case, as GitHub matches repository names: for a check outside
+ * zod, such as the JSON Schema the engine checks a webhook delivery against, which reads it with the
+ * `u` flag. `name` is a checked `owner/name`, so only `.` means anything in a pattern.
+ */
+export function anyCasePattern(name: RepositoryName): RegExp {
+	const escaped = name.replaceAll('.', String.raw`\.`)
+	const anyCase = escaped.replaceAll(/[A-Za-z]/g, (letter) => `[${letter.toUpperCase()}${letter.toLowerCase()}]`)
+	return new RegExp(`^${anyCase}$`, 'u')
+}

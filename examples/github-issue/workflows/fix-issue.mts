@@ -7,9 +7,12 @@
  * Plain async TypeScript: every `await` is real, and the agent is a call inside it.
  */
 import { duration, limit, succeed, workflow } from '@mesh-flow/core'
-import { github, IssueParameters } from '@mesh-flow/github'
+import { github } from '@mesh-flow/github'
 import { developer, writer } from '../agents.mts'
 import { installDependencies } from '../utils/npm/install-dependencies.mts'
+
+/** The one repository this app works on: the form only asks for the issue number, and other repositories' webhooks are skipped. */
+const appRepository = 'Marvin-Brouwer/five-dice'
 
 /** How long the developer may work on the fix itself. */
 const fixTime = duration.of('30m')
@@ -20,7 +23,7 @@ const reviewChangesTime = duration.of('30m')
 /** How long the developer may work on fixing failed checks. */
 const checkFixTime = duration.of('20m')
 
-export const fixIssue = workflow('fix-issue', IssueParameters, async ({ parameters, abortSignal }) => {
+export const fixIssue = workflow('fix-issue', { issue: github.issueIn(appRepository) }, async ({ parameters, abortSignal }) => {
 	const issue = await github.collect(parameters.issue)
 	const repository = await github.checkout({ repository: issue.repository, branch: `fix/${String(issue.number)}` })
 	// A run that starts over after its pull request merged, such as one whose sandbox was lost while it waited, is done.

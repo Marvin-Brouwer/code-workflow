@@ -1,6 +1,8 @@
 import { NotByConnector } from '@mesh-flow/code-repository'
 import { webhook, type WebhookSignature, type WebhookTrigger, type Workflow } from '@mesh-flow/core'
 import { z } from 'zod'
+import { pinnedRepository } from './pinned-repository.mts'
+import { anyCasePattern, RepositoryName } from './repository-name.mts'
 import type { IssueReference } from './tools/issue-tools.mts'
 
 /** How GitHub signs a delivery: the hex HMAC-SHA256 of the body in `x-hub-signature-256`, after `sha256=`. */
@@ -34,28 +36,41 @@ const User = z.object({ login: z.string() })
 const Issue = z.object({ number: z.int().positive(), title: z.string(), html_url: z.url() })
 const PullRequest = z.object({ number: z.int().positive(), title: z.string(), html_url: z.url() })
 
+/** Which `issues` events for a label `issueLabeled` fits. */
+export interface IssueLabeledFilter {
+	/** The one label to take deliveries of. Default: every label. */
+	readonly label?: string | undefined
+	/** The one repository, as `owner/name` in any case, to take deliveries of. Default: every repository. */
+	readonly repository?: string | undefined
+}
+
 /**
- * The `issues` event for a label put on an issue. With `label`, only that label fits: the filter
- * is in the structure, so the engine skips other deliveries before it makes a sandbox.
- * `github.onIssueLabeled` is the ready-made trigger on it.
+ * The `issues` event for a label put on an issue. With a `label` or a `repository`, only that one
+ * fits: the filter is in the structure, so the engine skips other deliveries before it makes a
+ * sandbox. The repository fits in any case, as GitHub names it. `github.onIssueLabeled` is the
+ * ready-made trigger on it.
  *
- * @param label - The one label to take deliveries of. Default: every label.
+ * @param filter - Which label and repository fit. Default: every one.
  * @returns The schema, for a `webhook` trigger with {@link triggerOptions}.
+ * @throws When `repository` isn't `owner/name`.
  *
  * @example
  * ```ts
- * const labeled = github.issueLabeled('needs-triage').transform((event) => ({
+ * const labeled = github.issueLabeled({ label: 'needs-triage' }).transform((event) => ({
  * 	issue: { repository: event.repository.full_name, number: event.issue.number },
  * }))
  * webhook(triage, labeled, { name: 'triage-on-label', ...github.triggerOptions })
  * ```
  */
-export function issueLabeled(label?: string) {
+export function issueLabeled({ label, repository }: IssueLabeledFilter = {}) {
 	return z.object({
 		action: z.literal('labeled'),
 		label: z.object({ name: label === undefined ? z.string() : z.literal(label) }),
 		issue: Issue,
-		repository: Repository,
+		repository:
+			repository === undefined
+				? Repository
+				: Repository.extend({ full_name: z.string().regex(anyCasePattern(RepositoryName.parse(repository))) }),
 		sender: User,
 	})
 }
@@ -153,9 +168,18 @@ export const pullRequestReviewCommentCreated = z.object({
 })
 export type PullRequestReviewCommentCreated = z.infer<typeof pullRequestReviewCommentCreated>
 
-/** A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional. */
-export type TakesIssue<Shape extends z.ZodRawShape> =
-	{ readonly issue: z.input<typeof IssueReference> } extends z.input<z.ZodObject<Shape>> ? Workflow<Shape> : never
+/**
+ * A workflow that takes `IssueParameters`, or `{ issue }` with anything else optional, where the
+ * issue may be pinned to one repository, as `github.issueIn` makes it. The issue itself can't be
+ * optional: an event always gives one.
+ */
+export type TakesIssue<Shape extends z.ZodRawShape> = Shape extends { readonly issue: infer IssueSchema extends z.ZodType }
+	? z.input<IssueSchema> extends z.input<typeof IssueReference>
+		? { readonly issue: z.input<IssueSchema> } extends z.input<z.ZodObject<Shape>>
+			? Workflow<Shape>
+			: never
+		: never
+	: never
 
 /** The name of a label, as GitHub takes it and as it fits in a webhook's name. */
 const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes.')
@@ -164,14 +188,17 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  * Starts `workflow` with `{ issue: { repository, number } }` whenever `label` is put on an issue.
  * The webhook is named `<workflow>-labeled-<label>`, signed as GitHub signs, and keyed by GitHub's
  * delivery id. The workflow has to take `IssueParameters`, or `github.issue` as its `issue`
- * parameter.
+ * parameter. With `github.issueIn('owner/name')` as its `issue`, the repository is pinned: only its
+ * events fit, in any case, and other repositories' events are skipped before a sandbox. Only
+ * `issueIn` pins it this way; a workflow that narrows the repository otherwise is refused a run at
+ * its parameter check instead, after a sandbox is made.
  *
  * Point a GitHub webhook for `Issues` events at `/webhooks/<workflow>-labeled-<label>` on the
  * engine. Set its secret with `mesh-flow webhook secret <workflow>-labeled-<label> --generate`
  * and paste it into GitHub. The engine skips other labels before it makes a sandbox.
  *
- * @param workflow - A workflow whose parameters are `IssueParameters`, or `{ issue }` with
- * anything else optional. Any other workflow is a type error.
+ * @param workflow - A workflow whose `issue` is `github.issue` or `github.issueIn('owner/name')`,
+ * with anything else optional. Any other workflow is a type error.
  * @param label - The label, in lowercase letters, digits and dashes, such as `ai-fix`.
  * @returns The trigger, for the `workflows` of `defineMeshFlow`.
  * @throws When `label` holds anything but lowercase letters, digits and dashes.
@@ -190,10 +217,13 @@ const LabelName = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letter
  */
 export function onIssueLabeled<Shape extends z.ZodRawShape>(workflow: TakesIssue<Shape>, label: string): WebhookTrigger {
 	const checked = LabelName.parse(label)
-	const schema = issueLabeled(checked).transform((event) => ({
-		issue: { repository: event.repository.full_name, number: event.issue.number },
-	}))
 	// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- TakesIssue has checked that { issue } is enough to start it
 	const takingIssue = workflow as unknown as Workflow<{ issue: typeof IssueReference }>
-	return webhook(takingIssue, schema, { name: `${workflow.name}-labeled-${checked}`, ...triggerOptions })
+	// A workflow pinned to one repository only fits that repository's events, so the others are skipped before a sandbox.
+	const repository = pinnedRepository(takingIssue.parameters.shape.issue)
+	const schema = issueLabeled({ label: checked, repository }).transform((event) => ({
+		// GitHub may case the name otherwise than the pin, which the workflow's parameters fix exactly.
+		issue: { repository: repository ?? event.repository.full_name, number: event.issue.number },
+	}))
+	return webhook(takingIssue, schema, { name: `${takingIssue.name}-labeled-${checked}`, ...triggerOptions })
 }

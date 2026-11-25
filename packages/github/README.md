@@ -72,7 +72,20 @@ export const fixIssue = workflow('fix-issue', IssueParameters, async ({ paramete
 
 ### Issues
 
-`IssueParameters` is what a workflow on one issue takes, `{ issue }`, where `github.issue` is the issue itself, `{ repository: 'owner/name', number }`; a workflow that takes more declares `{ ...IssueParameters, reviewer: z.string() }`. `github.collect` reads the issue and writes it as Markdown into `issues/` in the workspace; in a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout. `github.comment(issue, body, { key })` updates its earlier comment with the same key instead of adding one, `github.label(issue, labels)` adds labels, `github.close(issue)` closes it.
+`IssueParameters` is what a workflow on one issue takes, `{ issue }`, where `github.issue` is the issue itself, `{ repository: 'owner/name', number }`; a workflow that takes more declares `{ ...IssueParameters, reviewer: z.string() }`. A workflow meant for one repository takes `github.issueIn('owner/name')` as its `issue`, as below: the repository is pinned in the schema, so the start form only asks for the number, a run for another repository is refused, and `github.onIssueLabeled` skips other repositories' events (in any case) before it makes a sandbox. `github.collect` reads the issue and writes it as Markdown into `issues/` in the workspace; in a prompt it renders as that file's absolute path, so the agent reads as much of it as it needs, also from inside a checkout. `github.comment(issue, body, { key })` updates its earlier comment with the same key instead of adding one, `github.label(issue, labels)` adds labels, `github.close(issue)` closes it.
+
+```ts
+import { succeed, workflow } from '@mesh-flow/core'
+import { github } from '@mesh-flow/github'
+import { developer } from '../agents.mts'
+
+const repository = 'octo/dice'
+
+export const fixIssue = workflow('fix-issue', { issue: github.issueIn(repository) }, async ({ parameters }) => {
+	const issue = await github.collect(parameters.issue)
+	await developer.loop`Fix ${issue}, then ${succeed()}.`
+})
+```
 
 ### Repositories
 
