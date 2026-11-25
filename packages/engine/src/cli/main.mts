@@ -57,6 +57,8 @@ const actionDescriptions = {
 	stop: 'Stops a run and removes its sandbox.',
 	resume: 'Resumes a paused run where it was.',
 	restart: 'Runs a run again from the top, with the code it first ran.',
+	archive: 'Archives a run that is over: kept, but left out of `list`.',
+	unarchive: 'Takes a run out of the archive.',
 } as const
 
 function log(message: string): void {
@@ -267,10 +269,13 @@ export async function main(argv: readonly string[]): Promise<void> {
 
 	program
 		.command('list')
-		.description('Lists every run.')
-		.action(async () => {
+		.description('Lists the runs, without the archived ones.')
+		.option('--archived', 'list the archived runs instead')
+		.action(async ({ archived }: { archived?: boolean }) => {
+			const showArchived = archived === true
 			for (const record of await client().list(requestSignal())) {
-				console.log(formatRunLine(record))
+				const isArchived = record.archivedAt !== undefined
+				if (isArchived === showArchived) console.log(formatRunLine(record))
 			}
 		})
 
@@ -305,7 +310,7 @@ export async function main(argv: readonly string[]): Promise<void> {
 			console.log(formatRunLine(await client().answer(run, request, value, requestSignal())))
 		})
 
-	for (const action of ['stop', 'resume', 'restart'] as const) {
+	for (const action of ['stop', 'resume', 'restart', 'archive', 'unarchive'] as const) {
 		program
 			.command(action)
 			.description(actionDescriptions[action])

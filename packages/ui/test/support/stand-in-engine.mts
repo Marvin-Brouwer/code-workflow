@@ -70,6 +70,27 @@ interface StandInRun {
 	pending: unknown[]
 	events: { id: string; type: string; at: string; parentId?: string; [field: string]: unknown }[]
 	updatedAt: string
+	archivedAt?: string | undefined
+}
+
+/** The width of the number after the `f` in a stand-in run id, so the id is as long as the engine's. */
+const runNumberWidth = 11
+
+/**
+ * The id of the stand-in's `position`th run it starts with, from 1. The `f` keeps these apart from
+ * the runs a test starts.
+ */
+export function standInRunId(position: number): string {
+	return `run-f${String(position).padStart(runNumberWidth, '0')}`
+}
+
+/** The runs the engine's `archive` takes: those that are over. */
+const finishedStatuses = new Set(['succeeded', 'failed', 'stopped', 'skipped'])
+
+/** What the stand-in engine starts with besides its app. */
+export interface StandInOptions {
+	/** Runs it has already, by status, such as a stopped one to archive. */
+	readonly runs?: readonly string[]
 }
 
 /**
@@ -77,8 +98,13 @@ interface StandInRun {
  * the UI calls, with one app whose run asks one question, and streams its changes. It reads the
  * home's credentials, as the engine does, so the wizard asks for the token until it's set.
  */
-export async function standInEngine(home: string) {
-	const runs = new Map<string, StandInRun>()
+export async function standInEngine(home: string, options: StandInOptions = {}) {
+	const runs = new Map<string, StandInRun>(
+		(options.runs ?? []).map((status, index) => {
+			const id = standInRunId(index + 1)
+			return [id, { id, status, pending: [], events: [], updatedAt: builtAt }]
+		}),
+	)
 	const listeners = new Set<(id: string) => void>()
 	const changed = (run: StandInRun) => {
 		run.updatedAt = new Date().toISOString()
@@ -98,6 +124,7 @@ export async function standInEngine(home: string) {
 				providers: [],
 			},
 			status: run.status,
+			...(run.archivedAt === undefined ? {} : { archivedAt: run.archivedAt }),
 			cursor: 0,
 			pending: run.pending,
 			createdAt: builtAt,
@@ -182,6 +209,27 @@ export async function standInEngine(home: string) {
 		event(run, 'workflow-succeeded', '1-1', { answer: value.answer })
 		run.pending = []
 		run.status = 'succeeded'
+		changed(run)
+		return context.json(record(run))
+	})
+	api.post('/runs/:run/restart', (context) => {
+		const run = found(context.req.param('run'))
+		run.status = 'starting'
+		run.archivedAt = undefined
+		changed(run)
+		return context.json(record(run))
+	})
+	api.post('/runs/:run/archive', (context) => {
+		const run = found(context.req.param('run'))
+		// As the engine: only a run that's over is archived.
+		if (!finishedStatuses.has(run.status)) return context.json({ error: `Run ${run.id} is ${run.status}.` }, 409)
+		run.archivedAt = new Date().toISOString()
+		changed(run)
+		return context.json(record(run))
+	})
+	api.post('/runs/:run/unarchive', (context) => {
+		const run = found(context.req.param('run'))
+		run.archivedAt = undefined
 		changed(run)
 		return context.json(record(run))
 	})

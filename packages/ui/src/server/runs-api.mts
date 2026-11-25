@@ -28,6 +28,10 @@ export function runsApi(client: ControlClient): Hono {
 	api.post('/runs/:run/stop', async (context) => context.json(await client.stop(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/resume', async (context) => context.json(await client.resume(context.req.param('run'), context.req.raw.signal)))
 	api.post('/runs/:run/restart', async (context) => context.json(await client.restart(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/archive', async (context) => context.json(await client.archive(context.req.param('run'), context.req.raw.signal)))
+	api.post('/runs/:run/unarchive', async (context) =>
+		context.json(await client.unarchive(context.req.param('run'), context.req.raw.signal)),
+	)
 	api.get('/events', async (context) => streamed(await client.followEngine(context.req.raw.signal)))
 	api.get('/connectors', async (context) => context.json(await client.connectors(context.req.raw.signal)))
 	api.get('/sign-ins', async (context) => context.json(await client.signIns(context.req.raw.signal)))

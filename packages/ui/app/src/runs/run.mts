@@ -1,11 +1,12 @@
 import { choice, component } from '@rooted/components'
 import { z } from 'zod'
-import { read, send, type Answer } from '../_shared/api.mts'
+import { read } from '../_shared/api.mts'
 import { followStream } from '../_shared/follow-stream.mts'
 import { announce, withOwnStream } from '../_shared/live-events.mts'
 import { refresher } from '../_shared/refresher.mts'
-import { RunEvent, RunRecord, type RunStatus } from '../_shared/runs.mts'
+import { RunEvent, RunRecord } from '../_shared/runs.mts'
 import { followBottom } from './follow-bottom.mts'
+import { actOn, runActions, type RunAction } from './run-actions.mts'
 import { RunFacts } from './run-facts.mts'
 import { runFeed } from './run-feed.mts'
 import { RunRequestView } from './run-requests.mts'
@@ -19,15 +20,8 @@ export interface RunPageOptions {
 	readonly id: string
 }
 
-/** What a person can do to a run from its page, as the engine's routes of those names. */
-type RunAction = 'stop' | 'resume' | 'restart'
-
-/** What can be done to a run, and in which statuses the engine takes it. */
-const actions: readonly { readonly action: RunAction; readonly label: string; readonly when: readonly RunStatus[] }[] = [
-	{ action: 'stop', label: 'Stop', when: ['starting', 'running', 'paused', 'restartable'] },
-	{ action: 'resume', label: 'Resume', when: ['paused'] },
-	{ action: 'restart', label: 'Restart', when: ['restartable', 'failed', 'stopped'] },
-]
+/** Everything the run page lets a person do to a run. */
+const pageActions: readonly RunAction[] = ['stop', 'resume', 'restart', 'archive', 'unarchive']
 
 /**
  * One run: its status, what it waits on with the forms that answer it, and its steps as bars, by
@@ -70,8 +64,14 @@ export const RunPage = component<RunPageOptions>({
 		// The request forms stay as they are while the run waits on them, so a refresh doesn't clear what's typed.
 		let shownRequests = ''
 
+		// One action at a time, so a double click doesn't send a second one that's refused.
+		let acting = false
 		const act = async (action: RunAction) => {
-			const answer: Answer<unknown> = await send('POST', `/engine/runs/${encodeURIComponent(id)}/${action}`, {}, RunRecord, signal)
+			if (acting) return
+			acting = true
+			const answer = await actOn(id, action, signal)
+			acting = false
+			if (signal.aborted) return
 			status.textContent = answer.ok ? '' : answer.error
 		}
 
@@ -135,19 +135,17 @@ export const RunPage = component<RunPageOptions>({
 				}),
 			)
 			buttons.replaceChildren(
-				...actions
-					.filter(({ when }) => when.includes(record.status))
-					.map(({ action, label }) =>
-						element('button', {
-							type: 'button',
-							textContent: label,
-							on: {
-								click() {
-									void act(action)
-								},
+				...runActions(record, pageActions).map(({ action, label }) =>
+					element('button', {
+						type: 'button',
+						textContent: label,
+						on: {
+							click() {
+								void act(action)
 							},
-						}),
-					),
+						},
+					}),
+				),
 			)
 			const requests = JSON.stringify(record.pending)
 			if (requests !== shownRequests) {
