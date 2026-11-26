@@ -9,6 +9,7 @@ import { followBottom } from './follow-bottom.mts'
 import { actOn, runActions, type RunAction } from './run-actions.mts'
 import { RunFacts } from './run-facts.mts'
 import { runFeed } from './run-feed.mts'
+import { RunInput } from './run-input.mts'
 import { RunRequestView } from './run-requests.mts'
 import { attemptsOf, type Attempt, type Step } from './run-steps.mts'
 import { RunUsage } from './run-usage.mts'
@@ -49,10 +50,16 @@ export const RunPage = component<RunPageOptions>({
 		const steps = element('section', {
 			classes: styles.section,
 		})
+		const input = element('section', {
+			classes: styles.section,
+			children: create(RunInput, {
+				run: id,
+			}),
+		})
 		const usage = element('section', {
 			classes: styles.section,
 		})
-		append(heading, facts, buttons, status, steps, waiting, usage)
+		append(heading, facts, buttons, status, input, steps, waiting, usage)
 
 		const opened = new Map<string, boolean>()
 		const open: OpenState = {
@@ -94,10 +101,12 @@ export const RunPage = component<RunPageOptions>({
 		}
 
 		const usageView = (record: RunRecord): HTMLElement[] => {
-			if (record.usage === undefined) return []
+			const used = record.liveUsage ?? record.usage
+			if (used === undefined) return []
 			return [
 				create(RunUsage, {
-					usage: record.usage,
+					usage: used,
+					live: record.liveUsage !== undefined,
 				}),
 			]
 		}

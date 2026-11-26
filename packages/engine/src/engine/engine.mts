@@ -240,6 +240,12 @@ export class Engine {
 		await this.#signIns.waitFor(connector, this.#withLifetime(abortSignal))
 	}
 
+	/** What the run was started with: its workflow's parameters, as the trigger gave them. `undefined` for a workflow without any. */
+	async input(id: string): Promise<unknown> {
+		const start = await this.#store.loadStart(this.get(id))
+		return start.mode === 'run' ? start.input : undefined
+	}
+
 	/** The run's event tree so far, in the order the runtime sent it. */
 	events(id: string): Promise<RuntimeEvent[]> {
 		return this.#store.events(this.get(id).id)
@@ -602,7 +608,9 @@ export class Engine {
 				// Saved with the cursor, so an outcome that was read can't be lost. The sandbox goes after.
 				const { sandbox } = this.get(id)
 				const usage = await this.#closeGateway(id)
-				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [], usage }, ['running'])
+				await this.#update(id, { ...outcome, cursor: delivery.cursor, sandbox: undefined, pending: [], usage, liveUsage: undefined }, [
+					'running',
+				])
 				if (sandbox) await this.#discard(id, sandbox)
 				return
 			}
@@ -673,6 +681,11 @@ export class Engine {
 				// What the answer names, such as a package, is in the sandbox before the answer.
 				if (staged !== undefined) await channel.stage(stagedFileName(call.id), staged, abortSignal)
 				await this.#answerFromGateway(id, channel, call.id, answer, abortSignal)
+				// Only shown: a usage that can't be read or saved now is in `usage` once the run is over.
+				if (call.call.type === 'model')
+					await this.#showUsage(id, abortSignal).catch((error: unknown) => {
+						if (!abortSignal.aborted) this.#log(`Showing the usage of run ${id} failed: ${messageOf(error)}`)
+					})
 			})
 			.catch(async (error: unknown) => {
 				if (abortSignal.aborted) return
@@ -721,6 +734,18 @@ export class Engine {
 		for (const call of interrupted) {
 			await this.#answerFromGateway(id, channel, call.id, call.answer, abortSignal)
 		}
+	}
+
+	/**
+	 * Puts what the run used so far on its record, as `liveUsage`, so it shows while the run goes on.
+	 * Only while it runs: once it's over, `usage` has it all.
+	 */
+	async #showUsage(id: RunId, abortSignal: AbortSignal): Promise<void> {
+		if (this.#gateway === undefined) return
+		const used = await this.#gateway.usage(id, abortSignal)
+		const record = this.get(id)
+		if (record.status !== 'running') return
+		await this.#update(id, { liveUsage: mergeUsage(record.usage ?? {}, used) }, ['running'])
 	}
 
 	/** Closes the run's gateway endpoints and returns its usage, with that of earlier attempts. */
@@ -827,7 +852,14 @@ export class Engine {
 		if (finishedStatuses.has(current.status)) return current
 		const { sandbox } = current
 		const usage = await this.#closeGateway(id)
-		const stopped = await this.#update(id, { status: 'stopped', sandbox: undefined, paused: undefined, pending: [], usage })
+		const stopped = await this.#update(id, {
+			status: 'stopped',
+			sandbox: undefined,
+			paused: undefined,
+			pending: [],
+			usage,
+			liveUsage: undefined,
+		})
 		if (sandbox) await this.#discard(id, sandbox)
 		return stopped
 	}
@@ -857,7 +889,7 @@ export class Engine {
 	async #fail(id: RunId, error: unknown): Promise<void> {
 		const { sandbox } = this.get(id)
 		const usage = await this.#closeGateway(id)
-		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [], usage })
+		await this.#update(id, { status: 'failed', error: messageOf(error), sandbox: undefined, pending: [], usage, liveUsage: undefined })
 		if (sandbox) await this.#discard(id, sandbox)
 	}
 

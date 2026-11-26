@@ -10,6 +10,19 @@ export const standInSchedule = '0 3 * * *'
 
 const builtAt = '2026-11-23T08:00:00.000Z'
 
+/** Where a run record keeps its usage: `liveUsage` while it goes on, `usage` once it's over. */
+const usageField = (kind: 'live' | 'final') => (kind === 'live' ? 'liveUsage' : 'usage')
+
+/** What the stand-in's one model used over so many requests. */
+const modelUsage = (requests: number) => ({
+	requests,
+	inputTokens: requests * 100,
+	outputTokens: requests * 10,
+	cacheReadTokens: 0,
+	cacheWriteTokens: 0,
+	costUsd: 0,
+})
+
 /**
  * The app the stand-in has deployed: one workflow that needs a GitHub token and a key for its
  * agent's provider, started by two buttons, a webhook without its secret, and a schedule.
@@ -71,6 +84,8 @@ interface StandInRun {
 	events: { id: string; type: string; at: string; parentId?: string; [field: string]: unknown }[]
 	updatedAt: string
 	archivedAt?: string | undefined
+	input?: unknown
+	usage?: { kind: 'live' | 'final'; requests: number } | undefined
 }
 
 /** The width of the number after the `f` in a stand-in run id, so the id is as long as the engine's. */
@@ -125,6 +140,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 			},
 			status: run.status,
 			...(run.archivedAt === undefined ? {} : { archivedAt: run.archivedAt }),
+			...(run.usage === undefined ? {} : { [usageField(run.usage.kind)]: { 'claude-sonnet-5-5': modelUsage(run.usage.requests) } }),
 			cursor: 0,
 			pending: run.pending,
 			createdAt: builtAt,
@@ -169,6 +185,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 			pending: [],
 			events: [],
 			updatedAt: builtAt,
+			input,
 		}
 		runs.set(run.id, run)
 		const root = event(run, 'workflow', undefined, { workflow: 'fix-issue' })
@@ -188,6 +205,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 			result: '<img src=x onerror="window.injected = true">',
 		})
 		event(run, 'loop-succeeded', loop)
+		run.usage = { kind: 'live', requests: 1 }
 		event(run, 'input', root, { question: 'Which die is wrong?' })
 		run.pending = [{ kind: 'input', id: 'input-1', question: 'Which die is wrong?', fields: { answer: { type: 'string' } } }]
 		changed(run)
@@ -195,6 +213,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 	})
 	api.get('/runs', (context) => context.json([...runs.values()].map(record)))
 	api.get('/runs/:run', (context) => context.json(record(found(context.req.param('run')))))
+	api.get('/runs/:run/input', (context) => context.json({ input: found(context.req.param('run')).input }))
 	api.get('/runs/:run/events', (context) =>
 		context.req.header('accept')?.includes('text/event-stream') === true
 			? followRun(context, context.req.param('run'))
@@ -209,6 +228,7 @@ export async function standInEngine(home: string, options: StandInOptions = {}) 
 		event(run, 'workflow-succeeded', '1-1', { answer: value.answer })
 		run.pending = []
 		run.status = 'succeeded'
+		run.usage = { kind: 'final', requests: 2 }
 		changed(run)
 		return context.json(record(run))
 	})

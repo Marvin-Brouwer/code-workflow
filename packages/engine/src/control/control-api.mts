@@ -78,6 +78,7 @@ export function controlApi(engine: Engine, { deployment, afterDeploy = () => und
 		return context.json(await engine.startRun({ trigger, input, key, abortSignal: context.req.raw.signal }), 201)
 	})
 	api.get('/runs/:run', (context) => context.json(engine.get(context.req.param('run'))))
+	api.get('/runs/:run/input', async (context) => context.json({ input: await engine.input(context.req.param('run')) }))
 	const followRun = runEventStream(engine)
 	api.get('/runs/:run/events', async (context) =>
 		context.req.header('accept')?.includes('text/event-stream') === true
